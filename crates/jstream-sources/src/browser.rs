@@ -176,6 +176,7 @@ pub(crate) fn open(
         page,
         blank,
         audio,
+        every_ms: i64::from(1000_u32.div_ceil(fps)),
     }))
 }
 
@@ -215,17 +216,34 @@ struct BrowserSource {
     /// A transparent frame of the page's size.
     blank: Arc<VideoFrame>,
     audio: Arc<dyn SourceAudio>,
+    /// How often a page that paints on the CPU is looked at again, in milliseconds: one
+    /// frame at its frame rate.
+    every_ms: i64,
 }
 
 impl Source for BrowserSource {
-    /// A transparent frame of the page's size: the page itself is only on the GPU
-    /// ([`gpu_frame`](Source::gpu_frame)), and is never copied to the CPU (ADR-0021).
+    /// The page's latest paint where its backend paints on the CPU (CEF on Linux,
+    /// ADR-0095), else a transparent frame of the page's size: the page itself is then
+    /// only on the GPU ([`gpu_frame`](Source::gpu_frame)), and is never copied to the
+    /// CPU (ADR-0021). Before its first paint it is the transparent frame either way.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(Arc::clone(&self.blank))
+        Ok(self
+            .page
+            .cpu_frame()
+            .unwrap_or_else(|| Arc::clone(&self.blank)))
     }
 
-    fn next_change(&self, _: MediaTime) -> Option<MediaTime> {
-        None
+    /// A page that paints on the CPU is looked at again every frame of its frame rate;
+    /// one on the GPU has a frame of its own, and its stand-in never changes.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.page.paints_on_cpu() {
+            return None;
+        }
+        let ms = i64::try_from(crate::source::millis(at)).unwrap_or(i64::MAX);
+        Some(MediaTime::new(
+            ms.saturating_add(self.every_ms),
+            Timebase::MILLIS,
+        ))
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {

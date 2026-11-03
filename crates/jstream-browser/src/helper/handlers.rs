@@ -35,6 +35,16 @@ wrap_app! {
             // No first-run, crash-restore or error dialogs in a browser nobody sees.
             command_line.append_switch(Some(&"no-first-run".into()));
             command_line.append_switch(Some(&"noerrdialogs".into()));
+            // Pages are painted off screen, so on Linux they need no display at all: with
+            // neither X11 nor Wayland (a server, a container, CI) Chromium's headless
+            // platform stands in (ADR-0095).
+            #[cfg(target_os = "linux")]
+            if std::env::var_os("DISPLAY").is_none() && std::env::var_os("WAYLAND_DISPLAY").is_none() {
+                command_line.append_switch_with_value(
+                    Some(&"ozone-platform".into()),
+                    Some(&"headless".into()),
+                );
+            }
         }
     }
 }
@@ -147,14 +157,52 @@ wrap_render_handler! {
             _dirty_rects: Option<&[Rect]>,
             info: Option<&AcceleratedPaintInfo>,
         ) {
-            // Popups (`<select>` lists) paint separately; an overlay has no use for them.
-            if type_ != PaintElementType::VIEW {
-                return;
+            // Shared textures are Windows' paints (ADR-0048); Linux paints in software.
+            #[cfg(windows)]
+            {
+                // Popups (`<select>` lists) paint separately; an overlay has no use for them.
+                if type_ != PaintElementType::VIEW {
+                    return;
+                }
+                let Some(info) = info else {
+                    return;
+                };
+                self.page.0.paint(info.shared_texture_handle);
             }
-            let Some(info) = info else {
-                return;
-            };
-            self.page.0.paint(info.shared_texture_handle);
+            #[cfg(not(windows))]
+            let _ = (type_, info);
+        }
+
+        fn on_paint(
+            &self,
+            _browser: Option<&mut Browser>,
+            type_: PaintElementType,
+            _dirty_rects: Option<&[Rect]>,
+            buffer: *const u8,
+            width: c_int,
+            height: c_int,
+        ) {
+            // Software paints are Linux's (ADR-0095); Windows paints shared textures.
+            #[cfg(target_os = "linux")]
+            {
+                if type_ != PaintElementType::VIEW || buffer.is_null() {
+                    return;
+                }
+                let (Ok(width), Ok(height)) = (u32::try_from(width), u32::try_from(height))
+                else {
+                    return;
+                };
+                let Some(bytes) = crate::cpu_frames::frame_bytes(width, height) else {
+                    return;
+                };
+                // SAFETY: CEF passes the view's whole paint, `width` × `height` BGRA8
+                // pixels with no row padding, valid and unchanged for the duration of
+                // this callback, which the slice doesn't outlive.
+                let bgra = unsafe { std::slice::from_raw_parts(buffer, bytes) };
+                self.page.0.paint(bgra, width, height);
+            }
+            #[cfg(not(target_os = "linux"))]
+            let _ = (type_, buffer, width, height);
         }
     }
 }

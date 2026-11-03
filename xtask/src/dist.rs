@@ -226,7 +226,9 @@ fn build_binaries(root: &Path, browser: bool) -> Result<()> {
 /// its wrapper (CMake and Ninja on the path), and returns the distribution's folder.
 fn build_helper(root: &Path) -> Result<PathBuf> {
     let output = cargo_build(root)
-        .args(["-p", HELPER_PACKAGE, "--features", "cef"])
+        // `--lib`: the DLL only. The package's executable is the Linux helper (ADR-0095),
+        // which on Windows does nothing and would share the DLL's PDB name.
+        .args(["-p", HELPER_PACKAGE, "--lib", "--features", "cef"])
         .arg("--message-format=json-render-diagnostics")
         .stderr(std::process::Stdio::inherit())
         .output()
@@ -246,7 +248,7 @@ fn build_helper(root: &Path) -> Result<PathBuf> {
 /// CEF's distribution folder, from Cargo's JSON `messages`: the link search path of
 /// `cef-dll-sys`'s build script that `is_cef` accepts (its other one is the wrapper's
 /// CMake output).
-fn cef_dir(messages: &str, is_cef: impl Fn(&Path) -> bool) -> Option<PathBuf> {
+pub(crate) fn cef_dir(messages: &str, is_cef: impl Fn(&Path) -> bool) -> Option<PathBuf> {
     messages
         .lines()
         .filter_map(|line| serde_json::from_str::<serde_json::Value>(line).ok())
@@ -282,7 +284,7 @@ fn ships_from_cef(name: &str) -> bool {
 /// What `CEF-VERSION.txt` says: the CEF distribution the runtime came from, as named in
 /// its `archive.json` (CEF's and Chromium's versions), so the zip names the revisions
 /// its LGPL parts were built from (ADR-0021).
-fn cef_version_text(archive_json: &str) -> Result<String> {
+pub(crate) fn cef_version_text(archive_json: &str) -> Result<String> {
     let archive: serde_json::Value =
         serde_json::from_str(archive_json).context("reading CEF's archive.json")?;
     let name = archive["name"]
@@ -496,14 +498,14 @@ fn arch() -> &'static str {
     }
 }
 
-fn copy(from: &Path, to: &Path) -> Result<()> {
+pub(crate) fn copy(from: &Path, to: &Path) -> Result<()> {
     fs::copy(from, to)
         .with_context(|| format!("copying {} to {}", from.display(), to.display()))?;
     Ok(())
 }
 
 /// Copies the folder `from` to `to`, which must not exist yet.
-fn copy_dir(from: &Path, to: &Path) -> Result<()> {
+pub(crate) fn copy_dir(from: &Path, to: &Path) -> Result<()> {
     fs::create_dir_all(to).with_context(|| format!("creating {}", to.display()))?;
     for entry in fs::read_dir(from).with_context(|| format!("reading {}", from.display()))? {
         let entry = entry?;

@@ -41,7 +41,8 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   file, the plugin folder, the effect packs folder and the placeholder outputs; on Windows a live one, through `live.rs`, that scans
   the CLAP plugins, and with the `cef` feature also opens browser sources, on
   macOS a live one on the macOS backends built so far, and on 64-bit Linux a live one
-  on the Linux backends, [Design](#design)), installs the signal handlers that stop it, then binds the server
+  on the Linux backends, which with the `cef` feature also opens browser sources,
+  [Design](#design)), installs the signal handlers that stop it, then binds the server
   with MCP on, the UI settings file in the data directory and, with `--ui-dir`, the web
   UI's files.
 - **Media Foundation check** (`main.rs`, `components.rs`, Windows only): exits with
@@ -550,7 +551,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   no folder. `serve::engine` calls `Engine::watch_effect_packs` once the engine is built,
   on every platform: packs are drawn by the compositor, which needs no platform
   backend.
-- **Browser sources** (`serve.rs`, feature `cef`, Windows only). Built with
+- **Browser sources** (`serve.rs`, feature `cef`, Windows and 64-bit Linux). Built with
   `--features cef`, the daemon gives the engine `jstream-browser`'s CEF backend
   (`Engine::with_browser`), so `browser` sources open their pages
   ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
@@ -562,7 +563,13 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
   `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
-  beside `jstream-daemon.exe`, as the portable zip has them, or next to it; its cache is the data directory's `cef` folder (else the log
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. On Linux
+  the helper is the `jstream-browser-helper` executable with `libcef.so` and CEF's
+  runtime files beside it, in the `browser` folder `cargo xtask browser-linux` lays out,
+  beside `jstream-daemon` or next to it, and no device is opened: pages paint in
+  software and hand the engine CPU frames
+  ([ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)); the helper needs a user
+  other than root for Chromium's sandbox. Either way its cache is the data directory's `cef` folder (else the log
   directory's) and its log the log directory's `cef.log`. Nothing about the browser
   stops the daemon: a device that won't open leaves pages playing audio with their
   frames dropped, a daemon whose own path is unknown leaves browser sources empty, and
@@ -576,9 +583,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   stage
   ([jstream-core › Design](../../crates/jstream-core/README.md#design), *Live sources*).
   The daemon doesn't build or link CEF (only the helper does); the
-  feature is off by default until the helper and CEF's runtime are packaged
+  feature is off by default
   ([jstream-browser › Open items](../../crates/jstream-browser/README.md#open-items)).
-  `dox` type-checks the wiring without downloading CEF, as CI's Windows clippy does. Without the feature, `browser` sources show
+  `dox` type-checks the wiring without downloading CEF, as CI's Windows and Linux clippy
+  do. Without the feature, `browser` sources show
   nothing, as on other platforms. `browse` is that wiring over any backend, which is how
   the tests run it on `jstream-browser`'s fake.
 - **MCP over streamable HTTP.** `serve.rs` sets `ServerConfig::mcp`, so the server

@@ -2816,6 +2816,7 @@ dependencies = [
  "jstream-media",
  "jstream-platform",
  "jstream-platform-windows",
+ "libc",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",

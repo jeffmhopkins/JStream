@@ -194,24 +194,30 @@ covers = [
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
 [ADR-0048](../adr/0048-sandboxed-browser-helper.md) decide. Its first run on Windows
-hardware is still to come (#341).
+hardware is still to come (#341). On Linux it is built as
+[ADR-0095](../adr/0095-browser-helper-on-linux.md) decides, and CI opens a page through
+the sandboxed helper on every run.
 
 **Threats:** a page exploiting the renderer to reach the engine, which holds the stream
 keys; a page reading local files; a page driving the control API; a page using the
 camera or microphone; a page probing the LAN.
 
-**Controls:** pages run in a separate helper process with CEF's sandbox on; profiles are
+**Controls:** pages run in a separate helper process with CEF's sandbox on (on Linux
+Chromium's own, through user namespaces or a setuid `chrome-sandbox`, with no switch to
+turn it off; a root user can't run pages); profiles are
 in memory, with no cache or cookies on disk; every request a page makes, navigations
 included, passes a request policy that allows only `http`, `https`, `ws`, `wss`,
 `data:`, `blob:`, `about:blank` and `about:srcdoc`, and `file:` only in a local page's
 own folder or below it, compared by name and again after resolving links; popups are not
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
-foreign or `null`.
+foreign or `null`. On Linux the engine's line to the helper is a socket pair, which no
+other process can join, and pages' frames cross through a folder made fresh for each
+helper with mode 0700, which the engine reads only within a frame's bounded size.
 
 **Controls (#549, #721):** a page from a public origin is also refused loopback,
 private, link-local and local-name targets, redirects to them included, unless it is

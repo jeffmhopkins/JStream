@@ -20,7 +20,13 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(any(all(windows, feature = "cef"), test))]
+#[cfg(any(
+    all(
+        any(windows, all(target_os = "linux", target_pointer_width = "64")),
+        feature = "cef"
+    ),
+    test
+))]
 use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(
     windows,
@@ -88,7 +94,7 @@ pub fn engine(
         // After `with_backends`, so pages start on the media clock. Clones share the
         // engine's sources, so this gives the browser to `engine` too.
         #[cfg(feature = "cef")]
-        let _ = cef_browser(Engine::clone(&engine), gpu.as_ref(), clock, options);
+        let _ = cef_browser(Engine::clone(&engine), Some(gpu.as_ref()), clock, options);
         engine
     };
     #[cfg(target_os = "macos")]
@@ -100,7 +106,17 @@ pub fn engine(
         secrets,
     );
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-    let engine = live_redacting(engine, linux_backends()?, linux_keys()?, rtmp(), secrets);
+    let engine = {
+        let backends = linux_backends()?;
+        #[cfg(feature = "cef")]
+        let clock = Arc::clone(&backends.clock);
+        let engine = live_redacting(engine, backends, linux_keys()?, rtmp(), secrets);
+        // Pages paint in software on Linux and hand the engine CPU frames, so they need
+        // no device (ADR-0095).
+        #[cfg(feature = "cef")]
+        let _ = cef_browser(Engine::clone(&engine), None, clock, options);
+        engine
+    };
     #[cfg(not(any(
         windows,
         target_os = "macos",
@@ -327,21 +343,26 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
 }
 
 /// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), on a
-/// GPU device of the engine's media adapter, opened through the backends' `gpu`, with
-/// pages' audio stamped on their `clock`.
+/// GPU device of the engine's media adapter, opened through the backends' `gpu` (Windows;
+/// `None` on Linux, where pages hand the engine CPU frames, ADR-0095), with pages' audio
+/// stamped on their `clock`.
 ///
 /// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
-/// page opens: the helper (`jstream-browser-helper.exe` and its DLL) and CEF's runtime
-/// files go in the `browser` folder beside the daemon's exe (or next to it), CEF's cache
+/// page opens: the helper (`jstream-browser-helper.exe` and its DLL on Windows,
+/// `jstream-browser-helper` on Linux) and CEF's runtime files go in the `browser` folder
+/// beside the daemon's executable (or next to it), CEF's cache
 /// in the data directory's `cef` folder
 /// and its log in the log directory's `cef.log`. Neither a
 /// missing data directory nor a device that won't open stops the daemon: without a
 /// device, pages still play their audio and only their frames are dropped, and when the
 /// daemon's own path is unknown, browser sources show nothing (both are logged).
-#[cfg(all(windows, feature = "cef"))]
+#[cfg(all(
+    any(windows, all(target_os = "linux", target_pointer_width = "64")),
+    feature = "cef"
+))]
 fn cef_browser(
     engine: Engine,
-    gpu: &dyn jstream_platform::GpuInterop,
+    gpu: Option<&dyn jstream_platform::GpuInterop>,
     clock: Arc<dyn jstream_platform::MediaClock>,
     options: &Options,
 ) -> Engine {
@@ -363,12 +384,13 @@ fn cef_browser(
         }
     };
     config.log_file = logs.map(|dir| dir.join("cef.log"));
-    let gpu = gpu
-        .open_device()
-        .inspect_err(|error| {
-            tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
-        })
-        .ok();
+    let gpu = gpu.and_then(|gpu| {
+        gpu.open_device()
+            .inspect_err(|error| {
+                tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
+            })
+            .ok()
+    });
     browse(
         engine,
         Arc::new(CefBackend::new(config, clock)),
@@ -379,7 +401,13 @@ fn cef_browser(
 /// Gives `engine` `browser` for its `browser` sources, delivering pages' frames on `gpu`
 /// (`BrowserBackend::use_device`): the device must come first, so the first page's first
 /// paint already has it.
-#[cfg(any(all(windows, feature = "cef"), test))]
+#[cfg(any(
+    all(
+        any(windows, all(target_os = "linux", target_pointer_width = "64")),
+        feature = "cef"
+    ),
+    test
+))]
 pub fn browse(
     engine: Engine,
     browser: Arc<dyn BrowserBackend>,
