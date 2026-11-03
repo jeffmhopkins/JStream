@@ -108,5 +108,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0092](0092-installed-fonts-query.md) | The engine lists the installed fonts, so a font is picked by name | accepted | agent |  |
 | [ADR-0093](0093-shader-sources-from-effect-packs.md) | Shader sources from effect packs | accepted | agent |  |
 | [ADR-0094](0094-scene-cameras.md) | Scene cameras: items in one 3D space | accepted | agent |  |
-| [ADR-0096](0096-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | proposed | maintainer |  |
+| [ADR-0097](0097-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | proposed | maintainer |  |
 <!-- @generated end adr-index -->

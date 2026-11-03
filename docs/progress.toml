@@ -1046,4 +1046,4 @@ title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, w
 status = "planned"
 needs = ["build", "maintainer"]
 prs = [1034, 1048, 1050, 1052]
-note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP waits on ADR-0096 (maintainer tier, proposed); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP waits on ADR-0097 (maintainer tier, proposed); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"

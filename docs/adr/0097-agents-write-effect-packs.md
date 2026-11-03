@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0096"
+id = "ADR-0097"
 title = "Agents write effect packs over the protocol and MCP"
 kind = "adr"
 status = "proposed"
 tier = "maintainer"
 -->
 
-# ADR-0096: Agents write effect packs over the protocol and MCP
+# ADR-0097: Agents write effect packs over the protocol and MCP
 
 <!-- @generated begin adr-status -->
 > **Status:** proposed
@@ -36,7 +36,8 @@ Letting a client write packs changes what a remote client is trusted to do, whic
 ## Options
 - **A. Agents write packs (recommended).** The decision below. An agent can make and fix
   shaders in the scene-building loop; the cost is that a token-holding client can put
-  GPU code on the machine without a person installing it.
+  GPU code on the machine without a person installing it, and can replace or delete any
+  pack a person installed, by that pack's own ID.
 - **B. Agents write packs only with a person's approval.** A write would wait in a
   queue until a person accepts it in the UI. It keeps installs a person's act, but the
   loop stalls on every compile error, and the approval UI and queue are new work of their own.
@@ -54,8 +55,9 @@ Letting a client write packs changes what a remote client is trusted to do, whic
      as text, images as base64) and loads it at once. It answers with the pack's kinds,
      or with `invalid_argument` naming each problem's file, line and message, and then
      the old version stays.
-   - `pack.delete {pack}` removes the folder that loads pack ID `<pack>`, whatever its
-     name, or is refused with `not_found` when none does; `pack.list` names the packs,
+   - `pack.delete {pack}` removes the folder whose `effect.toml` names pack ID `<pack>`,
+     whatever its name and whether or not it loads, or is refused with `not_found` when
+     none does; `pack.list` names the packs,
      their folders, their kinds and who last wrote each (point 5).
    - `pack.read {pack}` returns one pack's text files and, for each image, its path,
      size and digest; `pack.read {pack, path}` returns one file, an image as base64. An
@@ -69,12 +71,13 @@ Letting a client write packs changes what a remote client is trusted to do, whic
    Its `effect.toml` must have `id = <pack>`. Each file path is relative and follows the
    asset-path rules, applied to each component as the platform parses it: no `..`, no
    absolute, drive or UNC path, no dot-component, no `\` or `:`, no Windows reserved
-   name (`CON`, `NUL`, `COM1` and the like) and no trailing dot or space; and it names
+   name (`CON`, `NUL`, `COM1` and the like, with any extension: `nul.png` too) and no
+   trailing dot or space; and it names
    `effect.toml` or a `.wgsl`, `.png`, `.jpg` or `.jpeg` file. Folder names are
    compared as the file system compares them, without case on Windows and macOS.
    Before anything is written, a write is refused with `invalid_argument` when:
-   - another folder already loads pack ID `<pack>` (a pack a person installed under
-     another folder name); or
+   - another folder's `effect.toml` names pack ID `<pack>`, whether or not that pack
+     loads (a pack a person installed under another folder name); or
    - `<packs>/<pack>` exists and its `effect.toml` doesn't name pack ID `<pack>`: a
      folder holding a pack of another ID, a manifest that doesn't parse, or no
      `effect.toml` at all. A pack of that ID that fails to load for another reason (a
@@ -87,7 +90,11 @@ Letting a client write packs changes what a remote client is trusted to do, whic
    [ADR-0074](0074-too-large-requests.md). A larger `files` is refused with `too_large`
    before it is decoded.
 4. **How a write lands, and how a stopped one is recovered.**
-   - A write first removes any leftover `<packs>/.staging/<pack>` and
+   - Pack writes and deletes run one at a time.
+   - A write that finds `.trash/<pack>` with no `<pack>` (an earlier undo failed) first
+     renames it back, as the startup recovery does, and answers `internal` if it can't;
+     so the only copy of the old version is never removed.
+   - A write then removes any leftover `<packs>/.staging/<pack>` and
      `<packs>/.trash/<pack>`; if it can't, it answers `internal` and the old version
      stays. So a write never stages over an earlier write's files, and its first rename
      never meets an existing folder.
@@ -139,6 +146,9 @@ Letting a client write packs changes what a remote client is trusted to do, whic
     stop a stream.
   - No forced GPU reset has yet been run on Windows hardware to check recovery there.
   - The threat model's #349 row stays open for a GPU-time guard.
+- An agent can also replace or delete a pack a person installed. That change is on disk
+  and undo doesn't reach it; `pack.list`'s last writer and the audit log record it. A
+  person who wants a pack kept from agents keeps a copy outside the packs folder.
 - The threat model's rows for packs change from "GPU code the user installed" to "GPU
   code a person or a token-holding client installed".
 - The protocol gains four commands and a `PROTOCOL_VERSION` bump; the MCP tools follow.
