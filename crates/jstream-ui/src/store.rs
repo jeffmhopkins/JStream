@@ -225,6 +225,15 @@ impl Collection {
             .and_then(|parent| self.scene(parent))
     }
 
+    /// The camera `scene_id` is seen through, when it is a 3D scene (ADR-0094): its own,
+    /// or on a keyframe scene its override or else its parent's.
+    pub fn camera_of(&self, scene_id: &SceneId) -> Option<jstream_control::protocol::SceneCamera> {
+        let scene = self.scene(scene_id)?;
+        scene
+            .camera
+            .or_else(|| self.parent_of(scene_id).and_then(|parent| parent.camera))
+    }
+
     /// Whether `scene_id` names a keyframe scene, where only its items' geometry, crop,
     /// visibility, opacity and effects can change (ADR-0049, ADR-0088).
     pub fn is_keyframe(&self, scene_id: &SceneId) -> bool {

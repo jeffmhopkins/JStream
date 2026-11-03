@@ -1735,7 +1735,9 @@ function in this crate so the compositor and the UI share one implementation.
   (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
   plane and the polygon clipping are the same. The picture's up is −y, or −z within
   0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
-  neutral 3D lands exactly on its 2D box.
+  neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way for an
+  editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
+  drags an item to.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such
