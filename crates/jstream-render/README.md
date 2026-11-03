@@ -67,9 +67,12 @@ and calls this crate.
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
   [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md) (`blend.rs`): `normal`,
   `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
-  `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop,
-  a copy of the target's texels under the item. Those three last mix sRGB-encoded
-  values, the rest linear light. A layer blends with its own texels only.
+  `darken`, `lighten`, `overlay`, `difference`, `exclusion`, `normal_srgb` and
+  `additive_srgb` by reading a backdrop, a copy of the target's texels under the item.
+  Overlay, difference and exclusion mix sRGB-encoded values, and so do the two `_srgb`
+  modes, which composite as a browser does
+  ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); the rest blend
+  in linear light. A layer blends with its own texels only.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps

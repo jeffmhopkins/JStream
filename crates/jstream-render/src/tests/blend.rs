@@ -1,5 +1,6 @@
 //! ADR-0082's blend modes, against a CPU reference of the W3C compositing formulas in
-//! premultiplied linear light (sRGB-encoded for overlay, difference and exclusion), on
+//! premultiplied linear light (sRGB-encoded for overlay, difference and exclusion, and
+//! the whole composite for `normal_srgb` and `additive_srgb`, ADR-0105), on
 //! opaque and translucent backdrops and sources.
 
 use jstream_media::FrameSize;
@@ -55,12 +56,27 @@ fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) ->
     let ba = f64::from(backdrop.a);
     let back = [backdrop.r, backdrop.g, backdrop.b].map(|c| decode(f64::from(c)));
     let src = [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0));
-    let alpha = if mode == BlendMode::Additive {
+    let alpha = if matches!(mode, BlendMode::Additive | BlendMode::AdditiveSrgb) {
         sa + ba * (1.0 - sa)
     } else {
         sa + ba - sa * ba
     };
     let mut out = [0u8; 4];
+    if matches!(mode, BlendMode::NormalSrgb | BlendMode::AdditiveSrgb) {
+        // ADR-0105: source-over or additive of the encoded straight colours.
+        let under = if mode == BlendMode::AdditiveSrgb {
+            ba
+        } else {
+            ba * (1.0 - sa)
+        };
+        for channel in 0..3 {
+            let mixed = encode(src[channel]) * sa + encode(back[channel]) * under;
+            let straight = if alpha > 0.0 { mixed / alpha } else { 0.0 };
+            out[channel] = (straight.clamp(0.0, 1.0) * 255.0).round() as u8;
+        }
+        out[3] = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+        return out;
+    }
     for channel in 0..3 {
         let (s, b) = (src[channel] * sa, back[channel] * ba);
         let premultiplied = match mode {
@@ -306,4 +322,32 @@ fn a_3d_item_reads_the_backdrop_under_its_polygon() {
             );
         }
     }
+}
+
+/// A faint veil over a dark backdrop keeps the strength a browser gives it under
+/// `normal_srgb` (#1096): white at 10% over sRGB 30 is about 53 mixed encoded, as a
+/// browser composites, where `normal`, mixing linear light, lifts it to about 95.
+#[test]
+fn a_faint_veil_keeps_its_browser_strength_in_srgb() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let white = solid(compositor, 2, 2, [255, 255, 255, 255]);
+    let dark = 30.0 / 255.0;
+    let background = Color::rgb(dark, dark, dark);
+    for (mode, expected) in [(BlendMode::NormalSrgb, 53), (BlendMode::Normal, 95)] {
+        let items = [blended(&white, Placement::IDENTITY, 0.1, mode)];
+        let shot = render(compositor, (2, 2), background, &items);
+        near(&shot, 0, 0, [expected, expected, expected, 255], TOLERANCE);
+    }
+    // Additive adds the encoded values: 30 + 10% of 255.
+    let items = [blended(
+        &white,
+        Placement::IDENTITY,
+        0.1,
+        BlendMode::AdditiveSrgb,
+    )];
+    let shot = render(compositor, (2, 2), background, &items);
+    near(&shot, 0, 0, [56, 56, 56, 255], TOLERANCE);
 }

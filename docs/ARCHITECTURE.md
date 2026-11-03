@@ -305,7 +305,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output that carries audio an audio chain, and their filters can't hold a reference
   (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
-  [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
+  [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
+  browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -1056,8 +1057,10 @@ interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
-src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
-target under the item, and overlay, difference and exclusion mix sRGB-encoded values. The composite pass writes premultiplied linear light into `Rgba16Float`; a
+src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
+target under the item, and overlay, difference, exclusion, `normal_srgb` and
+`additive_srgb` mix sRGB-encoded values, the last two to match a browser
+([ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter

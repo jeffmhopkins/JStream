@@ -202,7 +202,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of the
+  `normal_srgb` and `additive_srgb` blend modes (ADR-0105), with 0.72 to 0.75 left to
+  changes that claimed them first; 0.71 because of
   `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
   ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 left
   to a change that claimed it first; 0.70 because of
@@ -717,12 +719,15 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`, and from 0.76 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
 sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
+`normal_srgb` and `additive_srgb` (0.76) are `normal` and `additive` mixed in
+sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
+same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain

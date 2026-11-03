@@ -1861,7 +1861,8 @@ impl Crop {
 ///
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). They blend in linear light,
-/// except overlay, difference and exclusion, which blend sRGB-encoded values.
+/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.76),
+/// which blend sRGB-encoded values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -1885,11 +1886,18 @@ pub enum BlendMode {
     Difference,
     /// Like difference, with lower contrast.
     Exclusion,
+    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.76,
+    /// #1096): a soft overlay designed in a browser keeps its strength, where `normal`
+    /// mixes linear light and a faint veil over a dark backdrop comes out brighter.
+    NormalSrgb,
+    /// Additive in sRGB-encoded values, as a browser's `plus-lighter` adds (since 0.76,
+    /// #1096): the encoded colours add, so a faint glow adds what it does in the browser.
+    AdditiveSrgb,
 }
 
 impl BlendMode {
     /// Every mode, in the order the UI lists them.
-    pub const ALL: [BlendMode; 9] = [
+    pub const ALL: [BlendMode; 11] = [
         BlendMode::Normal,
         BlendMode::Additive,
         BlendMode::Multiply,
@@ -1899,6 +1907,8 @@ impl BlendMode {
         BlendMode::Lighten,
         BlendMode::Difference,
         BlendMode::Exclusion,
+        BlendMode::NormalSrgb,
+        BlendMode::AdditiveSrgb,
     ];
 
     /// The mode with this wire name.
@@ -1925,6 +1935,8 @@ impl BlendMode {
             BlendMode::Lighten => "lighten",
             BlendMode::Difference => "difference",
             BlendMode::Exclusion => "exclusion",
+            BlendMode::NormalSrgb => "normal_srgb",
+            BlendMode::AdditiveSrgb => "additive_srgb",
         }
     }
 }
