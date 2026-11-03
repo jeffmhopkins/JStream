@@ -28,7 +28,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 |---|---|---|
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
-| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
+| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
@@ -380,7 +380,7 @@ injection), and so using its full access against the user.
 
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
-MCP off. Tool arguments and results are not logged; the audit log records who changed
+MCP off unless started with `--mcp`, which serves it behind the same token and checks. Tool arguments and results are not logged; the audit log records who changed
 what, without arguments. Agents can read the last 100 entries with `activity.list`,
 each with a sentence that names objects and gives values but never settings, targets
 or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.

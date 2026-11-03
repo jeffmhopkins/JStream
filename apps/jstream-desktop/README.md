@@ -30,7 +30,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
-  at each start; `vcam_status`, whether the camera is registered and current.
+  at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
+  on); `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
@@ -160,12 +161,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
   picks, behind a 32-byte random token made at each start and kept only in memory: no
   token file, and no other client can connect. MCP is off. With `--mcp`
-  (`host::Agents`) the server binds `127.0.0.1` on that fixed port, takes the token from
+  (`host::Agents`) the server binds `127.0.0.1` on a fixed port (`--port`, 4455 by
+  default), takes the token from
   the data folder's token file through `jstream_server::token_file`, the daemon's
   code, so it has the same checks (user-only, refused otherwise), and turns MCP on
   (`ServerConfig::mcp`), so agents and the CLI connect with that file. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. The engine serves only the webview, so the server pairs no device
+  token. The window needs no pairing and pairing remote browsers isn't offered yet
+  ([Purpose](#purpose)), so the server pairs no device
   (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
   answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
   pairing page or device cookie

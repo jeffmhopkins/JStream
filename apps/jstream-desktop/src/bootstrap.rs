@@ -5,8 +5,8 @@
 //! reassigned, and only on a page from the app's own origin: the webview also refuses
 //! to navigate anywhere else (see `shell.rs`), so no other page ever sees the token.
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
-//! The token is the in-memory one the app made at startup; it is never written to a
-//! file or a log (R-SEC-001).
+//! The token is the in-memory one the app made at startup, or with `--mcp` the data
+//! folder's user-only token file's; it is never written to a log (R-SEC-001).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 

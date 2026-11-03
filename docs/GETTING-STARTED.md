@@ -188,7 +188,8 @@ can look at the program with snapshots. Agents can't connect until you turn this
    }
    ```
 
-   For Claude Code, in a terminal:
+   For Claude Code, in Command Prompt (in PowerShell, write `$env:APPDATA` for
+   `%APPDATA%`):
 
    ```bat
    claude mcp add jstream -e JSTREAM_TOKEN_FILE=%APPDATA%\JStream\token -- "C:\Users\you\Documents\JStream\jstream-cli.exe" --url ws://127.0.0.1:4455 mcp

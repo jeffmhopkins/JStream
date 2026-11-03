@@ -102,7 +102,8 @@ impl Host {
             config.mcp = true;
         }
         config.extra_origins = vec![origin.to_owned()];
-        // The engine serves only this webview, so it pairs no device (ADR-0047).
+        // The window needs no pairing, and pairing remote browsers isn't offered yet, so it
+        // pairs no device (ADR-0047), with or without agents.
         config.pairing = false;
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
