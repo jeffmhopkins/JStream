@@ -16,7 +16,7 @@ tier = "maintainer"
 ## Context
 HTML pages in browser sources can't see the engine. Pages that should move together each
 read `Date.now()`, no page knows when its item was shown or which scene is on program,
-monitor pages fake their data, and audio visualisers simulate the mix (#1063, #1060).
+data pages fake their data, and audio visualisers simulate the mix (#1063, #1060).
 Native motion is getting one engine animation clock, a media-clock time that every motion
 modifier and timeline reads (#1058). A page that draws to that same clock stays in step
 with native motion, and with the other pages.
@@ -124,13 +124,13 @@ it must never hand a page the control token (#347).
    - **Commands.** `values.set { name, value }` (`value: null` removes it), `values.list`,
      and a `values.changed` event. MCP tools `values_set` and `values_list`. They are
      **actions**, not edits ([R-ARCH-006](../RULES.md#R-ARCH-006),
-     [ADR-0013](0013-command-model.md)): a scoreboard ticking must not fill the undo
+     [ADR-0013](0013-command-model.md)): a value that changes often must not fill the undo
      history.
    - **Storage.** The engine holds values in memory. They are not collection state, not
      saved, and not `rev`. A collection that wants a value at start sets it from a
      timeline cue (#1059) or from the agent that builds the scene.
-   - **Names and limits.** A name is dotted lowercase segments (`ship.status`,
-     `score.home`) of `[a-z0-9_]`, at most 64 bytes. A value is any JSON value, at most
+   - **Names and limits.** A name is dotted lowercase segments (`status.text`,
+     `counter.a`) of `[a-z0-9_]`, at most 64 bytes. A value is any JSON value, at most
      16 KiB serialized, with at most 256 names in the store. A set beyond a limit is refused
      with `invalid_argument`.
    - **What the page sees.** `jstream.values.get(name)` returns the value. A `value`
@@ -165,8 +165,8 @@ it must never hand a page the control token (#347).
 <a id="consequences"></a>
 ## Consequences
 - HTML monitors and visualisers can draw from the same clock as native motion, show
-  data an agent sets over MCP, and react to the real mix. The cockpit's pages stop faking
-  their data (#1063, #1060).
+  data an agent sets over MCP, and react to the real mix, rather than faking their data
+  (#1063, #1060).
 - A page that is granted data can send it off the machine, if it is a web page or loads
   one. That is the user's choice, made per source and per kind of data, and the Properties
   dialog says so. Two grants deserve the warning most:
