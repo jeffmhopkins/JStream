@@ -113,7 +113,8 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `device`, `history`, `output`, `pairing` and `ui_settings`. `history` stays
+today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
+disk that undo never reaches), `pairing` and `ui_settings`. `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream

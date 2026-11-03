@@ -968,7 +968,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pairing` and `ui_settings`;
+  `pack`, `pairing` and `ui_settings`;
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets
