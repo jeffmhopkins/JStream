@@ -400,11 +400,18 @@ wrap_resource_request_handler! {
             };
             let url = CefString::from(&request.url()).to_string();
             let page = &self.page.0;
-            match page.policy.check_from(&url, self.initiator.as_deref()) {
+            let main_frame = request.resource_type() == ResourceType::MAIN_FRAME;
+            let verdict = if main_frame {
+                page.policy
+                    .check_main_frame_from(&url, self.initiator.as_deref())
+            } else {
+                page.policy.check_from(&url, self.initiator.as_deref())
+            };
+            match verdict {
                 crate::Verdict::Allow => {
                     // Before the new document exists, so its requests are judged by where
                     // the main frame now is.
-                    if request.resource_type() == ResourceType::MAIN_FRAME {
+                    if main_frame {
                         page.policy.main_frame_to(&url);
                     }
                     ReturnValue::CONTINUE
@@ -438,9 +445,17 @@ wrap_resource_request_handler! {
             };
             let page = &self.page.0;
             let target = new_url.to_string();
-            match page.policy.check_from(&target, self.initiator.as_deref()) {
+            let main_frame =
+                request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME);
+            let verdict = if main_frame {
+                page.policy
+                    .check_main_frame_from(&target, self.initiator.as_deref())
+            } else {
+                page.policy.check_from(&target, self.initiator.as_deref())
+            };
+            match verdict {
                 crate::Verdict::Allow => {
-                    if request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME) {
+                    if main_frame {
                         page.policy.main_frame_to(&target);
                     }
                 }

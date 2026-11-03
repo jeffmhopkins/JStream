@@ -34,7 +34,11 @@
 //!     page, so a sandboxed or `data:` frame that a third-party frame creates counts as
 //!     the page's own;
 //!   - a request CEF names no origin for was started by the browser itself (the
-//!     source's own load, a reload) and is judged as the source's own.
+//!     source's own load, a reload) and is judged as the source's own. CEF on Linux names
+//!     `null` instead for the source's own first load (#1069), so a main-frame load of the
+//!     source's own web origin with an opaque initiator, before the main frame has left
+//!     it, counts as one the browser started
+//!     ([`check_main_frame_from`](RequestPolicy::check_main_frame_from)).
 //!
 //!   Every other origin from the internet is refused. CEF can't tell one opaque origin
 //!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
@@ -180,6 +184,19 @@ impl RequestPolicy {
             self.denied.fetch_add(1, Ordering::Relaxed);
         }
         verdict
+    }
+
+    /// [`check_from`](Self::check_from) for a request that loads the main frame. CEF on
+    /// Linux names the opaque origin (`null`) as the initiator of the source's own first
+    /// load, which the browser started (#1069). So a main-frame load of the source's own
+    /// web origin with an opaque initiator, while the main frame hasn't left that origin,
+    /// is judged as one the browser started: still refused when the location is from the
+    /// internet and its source didn't opt in.
+    pub fn check_main_frame_from(&self, url: &str, initiator: Option<&str>) -> Verdict {
+        let own_load = initiator == Some("null")
+            && !self.left_home.load(Ordering::Acquire)
+            && matches!(&self.home, Home::Web(Some(own)) if Origin::parse(url).as_ref() == Some(own));
+        self.check_from(url, if own_load { None } else { initiator })
     }
 
     /// Whether `initiator` (an origin, as for [`check_from`](Self::check_from)) may make
@@ -693,6 +710,71 @@ mod tests {
             opted.check_from("http://192.168.1.1/", Some("null")),
             Verdict::Allow
         );
+    }
+
+    /// #1069: CEF on Linux names `null` as the initiator of the source's own first load.
+    /// A local web source still loads, and so does an opted-in one; a source from the
+    /// internet, another local origin, a subresource and a load after the main frame left
+    /// home are still judged by their opaque origin.
+    #[test]
+    fn a_local_source_s_own_first_load_with_a_null_initiator_is_allowed() {
+        let local = RequestPolicy::for_location(&PageLocation::Web(
+            "http://127.0.0.1:8767/sky.html".into(),
+        ));
+        assert_eq!(
+            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null")),
+            Verdict::Allow
+        );
+        // A reload, or another page of the same origin, while still home.
+        assert_eq!(
+            local.check_main_frame_from("http://127.0.0.1:8767/other.html", Some("null")),
+            Verdict::Allow
+        );
+        // Another local origin, and a subresource, are not the source's own load.
+        assert!(deny(
+            local.check_main_frame_from("http://127.0.0.1:9000/", Some("null"))
+        ));
+        assert!(deny(
+            local.check_from("http://127.0.0.1:8767/a.png", Some("null"))
+        ));
+        // Once the main frame has left for the web, `null` is the web's.
+        local.main_frame_to("https://example.com/");
+        assert!(deny(local.check_main_frame_from(
+            "http://127.0.0.1:8767/sky.html",
+            Some("null")
+        )));
+
+        // A named initiator is judged as before.
+        let named =
+            RequestPolicy::for_location(&PageLocation::Web("http://localhost:3000/".into()));
+        assert_eq!(
+            named.check_main_frame_from("http://localhost:3000/", Some("http://localhost:3000")),
+            Verdict::Allow
+        );
+
+        // An opted-in LAN name.
+        let opted = RequestPolicy::for_page(&PageSpec {
+            location: PageLocation::Web("http://widgets.example:8080/".into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: true,
+        });
+        assert_eq!(
+            opted.check_main_frame_from("http://widgets.example:8080/", Some("null")),
+            Verdict::Allow
+        );
+
+        // A source from the internet gains nothing: its own load isn't local anyway, and a
+        // local target from it stays refused.
+        let web = RequestPolicy::for_location(&PageLocation::Web("https://example.com/".into()));
+        assert_eq!(
+            web.check_main_frame_from("https://example.com/", Some("null")),
+            Verdict::Allow
+        );
+        assert!(deny(
+            web.check_main_frame_from("http://127.0.0.1/", Some("null"))
+        ));
     }
 
     /// #347: a page from the internet can't reach this computer or the local network.
