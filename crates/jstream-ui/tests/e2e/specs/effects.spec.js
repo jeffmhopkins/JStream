@@ -2,7 +2,7 @@
 // Filters panel shows the item's effects, which the Add filter dialog adds to and whose
 // rows work as a chain's. They belong to the one placement, not to its source. The mock
 // engine lists and describes no kinds, so the page's socket answers for Vignette (with the
-// core kind's four settings, so it opens the Filter settings dialog), Sharpen and Gain
+// core kind's four settings, so it opens the Filters window), Sharpen and Gain
 // (`describeKinds`). In a keyframe scene the panel shows the item's effects as the keyframe
 // shows them: they follow the item's own until a change gives the keyframe its own, and
 // Follow the item clears that override (ADR-0088).
@@ -73,10 +73,10 @@ test('an item\'s effects are its own: added, reordered, turned off and removed u
   const start = await rev(page);
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
-  // Four settings: it opens the Filter settings dialog, named for the item's effect.
-  const settings = page.getByRole('dialog', { name: 'Filter settings' });
-  await expect(settings.locator('.modal-title')).toHaveText('Vignette');
-  await expect(settings.locator('.modal-sub')).toHaveText('Effect on “Backdrop”');
+  // Four settings: it opens the Filters window, on the item's effect.
+  const settings = page.getByRole('dialog', { name: 'Filters', exact: true });
+  await expect(settings.locator('.filter-pane-title')).toHaveText('Vignette');
+  await expect(settings.locator('.filter-pane-sub')).toHaveText('Effect on “Backdrop”');
   await settings.getByRole('button', { name: 'OK' }).click();
   await expect(settings).toBeHidden();
   await expect(effectRows(page).locator('.filter-name')).toHaveText(['Vignette']);

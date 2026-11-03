@@ -49,7 +49,7 @@ pub(super) fn descriptor() -> KindDescriptor {
             ),
             described(
                 "Multiplies each channel; white is unchanged. Sepia is saturation -1 \
-                 times a warm colour.",
+                 times a warm color.",
                 color("multiply", "Multiply color", false, "#ffffff"),
             ),
             float("opacity", "Opacity", 0.0, 100.0, 100.0, "%"),

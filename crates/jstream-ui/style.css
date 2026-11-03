@@ -1345,6 +1345,29 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filter-editor .section { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin: 0; }
 .filter-editor .section legend, .filter-editor .section summary { grid-column: 1 / -1; }
 .modal.filter-dialog { width: 460px; }
+/* The Filters window: scope tabs, the chain on the left, the selected filter's settings on
+   the right. Its backdrop is clear, so the canvas shows each change. */
+.modal-backdrop.undimmed { background: transparent; }
+.modal.filters-window { width: 820px; height: min(620px, 100%); }
+.filters-scopes { display: flex; gap: 4px; padding: 8px 16px 0; border-bottom: 1px solid var(--line); }
+.filters-scope { padding: 6px 12px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); }
+.filters-scope.on { color: var(--text); border-bottom-color: var(--accent); }
+.filters-window-body { display: grid; grid-template-columns: 300px 1fr; flex: 1 1 auto; min-height: 0; }
+.filters-window-list { display: flex; flex-direction: column; gap: 8px; padding: 10px; overflow: auto; border-right: 1px solid var(--line); }
+.filters-window-pane { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+.filters-window-pane > .placeholder { padding: 16px; }
+.filter-pane { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.filter-pane-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px 0; }
+.filter-pane-title { font-size: 14px; font-weight: 600; }
+.filter-pane .filter-dialog-body { max-height: none; flex: 1 1 auto; }
+.filter-pane-foot { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.filter.selected > .filter-row { background: var(--selected, rgba(76, 141, 255, 0.18)); }
+.filters-open { margin-left: auto; width: 26px; height: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 5px; background: none; color: var(--muted); }
+.filters-open:hover { color: var(--text); background: var(--hover, rgba(255, 255, 255, 0.06)); }
+@media (max-width: 720px) {
+  .filters-window-body { grid-template-columns: 1fr; }
+  .filters-window-list { border-right: 0; border-bottom: 1px solid var(--line); max-height: 40%; }
+}
 .filter-dialog-tools { display: flex; align-items: center; gap: 8px; }
 .filter-dialog-body { padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .filter-hint { margin: 0 0 12px; font-size: 12px; color: var(--muted); }

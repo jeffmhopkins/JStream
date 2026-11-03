@@ -591,7 +591,7 @@ source: crates/jstream-core/src/kinds.rs
         "max": 1000,
         "default": 100,
         "label": "Key color spill reduction",
-        "description": "How far past the similarity kept colour is desaturated, removing the key colour's cast from edges.",
+        "description": "How far past the similarity kept color is desaturated, removing the key color's cast from edges.",
         "live": true
       }
     ]
@@ -701,7 +701,7 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": false,
         "default": "#ffffff",
         "label": "Multiply color",
-        "description": "Multiplies each channel; white is unchanged. Sepia is saturation -1 times a warm colour.",
+        "description": "Multiplies each channel; white is unchanged. Sepia is saturation -1 times a warm color.",
         "live": true
       },
       {

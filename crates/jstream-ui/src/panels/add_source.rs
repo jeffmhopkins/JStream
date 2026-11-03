@@ -568,6 +568,16 @@ fn AddSourceBody(
                 .cloned()
         })
     };
+    // When the search moves the pick to another type, a name typed for the last one
+    // goes, as a click on a type clears it.
+    Effect::new(move |before: Option<Option<String>>| {
+        let now = current().map(|t| t.key());
+        if before.is_some_and(|before| before != now) {
+            name.set(String::new());
+            chosen.set(None);
+        }
+        now
+    });
     let existing_list = {
         let scene_id = scene_id.clone();
         move || {
@@ -672,7 +682,8 @@ fn AddSourceBody(
     let type_list = move || {
         let types = shown.get();
         if types.is_empty() {
-            return view! { <p class="placeholder">"No source type matches."</p> }.into_any();
+            return view! { <p class="placeholder" role="status">"No source type matches."</p> }
+                .into_any();
         }
         let mut groups: Vec<(Category, Vec<SourceType>)> = Vec::new();
         for t in types {
