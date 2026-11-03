@@ -456,7 +456,7 @@ stamp = { hash = "b3:67aa36b060d4b132", by = "agent:claude", note = "mcp README 
 stamp = { hash = "b3:2bf40744460c59b3", by = "agent:claude", note = "#1101 opacity above 1: design guidance adds that opacity goes to 4 and above 1 multiplies an item's light; tools.snap changes only through the protocol schema (opacity docs, version)" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:5e63fb93c62eafd3", by = "agent:claude", note = "design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
+stamp = { hash = "b3:71bb47e2bd936131", by = "agent:claude", note = "#1101 opacity above 1: design guidance adds that opacity goes to 4 and above 1 multiplies an item's light; tools.snap changes only through the protocol schema (opacity docs, version) | merge: #1095 rewords the stinger guidance in design.rs (transparent during the page load, never the last run's end); this branch's opacity-gain guidance line is untouched and the section still holds | kept from the merged side: design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2391,7 +2391,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:5e63fb93c62eafd3", by = "agent:claude", note = "design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
+stamp = { hash = "b3:71bb47e2bd936131", by = "agent:claude", note = "#1101 opacity above 1: design.rs guidance adds opacity up to 4 as a gain for additive glows and reflections; no tool change | merge: #1095 rewords the stinger guidance in design.rs (transparent during the page load, never the last run's end); this branch's opacity-gain guidance line is untouched and the section still holds | kept from the merged side: design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2424,7 +2424,7 @@ stamp = { hash = "b3:8d504af503b308a3", by = "agent:claude", note = "Tools bulle
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:5e63fb93c62eafd3", by = "agent:claude", note = "design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
+stamp = { hash = "b3:71bb47e2bd936131", by = "agent:claude", note = "#1101 opacity above 1: guidance text change only | merge: #1095 rewords the stinger guidance in design.rs (transparent during the page load, never the last run's end); this branch's opacity-gain guidance line is untouched and the section still holds | kept from the merged side: design.rs's HTML stinger guidance: the reload sentence now says the stinger is transparent while it reloads, never the end of its previous run (the reload hold in jstream-browser). It still says to start and end the animation transparent, keep it light and leave a few hundred ms before cut_ms. No tool, schema or access change." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -5520,7 +5520,7 @@ stamp = { hash = "b3:cbc148f78a6a98ff" }
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:e09dcef54c436d7a", by = "agent:claude", note = "merge: #1049 added item.set_locked to the CLI usage; the agent setup steps (--mcp, token file, cli mcp proxy config) don't name it and still hold | kept from the merged side: Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
+stamp = { hash = "b3:4660367b338e5cd2", by = "agent:claude", note = "#1101 opacity above 1: CLI usage now says item.set_opacity takes 0..4; this section's agent setup holds | merge: #1095 doesn't touch the CLI usage beyond what main restamped; the agent steps still hold | kept from the merged side: merge: #1049 added item.set_locked to the CLI usage; the agent setup steps (--mcp, token file, cli mcp proxy config) don't name it and still hold | kept from the merged side: Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
