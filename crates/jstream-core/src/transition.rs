@@ -158,9 +158,13 @@ pub(crate) enum Seen {
     /// The camera its transition gives its track.
     #[default]
     AsPlanned,
-    /// Taken from the screen mid-transition: the camera it was seen through then,
-    /// `None` for 2D. It keeps it as it leaves.
-    Held(Option<SceneCamera>),
+    /// Taken from the screen mid-transition: the camera it was seen through then
+    /// (`None` for 2D) and the depth run it was sorted in, both of which it keeps as it
+    /// leaves, so a stinger's items stay over the scenes they covered.
+    Held {
+        camera: Option<SceneCamera>,
+        depth_run: u32,
+    },
 }
 
 /// The one camera every visual taken from the screen was seen through, or `Err` when
@@ -168,7 +172,7 @@ pub(crate) enum Seen {
 /// switch that takes them can't move one camera. `Ok(None)` for 2D, or nothing shown.
 pub(crate) fn shared_camera(visuals: &[Visual]) -> Result<Option<SceneCamera>, ()> {
     let mut held = visuals.iter().map(|visual| match visual.seen {
-        Seen::Held(camera) => camera,
+        Seen::Held { camera, .. } => camera,
         Seen::AsPlanned => None,
     });
     let Some(first) = held.next() else {

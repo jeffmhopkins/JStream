@@ -947,9 +947,10 @@ keeps each side's own camera on its items. A stinger's items are seen through th
 own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
 `depth_run` of their own, so they sort among themselves and stay over the scenes
 under them. A switch that cuts a transition short takes what is on screen with the
-camera each item was seen through (`Seen::Held`): it leaves through that camera, and
-only a screen seen through one camera (a Move cut short) moves it toward the new
-scene's; one seen through several (a Fade or stinger between cameras) makes the
+camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
+leaves through that camera, a stinger's items still over what they covered, and only a
+screen seen through one camera (a Move cut short) moves it toward the new scene's, for
+every track; one seen through several (a Fade or stinger between cameras) makes the
 switch a Fade (`transition::shared_camera`).
 
 ### No privacy screen

@@ -772,6 +772,12 @@ fn a_stingers_items_keep_their_scenes_camera() {
         cameras[..cameras.len() - 1].contains(&None),
         "the stinger's c1 leaves in 2D: {cameras:?}"
     );
+    let runs = hub.load().shot().track_depth_runs().expect("a fade");
+    assert_eq!(
+        runs.iter().filter(|run| **run == 1).count(),
+        1,
+        "c1 keeps the stinger's own depth run as it leaves: {runs:?}"
+    );
 
     clock.advance(1_000_000);
     engine.replan();
@@ -782,4 +788,45 @@ fn a_stingers_items_keep_their_scenes_camera() {
         Some(vec![Some(a), Some(b), Some(b)]),
         "a 3D stinger scene through its own camera"
     );
+}
+
+/// A Move cut short by another Move keeps moving one camera, from where it was, for
+/// every track, so a third quick switch moves too (ADR-0094 decision 7).
+#[test]
+fn moves_cut_short_keep_moving_one_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(camera_at(900.0))),
+            set_camera("b", Some(camera_at(1000.0))),
+            set_camera("c", Some(camera_at(1100.0))),
+            preset("move", "move", 400),
+        ]),
+    )
+    .expect("cameras");
+    let hub = engine.render_hub();
+    let one_camera = |elapsed_ms: f32| {
+        let cameras = hub.load().shot().track_cameras(elapsed_ms).expect("moving");
+        assert!(cameras.len() > 1, "{cameras:?}");
+        assert!(
+            cameras.windows(2).all(|pair| pair[0] == pair[1]),
+            "one camera for every track: {cameras:?}"
+        );
+        cameras[0].map(|camera| camera.position.x.get())
+    };
+
+    switch(&control, "b", Some("move")).expect("to b");
+    clock.advance(100_000);
+    switch(&control, "c", Some("move")).expect("to c");
+    assert_eq!(
+        one_camera(0.0),
+        Some(925.0),
+        "from a quarter of the way to b"
+    );
+    clock.advance(100_000);
+    switch(&control, "a", Some("move")).expect("back to a");
+    let x = one_camera(0.0).expect("3D");
+    assert!(x > 925.0 && x < 1100.0, "from on the way to c: {x}");
 }

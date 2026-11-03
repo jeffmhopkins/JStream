@@ -518,14 +518,15 @@ impl TrackCameras {
     /// The camera `track` is seen through `elapsed_ms` into the transition: a Move's
     /// tracks share the camera moving between the two ends; a Fade's leaving tracks keep
     /// the one they leave from, and the rest take the one it shows. A stinger's items
-    /// take their own scene's, and what was taken from the screen and doesn't pair
-    /// keeps the camera it was seen through then (`seen`).
+    /// take their own scene's. Outside a Move, what was taken from the screen keeps the
+    /// camera it was seen through then (`seen`); a Move only starts from a screen seen
+    /// through one camera, its first end, so all its tracks share the moving one.
     fn camera(&self, track: &Track, seen: Seen, elapsed_ms: f32) -> Option<SceneCamera> {
         if matches!(track, Track::Through { .. }) {
             return self.overlay;
         }
-        if let Seen::Held(camera) = seen
-            && !matches!(track, Track::Pair { .. })
+        if let Seen::Held { camera, .. } = seen
+            && !self.pairs
         {
             return camera;
         }
@@ -751,6 +752,18 @@ impl Shot {
             t.tracks
                 .iter()
                 .map(|(_, track, seen)| t.cameras.camera(track, *seen, elapsed_ms))
+                .collect()
+        })
+    }
+
+    /// The depth run each of the running transition's tracks sorts in, in drawing order,
+    /// or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn track_depth_runs(&self) -> Option<Vec<u32>> {
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, seen)| depth_run(track, *seen))
                 .collect()
         })
     }
@@ -1232,7 +1245,10 @@ pub(crate) fn on_screen(
     let cameras = planner.track_cameras(running);
     let elapsed_ms = running.elapsed_ms(now);
     planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
-        Seen::Held(cameras.camera(track, visual.seen, elapsed_ms))
+        Seen::Held {
+            camera: cameras.camera(track, visual.seen, elapsed_ms),
+            depth_run: depth_run(track, visual.seen),
+        }
     })
 }
 
@@ -4047,9 +4063,19 @@ fn fill_tracks<'a>(
             visible: true,
             camera: transition.cameras.camera(track, *seen, elapsed),
             // A stinger's items sort on their own, over the scenes under them.
-            depth_run: u32::from(matches!(track, Track::Through { .. })),
+            depth_run: depth_run(track, *seen),
         })
     }));
+}
+
+/// The depth run a transition's track sorts in (ADR-0094 decision 4): a stinger's items
+/// one of their own, kept when a switch takes them from the screen, so they stay over
+/// the scenes under them through an equal camera; everything else `0`.
+fn depth_run(track: &Track, seen: Seen) -> u32 {
+    match seen {
+        Seen::Held { depth_run, .. } => depth_run,
+        Seen::AsPlanned => u32::from(matches!(track, Track::Through { .. })),
+    }
 }
 
 /// `image`, of size `from`, fitted inside `into`: scaled by the same factor both ways
@@ -4707,13 +4733,19 @@ pub(crate) mod tests {
         );
         cameras.overlay = Some(from);
         assert_eq!(cameras.camera(&through, planned, 500.0), Some(from));
-        // What a switch took from the screen leaves through the camera it had then,
-        // 2D included, whatever the ends.
-        let held = Seen::Held(Some(to));
-        assert_eq!(cameras.camera(&leaving, held, 500.0), Some(to));
-        assert_eq!(cameras.camera(&leaving, Seen::Held(None), 500.0), None);
+        // Outside a Move, what a switch took from the screen leaves through the camera
+        // it had then, 2D included, whatever the ends.
+        let held = |camera| Seen::Held {
+            camera,
+            depth_run: 0,
+        };
+        assert_eq!(cameras.camera(&leaving, held(Some(to)), 500.0), Some(to));
+        assert_eq!(cameras.camera(&leaving, held(None), 500.0), None);
+        // A Move starts from a screen seen through one camera, its first end, and
+        // moves it for every track, leaving ones too.
         cameras.pairs = true;
-        assert_eq!(cameras.camera(&leaving, held, 0.0), Some(to));
+        let moving = cameras.camera(&leaving, held(Some(from)), 500.0);
+        assert_eq!(moving.map(|camera| camera.position.x.get()), Some(1460.0));
     }
 
     /// A scene's background is planned with it, a keyframe scene draws its parent's and
