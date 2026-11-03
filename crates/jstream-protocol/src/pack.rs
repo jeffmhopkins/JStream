@@ -53,9 +53,10 @@ pub struct PackInfo {
     /// Whether the engine loads it: `false` for a pack whose manifest or shaders fail
     /// to load, or whose ID another folder already holds.
     pub loaded: bool,
-    /// The client name (from its `hello`) of the last `pack.write` of this pack, which
-    /// says who claims to have written it, not who proved it. Omitted for a pack no
-    /// client wrote: one a person put in the folder.
+    /// The client name (from its `hello`) of the last `pack.write` of this pack ID,
+    /// which says who claims to have written it, not who proved it. It stays when a
+    /// person later edits or replaces the folder by hand. Omitted for a pack ID no
+    /// client has written, and when the last writer gave no name.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub written_by: Option<String>,
 }
@@ -69,7 +70,8 @@ pub struct PackFileInfo {
     pub size: u64,
     /// The BLAKE3 digest of its bytes, as lower-case hex.
     pub digest: String,
-    /// The text of an `effect.toml` or `.wgsl` file. Omitted for an image.
+    /// The text of an `effect.toml` or `.wgsl` file. Omitted for an image, and in a
+    /// whole-pack read for a file past its 3 MiB budget of text: read it by `path`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
     /// An image's bytes as base64, only when `pack.read` named that image by `path`.

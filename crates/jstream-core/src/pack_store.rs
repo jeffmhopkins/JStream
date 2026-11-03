@@ -11,8 +11,6 @@ use std::io;
 use std::path::{MAIN_SEPARATOR, Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use jstream_effects::MANIFEST;
 use jstream_protocol::{
     AssetRoot, EntityKind, MAX_PACK_FILES, MAX_PACK_IMAGE_BYTES, MAX_PACK_WRITE_BYTES, PackContent,
@@ -169,8 +167,7 @@ pub(crate) fn decode(files: &[PackFile]) -> Result<Vec<(String, Vec<u8>)>, Proto
                 return Err(bad("an image is sent as `base64`".into()));
             }
             (PackContent::Base64(text), false) => {
-                let bytes = STANDARD
-                    .decode(text)
+                let bytes = crate::snapshot::decode_base64(text)
                     .map_err(|error| bad(format!("not standard base64: {error}")))?;
                 if bytes.len() > MAX_PACK_IMAGE_BYTES {
                     return Err(bad(format!(
@@ -182,6 +179,19 @@ pub(crate) fn decode(files: &[PackFile]) -> Result<Vec<(String, Vec<u8>)>, Proto
             }
         };
         decoded.push((path.clone(), bytes));
+    }
+    // A file and a folder can't share a name: `a.wgsl` and `a.wgsl/b.wgsl`.
+    for (path, _) in &decoded {
+        let folder = format!("{}/", path.to_ascii_lowercase());
+        if let Some((inner, _)) = decoded
+            .iter()
+            .find(|(other, _)| other.to_ascii_lowercase().starts_with(&folder))
+        {
+            return Err(ProtocolError::invalid_argument(
+                "files",
+                format!("`{path}` is a file, so `{inner}` can't be in a folder of that name"),
+            ));
+        }
     }
     if !decoded.iter().any(|(path, _)| path == MANIFEST) {
         return Err(ProtocolError::invalid_argument(
@@ -420,7 +430,9 @@ fn without_staging(staging: &Path, message: &str) -> String {
 
 /// Deletes pack `pack` from `root` (ADR-0097 decision 4): each folder whose
 /// `effect.toml` names it goes to `.deleted/<pack>`, then is removed. `not_found` when
-/// none does.
+/// none does. An old version a rewrite left in `.trash/<pack>` (its removal failed) is
+/// removed first, so the next start's recovery can't take it for a stopped swap and put
+/// the deleted pack back.
 pub(crate) fn delete(root: &Path, pack: &str) -> Result<(), ProtocolError> {
     let held = holders(root, pack);
     if held.is_empty() {
@@ -429,6 +441,8 @@ pub(crate) fn delete(root: &Path, pack: &str) -> Result<(), ProtocolError> {
             id: pack.to_owned(),
         });
     }
+    let trash = root.join(TRASH).join(pack);
+    remove(&trash).map_err(|e| internal("couldn't remove the leftover", &trash, &e))?;
     let deleted = root.join(DELETED).join(pack);
     for dir in held {
         remove(&deleted).map_err(|e| internal("couldn't remove the leftover", &deleted, &e))?;
@@ -457,7 +471,13 @@ pub(crate) fn read(dir: &Path, path: Option<&str>) -> Result<Vec<PackFileInfo>, 
         };
         let bytes = std::fs::read(&found.1).map_err(|e| internal("couldn't read", &found.1, &e))?;
         let mut info = file_info(wanted, &bytes);
-        if is_text(wanted) {
+        if is_text(wanted) && info.size > MAX_READ_TEXT_BYTES {
+            // Only a person can have put one this large there: a write is capped.
+            return Err(ProtocolError::TooLarge {
+                size_bytes: info.size,
+                limit_bytes: MAX_READ_TEXT_BYTES,
+            });
+        } else if is_text(wanted) {
             info.text = Some(String::from_utf8_lossy(&bytes).into_owned());
         } else if bytes.len() > MAX_PACK_IMAGE_BYTES {
             return Err(ProtocolError::TooLarge {
@@ -465,7 +485,7 @@ pub(crate) fn read(dir: &Path, path: Option<&str>) -> Result<Vec<PackFileInfo>, 
                 limit_bytes: MAX_PACK_IMAGE_BYTES as u64,
             });
         } else {
-            info.base64 = Some(STANDARD.encode(&bytes));
+            info.base64 = Some(crate::snapshot::base64(&bytes));
         }
         return Ok(vec![info]);
     }
@@ -616,6 +636,22 @@ mod tests {
             content: PackContent::Base64("!!".into()),
         };
         assert!(decode(&[manifest.clone(), not_base64]).is_err());
+        let file_and_folder = decode(&[
+            manifest.clone(),
+            text("a.wgsl", ""),
+            text("A.wgsl/b.wgsl", ""),
+        ]);
+        assert!(
+            file_and_folder
+                .unwrap_err()
+                .to_string()
+                .contains("is a file")
+        );
+        let padded_early = PackFile {
+            path: "a.png".into(),
+            content: PackContent::Base64("AQ==AQID".into()),
+        };
+        assert!(decode(&[manifest.clone(), padded_early]).is_err());
         let many: Vec<PackFile> = (0..65).map(|i| text(&format!("{i}.wgsl"), "")).collect();
         assert!(decode(&many).unwrap_err().to_string().contains("65 files"));
         let big = text(
@@ -760,6 +796,73 @@ mod tests {
             let error = packs.delete("tint").expect_err("gone");
             assert!(matches!(error, ProtocolError::NotFound { .. }), "{error}");
             assert!(packs.read("tint", None).is_err());
+        }
+
+        #[test]
+        fn a_deleted_pack_stays_deleted_after_a_restart() {
+            let temp = Temp::new("delete-restart");
+            let mut packs = open(&temp);
+            packs.write("tint", &tint(MUL), "agent").expect("written");
+            // A rewrite whose old version couldn't be removed left it in the trash.
+            test_pack::write(&temp.0.join(super::super::TRASH).join("tint"), BLUE);
+            packs.delete("tint").expect("deleted");
+            assert!(!temp.0.join(super::super::TRASH).join("tint").exists());
+            drop(packs);
+            assert!(open(&temp).list().is_empty(), "the deleted pack came back");
+        }
+
+        #[test]
+        fn an_unnamed_writer_names_no_one() {
+            let temp = Temp::new("unnamed-writer");
+            let mut packs = open(&temp);
+            packs.write("tint", &tint(MUL), "agent").expect("written");
+            let (info, _) = packs.write("tint", &tint(BLUE), "").expect("rewritten");
+            assert_eq!(info.written_by, None);
+        }
+
+        #[test]
+        fn a_huge_text_file_a_person_placed_is_too_large_to_read() {
+            let temp = Temp::new("read-huge");
+            let mut packs = open(&temp);
+            packs.write("tint", &tint(MUL), "agent").expect("written");
+            let huge = "x".repeat(super::super::MAX_READ_TEXT_BYTES as usize + 1);
+            std::fs::write(temp.pack().join("huge.wgsl"), huge).expect("write");
+            let error = packs
+                .read("tint", Some("huge.wgsl"))
+                .expect_err("too large");
+            assert!(matches!(error, ProtocolError::TooLarge { .. }), "{error}");
+            let all = packs.read("tint", None).expect("read");
+            let listed = all.iter().find(|f| f.path == "huge.wgsl").expect("listed");
+            assert_eq!(listed.text, None, "past the text budget");
+        }
+
+        /// Where the file system ignores case (Windows, macOS), a folder `Tint` holding
+        /// pack `tint` is that pack's folder, and a write replaces it in place.
+        #[cfg(any(windows, target_os = "macos"))]
+        #[test]
+        fn a_folder_named_in_another_case_is_the_packs_folder() {
+            let temp = Temp::new("case-folder");
+            test_pack::write(&temp.0.join("Tint"), MUL);
+            let mut packs = open(&temp);
+            let (info, _) = packs.write("tint", &tint(BLUE), "agent").expect("replaced");
+            assert!(info.loaded);
+            assert_eq!(packs.list().len(), 1, "one folder, replaced in place");
+        }
+
+        /// Where it doesn't (Linux), `Tint` is another folder, and it holds the ID.
+        #[cfg(not(any(windows, target_os = "macos")))]
+        #[test]
+        fn a_folder_named_in_another_case_is_another_folder() {
+            let temp = Temp::new("case-folder");
+            test_pack::write(&temp.0.join("Tint"), MUL);
+            let mut packs = open(&temp);
+            let error = packs
+                .write("tint", &tint(BLUE), "agent")
+                .expect_err("refused");
+            assert!(
+                error.to_string().contains("`Tint` already holds"),
+                "{error}"
+            );
         }
 
         #[test]

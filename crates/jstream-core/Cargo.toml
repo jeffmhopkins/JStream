@@ -30,8 +30,6 @@ default = ["wasm-plugins"]
 [dependencies]
 # The render snapshot the control side publishes and the render thread loads lock-free.
 arc-swap.workspace = true
-# The images of a `pack.write` and a `pack.read` (ADR-0097).
-base64.workspace = true
 blake3.workspace = true
 futures-core.workspace = true
 jstream-audio.workspace = true

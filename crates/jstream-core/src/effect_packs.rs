@@ -442,7 +442,12 @@ impl Packs {
         let home = crate::pack_store::write(&root, pack, &decoded, |dir| {
             jstream_effects::load_pack(dir, jstream_render::FILTER_PRELUDE)
         })?;
-        self.writers.insert(pack.to_owned(), writer.to_owned());
+        // A client that gave no name in its `hello` names no writer.
+        if writer.is_empty() {
+            self.writers.remove(pack);
+        } else {
+            self.writers.insert(pack.to_owned(), writer.to_owned());
+        }
         crate::pack_store::save_writers(&root, &self.writers);
         tracing::info!(pack, writer, files = files.len(), "effect pack written");
         // Its files may keep the sizes and times of the ones they replaced.

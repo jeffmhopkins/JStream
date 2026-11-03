@@ -1654,9 +1654,11 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
 - **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
   `not_found` with `EntityKind::Pack`.
 - **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
-  loads, `loaded`, and `written_by`, the client name of its last `pack.write`.
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that pack ID (omitted when it
+gave none).
 - **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
-  BLAKE3 `digest`, the `text` of text files, and with `path` an image's `base64`.
+  BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
+over that read by `path` is `too_large`), and with `path` an image's `base64`.
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
 

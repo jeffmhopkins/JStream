@@ -405,6 +405,28 @@ exits 0 and names it, and on `kernel32.dll` exits 1; the daemon logs
 `kind.describe` lists its parameters; no `jstream-plugin-host.exe` is left after the scan
 or after Ctrl-C.
 
+### 19. Effect-pack writes on NTFS (closes #1088, PR #1085)
+
+By hand: the script doesn't run this one yet. On #1085's branch, start the daemon with
+`--effects-dir` set to an empty folder and connect a client, for example
+`jstream-cli mcp` or the UI's devtools.
+
+1. Send `pack.write` for a pack `tint`: an `effect.toml` naming `id = "tint"` and its
+   `.wgsl`. It answers with `loaded: true`, and `kind.list` has `tint/…` straight away.
+2. Open the `.wgsl` in an editor that holds it open (Notepad++ does), or start a
+   Defender custom scan of the folder. While that is running, write `tint` again with
+   another shader. It succeeds within about a second, or answers `internal`, and the old
+   version stays loaded. Close the editor and check that `.trash` and `.staging` are
+   empty or gone after the next write.
+3. Rename the folder to `Tint` by hand, then write `tint`. It replaces the folder in
+   place, and `pack.list` shows one pack.
+4. `pack.write` with pack `con`, and with files `nul.png` and `com1/x.wgsl`: each is
+   `invalid_argument`, and nothing appears in the folder.
+5. Kill the daemon while a write is running, then start it again. `tint` loads as one of
+   its versions, and `.staging` and `.deleted` are gone.
+
+Pass: every step does as described. Report on #1088.
+
 <a id="waiting"></a>
 ## Waiting on a fix
 <!-- @section

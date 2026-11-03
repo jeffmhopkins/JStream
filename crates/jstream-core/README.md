@@ -636,9 +636,7 @@ settings, and the CLAP kinds' parameter defaults), `png`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes), `blake3` (the digests a quarantine keeps of each blamed
-shader, ADR-0097; already in the tree through `jstream-server`), `base64` (the images
-a `pack.write` carries and a `pack.read` returns, ADR-0097; the 0.22 line `axum`
-already brings in), `tracing` (see *Logging*) and, on Windows only,
+shader, ADR-0097; already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -1139,7 +1137,8 @@ runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' l
 folder they fail with `unsupported`. A write checks the pack ID (a folder name on every
 platform), its files (at most 64, the asset-path rules for each component, no
 dot-component or trailing dot or space, `effect.toml` and `.wgsl` files as text and
-`.png`, `.jpg` and `.jpeg` images as base64 of at most 2 MiB) and their size as sent
+`.png`, `.jpg` and `.jpeg` images as base64 of at most 2 MiB, decoded strictly by
+`snapshot::decode_base64`; no path is both a file and a folder) and their size as sent
 (3 MiB, else `too_large`, before any is decoded). It puts back a `.trash/<pack>` an
 earlier failed undo left with no `<pack>`, refuses a pack ID another folder's manifest
 names and a folder `<pack>` whose manifest doesn't name it (folder names compared
@@ -1153,11 +1152,13 @@ that still fails is undone, and when the undo fails too the answer says the pack
 air until the next start. The engine then marks the folder stale
 (`PackWatcher::mark_stale`, as new files may keep the old sizes and times) and polls at
 once, so its kinds change before the answer, which is the pack as `pack.list` shows
-it. A delete moves each folder whose manifest names the pack to `.deleted/<pack>`, then
+it. A delete first removes a `.trash/<pack>` a rewrite left (its old version, when removing
+it failed), so the next start can't take it for a stopped swap and bring the deleted pack
+back, then moves each folder whose manifest names the pack to `.deleted/<pack>` and
 removes it. `Packs::new` first recovers a stopped swap (`pack_store::recover`): a
 `.trash/<pack>` with no `<pack>` is renamed back, one beside its `<pack>` removed, and
-`.staging` and `.deleted` emptied. The last writer's client name of each pack is kept
-in `.writers.json` in the packs folder, and the activity log and audit log record
+`.staging` and `.deleted` emptied. The last writer's client name of each pack ID is kept
+in `.writers.json` in the packs folder (none for a client that gave no name), and the activity log and audit log record
 every write and delete (`Wrote effect pack “tint” (2 files)`).
 **Shader sources** (`pack_source.rs`, `chain.rs`,
 [ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's

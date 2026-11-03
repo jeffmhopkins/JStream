@@ -6329,7 +6329,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "text": {
-          "description": "The text of an `effect.toml` or `.wgsl` file. Omitted for an image.",
+          "description": "The text of an `effect.toml` or `.wgsl` file. Omitted for an image, and in a\nwhole-pack read for a file past its 3 MiB budget of text: read it by `path`.",
           "type": [
             "string",
             "null"
@@ -6366,7 +6366,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "boolean"
         },
         "written_by": {
-          "description": "The client name (from its `hello`) of the last `pack.write` of this pack, which\nsays who claims to have written it, not who proved it. Omitted for a pack no\nclient wrote: one a person put in the folder.",
+          "description": "The client name (from its `hello`) of the last `pack.write` of this pack ID,\nwhich says who claims to have written it, not who proved it. It stays when a\nperson later edits or replaces the folder by hand. Omitted for a pack ID no\nclient has written, and when the last writer gave no name.",
           "type": [
             "string",
             "null"
