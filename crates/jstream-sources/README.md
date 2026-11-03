@@ -389,6 +389,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 
 Every frame is packed `Rgba8` with straight alpha, sRGB, full range.
 
+**Installed fonts** (`fonts.rs`, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). `installed_fonts(dirs)` lists the
+fonts in the folders `system_font_dirs()` names for the OS (Linux's
+`/usr/share/fonts`, `/usr/local/share/fonts`, the user's data `fonts` and `~/.fonts`;
+macOS's system, library and user `Fonts`; Windows' `%WINDIR%\Fonts` and the user's),
+for the engine's `font.list`: each `.ttf`, `.otf` and `.ttc` (a collection's first
+font) with the family and style its name table gives (typographic names first, the US
+English Windows entry first), control characters dropped and cut at 128 characters,
+ordered by family ignoring case. The walk goes at most `MAX_DEPTH` (8) folders deep and
+`MAX_FONTS` (8192) files, follows links to files but not to folders, and reads only a
+file's header, table directory and name table (at most 1 MiB), so 160 fonts take a few
+milliseconds. A file that doesn't parse or names no family is left out. Its tests walk
+a folder of the bundled Roboto files, a file that isn't a font and the depth limit.
+
 **Bundled fonts.** Three Latin subsets of Roboto by Google, under the Apache License
 2.0 (`assets/fonts/LICENSE-Roboto.txt`), are the text source's faces while `font` is
 `null`; `chat_message` draws with the regular one, and the tests draw with all three.

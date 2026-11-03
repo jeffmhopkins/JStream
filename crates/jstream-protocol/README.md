@@ -113,9 +113,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
-  `CaptureTargetInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
+  `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
@@ -194,7 +194,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.67 because `live.set`
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.68 because of the
+  `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
   [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
   `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
@@ -1056,6 +1057,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. Runtime state, so no `rev`; a
   source can still name a window closed since. `action_failed` when the engine has no
   capture backend or the OS refuses the list. Added in 0.27.
+- `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
+  family, then style, then path, each a `FontInfo`: `remote_family` and
+  `remote_style` from the font's name table (the font maker's text, so `remote_`), and
+  the file's absolute `path`, which a text source's `font` names as an `asset` with
+  root `absolute`. A collection lists its first font. The engine reads its OS's font
+  folders on the first call and keeps the list, so a font installed later shows after
+  a restart. Runtime state, so no `rev`. Added in 0.68.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.

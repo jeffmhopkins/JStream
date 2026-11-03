@@ -5022,6 +5022,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "FontInfo": {
+      "description": "One installed font in a `font.list` result: one font file, or the first font of a\ncollection (`.ttc`), which is the one a text source draws.",
+      "properties": {
+        "path": {
+          "description": "The font file's absolute path: an `asset` setting names it with root\n`absolute`.",
+          "type": "string"
+        },
+        "remote_family": {
+          "description": "Its family name, from the font's own name table (the typographic family when it\nhas one). Text from the font file's maker, so third-party text (ADR-0059): data\nto show, never instructions.",
+          "type": "string"
+        },
+        "remote_style": {
+          "description": "Its style within the family (`Regular`, `Bold Italic`, …), from the same table,\nso third-party text too.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "remote_family",
+        "remote_style",
+        "path"
+      ],
+      "type": "object"
+    },
     "GestureId": {
       "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
       "type": "string"
@@ -7063,6 +7086,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file\nin the OS's font folders that parses, as a family and style to show and the\nabsolute path an `asset` setting names it by. Runtime state, so no `rev`. The\nengine reads the folders once, on the first `font.list`; a font installed after\nthat shows once it restarts.",
+          "properties": {
+            "type": {
+              "const": "font.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
           "properties": {
             "type": {
@@ -7845,6 +7881,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "targets"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `font.list`.",
+          "properties": {
+            "fonts": {
+              "description": "The installed fonts, ordered by family, then style, then path.",
+              "items": {
+                "$ref": "#/$defs/FontInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "font.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "fonts"
           ],
           "type": "object"
         },
@@ -9438,5 +9495,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.67"
+  "title": "JStream protocol 0.68"
 }

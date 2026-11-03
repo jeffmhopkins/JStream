@@ -99,7 +99,7 @@ pub use preview::{
     PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
 };
 pub use query::{
-    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, ItemInfo, MasterInfo,
+    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,
     PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;

@@ -23,7 +23,7 @@ mod ws_web;
 pub use control::{BinaryStream, BoxFuture, Control, EventStream, MaybeSendSync};
 pub use error::ControlError;
 #[cfg(any(test, feature = "mock"))]
-pub use mock::{MOCK_DISPLAY, MOCK_WINDOW, MockControl, MockEngine};
+pub use mock::{MOCK_DISPLAY, MOCK_FONTS, MOCK_WINDOW, MockControl, MockEngine};
 #[cfg(all(feature = "ws", not(target_arch = "wasm32")))]
 pub use ws::WsControl;
 #[cfg(feature = "ws")]
