@@ -124,7 +124,8 @@ pub(crate) fn shape(
 /// item is placed in the scene's space; `None` in a 2D scene.
 ///
 /// A non-finite component, including a product that overflows, is
-/// [`RenderError::Invalid`].
+/// [`RenderError::Invalid`], except a geometry's: one the graph stored draws or draws
+/// nothing (#629, #1046), so a neutral box too large for `f32` draws nothing.
 ///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite or not drawable.
@@ -193,6 +194,10 @@ fn boxed(
         Ok(content) => content,
         // Through a camera a stored geometry draws or draws nothing (see `drawn`).
         Err(_) if view.is_some() => return Ok(None),
+        // A neutral box `check_drawable` accepts by its finite corners can still be so
+        // large that its content overflows `f32`: it draws nothing rather than failing
+        // the frame (#1046).
+        Err(GeometryError::NotFinite) if geometry.is_neutral_3d() => return Ok(None),
         Err(err) => return Err(placement_error(err)),
     };
     let Some(content) = content else {
@@ -223,9 +228,13 @@ fn boxed(
     let mut corners = [[0.0; 2]; 4];
     let mut uvs = [[0.0; 2]; 4];
     for (i, (x, y)) in local.into_iter().enumerate() {
-        corners[i] = match geometry.place(x, y).map_err(placement_error)? {
-            Placed::At(point) => [point.x, point.y],
-            _ => return Err(not_finite()),
+        // As with the content above, an overflow draws nothing (#1046).
+        corners[i] = match geometry.place(x, y) {
+            Ok(Placed::At(point)) if point.x.is_finite() && point.y.is_finite() => {
+                [point.x, point.y]
+            }
+            Ok(_) | Err(GeometryError::NotFinite) => return Ok(None),
+            Err(err) => return Err(placement_error(err)),
         };
         uvs[i] = [u(x), v(y)];
     }
@@ -779,11 +788,27 @@ mod tests {
     #[test]
     fn every_drawable_geometry_gives_a_shape() {
         let mut accepted = 0;
-        for geometry in crate::tests::extreme_geometries(40_000) {
+        let mut neutral = 0;
+        // Each sweep geometry, and the same box with neutral 3D, which `check_drawable`
+        // bounds only by finite corners (#1046).
+        let sweep = crate::tests::extreme_geometries(40_000)
+            .into_iter()
+            .flat_map(|geometry| {
+                let mut flat = geometry;
+                flat.tilt_deg = Finite32::ZERO;
+                flat.turn_deg = Finite32::ZERO;
+                flat.depth_px = Finite32::ZERO;
+                flat.perspective_px = None;
+                [geometry, flat]
+            });
+        for geometry in sweep {
             if geometry.check_drawable().is_err() {
                 continue;
             }
             accepted += 1;
+            if geometry.is_neutral_3d() {
+                neutral += 1;
+            }
             for (width, height) in crate::tests::SOURCES {
                 let crops = [
                     Crop::NONE,
@@ -802,6 +827,27 @@ mod tests {
             }
         }
         assert!(accepted > 5_000, "{accepted} accepted");
+        assert!(neutral > 5_000, "{neutral} neutral");
+    }
+
+    /// #1046: a box with neutral 3D so large that its content overflows `f32` draws
+    /// nothing in a 2D scene, rather than failing the frame.
+    #[test]
+    fn a_huge_neutral_box_draws_nothing() {
+        let finite = |v: f32| Finite32::new(v).expect("finite");
+        let mut geometry = ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(-4.895_988e15, 0.420_832_04).expect("finite"),
+            jstream_protocol::Size::try_new(1.635_186_1e24, 6.569_995e35).expect("positive"),
+        )
+        .expect("geometry");
+        geometry.fit_mode = jstream_protocol::FitMode::Fill;
+        geometry.rotation_deg = finite(88.057_34);
+        geometry.flip_v = true;
+        assert!(geometry.is_neutral_3d());
+        assert_eq!(geometry.check_drawable(), Ok(()));
+        let drawn = shape(8192, 1, Placement::Geometry(geometry), Crop::NONE)
+            .expect("a placement the graph accepts never fails its frame");
+        assert!(drawn.is_none());
     }
 
     /// ADR-0094 with #629's invariant (#1044 round 1, B1): through any valid camera,
