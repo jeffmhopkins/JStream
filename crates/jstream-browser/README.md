@@ -17,11 +17,12 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTU
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
 web pages rendered off screen by CEF in a sandboxed helper process, each page's frames
-as textures on a GPU device the host hands it and its audio as a stream the engine
-records like a device's. Layer 3, its own crate rather than part of a platform crate, so that only
-the helper's build downloads and builds CEF
+as textures on a GPU device the host hands it (Windows) or as CPU frames (Linux), and its
+audio as a stream the engine records like a device's. Layer 3, its own crate rather than
+part of a platform crate, so that only the helper's build downloads and builds CEF
 ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md),
-[ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)).
+[ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
+[ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)).
 
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
@@ -36,8 +37,10 @@ samples the pages there, and takes it back (leaving none) when the stage stops, 
 when the stage leaves the GPU path mid-run, after which the pages deliver no frames for
 the rest of that stage
 ([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
-a device a page renders and plays but delivers no frames. Dropping the
-page closes it.
+a device a page renders and plays but delivers no frames. A page that `paints_on_cpu`
+(CEF on Linux) needs no device: its latest paint is its `cpu_frame`, straight-alpha
+RGBA8, which `jstream-sources` shows as the source's frame and looks at again every
+frame of the page's rate (ADR-0095). Dropping the page closes it.
 
 **Built everywhere:**
 - `PageLocation` and `PageSpec` (`page.rs`). A web address must be `http://` or
@@ -99,14 +102,20 @@ page closes it.
   reach out; a missing file is refused. Every other scheme is refused. Each refusal is counted. The
   folder is trusted as an asset root is: something that can write in it could swap a
   file for a link between the check and the load.
+- `cpu_frames.rs` (Linux, and in tests): what both sides of the Linux frame path agree
+  on: three slot files per page, the number that names each one's file, the largest
+  frame (16384 pixels a side), and the conversion of CEF's premultiplied BGRA8 to
+  straight RGBA8, rounded and capped.
 - `fake` (feature `fake`, and in tests): `FakeBrowser`, a backend that records the
-  pages it opens, their CSS changes and whether they were closed, never paints, and can
-  be told to refuse. `FakePageState::request` plays a request through the page's
+  pages it opens, their CSS changes and whether they were closed, and can be told to
+  refuse. Its pages paint only when told to paint on the CPU (`paint_on_cpu`) and handed
+  a frame (`FakePageState::paint`). `FakePageState::request` plays a request through the page's
   policy.
 
-**The CEF backend** (`cef/`, Windows and feature `cef` only): pages run in the sandboxed
-browser helper process ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)),
+**The CEF backend** (`cef/`, Windows and Linux, feature `cef` only): pages run in the
+sandboxed browser helper process ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)),
 never in the engine's. This side builds no CEF; `dox` compile-checks it with the rest.
+What follows is Windows; **On Linux** below says what differs.
 - `CefBackend::new` takes a `CefConfig` (the helper exe, the cache root and an optional
   log file; `CefConfig::beside_exe` finds the helper in the `browser` folder beside the
   running exe, as the portable zip lays it out, else next to the exe itself, and puts the
@@ -141,19 +150,36 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   range, stamped on arrival. A paint that can't be copied keeps the last frame and is
   logged once until one succeeds. `use_device` also tells the helper the device's adapter
   LUID; without a device, or one without a LUID, pages deliver no frames.
+- **On Linux** (`cef/cpu.rs`, ADR-0095): the helper is `jstream-browser-helper`, started
+  with `--jstream-frames=<folder>` and one end of a Unix socket pair as its standard
+  input; the link runs over the other end, so there are no names and no peer check. The
+  folder is made fresh for each helper, mode 0700, under `$XDG_RUNTIME_DIR`, else
+  `/dev/shm`, else the temp folder, and removed with everything in it once the helper
+  has stopped. Each paint names a slot file there; the engine reads the whole frame from
+  it (a size larger than the page, a slot past the third, a missing or short file is
+  skipped, keeping the last frame, and logged once) into a new RGBA8 CPU frame, BT.709
+  full range, stamped on arrival, then releases the slot. `use_device` does nothing, and
+  no adapter is sent.
 
-**The helper's side** (`helper/`, Windows and feature `helper`, which only
+**The helper's side** (`helper/`, Windows and Linux, feature `helper`, which only
 `jstream-browser-helper` turns on; it builds CEF with its sandbox):
-- `run_helper` is all the helper DLL's `RunWinMain` does. In a CEF subprocess it hands
-  the process to CEF. In the browser process it connects to the pipes, starts CEF with
+- `run_helper` is all the helper DLL's `RunWinMain` does on Windows, and all the
+  helper executable's `main` does on Linux. In a CEF subprocess it hands
+  the process to CEF. In the browser process it connects to the pipes (on Linux it
+  takes the socket that is its standard input and puts `/dev/null` in its place, so
+  CEF's subprocesses never inherit it), starts CEF with
   the sandbox on, windowless rendering, profiles in memory (no `cache_path`, no persisted
   cookies) and warnings-only logging, and runs CEF's message loop. The engine's messages
   are read on a thread of their own; a new adapter and shutting down go to CEF's UI
   thread. The engine's `Shutdown`, its pipe closing, or a write to it failing closes
   every page, and the loop quits once they have closed, or after ten seconds.
-- Every page is a windowless browser with shared textures on, painting at its spec's
-  frame rate with a transparent background. Command-line switches let pages play sound
-  without a click and turn off first-run and error dialogs. Pop-ups are blocked. Every
+- Every page is a windowless browser, with shared textures on Windows and software
+  paints on Linux, painting at its spec's frame rate with a transparent background.
+  Command-line switches let pages play sound without a click and turn off first-run and
+  error dialogs, and on Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, start
+  Chromium on its headless platform. On Linux Chromium also keeps its in-memory
+  profiles' key itself (`--password-store=basic`), never opening the desktop's keyring.
+  Pop-ups are blocked. Every
   permission a page asks for (camera, microphone, screen capture, geolocation,
   notifications, clipboard, MIDI and the rest) is refused by the page's permission
   handler rather than left to CEF's default: a media request is cancelled and a
@@ -182,6 +208,12 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
   copy is waited for before the callback returns, since CEF takes its texture back then.
   A slot the engine hasn't released isn't painted into: with all three held, the paint is
   skipped. Popup-widget paints are ignored.
+- **Frames on Linux** (`helper/shm.rs`): each software paint is converted to straight
+  RGBA8 and written into the next free of the page's three slot files (mode 0600) in the
+  engine's folder, with the same release and skip rules; the page's files are removed
+  when its browser closes. CEF failing to start reports that it needs `libcef.so` beside
+  the helper and a sandbox that can start (not root; user namespaces or a setuid
+  `chrome-sandbox`).
 - **Audio** (`helper/handlers.rs`): the audio handler asks for 48 kHz stereo in 10 ms
   packets and sends each interleaved (mono doubled, channels past two dropped). A stream
   error fails the page's audio in the engine, which reopens its input, except while the
@@ -195,10 +227,16 @@ as the daemon's pages do before a program stage lends its own context, and repor
 arrive, a custom-CSS change the page reacts to, the requests refused (the built-in page
 loads one image from outside its folder), and the shutdown time. It runs on Windows only.
 
+**The Linux check.** `tests/linux_page.rs` (feature `cef`, ignored by default) opens a
+file page through the real helper named by `JSTREAM_BROWSER_HELPER`, as `cargo xtask
+browser-linux` lays it out, and waits for a paint whose left half is opaque red and
+right half transparent, then shuts the helper down. CI's `browser-linux` job runs it,
+sandboxed, headless and without a GPU.
+
 <a id="open-items"></a>
 ## Open items
 <!-- @section
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet.
@@ -220,5 +258,9 @@ What ADR-0021 asks for that this crate doesn't do yet.
 - **Settings and interaction.** "Shut down when not visible", "refresh when shown" and
   `source.interact` need the source-visibility hook and a protocol action. No page gets
   control-API access, and the per-source opt-in doesn't exist.
+- **Linux.** Frames are copied on the CPU (ADR-0095): CEF's accelerated paint shared as
+  DMA-BUFs onto the engine's Vulkan device would avoid the copies on a machine with a
+  GPU, and neither path has been measured. The desktop app has no Linux build, so only
+  the daemon wires the Linux backend.
 - **Audio timestamps.** Packets are stamped when they reach the engine; if CEF's `pts` is
   QPC time, as S4 suggests, the helper could send it and the engine use it instead.

@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use jstream_media::MediaTime;
+use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
 
 use crate::wire::{self, ToEngine, ToHelper};
@@ -43,10 +43,15 @@ pub(crate) struct Paint {
     pub(crate) height: u32,
 }
 
-/// Makes each page's frame importer: the D3D12 import on Windows, a recorder in tests.
+/// Makes each page's frame importer: the D3D12 import on Windows, the slot-file reader
+/// on Linux, a recorder in tests.
 pub(crate) trait Frames: Send + Sync {
-    /// A new page's importer.
-    fn page(&self) -> Box<dyn PageFrames>;
+    /// A new page's importer, for a page of `size`.
+    fn page(&self, size: FrameSize) -> Box<dyn PageFrames>;
+    /// Whether its pages' frames are CPU frames ([`PageFrames::latest_cpu`]).
+    fn on_cpu(&self) -> bool {
+        false
+    }
 }
 
 /// One page's frames on the engine's device.
@@ -54,8 +59,13 @@ pub(crate) trait PageFrames: Send + Sync {
     /// Takes `paint`, which arrived at `pts`, as the page's latest frame. Returns once
     /// the engine no longer reads the helper's texture, which the helper then reuses.
     fn paint(&self, paint: &Paint, pts: MediaTime);
-    /// The latest frame, if any.
+    /// The latest frame on the GPU, if any.
     fn latest(&self) -> Option<GpuFrame>;
+    /// The latest frame in CPU memory, for an importer that reads paints into it (Linux);
+    /// `None`, the default, for one that imports onto the GPU.
+    fn latest_cpu(&self) -> Option<Arc<VideoFrame>> {
+        None
+    }
 }
 
 /// The engine's end of one helper's pipe.
@@ -160,7 +170,8 @@ impl Link {
     }
 
     /// Copies pages' paints onto the adapter with this LUID from now on, or delivers no
-    /// frames (`None`).
+    /// frames (`None`). Windows only: on Linux the helper paints in software.
+    #[cfg(any(test, windows))]
     pub(crate) fn use_adapter(&self, luid: Option<u64>) {
         self.send(&ToHelper::Adapter { luid });
     }
@@ -175,7 +186,7 @@ impl Link {
         let (tx, rx) = mpsc::sync_channel(1);
         let page = Arc::new(PageLink {
             audio: PageAudio::new(),
-            frames: self.frames.page(),
+            frames: self.frames.page(spec.size),
             denied: AtomicU64::new(0),
             opened: Mutex::new(Some(tx)),
         });
@@ -369,6 +380,14 @@ impl BrowserPage for LinkPage {
         self.page.frames.latest()
     }
 
+    fn paints_on_cpu(&self) -> bool {
+        self.link.frames.on_cpu()
+    }
+
+    fn cpu_frame(&self) -> Option<Arc<VideoFrame>> {
+        self.page.frames.latest_cpu()
+    }
+
     fn set_css(&mut self, css: &str) {
         self.link.send(&ToHelper::SetCss {
             page: self.id,
@@ -419,7 +438,7 @@ mod tests {
     use std::io::{PipeReader, PipeWriter};
     use std::path::PathBuf;
 
-    use jstream_media::{FrameSize, Timebase};
+    use jstream_media::Timebase;
     use jstream_platform::{AudioInputHandler, AudioPacket};
 
     use super::*;
@@ -445,7 +464,7 @@ mod tests {
     struct Recorder(Paints);
 
     impl Frames for Recorder {
-        fn page(&self) -> Box<dyn PageFrames> {
+        fn page(&self, _size: FrameSize) -> Box<dyn PageFrames> {
             Box::new(Recorder(Arc::clone(&self.0)))
         }
     }
