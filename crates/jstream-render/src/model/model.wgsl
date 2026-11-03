@@ -21,7 +21,7 @@ struct Frame {
 
 struct Material {
     base: vec4<f32>,
-    // rgb: emitted light; a: unused.
+    // rgb: emitted light; a: has a normal map (0 or 1).
     emissive: vec4<f32>,
     // metallic, roughness, normal scale, occlusion strength.
     surface: vec4<f32>,
@@ -147,13 +147,19 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         let roughness = clamp(material.surface.y * surface.g, 0.03, 1.0);
         var n = normalize(in.normal);
         var t = in.tangent.xyz - n * dot(n, in.tangent.xyz);
+        // A back face turns its whole frame over, tangent with normal, so a normal map
+        // tilts the back of a surface as it does the front, seen from the other side.
         if !facing {
             n = -n;
+            t = -t;
         }
-        if dot(t, t) > 1e-12 {
+        // No normal map: the interpolated normal as it is, so a flat surface stays flat.
+        if material.emissive.a > 0.5 && dot(t, t) > 1e-12 {
             t = normalize(t);
-            // The cross product flips with a mirrored map and with a back face, which
-            // is exactly when the raw front_facing is false: its sign covers both.
+            // The bitangent is the model's turned by a mirrored map and turned over on a
+            // back face. cross(n, t) misses both: a mirror reverses a cross product, and
+            // n and t turned over together leave it as it was. The raw front_facing is
+            // false with either one alone and true with both, so its sign covers them.
             let b = cross(n, t) * in.tangent.w * select(-1.0, 1.0, front_facing);
             var m = textureSample(normal_tex, tex_sampler, in.uv).xyz * 2.0 - vec3<f32>(1.0);
             m = vec3<f32>(m.xy * material.surface.z, m.z);

@@ -480,9 +480,13 @@ with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's ow
 is linear in the model's depth. Opaque and masked primitives draw first with depth
 writes, then blended ones far to near by their centres, testing without writing. There
 is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
-shader discards back faces itself unless the material is double-sided. A normal map's
-bitangent takes its sign from the raw `front_facing`, which flips with a mirrored map
-and with a back face alike, as the cross product of the normal and tangent does.
+shader discards back faces itself unless the material is double-sided. A back face of a
+double-sided material turns its normal and tangent over together, so a normal map tilts
+its back as the turned-over front would. The bitangent takes its sign from the raw
+`front_facing`: a mirrored map reverses the cross product of normal and tangent, a back
+face needs it turned over though that cross product isn't, and the raw flag is false with
+either alone and true with both. A material with no normal map keeps the interpolated
+normal as it is.
 `upload_model` refuses a primitive whose vertex or index buffer would pass the
 adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl`
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
@@ -882,7 +886,9 @@ reads upright; the studio key light makes a sphere brighter at its upper left; a
 material is half see-through; a floor running under the camera is clipped by the near
 plane; a model's layer sorts with a card by the model's depth, whatever the stacking
 order; a normal map tilted up its texture lights the same, toward the key light, when
-the placement mirrors the model; a model draws into layers of three sizes in a row (the
+the placement mirrors the model, and seen from behind (a double-sided plane turned 180°)
+lights as the front of the opposite tilt, while an unmapped plane's back lights as its
+front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
 refused with `RenderError::Invalid`.
 
