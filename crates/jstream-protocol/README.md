@@ -203,7 +203,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
   limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
@@ -1639,7 +1639,7 @@ GPU, and the OS resets the device (#349,
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
-Since 0.71 a client can write the packs themselves
+Since 0.72 a client can write the packs themselves
 ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md), `pack.rs`). These are
 actions and queries, not edits: undo doesn't reach the disk, and there is no `rev`.
 - **`pack.write {pack, files}`** replaces pack `pack` whole, or adds it, and loads it
@@ -1654,11 +1654,11 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
 - **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
   `not_found` with `EntityKind::Pack`.
 - **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
-  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that pack ID (omitted when it
-gave none).
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that
+  pack ID (omitted when it gave none).
 - **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
   BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
-over that read by `path` is `too_large`), and with `path` an image's `base64`.
+  over that read by `path` is `too_large`), and with `path` an image's `base64`.
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
 

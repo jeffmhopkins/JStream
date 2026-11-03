@@ -647,7 +647,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes one effect pack (0.71, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "files": {
                     "description": "Every file of the pack.",
@@ -673,7 +673,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes one effect pack (0.71, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "pack": {
                     "description": "The pack ID.",
@@ -6334,7 +6334,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes one effect pack (0.71, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "files": {
                     "description": "Every file of the pack.",
@@ -6360,7 +6360,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes one effect pack (0.71, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "pack": {
                     "description": "The pack ID.",
@@ -11602,7 +11602,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes one effect pack (0.71, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "files": {
                     "description": "Every file of the pack.",
@@ -11628,7 +11628,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes one effect pack (0.71, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "pack": {
                     "description": "The pack ID.",
@@ -15638,7 +15638,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `pack` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Writes one effect pack (0.71, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "files": {
                     "description": "Every file of the pack.",
@@ -15664,7 +15664,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes one effect pack (0.71, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+                "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
                 "properties": {
                   "pack": {
                     "description": "The pack ID.",
@@ -15682,7 +15682,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Lists the effect packs in the engine's packs folder (0.71, ADR-0097), ordered by\npack ID: each one's folder, its kinds while it loads, and the client that last\nwrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left\nout. Packs are not collection state, so no `rev`. Fails with `unsupported` from an\nengine that loads no packs.",
+                "description": "Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by\npack ID: each one's folder, its kinds while it loads, and the client that last\nwrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left\nout. Packs are not collection state, so no `rev`. Fails with `unsupported` from an\nengine that loads no packs.",
                 "properties": {
                   "type": {
                     "const": "pack.list",
@@ -15695,7 +15695,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Reads one effect pack's files (0.71, ADR-0097): the text of its `effect.toml` and\n`.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,\na file's `text` is left out; read it by `path`. With `path`, only that file, and\nan image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which\nonly a person can have put there, fails with `too_large`. Fails with `not_found`\n(entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it\ndoesn't have, and `unsupported` from an engine that loads no packs.",
+                "description": "Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and\n`.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,\na file's `text` is left out; read it by `path`. With `path`, only that file, and\nan image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which\nonly a person can have put there, fails with `too_large`. Fails with `not_found`\n(entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it\ndoesn't have, and `unsupported` from an engine that loads no packs.",
                 "properties": {
                   "pack": {
                     "description": "The pack ID.",

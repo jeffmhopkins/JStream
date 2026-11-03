@@ -737,7 +737,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   engine quarantined because a GPU device loss was blamed on it, which the event
   `gpu.device_lost` reports and `kind.list` marks (`quarantined`). The effect packs
   themselves are not for a person only: the actions `pack.write` and `pack.delete` and
-  the queries `pack.list` and `pack.read` (0.71,
+  the queries `pack.list` and `pack.read` (0.72,
   [ADR-0097](adr/0097-agents-write-effect-packs.md)) write, remove, list and read a pack
   in the engine's packs folder, so an agent can author a shader over MCP. A write is
   checked, staged in `.staging/<pack>`, loaded there, and swapped in with two renames

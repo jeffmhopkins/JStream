@@ -1,4 +1,4 @@
-//! Effect packs written over the protocol (0.71,
+//! Effect packs written over the protocol (0.72,
 //! [ADR-0097](../../../docs/adr/0097-agents-write-effect-packs.md)): the files a
 //! `pack.write` carries, and what `pack.list` and `pack.read` answer.
 

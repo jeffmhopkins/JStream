@@ -206,7 +206,7 @@ impl CallResult {
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum ActionResult {
-    /// The answer to `pack.write` (0.71): the pack as now loaded.
+    /// The answer to `pack.write` (0.72): the pack as now loaded.
     #[serde(rename = "pack.write")]
     PackWrite {
         /// The pack.

@@ -179,14 +179,14 @@ pub enum Query {
     /// that shows once it restarts.
     #[serde(rename = "font.list")]
     FontList,
-    /// Lists the effect packs in the engine's packs folder (0.71, ADR-0097), ordered by
+    /// Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by
     /// pack ID: each one's folder, its kinds while it loads, and the client that last
     /// wrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left
     /// out. Packs are not collection state, so no `rev`. Fails with `unsupported` from an
     /// engine that loads no packs.
     #[serde(rename = "pack.list")]
     PackList,
-    /// Reads one effect pack's files (0.71, ADR-0097): the text of its `effect.toml` and
+    /// Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and
     /// `.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,
     /// a file's `text` is left out; read it by `path`. With `path`, only that file, and
     /// an image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which

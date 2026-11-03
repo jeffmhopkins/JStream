@@ -1475,7 +1475,7 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
-    /// Writes one effect pack (0.71, ADR-0097): replaces the pack `pack` whole with
+    /// Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with
     /// `files`, or adds it, and loads it at once. The pack is always the folder named
     /// `pack` in the packs folder, whose `effect.toml` must say `id = "<pack>"`. Answers
     /// with the pack as loaded. Fails, writing nothing and keeping the old version, with
@@ -1494,7 +1494,7 @@ pub enum Action {
         /// Every file of the pack.
         files: Vec<crate::PackFile>,
     },
-    /// Removes one effect pack (0.71, ADR-0097): the folder whose `effect.toml` names
+    /// Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names
     /// pack ID `pack`, whatever its name and whether or not it loads. Its kinds leave
     /// `kind.list`, and filters and sources of them draw nothing, as before a pack loads.
     /// Fails with `not_found` (entity `pack`) when no folder holds that pack, `internal`

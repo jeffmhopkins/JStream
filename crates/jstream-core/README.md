@@ -1158,8 +1158,9 @@ back, then moves each folder whose manifest names the pack to `.deleted/<pack>` 
 removes it. `Packs::new` first recovers a stopped swap (`pack_store::recover`): a
 `.trash/<pack>` with no `<pack>` is renamed back, one beside its `<pack>` removed, and
 `.staging` and `.deleted` emptied. The last writer's client name of each pack ID is kept
-in `.writers.json` in the packs folder (none for a client that gave no name), and the activity log and audit log record
-every write and delete (`Wrote effect pack “tint” (2 files)`).
+in `.writers.json` in the packs folder (none for a client that gave no name), and the
+activity log and audit log record every write and delete (`Wrote effect pack “tint” (2
+files)`).
 **Shader sources** (`pack_source.rs`, `chain.rs`,
 [ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md), X2). A pack's
 `[[source]]` table is a `source` kind, `<pack>/<source>`, loaded, described, quarantined
