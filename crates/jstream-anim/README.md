@@ -71,8 +71,9 @@ Contents:
   ticks; `position` gives the pass and time; `seek` gives the cues to run on a jump to a
   pass and time: the last state per `CueAction::state_key` in play order, earlier passes
   and a range's intro included, without events. An unchecked zero-length loop never
-  plays, and an unchecked oscillator period that isn't positive gives 0, so bad input
-  can't spin or put NaN on the render thread.
+  plays, and a modifier whose unchecked parameters give a non-finite value (a period
+  that isn't positive or is tiny, a zero wrap, a NaN) gives 0, so bad input can't spin
+  or put NaN on the render thread.
 
 **Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs` and `timeline.rs`): live follow of absent fields, each
 write and clear inverse, the no-op clear, refused opacities, reset and its restore,
@@ -83,9 +84,9 @@ drops and restores, each of which must undo exactly and leave no empty override.
 For motion: each waveform's landmarks, period and phase, wrapping drifts, a seeded wiggle
 that stays within its amplitude with no jump between frames and stays precise days in,
 how `evaluate` adds, multiplies and skips disabled modifiers, the shown clock, blending,
-every refused parameter, an unchecked bad period giving 0, an oscillator unchanged
-three days in; and for timelines a six-cue sequence fired once each
-under uneven ticks, loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and into later passes, unchecked zero-length loops
-that never spin, every
-refused timeline, and 200 random timelines whose cues fire the same under random ticks
+every refused parameter, an unchecked bad period and other unchecked input (a tiny
+period, a zero wrap, NaN and infinite parameters) giving 0, an oscillator unchanged
+three days in; and for timelines a six-cue sequence fired once each under uneven ticks,
+loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and into
+later passes, unchecked zero-length loops that never spin, every refused timeline, and 200 random timelines whose cues fire the same under random ticks
 as in one window.

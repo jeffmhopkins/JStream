@@ -254,7 +254,10 @@ impl Modifier {
         if !self.enabled {
             return 0.0;
         }
-        match self.kind {
+        // `check_list` refuses every parameter that could make this non-finite (a period
+        // under 1 ms, a zero wrap, a NaN); for unchecked input, any non-finite value is 0,
+        // so nothing the render thread draws from it is NaN or infinite.
+        let v = match self.kind {
             Kind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -267,8 +270,7 @@ impl Modifier {
                 period_ms,
                 phase,
             } => {
-                // `check_list` refuses a period under 1 ms; this guard keeps unchecked
-                // input from producing NaN on the render thread.
+                // A period that isn't positive has no cycle.
                 if period_ms.is_nan() || period_ms <= 0.0 {
                     return 0.0;
                 }
@@ -282,7 +284,8 @@ impl Modifier {
                     None => travelled,
                 }
             }
-        }
+        };
+        if v.is_finite() { v } else { 0.0 }
     }
 }
 
@@ -630,6 +633,41 @@ mod tests {
         for period_ms in [0.0, -5.0, f64::NAN] {
             let m = modifier("o", Property::Opacity, sine(1.0, period_ms));
             assert_eq!(m.value_at(2.0), 0.0, "{period_ms}");
+            assert!(evaluate(&[m], 2.0, None).opacity_of(1.0).is_finite());
+        }
+    }
+
+    #[test]
+    fn any_unchecked_input_gives_a_finite_value() {
+        let bad = [
+            // Positive but subnormal: 2 s over it is infinite.
+            sine(1.0, 1e-310),
+            sine(f64::NAN, 1000.0),
+            Kind::Oscillate {
+                shape: Shape::Sine,
+                amplitude: 1.0,
+                period_ms: 1000.0,
+                phase: f64::NAN,
+            },
+            Kind::Wiggle {
+                amplitude: 1.0,
+                frequency_hz: f64::NAN,
+                seed: 1,
+                octaves: 1,
+            },
+            Kind::Drift {
+                rate_per_s: 1.0,
+                wrap: Some(0.0),
+            },
+            Kind::Drift {
+                rate_per_s: f64::INFINITY,
+                wrap: None,
+            },
+        ];
+        for kind in bad {
+            let m = modifier("x", Property::Opacity, kind);
+            assert!(check_list(std::slice::from_ref(&m)).is_err(), "{kind:?}");
+            assert_eq!(m.value_at(2.0), 0.0, "{kind:?}");
             assert!(evaluate(&[m], 2.0, None).opacity_of(1.0).is_finite());
         }
     }

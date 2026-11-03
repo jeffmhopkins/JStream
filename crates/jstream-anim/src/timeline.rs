@@ -154,7 +154,8 @@ impl<A> Timeline<A> {
     }
 
     /// Where in the timeline `at_ms` milliseconds of playing falls, by pass. `None` for a
-    /// negative time.
+    /// negative or NaN time, and for a looping timeline with no length to repeat
+    /// ([`Timeline::repeats_validly`]).
     fn place(&self, played_ms: f64) -> Option<(u64, f64, bool)> {
         if played_ms < 0.0 || played_ms.is_nan() {
             return None;
