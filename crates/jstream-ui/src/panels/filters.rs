@@ -3153,6 +3153,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3208,6 +3209,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>, variant_of: Option<&str>| SceneInfo {
             overrides: Vec::new(),
@@ -3300,6 +3302,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3484,6 +3487,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
             let items = match variant_of {

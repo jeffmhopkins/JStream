@@ -155,6 +155,58 @@ administrator rights; everything else in JStream works without it.
 After you update JStream, the Outputs panel may say "registered, but not for this
 version": run the same command again to update the registered copy.
 
+<a id="agents"></a>
+## Connect an agent (optional)
+<!-- @section
+depends_on = ["apps/jstream-desktop/README.md#usage", "apps/jstream-cli/README.md#usage"]
+-->
+
+An AI agent such as Claude can build and run your scenes through MCP: it gets the same
+control you have in the window, except YouTube sign-in and installing plugins, and it
+can look at the program with snapshots. Agents can't connect until you turn this on.
+
+1. **Start JStream with `--mcp`.** Right-click `jstream.exe`, choose **Show more
+   options** › **Create shortcut**, open the shortcut's **Properties**, and add ` --mcp`
+   at the end of **Target**. Start JStream from that shortcut. It then listens for
+   agents on `127.0.0.1:4455`, on this computer only, and keeps the password agents use
+   in a file named `token` in `%APPDATA%\JStream` (or `data` in portable mode), readable
+   only by you. If another program uses port 4455, the window says so: add
+   `--port 4460`, or any free port, after `--mcp`, and use that port below.
+2. **Tell your agent how to start JStream's MCP proxy**, `jstream-cli.exe` from the same
+   folder. For Claude Desktop, open **Settings** › **Developer** › **Edit Config** and add
+   this to `claude_desktop_config.json`, with your own folder:
+
+   ```json
+   {
+     "mcpServers": {
+       "jstream": {
+         "command": "C:\\Users\\you\\Documents\\JStream\\jstream-cli.exe",
+         "args": ["--url", "ws://127.0.0.1:4455", "mcp"],
+         "env": { "JSTREAM_TOKEN_FILE": "C:\\Users\\you\\AppData\\Roaming\\JStream\\token" }
+       }
+     }
+   }
+   ```
+
+   For Claude Code, in Command Prompt (in PowerShell, write `$env:APPDATA` for
+   `%APPDATA%`):
+
+   ```bat
+   claude mcp add jstream -e JSTREAM_TOKEN_FILE=%APPDATA%\JStream\token -- "C:\Users\you\Documents\JStream\jstream-cli.exe" --url ws://127.0.0.1:4455 mcp
+   ```
+
+   Other MCP clients that speak streamable HTTP can use `http://127.0.0.1:4455/mcp`
+   with the token file's contents as a bearer token.
+3. **Restart the agent's app** with JStream running. It lists JStream's tools, such as
+   `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
+   changes shows there, and **Agent activity** lists each change. Your agent may ask
+   before going live, changing a stream key or other steps undo can't take back. It can
+   undo its own edits, and asking it to is the way back: your **Undo** steps through
+   your edits only.
+
+Treat the `token` file like a password: anyone with it controls JStream. To change it,
+close JStream, delete the file and start JStream again, then restart the agent's app.
+
 <a id="trouble"></a>
 ## When something goes wrong
 <!-- @section

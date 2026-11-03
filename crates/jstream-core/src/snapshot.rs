@@ -4194,7 +4194,8 @@ fn scale_down(src_w: u32, src_h: u32, rgba: &[u8], dst_w: u32, dst_h: u32) -> Ve
     out
 }
 
-fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+/// `rgba` as a PNG, for `video.snapshot` and a preview stream's `png` codec.
+pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     let mut encoder = png::Encoder::new(&mut buf, width, height);
     encoder.set_color(png::ColorType::Rgba);
