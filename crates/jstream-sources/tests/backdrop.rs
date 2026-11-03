@@ -198,3 +198,45 @@ fn looks_are_live_and_the_size_restarts() {
         Err(SourceError::Setting { param, .. }) if param == "style"
     ));
 }
+
+/// A backdrop is at most 7680 on a side and 7680 × 4320 pixels in all (#1025): the
+/// descriptor says so, and a larger size is a setting error naming the side to shrink,
+/// refused before anything is drawn.
+#[test]
+fn the_size_is_capped_at_8k() {
+    let registry = Registry::builtin();
+    let kind = registry.descriptor("backdrop").expect("the backdrop kind");
+    for id in ["width", "height"] {
+        let param = kind.params.iter().find(|p| p.id == id).expect(id);
+        assert!(matches!(
+            param.ty,
+            jstream_protocol::ParamType::Int {
+                max: Some(7680),
+                ..
+            }
+        ));
+    }
+    let create = |w: u32, h: u32| {
+        registry
+            .create(
+                "backdrop",
+                &settings(&[("width", json!(w)), ("height", json!(h))]),
+                &Context::default(),
+            )
+            .map(|_| ())
+    };
+    for (w, h, side) in [
+        (16384, 16384, "width"),
+        (7681, 100, "width"),
+        (100, 7681, "height"),
+        (7680, 4321, "width"),
+        (4321, 7680, "height"),
+    ] {
+        assert!(
+            matches!(create(w, h), Err(SourceError::Setting { ref param, .. }) if param == side),
+            "{w}x{h}"
+        );
+    }
+    create(7680, 1).expect("7680 wide");
+    create(1, 7680).expect("7680 tall");
+}

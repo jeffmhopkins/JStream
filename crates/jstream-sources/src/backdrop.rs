@@ -10,7 +10,7 @@
 //! sRGB. The same settings always draw the same picture: `seed` picks another one.
 
 use crate::color::{frame_size, parse_color, rgba_frame};
-use crate::describe::{kind, param, size};
+use crate::describe::{kind, param};
 use crate::source::{changed_non_live, setting};
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
@@ -31,6 +31,15 @@ const STYLES: [(&str, &str); 3] = [
 
 /// The largest `seed`.
 const MAX_SEED: i64 = 999_999;
+
+/// The longest side a backdrop may have, smaller than other sources' (#1025). A backdrop
+/// is drawn on the CPU when it is created or changed, about 0.3 s for a 1080p frame,
+/// and its noise grids are allocated beside the frame. It is a soft picture that scales
+/// up with no visible loss, so 8K is as large as one needs to be.
+const MAX_SIDE: u32 = 7680;
+
+/// The most pixels a backdrop may have: 8K UHD's, 7680 × 4320, either way round.
+const MAX_PIXELS: u64 = 7680 * 4320;
 
 impl BackdropKind {
     pub(crate) fn new() -> Self {
@@ -127,8 +136,14 @@ impl BackdropKind {
                     ),
                     "Another number draws another backdrop with the same look.",
                 )),
-                param("width", "Width", size(), json!(1920)),
-                param("height", "Height", size(), json!(1080)),
+                described(
+                    param("width", "Width", side(), json!(1920)),
+                    "At most 7680, and 7680 × 4320 pixels in all. It scales up smoothly.",
+                ),
+                described(
+                    param("height", "Height", side(), json!(1080)),
+                    "At most 7680, and 7680 × 4320 pixels in all. It scales up smoothly.",
+                ),
             ],
             ..kind("backdrop", "Backdrop", true, false)
         })
@@ -142,6 +157,7 @@ impl SourceKind for BackdropKind {
 
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
         let size = frame_size(settings, &ctx.limits)?;
+        capped(size)?;
         let look = Look::read(settings)?;
         Ok(Box::new(BackdropSource {
             descriptor: self.0.clone(),
@@ -149,6 +165,41 @@ impl SourceKind for BackdropKind {
             frame: Arc::new(paint(size, &look)?),
         }))
     }
+}
+
+/// A width or height in pixels, up to [`MAX_SIDE`].
+fn side() -> ParamType {
+    ParamType::Int {
+        min: Some(1),
+        max: Some(i64::from(MAX_SIDE)),
+        step: Some(1),
+        unit: Some("px".into()),
+    }
+}
+
+/// Refuses a size over [`MAX_SIDE`] or [`MAX_PIXELS`], naming the side to shrink: the
+/// one over, else the larger.
+fn capped(size: FrameSize) -> Result<(), SourceError> {
+    let (w, h) = (size.width(), size.height());
+    if w > MAX_SIDE {
+        return Err(bad(
+            "width",
+            &format!("must be a whole number from 1 to {MAX_SIDE}"),
+        ));
+    }
+    if h > MAX_SIDE {
+        return Err(bad(
+            "height",
+            &format!("must be a whole number from 1 to {MAX_SIDE}"),
+        ));
+    }
+    if u64::from(w) * u64::from(h) > MAX_PIXELS {
+        return Err(bad(
+            if w >= h { "width" } else { "height" },
+            &format!("{w}x{h} is over a backdrop's 7680x4320 pixels"),
+        ));
+    }
+    Ok(())
 }
 
 /// A running `backdrop` source. Its one frame is drawn on create and on each update.

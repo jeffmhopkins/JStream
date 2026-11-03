@@ -182,22 +182,24 @@ source: crates/jstream-sources/tests/kinds.rs
         "id": "width",
         "type": "int",
         "min": 1,
-        "max": 16384,
+        "max": 7680,
         "step": 1,
         "unit": "px",
         "default": 1920,
         "label": "Width",
+        "description": "At most 7680, and 7680 × 4320 pixels in all. It scales up smoothly.",
         "live": false
       },
       {
         "id": "height",
         "type": "int",
         "min": 1,
-        "max": 16384,
+        "max": 7680,
         "step": 1,
         "unit": "px",
         "default": 1080,
         "label": "Height",
+        "description": "At most 7680, and 7680 × 4320 pixels in all. It scales up smoothly.",
         "live": false
       }
     ]
