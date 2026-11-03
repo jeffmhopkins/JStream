@@ -143,7 +143,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_locked <item-id> true|false` locks or unlocks an item's canvas box
   (protocol 0.71).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
-  item's opacity (above 1 a gain on its light, protocol 0.74) and blend mode; the engine
+  item's opacity (above 1 a gain on its light, protocol 0.75) and blend mode; the engine
   draws every mode (protocol 0.47).
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or

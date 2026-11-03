@@ -202,9 +202,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.74 because `item.set_opacity`,
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because `item.set_opacity`,
   `item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101), with
-  0.72 and 0.73 left to changes that claimed them first; 0.71 because of
+  0.72 to 0.74 left to changes that claimed them first; 0.71 because of
   `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
   ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 left
   to a change that claimed it first; 0.70 because of
@@ -718,7 +718,7 @@ parameters), so a reader of 0.7 messages sees no change for those.
 ### Opacity, blend and filters
 
 All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha multiplier (default 1), and from
-0.74 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
+0.75 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
 `additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
