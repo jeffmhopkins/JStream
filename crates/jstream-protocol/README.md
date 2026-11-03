@@ -62,7 +62,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set` (deprecated),
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `item.show`,
+  `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -202,7 +203,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.70 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.72 because of the
+  `item.show`, `item.hide` and `item.toggle` actions
+  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)); 0.70 because of
   `scene.set_camera` and `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
@@ -871,15 +874,21 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
   `plugin.*` actions (a person installs and grants plugins): each is
-  `invalid_argument` on `action.type`. A scene, output or preset the action names must
-  exist, else `not_found`.
+  `invalid_argument` on `action.type`. A scene, output, preset or item the action names
+  must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.72,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) are the actions that show
+  and hide one item: they change its placement's visibility as `item.set_visible` would,
+  moving `rev` on with no undo step, and the engine plays the item's own `appear` or
+  `disappear` effect on program over the default preset's duration.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
   inverse is `hotkey.set` with the action.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs and the preset a `scene.switch`
-  names), and their inverses restore the
+  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
+  names and the item an `item.*` action names), and any edit that takes an item away
+  (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
+  the item (ADR-0101). Their inverses restore the
   bindings after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`

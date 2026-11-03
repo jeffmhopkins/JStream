@@ -89,6 +89,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
+| `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
 | `output list` | query `output.list` |
 | `output status <id>` | query `output.status` |
 | `video snapshot` | query `video.snapshot` |

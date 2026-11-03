@@ -12,6 +12,7 @@ mod collection;
 mod fonts;
 mod gpu_capture;
 mod history;
+mod item_actions;
 mod keyframes;
 mod live_values;
 mod preview;

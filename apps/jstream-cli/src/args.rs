@@ -48,6 +48,9 @@ Commands:
                                    style and path (query font.list)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
+  item show|hide|toggle <item-id> [--scene <scene-id>]
+                                   show or hide an item with its own effect (actions
+                                   item.show, item.hide, item.toggle)
   output list                      list the configured outputs (query output.list)
   output status <output-id>        report an output's state and whether its stream
                                    key is set (query output.status)
@@ -296,6 +299,19 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
         }),
+        ["item", verb @ ("show" | "hide" | "toggle"), id, rest @ ..] => {
+            let scene_id = match rest {
+                [] => None,
+                ["--scene", scene] => Some(SceneId::new(*scene)),
+                _ => return Err(usage(format!("wrong arguments for `item {verb}`"))),
+            };
+            let item_id = ItemId::new(*id);
+            Command::Action(match *verb {
+                "show" => Action::ItemShow { item_id, scene_id },
+                "hide" => Action::ItemHide { item_id, scene_id },
+                _ => Action::ItemToggle { item_id, scene_id },
+            })
+        }
         ["output", "status", id] => Command::Query(Query::OutputStatus {
             output_id: OutputId::new(*id),
         }),
@@ -852,6 +868,28 @@ mod tests {
                 scene_id: SceneId::new("s"),
             })
         );
+        assert_eq!(
+            ok(&["item", "toggle", "i1"]).command,
+            Command::Action(Action::ItemToggle {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+            })
+        );
+        assert_eq!(
+            ok(&["item", "show", "i1", "--scene", "k"]).command,
+            Command::Action(Action::ItemShow {
+                item_id: ItemId::new("i1"),
+                scene_id: Some(SceneId::new("k")),
+            })
+        );
+        assert_eq!(
+            ok(&["item", "hide", "i1"]).command,
+            Command::Action(Action::ItemHide {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+            })
+        );
+        assert!(err(&["item", "hide", "i1", "k"]).starts_with("wrong arguments for `"));
         assert_eq!(
             ok(&["studio", "get"]).command,
             Command::Query(Query::StudioGet)

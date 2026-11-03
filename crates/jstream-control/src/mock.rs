@@ -427,6 +427,13 @@ impl History {
         self.prune();
     }
 
+    /// A change by a client that is no step of its history (an item action, ADR-0101):
+    /// logged, so another client's undo over it conflicts, with its stacks kept.
+    fn log_only(&mut self, client_id: &ClientId, rev: Rev) {
+        self.log.push_back((rev, client_id.clone()));
+        self.prune();
+    }
+
     /// Takes the step an undo or redo would apply.
     fn take(&mut self, client_id: &ClientId, direction: HistoryDirection) -> Option<Step> {
         let stacks = self.clients.get_mut(client_id)?;
@@ -792,6 +799,8 @@ impl State {
             if let Some((entity, id)) = deleted {
                 inverse.extend(next.remove_hotkeys_naming(entity, &id, &mut removed));
             }
+            // So does any edit that takes an item away (ADR-0101).
+            inverse.extend(next.remove_hotkeys_of_missing_items(&mut removed));
             undo.push(inverse);
         }
         next.rev = self
@@ -908,6 +917,43 @@ impl State {
         });
     }
 
+    /// `item.show`, `item.hide` and `item.toggle` (ADR-0101), as the engine runs them:
+    /// the placement's `item.set_visible`, one `rev` and a `state.changed`, logged for
+    /// undo conflicts but no step of the sender's history. The mock draws nothing, so it
+    /// plays no effect.
+    fn set_shown(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        item_id: ItemId,
+        scene_id: Option<SceneId>,
+        visible: Option<bool>,
+    ) -> Result<CallResult, ProtocolError> {
+        let current = self
+            .collection
+            .visible_in(&item_id, scene_id.as_ref())
+            .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+        let visible = visible.unwrap_or(!current);
+        let edit = Edit::ItemSetVisible {
+            item_id,
+            scene_id,
+            visible,
+        };
+        if visible == current {
+            // Nothing to change, but a scene the edit would refuse is refused here too.
+            let running = self.running();
+            self.collection
+                .clone()
+                .apply(edit, 0, &running)
+                .map_err(action_field)?;
+            return Ok(CallResult::action());
+        }
+        let (rev, _, _) = self.apply(vec![edit]).map_err(action_field)?;
+        self.history.log_only(client_id, rev);
+        self.changed(client_id, request_id, rev, None);
+        Ok(CallResult::action())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -934,6 +980,15 @@ impl State {
                     self.emit_studio(client_id, request_id, Some(started));
                 }
                 return Ok(CallResult::action());
+            }
+            Action::ItemShow { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, Some(true));
+            }
+            Action::ItemHide { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, Some(false));
+            }
+            Action::ItemToggle { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, None);
             }
             Action::StudioSetPreview { scene_id } => {
                 self.collection.existing_scene(&scene_id)?;
@@ -2154,6 +2209,7 @@ impl Collection {
                         EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
                         // The mock has only the `cut` preset every collection starts with.
                         EntityKind::Transition => id == INITIAL_PRESET,
+                        EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
                         _ => false,
                     };
                     if !exists {
@@ -2186,6 +2242,29 @@ impl Collection {
             return Err(not_found(EntityKind::Scene, scene_id.as_str()));
         }
         Ok(())
+    }
+
+    /// Removes the hotkey bindings whose action names an item the collection no longer
+    /// has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a deleted object.
+    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Vec<HotkeyBinding>) -> Vec<Edit> {
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| {
+                action.named_objects().iter().any(|&(entity, id)| {
+                    entity == EntityKind::Item && !self.items.contains_key(&ItemId::new(id))
+                })
+            })
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        chords
+            .into_iter()
+            .filter_map(|chord| {
+                let action = self.hotkeys.remove(&chord)?;
+                removed.push(HotkeyBinding::new(chord.clone(), &action));
+                Some(Edit::HotkeySet { chord, action })
+            })
+            .collect()
     }
 
     /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
@@ -2522,6 +2601,26 @@ impl Collection {
             ));
         }
         self.existing_item(item_id)
+    }
+}
+
+/// An error from the `item.set_visible` an item action applies, with its field named
+/// as the action's (`scene_id`, not `edits.0.scene_id`), as the engine reports it.
+fn action_field(error: ProtocolError) -> ProtocolError {
+    match error {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
+            field: field
+                .strip_prefix("edits.0.")
+                .map(str::to_owned)
+                .unwrap_or(field),
+            reason,
+            blockers,
+        },
+        other => other,
     }
 }
 

@@ -263,6 +263,19 @@ impl Collection {
             .collect()
     }
 
+    /// The chords bound to `action`, in chord order: for a `scene.switch`, every chord
+    /// that puts its scene on program ([`Self::scene_chords`]), whatever preset it names.
+    pub fn chords_for(&self, action: &Action) -> Vec<Chord> {
+        if let Action::SceneSwitch { scene_id, .. } = action {
+            return self.scene_chords(scene_id);
+        }
+        self.hotkeys
+            .iter()
+            .filter(|binding| binding.action().as_ref() == Some(action))
+            .map(|binding| binding.chord.clone())
+            .collect()
+    }
+
     /// The action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
         self.hotkeys

@@ -312,7 +312,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `stopped`). `MockEngine::emit` injects any other event;
 - the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `item.show`,
+  `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
+  `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first
   scene or deletes the program or preview scene. The mock knows only the initial `cut`
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every

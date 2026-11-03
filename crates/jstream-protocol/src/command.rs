@@ -1378,6 +1378,52 @@ pub enum Action {
         /// The scene to put on preview.
         scene_id: SceneId,
     },
+    /// Shows an item (0.72, ADR-0101) with its own appear effect, the way a hotkey shows
+    /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
+    /// with the same `scene_id` rules and the same errors (`not_found` for an item or
+    /// scene not in the collection, `invalid_argument` on `scene_id` for a scene whose
+    /// placement it can't change). It is collection state: `rev` moves on by one,
+    /// `state.changed` follows and the collection saves it. It is an action, so it is
+    /// never a step of the sender's undo history (ADR-0024 §5); another client's undo that
+    /// would overwrite it fails with `undo_conflict`, as after a batch. Showing an item
+    /// already shown succeeds and changes nothing.
+    ///
+    /// When the program scene draws the item, it appears with its `appear` effect, after
+    /// its `delay_ms` and with its easing, over the default preset's duration. `inherit`
+    /// is the default preset's `unmatched`, or no animation when that preset is a `cut`
+    /// or another kind without one. A source the program shows again this way restarts
+    /// as on a scene switch: a `media` or `browser` source with `restart_on_show` starts
+    /// from the beginning. A running transition continues from what is on screen.
+    #[serde(rename = "item.show")]
+    ItemShow {
+        /// The item to show.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Hides an item with its own `disappear` effect (0.72, ADR-0101): `item.show`'s
+    /// opposite, with the same rules. Hiding an item already hidden succeeds and changes
+    /// nothing.
+    #[serde(rename = "item.hide")]
+    ItemHide {
+        /// The item to hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Shows the item if that placement hides it, else hides it (0.72, ADR-0101), as
+    /// `item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is
+    /// the keyframe's override if it has one, else the item's own.
+    #[serde(rename = "item.toggle")]
+    ItemToggle {
+        /// The item to show or hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -1507,6 +1553,9 @@ impl Action {
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+            Action::ItemShow { .. } => "item.show",
+            Action::ItemHide { .. } => "item.hide",
+            Action::ItemToggle { .. } => "item.toggle",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1537,6 +1586,15 @@ impl Action {
             }
             Action::StudioSetPreview { scene_id } => {
                 vec![(EntityKind::Scene, scene_id.as_str())]
+            }
+            Action::ItemShow { item_id, scene_id }
+            | Action::ItemHide { item_id, scene_id }
+            | Action::ItemToggle { item_id, scene_id } => {
+                let mut named = vec![(EntityKind::Item, item_id.as_str())];
+                if let Some(scene_id) = scene_id {
+                    named.push((EntityKind::Scene, scene_id.as_str()));
+                }
+                named
             }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
@@ -1619,6 +1677,9 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
             | Action::PrivacySet { .. } => None,
         }
     }

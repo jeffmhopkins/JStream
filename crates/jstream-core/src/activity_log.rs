@@ -146,6 +146,18 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::StudioSetPreview { scene_id } => {
             format!("Put {} on preview", scene(state, scene_id))
         }
+        Action::ItemShow { item_id, .. } => format!("Showed {}", item(state, item_id)),
+        Action::ItemHide { item_id, .. } => format!("Hid {}", item(state, item_id)),
+        // Described before it runs: it shows an item hidden there, and hides one shown.
+        Action::ItemToggle { item_id, scene_id } => format!(
+            "{} {}",
+            if state.visible_in(item_id, scene_id.as_ref()) == Some(false) {
+                "Showed"
+            } else {
+                "Hid"
+            },
+            item(state, item_id)
+        ),
         Action::OutputStart { output_id } => {
             format!("Started output {}", quote(output_id.as_str()))
         }

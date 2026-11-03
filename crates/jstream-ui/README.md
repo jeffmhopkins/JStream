@@ -78,7 +78,9 @@ Contents ([Design](#design) explains the choices):
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
-  press, its label and the edits that bind a chord to a scene, tested natively.
+  press, its label and the edits that bind a chord to an action (a scene's
+  `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
+  `Collection::chords_for` lists a row's chords), tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -398,7 +400,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's) and Properties, the source's settings form. A scene shows its object
+  the parent's), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
+  source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the

@@ -698,7 +698,19 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
-  or not the mixer runs, and `live.set` and `live.cancel` (see *Live values* below).
+  or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
+  `item.show`, `item.hide` and `item.toggle`
+  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
+  `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
+  `State::visible_in`): a `rev`, `state.changed` and an entry in the undo-conflict log,
+  but no undo step (`History::record_batch` with no inverse). When the program scene's
+  tree holds the item and the item's effect isn't an instant one with no delay, the
+  engine reads what is on screen first (`snapshot::on_screen`, looking at sources
+  quietly so the probe reaches none) and puts a Move toward the program scene on the
+  studio, by item, with the default preset's duration and easing and its `unmatched`
+  (none for a `cut`): every other item pairs with itself and holds still, and only the
+  changed one appears or disappears with its effect. A source the next plan reaches
+  again restarts as on a switch (`restart_on_show`).
   `live.list` is a query answered from the gesture table.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** always reads off (see *No privacy screen* below).

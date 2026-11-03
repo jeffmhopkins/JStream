@@ -1072,6 +1072,18 @@ pub(crate) fn actions() -> Vec<Action> {
             source: None,
             source_id: Some(SourceId::new("src_cam")),
         },
+        Action::ItemShow {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
+        Action::ItemHide {
+            item_id: ItemId::new("itm_1"),
+            scene_id: Some(SceneId::new("scn_1")),
+        },
+        Action::ItemToggle {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
     ]
 }
 

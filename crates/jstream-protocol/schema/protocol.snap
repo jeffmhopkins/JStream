@@ -408,6 +408,93 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Shows an item (0.72, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to show."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+            },
+            "type": {
+              "const": "item.show",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Hides an item with its own `disappear` effect (0.72, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to hide."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+            },
+            "type": {
+              "const": "item.hide",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Shows the item if that placement hides it, else hides it (0.72, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to show or hide."
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+            },
+            "type": {
+              "const": "item.toggle",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
           "properties": {
             "type": {
@@ -9590,5 +9677,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.70"
+  "title": "JStream protocol 0.72"
 }

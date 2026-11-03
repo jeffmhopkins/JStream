@@ -441,6 +441,21 @@ impl State {
         })
     }
 
+    /// Whether the placement of `item_id` that `scene_id` names is visible, as
+    /// `item.set_visible` with that `scene_id` would change it: a keyframe scene's
+    /// override if it has one, else the item's own (ADR-0101's `item.toggle`). `None`
+    /// for an item the collection doesn't have.
+    pub fn visible_in(&self, item_id: &ItemId, scene_id: Option<&SceneId>) -> Option<bool> {
+        let (_, item) = self.item(item_id)?;
+        let keyframe = scene_id
+            .and_then(|id| self.scene(id))
+            .filter(|scene| scene.variant_of.is_some());
+        Some(match keyframe.and_then(|k| k.overrides.get(item_id)) {
+            Some(o) => o.apply(&item.props()).visible,
+            None => item.visible,
+        })
+    }
+
     /// The items in the tree of scene `root`, which a keyframe scene of it may override
     /// (ADR-0024 §2): `root`'s own, and the items of every group placed in it, at any
     /// depth. A group placed twice counts once (ADR-0040 §2).
