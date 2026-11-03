@@ -45,6 +45,7 @@ mod pack_source;
 mod plugins;
 mod preview;
 mod private_file;
+mod profile;
 mod runtime;
 mod session;
 mod snapshot;

@@ -16,6 +16,7 @@
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
 //! `plugin.list` (always empty: the mock runs no plugins),
+//! `profile.get` (always empty: the mock draws nothing),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -1215,6 +1216,10 @@ impl State {
                         u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
                     }),
                 entries: Vec::new(),
+            },
+            // The mock draws nothing and reads no threads (ADR-0103): an empty profile.
+            Query::ProfileGet { .. } => QueryResult::ProfileGet {
+                profile: jstream_protocol::ProfileInfo::default(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };

@@ -27,11 +27,12 @@ use crate::plugins::kinds::{self as clap_kinds, ClapScan};
 use crate::preview::{
     Current, Opening, PreviewCapture, PreviewHub, PreviewSource, SessionPreviews,
 };
+use crate::profile::{DrawMeter, Profiler};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
-    SharedVideoDevices, SizeChange, StartError, VcamOut, launch, launch_program, launch_vcam,
-    parts_from,
+    SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch, launch_program,
+    launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -45,7 +46,7 @@ use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, ProcessCpu, Secret,
-    StreamKeyStore,
+    StreamKeyStore, ThreadCpu,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
@@ -123,6 +124,9 @@ struct Shared {
     /// 0.57). Its lock is its own: the stats thread takes it before the collection
     /// lock, never with it.
     output_meters: Arc<Mutex<OutputMeters>>,
+    /// Where the engine's time goes, for `profile.get` (ADR-0103). Its locks are its
+    /// own; only its source meters and plan totals are taken under the collection lock.
+    profile: Profiler,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -169,31 +173,33 @@ impl Default for Engine {
     fn default() -> Self {
         let audio_scopes = Arc::new(AudioScopes::new());
         Self {
-            shared: Arc::new_cyclic(|shared: &Weak<Shared>| Shared {
-                state: Mutex::new({
-                    let mut state = State::default();
-                    state.graph = Graph::new().with_kinds(crate::kinds::builtin());
-                    let host: Weak<dyn LiveHost> = shared.clone();
-                    state.live = LiveSources::new(host);
-                    state.shared = shared.clone();
-                    state.live.set_audio_scopes(Arc::clone(&audio_scopes));
-                    state
-                }),
-                snapshots: SnapshotWorker::default(),
-                keys: Mutex::new(None),
-                audit: Audit::default(),
-                collection_file: Mutex::new(None),
-                audio_scopes,
-                youtube: Mutex::new(None),
-                previews: PreviewHub::default(),
-                load: LoadMeter::default(),
-                output_meters: Arc::default(),
-                #[cfg(feature = "wasm-plugins")]
-                automation: crate::plugins::automation::Registry::default(),
-                effect_packs: Mutex::new(None),
-                fonts: OnceLock::new(),
-                #[cfg(test)]
-                font_dirs: Mutex::new(None),
+            shared: Arc::new_cyclic(|shared: &Weak<Shared>| {
+                let mut state = State::default();
+                state.graph = Graph::new().with_kinds(crate::kinds::builtin());
+                let host: Weak<dyn LiveHost> = shared.clone();
+                state.live = LiveSources::new(host);
+                state.shared = shared.clone();
+                state.live.set_audio_scopes(Arc::clone(&audio_scopes));
+                let profile = Profiler::new(frame_budget(), state.live.meters());
+                Shared {
+                    state: Mutex::new(state),
+                    snapshots: SnapshotWorker::default(),
+                    keys: Mutex::new(None),
+                    audit: Audit::default(),
+                    collection_file: Mutex::new(None),
+                    audio_scopes,
+                    youtube: Mutex::new(None),
+                    previews: PreviewHub::default(),
+                    load: LoadMeter::default(),
+                    output_meters: Arc::default(),
+                    profile,
+                    #[cfg(feature = "wasm-plugins")]
+                    automation: crate::plugins::automation::Registry::default(),
+                    effect_packs: Mutex::new(None),
+                    fonts: OnceLock::new(),
+                    #[cfg(test)]
+                    font_dirs: Mutex::new(None),
+                }
             }),
             media: None,
             drops: Arc::new(Mutex::new(DropLedger::default())),
@@ -697,6 +703,18 @@ impl Engine {
         self.shared.load.set_cpu(cpu);
     }
 
+    /// Reads each of the process's threads' CPU time from `threads` for `profile.get`
+    /// from now on (protocol 0.71, ADR-0103). Without one the profile's `threads` is
+    /// empty. Read outside the collection lock, at most about once a second.
+    pub fn set_thread_cpu(&self, threads: Arc<dyn ThreadCpu>) {
+        self.shared.profile.set_threads(threads);
+    }
+
+    /// The engine's profiler, which the drawing threads' meters publish to.
+    pub(crate) fn profiler(&self) -> &Profiler {
+        &self.shared.profile
+    }
+
     /// Starts the engine's stats heartbeat: a `jstream-stats-idle` thread that emits a
     /// `stats.tick` about once a second while no output runs, so a client sees the
     /// engine's load while it is idle too (protocol 0.48). While the program stage runs,
@@ -1165,6 +1183,17 @@ impl Engine {
             }
         ) {
             Ok(self.font_list())
+        } else if let Call::Query {
+            query: Query::ProfileGet { seconds, top },
+        } = &call
+        {
+            // Outside the collection lock: reading the threads makes system calls.
+            let cpu = self.shared.load.cpu_time();
+            Ok(CallResult::Query {
+                result: QueryResult::ProfileGet {
+                    profile: self.shared.profile.profile(*seconds, *top, cpu),
+                },
+            })
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
         } = call
@@ -2728,6 +2757,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     let cpu = shared.load.cpu_time();
     // And the outputs' meters, whose lock is never taken with the collection's.
     let outputs = lock(&shared.output_meters).sample(Instant::now());
+    // A profile reading too (ADR-0103), whose locks are its own.
+    shared.profile.sample(cpu);
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);
@@ -3512,6 +3543,7 @@ impl State {
     /// program and every mix capture. A source the shot shows enlarged is drawn again at
     /// the density that keeps it sharp, when its kind can be (ADR-0073).
     fn publish_render(&mut self) -> Option<f32> {
+        let started = Instant::now();
         let Self {
             graph,
             shown,
@@ -3628,6 +3660,7 @@ impl State {
             *source_shots = Arc::new(shots);
         }
         live.wake_at(wake);
+        live.meters().planned(started.elapsed());
         planning.end_ms
     }
 
@@ -3854,6 +3887,10 @@ impl PreviewSource for Shared {
             rev: state.graph.rev(),
             at: state.live.now(),
         }
+    }
+
+    fn meter(&self) -> DrawMeter {
+        self.profile.preview_meter()
     }
 }
 

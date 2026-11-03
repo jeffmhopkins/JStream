@@ -87,6 +87,7 @@ use jstream_platform::Capture;
 
 use crate::chain::Chains;
 use crate::lock;
+use crate::profile::DrawMeter;
 use crate::runtime::{CaptureBackends, RenderCaptures, RenderSnapshot, spawn_captures};
 use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
@@ -130,6 +131,12 @@ pub(crate) struct Current {
 pub(crate) trait PreviewSource: Send + Sync {
     /// The snapshots, live values, `rev` and clock now.
     fn current(&self) -> Current;
+
+    /// A meter for a run of the hub thread, which times its pictures for
+    /// `profile.get` (ADR-0103). Without one the hub's pictures are timed for no one.
+    fn meter(&self) -> DrawMeter {
+        DrawMeter::default()
+    }
 }
 
 /// Draws one picture for the hub: `shot` with `live` applied and the latest frame of
@@ -144,6 +151,7 @@ pub(crate) type PreviewDraw = Box<
         FrameSize,
         MediaTime,
         &mut Vec<u8>,
+        &mut DrawMeter,
     ) -> Result<(), String>,
 >;
 
@@ -163,11 +171,11 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
         );
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
-        let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out| {
+        let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out, meter| {
             cache.begin_frame();
-            let output = snapshot::compose(
+            let output = snapshot::compose_metered(
                 &mut compositor,
-                (&mut cache, &mut chains),
+                (&mut cache, &mut chains, &mut *meter),
                 (shot, at),
                 // A preview stream shows the program mix, never a video mix.
                 snapshot::View::default(),
@@ -193,7 +201,7 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
 /// machine with no adapter ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenPreviewDraw {
     Arc::new(|| {
-        let draw: PreviewDraw = Box::new(|_, _, _, size, _, out| {
+        let draw: PreviewDraw = Box::new(|_, _, _, size, _, out, _| {
             out.clear();
             out.resize(size.width() as usize * size.height() as usize * 4, 0);
             Ok(())
@@ -750,6 +758,10 @@ fn run(
         draw: None,
         rgba: Vec::new(),
         jpeg: Vec::new(),
+        meter: source
+            .upgrade()
+            .map(|source| source.meter())
+            .unwrap_or_default(),
     };
     let mut captures = HubCaptures {
         capture,
@@ -966,6 +978,8 @@ struct Canvas<'a> {
     rgba: Vec<u8>,
     /// The last JPEG encoded.
     jpeg: Vec<u8>,
+    /// Times each picture for `profile.get` (ADR-0103).
+    meter: DrawMeter,
 }
 
 /// One pass over one stream: forwards the packets its encoder produced, and draws and
@@ -988,6 +1002,7 @@ fn serve(
         draw,
         rgba,
         jpeg,
+        meter,
     } = canvas;
     if let Err(reason) = forward(stream, work, None) {
         stream.end(rev, &reason);
@@ -1031,7 +1046,12 @@ fn serve(
         }
     }
     let drawing = draw.as_mut()?;
-    if let Err(reason) = drawing(shot, live, captures, size, at, rgba) {
+    let started = Instant::now();
+    let drawn = drawing(shot, live, captures, size, at, rgba, meter);
+    if drawn.is_ok() {
+        meter.end_frame(started.elapsed(), Instant::now(), drop);
+    }
+    if let Err(reason) = drawn {
         work.draw_errors += 1;
         tracing::debug!(channel = stream.channel, error = %reason, "preview picture skipped");
         if work.draw_errors > MAX_DRAW_ERRORS {

@@ -115,7 +115,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list` and `profile.get`
+  (`profile.rs`, with `ProfileInfo` and the shapes it holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -202,7 +203,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.70 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of the
+  `profile.get` query
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.70 because of
   `scene.set_camera` and `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
@@ -1086,6 +1089,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   root `absolute`. A collection lists its first font. The engine reads its OS's font
   folders on the first call and keeps the list, so a font installed later shows after
   a restart. Runtime state, so no `rev`. Added in 0.68.
+- `profile.get {seconds?, top?}`: where the engine's time went over the last
+  `seconds` (1 to 60, default 5), as a `ProfileInfo`
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
+  thread's (`program`, `preview`) frames, their average, 95th percentile and longest
+  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
+  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
+  effects, a placed scene's chain, the composite, the master or an output's chain) with
+  its frames, average and recent longest time and share of its drawer's time; the
+  sources the `jstream-sources` thread and the planner spent time on; the plans; the
+  process's CPU; and its threads by name, as a percentage of one core (JStream's own
+  `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
+  cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
+  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
+  0.71.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.

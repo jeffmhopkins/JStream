@@ -81,6 +81,7 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::output_stats::{MeterGuard, OutputSample, ReadSample, SentCounters};
+use crate::profile::{DrawMeter, Phase};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -92,6 +93,11 @@ use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, Vi
 /// Base frame rate of this cut: one frame every 1/30 s.
 pub(crate) const FRAME_NUM: u32 = 1;
 pub(crate) const FRAME_DEN: u32 = 30;
+
+/// The base frame period: what a frame may take for the program to keep up (ADR-0103).
+pub(crate) fn frame_budget() -> Duration {
+    Duration::from_secs(u64::from(FRAME_NUM)) / FRAME_DEN
+}
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
 /// platform's GPU context or, without one, hardware first with the software adapter as
@@ -141,6 +147,7 @@ pub(crate) type DrawFn = Box<
             &dyn Captures,
             &mut [MixFrame],
             MediaTime,
+            &mut DrawMeter,
         ) -> Result<Option<Reclaimed>, DrawError>,
 >;
 
@@ -249,7 +256,8 @@ pub(crate) fn cpu_draw() -> OpenDraw {
              _: &LiveParams,
              captures: &dyn Captures,
              frames: &mut [MixFrame],
-             _: MediaTime| {
+             _: MediaTime,
+             _: &mut DrawMeter| {
                 let first = shot
                     .captures()
                     .first()
@@ -1438,7 +1446,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at| {
+        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
             }
@@ -1459,9 +1467,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
                 let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
-                let drawn = snapshot::compose(
+                let drawn = snapshot::compose_metered(
                     &mut compositor,
-                    (&mut cache, &mut chains),
+                    (&mut cache, &mut chains, &mut *meter),
                     (shot, at),
                     view,
                     live,
@@ -1472,13 +1480,16 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     },
                 )
                 .and_then(|output| {
+                    let started = Instant::now();
                     if frame.readback {
                         copy_pixels(&output, &mut frame.out)?;
                     }
-                    match &frame.nv12 {
+                    let converted = match &frame.nv12 {
                         Some(target) => nv12.submit(&compositor, output.texture(), target),
                         None => Ok(()),
-                    }
+                    };
+                    meter.phase_since(Phase::Finish, started);
+                    converted
                 });
                 drawn.map_err(|err| draw_error(&compositor, &err))?;
             }
@@ -1760,6 +1771,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
             losses: loss_tx,
+            meter: engine.profiler().program_meter(),
         };
         move || render_thread(job)
     });
@@ -2503,6 +2515,8 @@ struct RenderJob {
     /// Told of each lost device, with the pack kinds drawn before it (#349): the
     /// engine handles it on its `jstream-device-losses` thread, never on this one.
     losses: Sender<DeviceLoss>,
+    /// Times each tick and its units for `profile.get` (ADR-0103).
+    meter: DrawMeter,
 }
 
 /// The render thread's boundary: a panic outside a tick (opening the compositor,
@@ -2710,8 +2724,9 @@ impl Frames {
         live: &LiveParams,
         captures: &RenderCaptures,
         at: MediaTime,
+        meter: &mut DrawMeter,
     ) -> Result<Option<Reclaimed>, DrawError> {
-        let drawn = draw(shot, live, captures, &mut self.mixes, at);
+        let drawn = draw(shot, live, captures, &mut self.mixes, at, meter);
         for ((frame, shown), encode) in self
             .mixes
             .iter_mut()
@@ -2795,6 +2810,7 @@ fn render_loop(job: RenderJob) {
         drops,
         fail,
         losses: loss_sender,
+        mut meter,
     } = job;
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
@@ -2869,6 +2885,7 @@ fn render_loop(job: RenderJob) {
             }
         };
         skipped = skipped.saturating_add(missed);
+        meter.skip(missed);
         index = index.saturating_add(missed);
         let drawn = frames.schedule(index);
         index = index.saturating_add(1);
@@ -2946,6 +2963,7 @@ fn render_loop(job: RenderJob) {
                 }
             }
         } else if drawn > 0 {
+            let started = Instant::now();
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 reader.adopt();
                 let (snapshot, live) = reader.held();
@@ -2953,10 +2971,14 @@ fn render_loop(job: RenderJob) {
                 // The shot's captures cover every mix's passes, so a display or window
                 // only a video mix shows is started too.
                 captures.tick(shot.captures(), now);
-                frames.draw(&mut draw, shot, live, &captures, due)
+                frames.draw(&mut draw, shot, live, &captures, due, &mut meter)
             }));
             match tick {
                 Ok(Ok(freed)) => {
+                    // The totals it replaces go to the collector (R-RT-003).
+                    meter.end_frame(started.elapsed(), Instant::now(), |old| {
+                        collector.free(Garbage::Profile(old));
+                    });
                     draw_errors = 0;
                     reader.count_drawn();
                     let read = frames
@@ -4704,6 +4726,7 @@ mod tests {
                 &captures,
                 &mut frames,
                 MediaTime::zero(Timebase::NANOS),
+                &mut crate::profile::DrawMeter::default(),
             )
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
@@ -4822,7 +4845,7 @@ mod tests {
         let long = Duration::from_secs(30);
         let opens: OpenDraw = Arc::new(|context: Option<&GpuContext>| {
             assert!(context.is_none(), "opened on the context");
-            let draw: DrawFn = Box::new(|_, _, _, _, _| Ok(None));
+            let draw: DrawFn = Box::new(|_, _, _, _, _, _| Ok(None));
             Ok(draw)
         });
         let released = Arc::new(AtomicBool::new(false));
