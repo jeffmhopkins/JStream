@@ -221,7 +221,7 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
-    /// Reads where the engine's time went over the last `seconds` (0.71, ADR-0103): per
+    /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
     /// drawing thread, per unit of drawing work and its owner (a source's upload or
     /// chain, a scene's chain or pass, an item's effects, an output's chain), per
     /// source, the planner, and the CPU of each thread of the process. The engine
@@ -618,7 +618,7 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
-    /// The result of `profile.get` (0.71). Runtime state, so it carries no `rev`.
+    /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
     #[serde(rename = "profile.get")]
     ProfileGet {
         /// Where the time went.

@@ -203,7 +203,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.73 because of the
   `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.70 because of
   `scene.set_camera` and `SceneInfo.camera`, a live value too
@@ -1106,7 +1106,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
   cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
   `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
-  0.71.
+  0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.

@@ -814,7 +814,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
-  `profile.get` (protocol 0.71, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
+  `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
   where the frame time went over the last few seconds: each drawing thread's frame time
   against the budget, the costliest units (a source's upload, a capture, a chain, a
   scene pass, the composite), each source's paints, looks and builds, the planner, and

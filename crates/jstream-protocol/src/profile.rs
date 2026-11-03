@@ -1,4 +1,4 @@
-//! `profile.get` (0.71, ADR-0103): where the engine's time goes, per drawing thread, per
+//! `profile.get` (0.73, ADR-0103): where the engine's time goes, per drawing thread, per
 //! unit of drawing work and its owner, per source and per thread, over a recent window.
 
 use crate::finite::Finite32;

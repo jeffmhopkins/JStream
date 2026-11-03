@@ -1,5 +1,5 @@
 //! The process's CPU time on Linux, for `stats.tick`'s load (protocol 0.48), and each
-//! of its threads' CPU time, for `profile.get` (protocol 0.71, ADR-0103).
+//! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103).
 
 #[cfg(target_os = "linux")]
 pub use os::{LinuxProcessCpu, LinuxThreadCpu};

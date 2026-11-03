@@ -1,5 +1,5 @@
 //! The process's CPU time on Windows, for `stats.tick`'s load (protocol 0.48), and each
-//! of its threads' CPU time, for `profile.get` (protocol 0.71, ADR-0103).
+//! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103).
 
 /// Adds a FILETIME's two halves into its 100 ns count, as `GetProcessTimes` reports
 /// kernel and user time.

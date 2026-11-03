@@ -1,5 +1,5 @@
 //! The engine process's own CPU time, for `stats.tick`'s load (protocol 0.48), and each
-//! of its threads' CPU time, for `profile.get` (protocol 0.71, ADR-0103).
+//! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103).
 
 use std::time::Duration;
 

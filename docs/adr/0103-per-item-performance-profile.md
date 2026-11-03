@@ -38,7 +38,7 @@ Where the time can go:
 
 <a id="decision"></a>
 ## Decision
-1. **A query, `profile.get` (protocol 0.71),** answers a `ProfileInfo` over a recent
+1. **A query, `profile.get` (protocol 0.73),** answers a `ProfileInfo` over a recent
    window: `seconds` (1 to 60, default 5) asks for it, `top` (default 20, at most 200)
    caps each list. It is a read: plugin class `read`, its own MCP tool (`profile`), and
    `jstream profile get`. Runtime state, so no `rev`. The result has:

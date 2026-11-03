@@ -704,7 +704,7 @@ impl Engine {
     }
 
     /// Reads each of the process's threads' CPU time from `threads` for `profile.get`
-    /// from now on (protocol 0.71, ADR-0103). Without one the profile's `threads` is
+    /// from now on (protocol 0.73, ADR-0103). Without one the profile's `threads` is
     /// empty. Read outside the collection lock, at most about once a second.
     pub fn set_thread_cpu(&self, threads: Arc<dyn ThreadCpu>) {
         self.shared.profile.set_threads(threads);

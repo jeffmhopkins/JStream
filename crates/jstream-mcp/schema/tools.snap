@@ -15561,7 +15561,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `profile` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Reads where the engine's time went over the last `seconds` (0.71, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
+                "description": "Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
                 "properties": {
                   "seconds": {
                     "description": "The window, in seconds, from 1 to 60\n([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window\nlonger than the engine has read for covers what it has.",
