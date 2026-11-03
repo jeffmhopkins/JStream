@@ -509,7 +509,7 @@ mod tests {
 
     #[test]
     fn an_oscillator_repeats_with_its_period_and_phase() {
-        let m = modifier("sway", Property::X, sine(3.0, 4000.0));
+        let m = modifier("osc", Property::X, sine(3.0, 4000.0));
         assert!(close(m.value_at(1.0), 3.0), "a quarter period in");
         assert!(close(m.value_at(5.0), 3.0), "one period later");
         let shifted = Modifier {
@@ -527,7 +527,7 @@ mod tests {
     #[test]
     fn a_drift_wraps_and_runs_backwards() {
         let wrap = modifier(
-            "sky",
+            "drift",
             Property::X,
             Kind::Drift {
                 rate_per_s: 10.0,
@@ -537,7 +537,7 @@ mod tests {
         assert!(close(wrap.value_at(3.0), 30.0));
         assert!(close(wrap.value_at(12.0), 20.0));
         let back = modifier(
-            "sky",
+            "drift",
             Property::X,
             Kind::Drift {
                 rate_per_s: -10.0,
@@ -546,7 +546,7 @@ mod tests {
         );
         assert!(close(back.value_at(3.0), 70.0), "wraps into 0..wrap");
         let open = modifier(
-            "sky",
+            "drift",
             Property::X,
             Kind::Drift {
                 rate_per_s: 2.5,

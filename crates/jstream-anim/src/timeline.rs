@@ -310,7 +310,7 @@ mod tests {
     }
 
     #[test]
-    fn the_weapons_run_fires_each_cue_once_at_its_time() {
+    fn a_sequence_fires_each_cue_once_at_its_time() {
         let t = timeline(4000, Looping::Once, &[0, 1500, 1950, 2400, 2850, 3300]);
         assert_eq!(t.check(), Ok(()));
         let start = 7 * 1000 * MS;
@@ -436,11 +436,11 @@ mod tests {
             cues: vec![
                 Cue {
                     at_ms: 0,
-                    action: Act::Set("shields", 0),
+                    action: Act::Set("a", 0),
                 },
                 Cue {
                     at_ms: 100,
-                    action: Act::Set("monitors", 1),
+                    action: Act::Set("b", 1),
                 },
                 Cue {
                     at_ms: 200,
@@ -448,11 +448,11 @@ mod tests {
                 },
                 Cue {
                     at_ms: 300,
-                    action: Act::Set("shields", 1),
+                    action: Act::Set("a", 1),
                 },
                 Cue {
                     at_ms: 900,
-                    action: Act::Set("monitors", 2),
+                    action: Act::Set("b", 2),
                 },
             ],
         };

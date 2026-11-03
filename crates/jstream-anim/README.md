@@ -80,7 +80,7 @@ drops and restores, each of which must undo exactly and leave no empty override.
 For motion: each waveform's landmarks, period and phase, wrapping drifts, a seeded wiggle
 that stays within its amplitude with no jump between frames and stays precise days in,
 how `evaluate` adds, multiplies and skips disabled modifiers, the shown clock, blending,
-every refused parameter; and for timelines the cockpit's weapons run fired once each
+every refused parameter; and for timelines a six-cue sequence fired once each
 under uneven ticks, loops, a range loop's intro and repeats, `Once` ending, seeks, every
 refused timeline, and 200 random timelines whose cues fire the same under random ticks
 as in one window.
