@@ -141,10 +141,25 @@ impl<A> Timeline<A> {
         Ok(())
     }
 
+    /// Whether its looping has a length to repeat: a `Loop` longer than 0 and a `Range`
+    /// with `from_ms < to_ms`. [`Timeline::check`] refuses the rest; [`Timeline::due`]
+    /// and [`Timeline::position`] treat them as never playing, so unchecked input can't
+    /// make them spin.
+    fn repeats_validly(&self) -> bool {
+        match self.looping {
+            Looping::Once => true,
+            Looping::Loop => self.duration_ms > 0,
+            Looping::Range { from_ms, to_ms } => from_ms < to_ms,
+        }
+    }
+
     /// Where in the timeline `at_ms` milliseconds of playing falls, by pass. `None` for a
     /// negative time.
     fn place(&self, played_ms: f64) -> Option<(u64, f64, bool)> {
         if played_ms < 0.0 || played_ms.is_nan() {
+            return None;
+        }
+        if !self.repeats_validly() {
             return None;
         }
         let duration = f64::from(self.duration_ms);
@@ -243,21 +258,63 @@ impl<A> Timeline<A> {
 }
 
 impl<A: CueAction> Timeline<A> {
-    /// The cues to run when the timeline is sought to `at_ms` of a pass, so the scene
-    /// shows what it would have had it played there: for each state key, the last cue at
-    /// or before `at_ms` (in that pass's span) that sets it, in time order. Events are
-    /// skipped, since they happened in the past.
-    pub fn seek(&self, at_ms: u32) -> Vec<usize> {
+    /// The cues to run when the timeline is sought to `at_ms` of pass `pass`, so the
+    /// scene shows what it would if it had played there: for each state key, the cue that
+    /// last set it, in the order they would have fired. Events are skipped, since they
+    /// happened in the past.
+    ///
+    /// On a later pass of a loop, a state the previous pass set after `at_ms` still holds,
+    /// and so does a `Range` intro's. So the scan covers, in play order, pass 0's cues
+    /// (from pass 1 on), one whole repeat (from pass 2 on), then this pass's cues up to
+    /// `at_ms`. Every pass of a loop holds the same cues, so that is the whole history.
+    pub fn seek(&self, pass: u64, at_ms: u32) -> Vec<usize> {
+        let (lo, hi) = match self.looping {
+            Looping::Once => (0, self.duration_ms.saturating_add(1)),
+            Looping::Loop => (0, self.duration_ms),
+            Looping::Range { from_ms, to_ms } => (from_ms, to_ms),
+        };
+        let in_span = |c: &Cue<A>, lo: u32, hi: u32| c.at_ms >= lo && c.at_ms < hi;
+        let first_hi = match self.looping {
+            Looping::Range { to_ms, .. } => to_ms,
+            _ => hi,
+        };
+        let pass = if matches!(self.looping, Looping::Once) {
+            0
+        } else {
+            pass
+        };
+        let indexed = || self.cues.iter().enumerate();
+        // In play order: pass 0 whole, one whole repeat, then this pass up to `at_ms`.
+        let mut order: Vec<usize> = Vec::new();
+        if pass >= 1 {
+            order.extend(
+                indexed()
+                    .filter(|(_, c)| in_span(c, 0, first_hi))
+                    .map(|(i, _)| i),
+            );
+        }
+        if pass >= 2 {
+            order.extend(
+                indexed()
+                    .filter(|(_, c)| in_span(c, lo, hi))
+                    .map(|(i, _)| i),
+            );
+        }
+        let this_lo = if pass == 0 { 0 } else { lo };
+        order.extend(
+            indexed()
+                .filter(|(_, c)| in_span(c, this_lo, hi) && c.at_ms <= at_ms)
+                .map(|(i, _)| i),
+        );
         let mut seen = HashSet::new();
-        let mut picked: Vec<usize> = self
-            .cues
-            .iter()
-            .enumerate()
+        let mut picked: Vec<usize> = order
+            .into_iter()
             .rev()
-            .filter(|(_, c)| c.at_ms <= at_ms)
-            .filter_map(|(i, c)| {
-                let key = c.action.state_key()?;
-                seen.insert(key).then_some(i)
+            .filter(|&i| {
+                self.cues[i]
+                    .action
+                    .state_key()
+                    .is_some_and(|key| seen.insert(key))
             })
             .collect();
         picked.reverse();
@@ -456,9 +513,73 @@ mod tests {
                 },
             ],
         };
-        assert_eq!(t.seek(500), [1, 3]);
-        assert_eq!(t.seek(5000), [3, 4]);
-        assert_eq!(t.seek(0), [0]);
+        assert_eq!(t.seek(0, 500), [1, 3]);
+        assert_eq!(t.seek(0, 5000), [3, 4]);
+        assert_eq!(t.seek(0, 0), [0]);
+    }
+
+    #[test]
+    fn a_seek_into_a_later_pass_keeps_what_earlier_passes_set() {
+        let set = |at_ms, target, v| Cue {
+            at_ms,
+            action: Act::Set(target, v),
+        };
+        // A loop whose only cue for `x` is late in the pass.
+        let looped = Timeline {
+            duration_ms: 1000,
+            looping: Looping::Loop,
+            cues: vec![set(100, "y", 0), set(900, "x", 1)],
+        };
+        assert_eq!(looped.seek(0, 500), [0], "pass 0 hasn't set x yet");
+        assert_eq!(
+            looped.seek(2, 500),
+            [1, 0],
+            "pass 1 set x, then this pass set y"
+        );
+        // A range: the intro sets `a` once, each repeat sets `c` at its start and `b` late.
+        let ranged = Timeline {
+            duration_ms: 3000,
+            looping: Looping::Range {
+                from_ms: 1000,
+                to_ms: 2000,
+            },
+            cues: vec![set(0, "a", 0), set(1000, "c", 2), set(1800, "b", 1)],
+        };
+        assert_eq!(ranged.check(), Ok(()));
+        assert_eq!(
+            ranged.seek(3, 1050),
+            [0, 2, 1],
+            "the intro's a, the last repeat's b, then this pass's c"
+        );
+    }
+
+    #[test]
+    fn unchecked_zero_length_loops_never_spin() {
+        let t = timeline(0, Looping::Loop, &[0]);
+        assert_eq!(fired(&t, 0, 0, 10 * MS), []);
+        let r = timeline(
+            1000,
+            Looping::Range {
+                from_ms: 5,
+                to_ms: 5,
+            },
+            &[0],
+        );
+        assert_eq!(fired(&r, 0, 0, 10 * MS), []);
+        assert!(!t.position(0, 5 * MS).ended);
+    }
+
+    #[test]
+    fn a_range_refuses_a_cue_at_or_past_its_end() {
+        let t = timeline(
+            3000,
+            Looping::Range {
+                from_ms: 1000,
+                to_ms: 2000,
+            },
+            &[500, 2000],
+        );
+        assert_eq!(t.check(), Err(InvalidTimeline::Unreachable(1)));
     }
 
     #[test]

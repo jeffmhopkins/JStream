@@ -267,6 +267,11 @@ impl Modifier {
                 period_ms,
                 phase,
             } => {
+                // `check_list` refuses a period under 1 ms; this guard keeps unchecked
+                // input from producing NaN on the render thread.
+                if period_ms.is_nan() || period_ms <= 0.0 {
+                    return 0.0;
+                }
                 let cycle = (seconds * 1000.0 / period_ms + phase).rem_euclid(1.0);
                 amplitude * shape.at(cycle)
             }
@@ -396,7 +401,9 @@ impl Offsets {
     }
 }
 
-/// Evaluates an item's modifiers at one moment, in list order. `engine_s` is the
+/// Evaluates an item's modifiers at one moment, in list order. The list should have
+/// passed [`check_list`]; unchecked input never panics or loops, and an oscillator with
+/// a period that isn't positive contributes 0. `engine_s` is the
 /// animation time in seconds; `shown_s` is the time since the item was last shown on
 /// program, `None` when it isn't shown, in which case [`Clock::Shown`] modifiers are at
 /// their start. Allocates nothing, so the render thread calls it per item per frame.
@@ -604,11 +611,27 @@ mod tests {
         );
         let day = 86_400.0 * 3.0;
         let frame = 1.0 / 60.0;
+        // One octave of amplitude 3 at 1 Hz moves at most 3 × 2 × 1.875 per second
+        // (the quintic's steepest slope), so about 0.19 a frame.
         let step = (m.value_at(day + frame) - m.value_at(day)).abs();
         assert!(
-            step < 0.5,
+            step < 0.2,
             "a frame's change stays small three days in: {step}"
         );
+        // Three days is a whole number of 4 s periods, so an oscillator is back where it
+        // was after 1 s, to well under a millionth.
+        let osc = modifier("o", Property::X, sine(3.0, 4000.0));
+        let drift = (osc.value_at(day + 1.0) - osc.value_at(1.0)).abs();
+        assert!(drift < 1e-6, "no precision lost three days in: {drift}");
+    }
+
+    #[test]
+    fn unchecked_bad_periods_give_zero_not_nan() {
+        for period_ms in [0.0, -5.0, f64::NAN] {
+            let m = modifier("o", Property::Opacity, sine(1.0, period_ms));
+            assert_eq!(m.value_at(2.0), 0.0, "{period_ms}");
+            assert!(evaluate(&[m], 2.0, None).opacity_of(1.0).is_finite());
+        }
     }
 
     #[test]
