@@ -1906,7 +1906,7 @@ mod tests {
         let control = connected(&engine);
         let kinds = now(transition_kinds(&control));
         let ids: Vec<_> = kinds.iter().map(|k| k.kind_id.as_str()).collect();
-        assert_eq!(ids, ["cut", "fade", "move"]);
+        assert_eq!(ids, ["cut", "fade", "move", "stinger"]);
     }
 
     #[test]
