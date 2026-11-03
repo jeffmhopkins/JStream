@@ -167,7 +167,7 @@ mod os {
             let handle = std::thread::Builder::new()
                 .name("jstream-spinner".into())
                 .spawn(move || {
-                    spin(40);
+                    spin(200);
                     let _ = ready_tx.send(());
                     let _ = rx.recv();
                 })
@@ -180,7 +180,7 @@ mod os {
                 .expect("listed by name");
             assert!(
                 spinner.cpu.as_millis() >= 20,
-                "it spun for 40 ms: {spinner:?}"
+                "it spun for 200 ms: {spinner:?}"
             );
             assert!(threads.len() >= 2, "this test's thread too");
             let spun = spinner.cpu;

@@ -2591,7 +2591,7 @@ calls take the collection lock as any session's do. The live sources' `SourceMet
 (a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
 takes under the collection lock and `jstream-sources` and the profiler take alone; the
 `Profiler`'s history and thread-reader locks are never taken with the collection lock
-(*Profile*). A stream's poll takes only its queue's lock. No lock
+(*Profile* in [Purpose](#purpose)). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -2979,7 +2979,7 @@ whole period behind the clock skips to the current tick and counts the skipped o
 too; a tick that fails part-way is discarded), which allocates nothing in a steady
 frame and publishes one snapshot of its totals about once a second, the meter's only
 allocation, handing the totals it replaces to the collector (*Profile* in
-[Design](#design)). None of those threads lock the collection: the render thread reads the
+[Purpose](#purpose)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
 values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
