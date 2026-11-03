@@ -64,6 +64,10 @@ pub(crate) enum ChainOwner {
     Master(Option<VideoMixId>),
     /// An output's own chain, after the master stage.
     Output(OutputId),
+    /// A `scene` source's chain where it places its scene (ADR-0065 §4), by the ID the
+    /// scene is planned under there: the scene, or a group's view through a keyframe
+    /// (ADR-0049 §3). Each has a chain of its own, as each draws its own picture.
+    Placed(SourceId, SceneId),
 }
 
 impl std::fmt::Display for ChainOwner {
@@ -75,6 +79,7 @@ impl std::fmt::Display for ChainOwner {
             Self::Master(None) => write!(f, "the master stage over the program"),
             Self::Master(Some(mix)) => write!(f, "the master stage over mix {mix}"),
             Self::Output(id) => write!(f, "output {id}"),
+            Self::Placed(id, scene) => write!(f, "source {id} over scene {scene}"),
         }
     }
 }
@@ -230,6 +235,16 @@ impl Chain {
                 }
                 _ => None,
             })
+    }
+
+    /// The scene a `scene` source's chain runs over (ADR-0065 §4): the layer it draws
+    /// into for the chain, or its own chain's output. `None` for a chain over a frame,
+    /// a capture, a composite or an item's box.
+    pub(crate) fn input_scene(&self) -> Option<&SceneId> {
+        match &self.input {
+            GpuKey::Layer(scene, _) | GpuKey::Filtered(ChainOwner::Scene(scene)) => Some(scene),
+            _ => None,
+        }
     }
 
     /// Points each filter that reads a scene `filtered` says has a chain at that chain's
