@@ -39,7 +39,11 @@ Contents:
   decoded frames) is already on it.
 - **Process CPU:** `ProcessCpu` (`Send + Sync`): the CPU time the process has used, on
   every thread, for `stats.tick`'s load. The host hands one to the engine; the stats
-  threads call it about once a second, never a real-time thread.
+  threads call it about once a second, never a real-time thread. `ThreadCpu`
+  (`Send + Sync`) lists each of the process's threads with its ID, name and CPU time,
+  for `profile.get`'s threads
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); `None` where the
+  platform can't list them. It is read on the same threads, never a real-time one.
 - **Frames:** `VideoSurface`, the frame type that crosses the seam: `Cpu`, a
   `VideoFrame` in system memory, or `Gpu`, a `GpuFrame` in a texture shared with the
   platform. It is `#[non_exhaustive]`.
@@ -236,7 +240,8 @@ Contents:
   count opens, seeks, frames and audio blocks),
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store),
-  `FakeCpu` (a `ProcessCpu` whose reading the test sets) and
+  `FakeCpu` (a `ProcessCpu` whose reading the test sets), `FakeThreads` (a `ThreadCpu`
+  whose list the test sets) and
   `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
   adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
   `start_loading` starts hosts that don't get ready until `finish_loading`) runs each

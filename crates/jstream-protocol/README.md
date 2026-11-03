@@ -115,8 +115,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list` and
-  `pack.read`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
+  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -149,7 +150,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ParamDescriptor` and `ParamType`, the shapes that describe a source, filter or
   transition kind's parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
   `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
-  (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
+  (`ParamDescriptor::check`, `check_asset_path`, and `not_a_reference`, the reason a value
+  isn't a reference, which sources reuse for their own checks) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).
@@ -207,8 +209,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   negative scale is not refused: `from_legacy` returns the drawn outline with the
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.77 because of
   `SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
-  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), with 0.73 to 0.76 left to
-  changes that claimed them first; 0.72 because of the effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), with 0.74 to 0.76 left to
+  changes that claimed them first; 0.73 because of the `profile.get` query
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
+  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
   limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
   may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
@@ -1106,6 +1110,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   root `absolute`. A collection lists its first font. The engine reads its OS's font
   folders on the first call and keeps the list, so a font installed later shows after
   a restart. Runtime state, so no `rev`. Added in 0.68.
+- `profile.get {seconds?, top?}`: where the engine's time went over the last
+  `seconds` (1 to 60, default 5), as a `ProfileInfo`
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
+  thread's (`program`, `preview`) frames, their average, 95th percentile and longest
+  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
+  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
+  effects, a placed scene's chain, the composite, the master or an output's chain) with
+  its frames, average and recent longest time and share of its drawer's time; the
+  sources the `jstream-sources` thread and the planner spent time on; the plans; the
+  process's CPU; and its threads by name, as a percentage of one core (JStream's own
+  `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
+  cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
+  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
+  0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.

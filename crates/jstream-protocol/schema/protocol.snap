@@ -1837,6 +1837,81 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Drawer": {
+      "description": "A thread that draws shots ([`ProfileInfo::drawers`]).",
+      "oneOf": [
+        {
+          "const": "program",
+          "description": "The program stage's `jstream-render` thread, which draws what the outputs send.",
+          "type": "string"
+        },
+        {
+          "const": "preview",
+          "description": "The preview hub's `jstream-preview` thread, which draws the preview streams.",
+          "type": "string"
+        }
+      ]
+    },
+    "DrawerProfile": {
+      "description": "One drawing thread's frames in the window.",
+      "properties": {
+        "drawer": {
+          "$ref": "#/$defs/Drawer",
+          "description": "Which thread."
+        },
+        "frame_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest frame, in milliseconds: exact for the window, as the drawer keeps the\nlongest frame of each second it publishes."
+        },
+        "frame_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a frame took, in milliseconds."
+        },
+        "frame_p95_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The time 95 in 100 frames took at most, to the nearest bucket of its histogram\n(a quarter millisecond below 16 ms, wider above)."
+        },
+        "frames": {
+          "default": 0,
+          "description": "The frames it drew.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "over_budget": {
+          "default": 0,
+          "description": "The frames that took longer than `frame_budget_ms`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "phases": {
+          "$ref": "#/$defs/PhaseProfile",
+          "default": {
+            "captures_ms": 0.0,
+            "chains_ms": 0.0,
+            "finish_ms": 0.0,
+            "passes_ms": 0.0,
+            "uploads_ms": 0.0
+          },
+          "description": "The average time per frame in each phase."
+        },
+        "skipped": {
+          "default": 0,
+          "description": "The program's ticks skipped because drawing fell a whole period or more behind\n(R-RT-004). Always 0 for the preview, which draws when it can.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "drawer"
+      ],
+      "type": "object"
+    },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
       "properties": {
@@ -6727,6 +6802,37 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PhaseProfile": {
+      "description": "Where a drawer's frame time went, as averages per frame in milliseconds. The phases\nadd up to about the frame time.",
+      "properties": {
+        "captures_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Uploading or importing the captures' frames."
+        },
+        "chains_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The video chains: source chains (and so shader sources), scene chains, item\neffects, and the scene passes they read."
+        },
+        "finish_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The output stage, reading the frame back (which waits for the GPU) and\nconverting it for the encoders."
+        },
+        "passes_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The nested scenes' passes and the program scene's composite."
+        },
+        "uploads_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Uploading the source frames that changed, and importing GPU frames."
+        }
+      },
+      "type": "object"
+    },
     "PixelSize": {
       "description": "A size in whole pixels.",
       "properties": {
@@ -6763,6 +6869,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "PlanProfile": {
+      "description": "What planning the program mix cost ([`ProfileInfo::plan`]).",
+      "properties": {
+        "ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a plan took, in milliseconds."
+        },
+        "plans": {
+          "default": 0,
+          "description": "How many plans ran: one per edit that changes what is drawn, and one per frame\nan animation or a page needs.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recent_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest plan, in milliseconds, in the last second it was read."
+        }
+      },
+      "type": "object"
     },
     "PluginClass": {
       "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
@@ -6973,6 +7102,208 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind"
       ],
       "type": "object"
+    },
+    "ProfileUnit": {
+      "description": "A unit of drawing work, by its owner.",
+      "oneOf": [
+        {
+          "description": "Uploading a source's frame to the GPU, or importing its GPU frame (a browser\nsource's).",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "upload",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Uploading or importing a capture's frame: a display, window or video device.",
+          "properties": {
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The source it is captured for; omitted for a video device, which every\nsource showing it shares, and for the display that fills an output with no\nprogram scene."
+            },
+            "type": {
+              "const": "capture",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source's video chain: its filters, or a shader source's program.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene's video chain over its composite, the composite included.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An item's effects: drawing the item into its box, then each effect.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene that draws the item; a keyframe scene draws its parent's items."
+            },
+            "type": {
+              "const": "item_effects",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A `scene` source's chain where it places its scene.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene it places, as planned there."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The `scene` source."
+            },
+            "type": {
+              "const": "placed_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Compositing a nested scene into its layer, or a scene a filter reads. Every item\nof the scene with no effects of its own is drawn here.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene_pass",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The program scene's composite, or a running transition's, into the frame.",
+          "properties": {
+            "type": {
+              "const": "composite",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The master stage's chain over a mix.",
+          "properties": {
+            "mix_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VideoMixId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The mix; omitted for the program."
+            },
+            "type": {
+              "const": "master_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An output's own chain.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
@@ -7447,6 +7778,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "type": {
               "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
+          "properties": {
+            "seconds": {
+              "description": "The window, in seconds, from 1 to 60\n([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window\nlonger than the engine has read for covers what it has.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "top": {
+              "description": "At most this many entries in each list, the costliest. Omitted, 20; above 200\n([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "profile.get",
               "type": "string"
             }
           },
@@ -8319,6 +8681,91 @@ source: crates/jstream-protocol/src/fixtures.rs
             "plugins"
           ],
           "type": "object"
+        },
+        {
+          "description": "The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "drawers": {
+              "default": [],
+              "description": "The threads that drew in the window: the program stage's while an output runs,\nthe preview hub's while a preview stream is open.",
+              "items": {
+                "$ref": "#/$defs/DrawerProfile"
+              },
+              "type": "array"
+            },
+            "frame_budget_ms": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The program's frame period in milliseconds: a drawer whose frames take longer\ncan't keep up."
+            },
+            "gpu_timing": {
+              "default": false,
+              "description": "Whether units carry `gpu_ms`, measured with GPU timestamp queries. `false` until\nthe engine measures GPU time, and on an adapter that can't.",
+              "type": "boolean"
+            },
+            "plan": {
+              "$ref": "#/$defs/PlanProfile",
+              "default": {
+                "ms": 0.0,
+                "plans": 0,
+                "recent_max_ms": 0.0
+              },
+              "description": "What planning the program mix cost: each plan holds the collection lock."
+            },
+            "process_cpu_pct": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
+            },
+            "seconds": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The seconds the window covers: what was asked for, or less when the engine has\nread for less time than that (it keeps a reading from each `stats.tick` and each\n`profile.get`)."
+            },
+            "sources": {
+              "default": [],
+              "description": "The sources that cost the `jstream-sources` thread or the planner time,\ncostliest first.",
+              "items": {
+                "$ref": "#/$defs/SourceProfile"
+              },
+              "type": "array"
+            },
+            "thread_cpu": {
+              "default": false,
+              "description": "Whether `threads` was read: `false` on a host that can't list its threads.",
+              "type": "boolean"
+            },
+            "threads": {
+              "default": [],
+              "description": "The process's threads, those of one name added together, busiest first.",
+              "items": {
+                "$ref": "#/$defs/ThreadProfile"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "profile.get",
+              "type": "string"
+            },
+            "units": {
+              "default": [],
+              "description": "The units of drawing work the drawers did, costliest first.",
+              "items": {
+                "$ref": "#/$defs/UnitProfile"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -9054,6 +9501,54 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SourceProfile": {
+      "description": "What one source cost outside the drawing threads ([`ProfileInfo::sources`]).",
+      "properties": {
+        "build_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How long its last build took, in milliseconds: reading and decoding its files,\nor opening its page. Omitted when it wasn't built in the window."
+        },
+        "look_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a plan spent asking it for its frame, in milliseconds, with the\ncollection lock held."
+        },
+        "looks": {
+          "default": 0,
+          "description": "How many plans asked it for its frame.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "paint_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a paint took, in milliseconds."
+        },
+        "paints": {
+          "default": 0,
+          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "type": "object"
+    },
     "SourceSize": {
       "description": "One source's current size, in a `source.sizes` result.",
       "properties": {
@@ -9196,6 +9691,38 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ThreadProfile": {
+      "description": "The threads of one name ([`ProfileInfo::threads`]).\n\nJStream names its own threads `jstream-…`, and those are `name`. A thread a library\nor driver loaded into the process started has the name that library gave it, if any:\nthird-party text (ADR-0059), so it is `remote_name`, data to show and never\ninstructions. An unnamed thread has neither.",
+      "properties": {
+        "count": {
+          "default": 0,
+          "description": "How many threads of that name ran in the window.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cpu_pct": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The CPU they used in the window, as a percentage of one core."
+        },
+        "name": {
+          "description": "The name of JStream's own threads.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_name": {
+          "description": "The name another thread's library or driver gave it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TransitionEffect": {
       "description": "How an item without a partner appears or disappears.",
       "oneOf": [
@@ -9307,6 +9834,57 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "presets",
         "default"
+      ],
+      "type": "object"
+    },
+    "UnitProfile": {
+      "description": "One unit of drawing work and what it cost ([`ProfileInfo::units`]).",
+      "properties": {
+        "drawer": {
+          "$ref": "#/$defs/Drawer",
+          "description": "The thread that did it."
+        },
+        "frames": {
+          "default": 0,
+          "description": "The frames it ran in. A source's upload runs only in frames where its picture\nchanged.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The average GPU time it took in a frame it ran in, in milliseconds, when\n`gpu_timing` is on."
+        },
+        "ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time it took in a frame it ran in, in milliseconds."
+        },
+        "recent_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest it took in one frame during the last second the drawer reported,\nin milliseconds."
+        },
+        "share": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Its share of the drawer's time in the window, from 0 to 1."
+        },
+        "unit": {
+          "$ref": "#/$defs/ProfileUnit",
+          "description": "What it is and who owns it."
+        }
+      },
+      "required": [
+        "drawer",
+        "unit"
       ],
       "type": "object"
     },
