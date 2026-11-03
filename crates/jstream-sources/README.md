@@ -348,8 +348,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
   `html` too. `youtube_chat` never sets
-  it. The page's picture is only on the GPU (`gpu_frame`), so
-  `frame` is a transparent frame of the page's size, and the page's audio is the
+  it. Where the backend paints on the GPU (Windows), the page's picture is only there
+  (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
+  Where it paints on the CPU (CEF on Linux,
+  [ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)), `frame` is the page's
+  latest paint (transparent before the first), and `next_change` asks for the source
+  again one frame of `fps` later, rounded up to a millisecond. The page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
 - `youtube_chat` ("YouTube chat"): a preset of `browser` that shows a live video's chat
@@ -550,7 +554,7 @@ in the file one frame period apart, and cut a block at a rate where 10 ms isn't 
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
 over URL, setting and backend errors, live CSS, the `local_network` opt-in, closing on
-drop and the audio hand-off.
+drop, the audio hand-off, and a page that paints on the CPU shown as the source's frame.
 `tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
 page a video or link opens, a blank page for an empty setting, refused links, the
 default CSS and live CSS.
