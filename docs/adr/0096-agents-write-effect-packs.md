@@ -32,37 +32,76 @@ Letting a client write packs changes what a remote client is trusted to do, whic
 - ADR-0087 keys its quarantine by kind ID. A client that writes packs chooses the kind ID,
   so it could put a blamed shader back under a new one.
 
+<a id="options"></a>
+## Options
+- **A. Agents write packs (recommended).** The decision below. An agent can make and fix
+  shaders in the scene-building loop; the cost is that a token-holding client can put
+  GPU code on the machine without a person installing it.
+- **B. Agents write packs only with a person's approval.** A write would wait in a
+  queue until a person accepts it in the UI. It keeps installs a person's act, but the
+  loop stalls on every compile error, and the approval UI and queue are new work of their own.
+- **C. Packs stay a person's files.** Nothing changes. Shader sources still work for packs
+  a person installs, and an agent can only describe a shader for a person to save.
+
 <a id="decision"></a>
 ## Decision
 1. **Agents may write packs.** The protocol gains `pack.write` and `pack.delete` actions
    and `pack.list` and `pack.read` queries, and `pack` is not a `PEOPLE_ONLY` noun, so
-   MCP agents get them. WASM plugins don't: ADR-0069 places them under "never".
-   - `pack.write` replaces one pack folder whole with the files it carries (text as
-     text, images as base64) and loads it at once. It answers with the pack's kinds, or
-     with `invalid_argument` naming each problem's file, line and message, and then the
-     old version stays.
-   - `pack.delete` removes one pack folder; `pack.list` names the packs and their kinds;
-     `pack.read` returns one pack's files.
+   MCP agents get them. For WASM plugins (amends ADR-0069 S2's table), `pack.list` and
+   `pack.read` are in the `read` class as every query is, and `pack.write` and
+   `pack.delete` are "never".
+   - `pack.write {pack, files}` replaces one pack whole with the files it carries (text
+     as text, images as base64) and loads it at once. It answers with the pack's kinds,
+     or with `invalid_argument` naming each problem's file, line and message, and then
+     the old version stays.
+   - `pack.delete {pack}` removes one pack; `pack.list` names the packs, their kinds and
+     who last wrote each (point 5).
+   - `pack.read {pack}` returns one pack's text files and, for each image, its path,
+     size and digest; `pack.read {pack, path}` returns one file, an image as base64. An
+     image over 2 MiB (one a person installed: a write can't carry one) is refused
+     with `too_large`, so no answer holds more than about 2.7 MiB of base64.
    - These are actions, not edits: undo doesn't reach the disk.
-2. **What a write may hold.** At most 64 files and 3 MiB of file contents, so a pack
-   whose images travel as base64 stays under the 4 MiB request limit
-   ([ADR-0074](0074-too-large-requests.md)); the per-file limits the loader already has;
-   and only `effect.toml`, `.wgsl`, `.png`, `.jpg` and `.jpeg` files, at paths that follow
-   the pack's asset-path rules. Nothing outside the packs folder is written.
-3. **How a write lands.** The files are written into `.staging/<pack>` in the packs
-   folder, which the loader never reads (it reads only the direct sub-folders that hold
-   an `effect.toml`), and loaded from there. Only a pack that loads is swapped in: the old folder is renamed
-   to `.trash/<pack>`, the new one into its place, and the old one removed. Between the
-   two renames the pack is briefly absent, never half written; a poll in that moment
-   reports its kinds removed and the next one added again.
-4. **Quarantine follows the shader, not its name** (amends ADR-0087 §3 and §4). A blamed
-   kind's quarantine also records a digest (BLAKE3) of each WGSL text it drew. A pack
-   whose shader matches a quarantined digest loads with that kind quarantined, under
-   whatever pack or kind ID it now has. Re-enabling stays a person's act
-   (`effect.enable` is still `PEOPLE_ONLY`), and lifts the digests with the kind.
+2. **Where a write lands.** `pack` is a pack ID (ADR-0093's form: lower-case letters,
+   digits and `-`), which can't name a dot-file, so the pack is always the folder
+   `<packs>/<pack>` and nothing else: never `quarantine.json`, `.staging` or `.trash`.
+   Its `effect.toml` must have `id = <pack>`, and each file path is relative, follows the
+   asset-path rules (no `..`, no absolute path, no dot-component) and names one of
+   `effect.toml`, a `.wgsl`, `.png`, `.jpg` or `.jpeg` file. A pack ID another folder
+   already loads (a pack a person installed under another folder name) is refused before
+   anything is written.
+3. **What a write may hold.** At most 64 files, the loader's per-file limits, and a
+   `files` value of at most 3 MiB as sent (text after JSON escaping, images as base64),
+   so the whole request, with its envelope, stays under the 4 MiB message limit of
+   [ADR-0074](0074-too-large-requests.md). A larger `files` is refused with `too_large`
+   before it is decoded.
+4. **How a write lands, and how a stopped one is recovered.**
+   - The files are written into `<packs>/.staging/<pack>`, which the loader never reads
+     (it reads only the direct sub-folders that hold an `effect.toml`), and loaded from
+     there, checked against the other loaded packs as a poll would check them.
+   - Only a pack that loads is swapped in, while the pack watcher is held so no poll
+     sees the swap: the old folder is renamed to `<packs>/.trash/<pack>`, the new one
+     into its place, then the old one removed. The engine takes the pack loaded from
+     staging at once, so the pack never leaves the air between versions.
+   - A rename that fails (on Windows, a sharing violation from a virus scanner or an
+     editor) is retried a few times for up to a second. If the second rename still
+     fails, the first is undone (`.trash/<pack>` back to `<pack>`), the write answers
+     `internal`, and the old version stays.
+   - At startup, before the first load, the watcher recovers a swap that stopped
+     between the renames: a `.trash/<pack>` with no `<pack>` is renamed back, a
+     `.trash/<pack>` beside a `<pack>` is removed, and `.staging` is emptied.
 5. **The UI shows who wrote a pack.** `pack.list` reports the client name of the last
    write, and the audit log records every write and delete, so a person can see that an
    agent installed GPU code.
+6. **Quarantine follows the shader, not its name** (amends ADR-0087 decisions 2 and 3).
+   - A blamed kind's quarantine also records a BLAKE3 digest of each WGSL module it drew,
+     as validated: for an effect, its prelude, header and shader text; for a shader
+     source, each pass's prelude, header, `common` and pass text.
+   - A pack any of whose modules matches a quarantined digest loads with that kind
+     quarantined, under whatever pack or kind ID it now has.
+   - A quarantine from before this ADR has no digests. It stays keyed by kind ID as
+     today, and the first time its pack loads its modules' digests are recorded.
+   - Re-enabling stays a person's act (`effect.enable` is still `PEOPLE_ONLY`), and lifts
+     the digests with the kind.
 
 <a id="consequences"></a>
 ## Consequences
@@ -70,12 +109,15 @@ Letting a client write packs changes what a remote client is trusted to do, whic
   compile errors with file and line.
 - An MCP agent can now put GPU code on the user's machine without a person installing
   it. What bounds it: naga validation and the shader contract, the size limits above,
-  ADR-0093's memory cap, and quarantine after one device reset per distinct shader. A
-  shader that changes a byte each time escapes the digest, so an adversarial agent can
-  still cost repeated resets; the threat model's #349 row stays open for a GPU-time
-  guard.
+  ADR-0093's memory cap, and quarantine after one device reset per distinct shader.
+  - A shader that changes a byte each time escapes the digest, so an adversarial agent
+    can still cost repeated resets.
+  - ADR-0087's third device loss within 60 s fails the outputs, so such an agent can
+    stop a stream.
+  - No forced GPU reset has yet been run on Windows hardware to check recovery there.
+  - The threat model's #349 row stays open for a GPU-time guard.
 - The threat model's rows for packs change from "GPU code the user installed" to "GPU
   code a person or a token-holding client installed".
 - The protocol gains four commands and a `PROTOCOL_VERSION` bump; the MCP tools follow.
-- If the maintainer rejects this, packs stay a person's files, and ADR-0093's shader
-  sources still work for packs a person installs.
+- If the maintainer rejects this, packs stay a person's files (option C), and ADR-0093's
+  shader sources still work for packs a person installs.
