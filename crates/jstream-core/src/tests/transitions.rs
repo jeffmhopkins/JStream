@@ -681,3 +681,105 @@ fn a_snapshot_shows_the_stinger_cover_the_cut() {
     clock.advance(250_000);
     assert_eq!(centre(&control), Some([0, 0xff, 0, 0xff]), "ended");
 }
+
+/// A scene camera at `x`, otherwise the framing camera (ADR-0094).
+fn camera_at(x: f32) -> jstream_protocol::SceneCamera {
+    let framing = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    jstream_protocol::SceneCamera {
+        position: jstream_protocol::Vec3::new(x, 540.0, 1304.0).expect("finite"),
+        ..framing
+    }
+}
+
+fn set_camera(scene: &str, camera: Option<jstream_protocol::SceneCamera>) -> Edit {
+    Edit::SceneSetCamera {
+        scene_id: SceneId::new(scene),
+        camera,
+    }
+}
+
+/// A switch that cuts short a Fade between two cameras moves no camera: what was on
+/// screen leaves through the camera each item had, and the new scene comes in through
+/// its own, even by a `move` preset (ADR-0094 decision 7).
+#[test]
+fn a_switch_mid_fade_keeps_each_leaving_items_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let (a, b, c) = (camera_at(900.0), camera_at(1000.0), camera_at(1100.0));
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(a)),
+            set_camera("b", Some(b)),
+            set_camera("c", Some(c)),
+            preset("move", "move", 400),
+        ]),
+    )
+    .expect("cameras");
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("fade")).expect("to b");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b)])
+    );
+    clock.advance(100_000);
+    switch(&control, "c", Some("move")).expect("retarget to c");
+    assert_eq!(
+        hub.load().shot().track_cameras(0.0),
+        Some(vec![Some(a), Some(b), Some(c)]),
+        "a1 and b1 leave through their own cameras, c1 arrives through c's"
+    );
+    assert_eq!(
+        hub.load().shot().track_cameras(200.0),
+        Some(vec![Some(a), Some(b), Some(c)])
+    );
+}
+
+/// A stinger's scene is seen through its own camera, or none, over both sides, and
+/// keeps it when a switch cuts the stinger short (ADR-0094 decision 7).
+#[test]
+fn a_stingers_items_keep_their_scenes_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let (a, b) = (camera_at(900.0), camera_at(1000.0));
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(a)),
+            set_camera("b", Some(b)),
+            stinger("sting", Some("c"), 1000, 400),
+        ]),
+    )
+    .expect("presets");
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b), None]),
+        "a 2D stinger scene over two 3D ones"
+    );
+    clock.advance(100_000);
+    switch(&control, "a", Some("fade")).expect("cut it short");
+    let cameras = hub.load().shot().track_cameras(0.0).expect("a fade");
+    assert_eq!(
+        cameras.last(),
+        Some(&Some(a)),
+        "a1 comes back through its camera"
+    );
+    assert!(
+        cameras[..cameras.len() - 1].contains(&None),
+        "the stinger's c1 leaves in 2D: {cameras:?}"
+    );
+
+    clock.advance(1_000_000);
+    engine.replan();
+    batch(&control, edits(vec![set_camera("c", Some(b))])).expect("c in 3D");
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b), Some(b)]),
+        "a 3D stinger scene through its own camera"
+    );
+}

@@ -1040,10 +1040,12 @@ anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
 An item in a 3D scene ([ADR-0094](adr/0094-scene-cameras.md)) carries its scene's
 camera and always takes that path: the same polygon, built through the camera's view
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
-consecutive items that share a camera with `depth_sort` on, far to near by the depth
-of their centre, stacking order breaking ties; there is still no depth buffer. In a
-Fade between two scenes each side's items keep their own camera, and a Move between two
-3D scenes interpolates the camera.
+consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
+keeps a stinger's items over the scenes under them), far to near by the depth of their
+centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
+two scenes each side's items keep their own camera, a Move between two 3D scenes
+interpolates the camera, and what a switch takes from the screen mid-Fade or
+mid-stinger leaves through the camera each item had.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other five read a copy of the

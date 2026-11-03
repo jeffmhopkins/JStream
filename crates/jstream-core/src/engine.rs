@@ -3364,13 +3364,9 @@ impl State {
         }
         let now = self.live.now();
         let running = match (run, from_scene) {
-            (Some(run), Some(from_scene)) => {
+            (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
                 let by_item = state.family_of(&from_scene) == state.family_of(&scene_id);
-                let from_camera = match self.studio.running() {
-                    Some(running) => running.camera_at(&self.graph, now),
-                    None => transition::camera_of(&self.graph, &from_scene),
-                };
                 let from = match self.studio.running() {
                     Some(running) => {
                         let Self {
@@ -3393,8 +3389,21 @@ impl State {
                         );
                         transition::From::OnScreen(visuals.into())
                     }
-                    None => transition::From::Scene(from_scene),
+                    None => transition::From::Scene(from_scene.clone()),
                 };
+                // What it moves from (ADR-0094 decision 7): the one camera of what is on
+                // screen, which a Move cut short shares. A screen seen through several
+                // (a Fade or stinger between cameras) has none to move, so the switch
+                // fades, each visual leaving through its own.
+                let shared = match &from {
+                    transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
+                    transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
+                };
+                let to_camera = transition::camera_of(&self.graph, &scene_id);
+                let from_camera = shared.unwrap_or(None);
+                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                    run.pairs = false;
+                }
                 Some(transition::Running {
                     from,
                     to: scene_id.clone(),

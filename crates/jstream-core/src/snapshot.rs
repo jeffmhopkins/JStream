@@ -45,7 +45,7 @@ use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::lock;
 use crate::runtime::RenderSnapshot;
-use crate::transition::{self, From, Planned, Running, Visual};
+use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -488,34 +488,48 @@ pub(crate) struct Shot {
 #[derive(Debug, PartialEq)]
 struct Transitioning {
     start: MediaTime,
-    tracks: Vec<(GpuKey, Track)>,
+    /// Each track with the camera its visual is seen through.
+    tracks: Vec<(GpuKey, Track, Seen)>,
     /// The backgrounds it fades between, from the scene it leaves to the one it shows,
     /// over `end_ms`.
     backgrounds: (Color, Color),
-    /// The cameras it moves between (ADR-0094 decision 7), from the scene it leaves (or
-    /// what was on screen) to the one it shows, `None` for a 2D side.
-    cameras: (Option<SceneCamera>, Option<SceneCamera>),
+    /// The cameras its tracks are seen through.
+    cameras: TrackCameras,
+    end_ms: f32,
+}
+
+/// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TrackCameras {
+    /// The cameras it moves between, from the scene it leaves (or the one camera of what
+    /// was on screen) to the one it shows, `None` for a 2D side.
+    ends: (Option<SceneCamera>, Option<SceneCamera>),
     /// The camera a stinger's scene is seen through, over both sides: its own, `None`
     /// for a 2D stinger scene or another kind.
-    overlay_camera: Option<SceneCamera>,
+    overlay: Option<SceneCamera>,
     /// The preset's own timing, which a moving camera follows.
     timing: Timing,
     /// Whether it is a Move, whose tracks share one moving camera; a Fade's leaving
     /// tracks keep the camera they leave from.
     pairs: bool,
-    end_ms: f32,
 }
 
-impl Transitioning {
+impl TrackCameras {
     /// The camera `track` is seen through `elapsed_ms` into the transition: a Move's
     /// tracks share the camera moving between the two ends; a Fade's leaving tracks keep
     /// the one they leave from, and the rest take the one it shows. A stinger's items
-    /// take their own scene's.
-    fn camera(&self, track: &Track, elapsed_ms: f32) -> Option<SceneCamera> {
+    /// take their own scene's, and what was taken from the screen and doesn't pair
+    /// keeps the camera it was seen through then (`seen`).
+    fn camera(&self, track: &Track, seen: Seen, elapsed_ms: f32) -> Option<SceneCamera> {
         if matches!(track, Track::Through { .. }) {
-            return self.overlay_camera;
+            return self.overlay;
         }
-        let (from, to) = self.cameras;
+        if let Seen::Held(camera) = seen
+            && !matches!(track, Track::Pair { .. })
+        {
+            return camera;
+        }
+        let (from, to) = self.ends;
         if !self.pairs {
             return match track {
                 Track::Disappear { .. } => from,
@@ -530,7 +544,9 @@ impl Transitioning {
             _ => to,
         }
     }
+}
 
+impl Transitioning {
     /// The background shown under its tracks at `at`: the scene it leaves's, mixed
     /// toward the shown scene's as the transition runs.
     fn background(&self, at: MediaTime) -> Color {
@@ -727,13 +743,25 @@ impl Shot {
         self.transition.as_ref().map(|t| t.tracks.len())
     }
 
+    /// The camera each of the running transition's tracks is seen through
+    /// `elapsed_ms` into it, in drawing order, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn track_cameras(&self, elapsed_ms: f32) -> Option<Vec<Option<SceneCamera>>> {
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, seen)| t.cameras.camera(track, *seen, elapsed_ms))
+                .collect()
+        })
+    }
+
     /// The running transition's tracks in drawing order, or `None` without one, for
     /// tests.
     #[cfg(test)]
     pub(crate) fn tracks(&self) -> Option<Vec<Track>> {
         self.transition
             .as_ref()
-            .map(|t| t.tracks.iter().map(|(_, track)| *track).collect())
+            .map(|t| t.tracks.iter().map(|(_, track, _)| *track).collect())
     }
 
     /// The layers a transition moves inside a group's layer (ADR-0049 §3), each item
@@ -1027,7 +1055,7 @@ fn plan_inner(
             let tracks = planned
                 .tracks
                 .into_iter()
-                .map(|(visual, track)| (key(&visual.image, &shot), track))
+                .map(|(visual, track)| (key(&visual.image, &shot), track, visual.seen))
                 .collect();
             let to = planner
                 .background(&running.to)
@@ -1038,28 +1066,11 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
-            let to_camera = planner
-                .camera(&running.to)
-                .and_then(|camera| camera.committed());
-            let overlay_camera = running
-                .run
-                .stinger
-                .as_ref()
-                .and_then(|stinger| stinger.scene.as_ref())
-                .and_then(|scene| planner.camera(scene))
-                .and_then(|camera| camera.committed());
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
-                cameras: (running.from_camera, to_camera),
-                overlay_camera,
-                timing: Timing {
-                    delay_ms: 0.0,
-                    duration_ms: running.run.duration_ms as f32,
-                    easing: running.run.easing,
-                },
-                pairs: running.run.pairs,
+                cameras: planner.track_cameras(running),
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -1107,10 +1118,15 @@ fn plan_inner(
         .collect();
     shot.captures = match &shot.transition {
         Some(transition) => placed_captures(shot.passes.iter())
-            .chain(transition.tracks.iter().filter_map(|(key, _)| match key {
-                GpuKey::Capture(spec) => Some(spec.clone()),
-                _ => None,
-            }))
+            .chain(
+                transition
+                    .tracks
+                    .iter()
+                    .filter_map(|(key, _, _)| match key {
+                        GpuKey::Capture(spec) => Some(spec.clone()),
+                        _ => None,
+                    }),
+            )
             .collect(),
         None => captures(&shot.passes),
     };
@@ -1213,7 +1229,11 @@ pub(crate) fn on_screen(
         wake: None,
     };
     let planned = planner.transition(running, &mut shot);
-    planned.on_screen(running.elapsed_ms(now), canvas_size(state.canvas()))
+    let cameras = planner.track_cameras(running);
+    let elapsed_ms = running.elapsed_ms(now);
+    planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
+        Seen::Held(cameras.camera(track, visual.seen, elapsed_ms))
+    })
 }
 
 fn canvas_size(canvas: Canvas) -> [f32; 2] {
@@ -1299,7 +1319,7 @@ fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
     let mut path = BTreeSet::new();
-    for (key, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+    for (key, _, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
         if let GpuKey::Layer(scene, depth) = key {
             visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
         }
@@ -1407,6 +1427,26 @@ impl<'a> Planner<'a, '_> {
             (parent.clone(), committed)
         });
         (own.is_some() || parent.is_some()).then_some(PassCamera { own, parent })
+    }
+
+    /// The cameras `running`'s tracks are seen through (ADR-0094 decision 7).
+    fn track_cameras(&self, running: &Running) -> TrackCameras {
+        let committed = |id: &SceneId| self.camera(id).and_then(|camera| camera.committed());
+        TrackCameras {
+            ends: (running.from_camera, committed(&running.to)),
+            overlay: running
+                .run
+                .stinger
+                .as_ref()
+                .and_then(|stinger| stinger.scene.as_ref())
+                .and_then(committed),
+            timing: Timing {
+                delay_ms: 0.0,
+                duration_ms: running.run.duration_ms as f32,
+                easing: running.run.easing,
+            },
+            pairs: running.run.pairs,
+        }
     }
 
     /// The background the planned scene `id` draws under its items, if it has one: a
@@ -1687,6 +1727,7 @@ impl<'a> Planner<'a, '_> {
             },
             effects: Vec::new(),
             inside: None,
+            seen: Seen::AsPlanned,
         }]
     }
 
@@ -1964,6 +2005,7 @@ impl<'a> Planner<'a, '_> {
                 settings: *item.transition(),
                 effects,
                 inside: None,
+                seen: Seen::AsPlanned,
             });
         }
         path.remove(id);
@@ -3602,6 +3644,7 @@ pub(crate) fn compose(
                             blend: BlendMode::Normal,
                             visible: true,
                             camera: None,
+                            depth_run: 0,
                         }
                     })
                     .collect();
@@ -3844,6 +3887,7 @@ fn draw_box(
         blend: BlendMode::Normal,
         visible: true,
         camera: None,
+        depth_run: 0,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -3953,6 +3997,7 @@ fn fill_items<'a>(
                 blend: sampled.blend,
                 visible: true,
                 camera,
+                depth_run: 0,
             });
         }
         let (placement, crop) = live.apply(layer);
@@ -3971,6 +4016,7 @@ fn fill_items<'a>(
             blend: layer.blend,
             visible: true,
             camera,
+            depth_run: 0,
         })
     }));
 }
@@ -3987,7 +4033,7 @@ fn fill_tracks<'a>(
     let elapsed = transition::elapsed_ms(transition.start, at);
     let size = [canvas.width() as f32, canvas.height() as f32];
     items.clear();
-    items.extend(transition.tracks.iter().filter_map(|(key, track)| {
+    items.extend(transition.tracks.iter().filter_map(|(key, track, seen)| {
         if chains.failed(key) {
             return None;
         }
@@ -3999,7 +4045,9 @@ fn fill_tracks<'a>(
             opacity: sampled.opacity,
             blend: sampled.blend,
             visible: true,
-            camera: transition.camera(track, elapsed),
+            camera: transition.cameras.camera(track, *seen, elapsed),
+            // A stinger's items sort on their own, over the scenes under them.
+            depth_run: u32::from(matches!(track, Track::Through { .. })),
         })
     }));
 }
@@ -4020,6 +4068,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         blend: BlendMode::Normal,
         visible: true,
         camera: None,
+        depth_run: 0,
     }
 }
 
@@ -4593,9 +4642,8 @@ pub(crate) mod tests {
     /// keeps each side's camera on its own tracks (ADR-0094 decision 7).
     #[test]
     fn a_move_moves_the_camera_and_a_fade_keeps_each_sides() {
-        use super::Transitioning;
+        use super::Seen;
         use jstream_protocol::{Canvas, Easing, SceneCamera, Vec3};
-        use jstream_render::Color;
         use jstream_render::transition::{Effect, Timing, Track};
 
         let from = SceneCamera::framing(Canvas::DEFAULT);
@@ -4628,24 +4676,21 @@ pub(crate) mod tests {
             effect: Effect::Fade,
             timing,
         };
-        let mut transition = Transitioning {
-            start: zero(),
-            tracks: Vec::new(),
-            backgrounds: (Color::BLACK, Color::BLACK),
-            cameras: (Some(from), Some(to)),
-            overlay_camera: None,
+        let mut cameras = super::TrackCameras {
+            ends: (Some(from), Some(to)),
+            overlay: None,
             timing,
             pairs: true,
-            end_ms: 1000.0,
         };
-        let halfway = transition.camera(&leaving, 500.0).expect("3D");
+        let planned = Seen::AsPlanned;
+        let halfway = cameras.camera(&leaving, planned, 500.0).expect("3D");
         assert_eq!(halfway.position.x.get(), 1460.0);
-        assert_eq!(transition.camera(&coming, 1000.0), Some(to));
-        transition.pairs = false;
-        assert_eq!(transition.camera(&leaving, 500.0), Some(from));
-        assert_eq!(transition.camera(&coming, 500.0), Some(to));
-        transition.cameras = (Some(from), None);
-        assert_eq!(transition.camera(&coming, 500.0), None);
+        assert_eq!(cameras.camera(&coming, planned, 1000.0), Some(to));
+        cameras.pairs = false;
+        assert_eq!(cameras.camera(&leaving, planned, 500.0), Some(from));
+        assert_eq!(cameras.camera(&coming, planned, 500.0), Some(to));
+        cameras.ends = (Some(from), None);
+        assert_eq!(cameras.camera(&coming, planned, 500.0), None);
         // A stinger's items are seen through their own scene's camera, or none.
         let through = Track::Through {
             at: at(0.0),
@@ -4654,14 +4699,21 @@ pub(crate) mod tests {
             disappear: Effect::Fade,
             leave: timing,
         };
-        transition.cameras = (Some(from), Some(to));
+        cameras.ends = (Some(from), Some(to));
         assert_eq!(
-            transition.camera(&through, 500.0),
+            cameras.camera(&through, planned, 500.0),
             None,
             "a 2D stinger scene"
         );
-        transition.overlay_camera = Some(from);
-        assert_eq!(transition.camera(&through, 500.0), Some(from));
+        cameras.overlay = Some(from);
+        assert_eq!(cameras.camera(&through, planned, 500.0), Some(from));
+        // What a switch took from the screen leaves through the camera it had then,
+        // 2D included, whatever the ends.
+        let held = Seen::Held(Some(to));
+        assert_eq!(cameras.camera(&leaving, held, 500.0), Some(to));
+        assert_eq!(cameras.camera(&leaving, Seen::Held(None), 500.0), None);
+        cameras.pairs = true;
+        assert_eq!(cameras.camera(&leaving, held, 0.0), Some(to));
     }
 
     /// A scene's background is planned with it, a keyframe scene draws its parent's and
@@ -4741,14 +4793,16 @@ pub(crate) mod tests {
             start: zero(),
             tracks: Vec::new(),
             backgrounds: (Color::BLACK, Color::rgb(1.0, 0.0, 0.0)),
-            cameras: (None, None),
-            overlay_camera: None,
-            timing: jstream_render::transition::Timing {
-                delay_ms: 0.0,
-                duration_ms: 1000.0,
-                easing: jstream_protocol::Easing::Linear,
+            cameras: super::TrackCameras {
+                ends: (None, None),
+                overlay: None,
+                timing: jstream_render::transition::Timing {
+                    delay_ms: 0.0,
+                    duration_ms: 1000.0,
+                    easing: jstream_protocol::Easing::Linear,
+                },
+                pairs: false,
             },
-            pairs: false,
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
