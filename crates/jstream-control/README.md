@@ -316,6 +316,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
+- `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
+  Bold and Regular) whose files don't exist;
 - `source.sizes`, answered with every source and no size, since the mock makes no
   frames, so it never sends `source.size_changed`;
 - `activity.list`, answered with no entries and the host's clock as `now_ms`: the mock

@@ -86,6 +86,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `output list` | query `output.list` |

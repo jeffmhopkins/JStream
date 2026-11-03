@@ -561,6 +561,18 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out)?;
             }
         }
+        QueryResult::FontList { fonts } => {
+            if fonts.is_empty() {
+                writeln!(out, "no fonts found")?;
+            }
+            for font in fonts {
+                writeln!(
+                    out,
+                    "{} {}: {}",
+                    font.remote_family, font.remote_style, font.path
+                )?;
+            }
+        }
         QueryResult::ItemList {
             rev,
             scene_id,
