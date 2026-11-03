@@ -346,10 +346,10 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   within 60 s fails the output, and each loss is logged and counted in the output's stats
   ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)). The static load limits are
   enforced (`jstream-effects`' shader contract, plus #538's 16 KiB value cap). A loss is
-  blamed on the pack effects drawn before it, which are quarantined until a person
-  re-enables them, under any pack or kind ID that draws the same WGSL (the quarantine
-  keeps each blamed module's digest, ADR-0097) (`effect.enable`, which no MCP tool, plugin or hotkey carries), the
-  whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
+  blamed on the pack effects drawn before it, which are quarantined, under any pack or
+  kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
+  ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
+  or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
   0.61). Not built yet: the GPU-time guard against long loops, which would turn an
   effect off before the OS resets the device.
 

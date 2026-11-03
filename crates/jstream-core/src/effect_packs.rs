@@ -760,9 +760,6 @@ mod tests {
         assert!(lifted.effects.contains_key(KIND) && lifted.quarantined.is_empty());
     }
 
-    /// A pack's shader source is a kind like its effects: described on load, drawn
-    /// until a device loss is blamed on it, then quarantined, and forgotten with its
-    /// pack.
     /// The `tint` pack's manifest and shader under another pack ID, `copy`.
     fn write_copy(temp: &Temp, shader: &str) {
         let dir = temp.0.join("copy");
@@ -835,6 +832,9 @@ mod tests {
         assert!(copied.quarantined.contains("copy/mul"));
     }
 
+    /// A pack's shader source is a kind like its effects: described on load, drawn
+    /// until a device loss is blamed on it, then quarantined, and forgotten with its
+    /// pack.
     #[test]
     fn a_shader_source_is_described_quarantined_and_forgotten() {
         use test_pack::SOURCE_KIND;

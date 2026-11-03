@@ -1120,7 +1120,9 @@ it, and a file that can't be read quarantines nothing. It follows the shader too
 kind's entry keeps the BLAKE3 digest of each WGSL module it drew (the prelude, header
 and shader of an effect; each pass of a shader source), and any loaded kind that draws
 one of them is quarantined, under whatever pack or kind ID. A kind quarantined in a file
-from before that gains its digests when its pack loads. Only `effect.enable` lifts it,
+from before that gains its digests when its pack loads. Only blamed kinds keep digests: the other
+kinds of a pack quarantined whole after a second blame are held by its pack ID alone,
+so a copy of that pack under another ID draws them (only the blamed one stays off). Only `effect.enable` lifts it,
 for the kind and its pack and for every entry whose digests the kind draws, run before
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
