@@ -329,6 +329,17 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.retired_filters.push((filter, self.frame));
     }
 
+    /// Hands `image`, a handle to a texture something stops holding, to the cache: it is
+    /// kept until the GPU has finished the current frame, then handed back in
+    /// [`Reclaimed`], so a texture that was its last handle is freed where the caller
+    /// drops those (R-RT-003).
+    pub fn retire_image(&mut self, image: Image) {
+        self.retired.push(Retired {
+            image,
+            after: self.frame,
+        });
+    }
+
     /// Ends the frame after its passes were submitted. Drops the frame holds of this
     /// frame's imports, retires every entry this frame did not use, arms the frame fence, polls the device without blocking, and hands
     /// back the retired images whose last frame the GPU has finished. `None` when there

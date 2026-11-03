@@ -211,12 +211,45 @@ fn sys_holds_time_since_start_the_frame_count_and_audio() {
     filter.set_audio(ProgramAudio {
         level: 0.5,
         peak: 1.0,
-        onset: 0.0,
+        ..ProgramAudio::default()
     });
     let second = at(&mut opened, &mut filter, 11.0);
     assert!(second[0].abs_diff(64) <= 1, "{second:?}");
     assert!(second[1].abs_diff(64) <= 1, "{second:?}");
     assert!(second[2].abs_diff(128) <= 1, "{second:?}");
+}
+
+/// The audio data image holds the bands in row 0 and the waveform in row 1, silent until
+/// the first `set_audio`.
+#[test]
+fn a_program_reads_the_audio_image() {
+    let Some(mut opened) = open() else { return };
+    let input = image(&opened, 1, &[[0, 0, 0, 0]]);
+    // Column 0: band 3; column 1: wave sample 5, as stored.
+    let mut filter = program(
+        vec![pass(
+            vec![ProgramInput::Audio],
+            1.0,
+            "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> { \
+             let x = i32(floor(in.pos.x)); \
+             var a = textureLoad(in0, vec2<i32>(3, 0), 0).r; \
+             if (x == 1) { a = textureLoad(in0, vec2<i32>(5, 1), 0).r; } \
+             return vec4<f32>(a); }",
+        )],
+        (2, 1),
+    );
+    let alphas = |opened: &mut _, filter: &mut VideoFilter| {
+        let shot = run(opened, filter, &input, 0.0);
+        [0, 1].map(|x| shot.pixel(x, 0).expect("in")[3])
+    };
+    let silent = alphas(&mut opened, &mut filter);
+    assert!(silent[0] <= 1 && silent[1].abs_diff(128) <= 1, "{silent:?}");
+    let mut audio = ProgramAudio::default();
+    audio.bands[3] = 1.0;
+    audio.wave[5] = -1.0;
+    filter.set_audio(audio);
+    let heard = alphas(&mut opened, &mut filter);
+    assert!(heard[0] >= 254 && heard[1] <= 1, "{heard:?}");
 }
 
 #[test]

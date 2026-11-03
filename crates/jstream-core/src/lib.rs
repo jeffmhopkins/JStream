@@ -41,6 +41,7 @@ mod live;
 mod load;
 mod output_stats;
 mod outputs;
+mod pack_source;
 mod plugins;
 mod preview;
 mod private_file;

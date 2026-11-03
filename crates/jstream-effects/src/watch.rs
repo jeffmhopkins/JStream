@@ -23,6 +23,7 @@ use std::time::{Duration, SystemTime};
 
 use crate::error::PackError;
 use crate::pack::{Effect, MANIFEST, Pack};
+use crate::source::ShaderSource;
 use jstream_render::{ProgramImage, ProgramPass};
 
 /// A poll interval that feels immediate to someone editing a shader.
@@ -204,6 +205,11 @@ impl PackWatcher {
     /// The effect whose kind ID is `kind_id`, from whichever pack has it.
     pub fn effect(&self, kind_id: &str) -> Option<&Effect> {
         self.packs().find_map(|p| p.effect(kind_id))
+    }
+
+    /// The shader source whose kind ID is `kind_id`, from whichever pack has it.
+    pub fn source(&self, kind_id: &str) -> Option<&ShaderSource> {
+        self.packs().find_map(|p| p.source(kind_id))
     }
 }
 
