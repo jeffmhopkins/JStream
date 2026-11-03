@@ -123,8 +123,9 @@ never in the engine's. This side builds no CEF; `dox` compile-checks it with the
 - **The pipe** (`wire.rs`, `link.rs`, built everywhere and tested over in-memory pipes):
   length-prefixed messages of at most 256 KiB (room for a page opened with 128 KiB of
   HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
-  opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, closes
-  it, tells the helper which adapter to paint on, and shuts it down. The helper sends
+  opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads
+  it (`BrowserPage::reload`, which the helper does with CEF's own reload, the custom CSS
+  going in again on load), closes it, tells the helper which adapter to paint on, and shuts it down. The helper sends
   frames, audio, audio failures, refused-request counts (never URLs) and warnings for
   the engine's log. A reader thread hands each to its page, stamping frames and audio on
   the media clock as they arrive. When the helper's pipe ends, every page's audio fails

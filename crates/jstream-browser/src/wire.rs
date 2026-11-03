@@ -49,6 +49,8 @@ pub(crate) enum ToHelper {
     Open { page: u32, spec: PageSpec },
     /// Replace a page's custom CSS.
     SetCss { page: u32, css: String },
+    /// Load a page again from its location.
+    Reload { page: u32 },
     /// Close a page.
     Close { page: u32 },
     /// The engine is done with a page's shared texture `slot`: the helper may paint
@@ -240,6 +242,10 @@ impl ToHelper {
                 out.u32(*page);
                 out.u8(*slot);
             }
+            Self::Reload { page } => {
+                out.u8(7);
+                out.u32(*page);
+            }
         }
         Ok(())
     }
@@ -301,6 +307,7 @@ impl ToHelper {
                 page: body.u32()?,
                 slot: body.u8()?,
             },
+            7 => Self::Reload { page: body.u32()? },
             _ => return Err(WireError::Malformed("an unknown message to the helper")),
         };
         body.end()?;
@@ -563,6 +570,7 @@ mod tests {
                 css: "x".repeat(64 * 1024),
             },
             ToHelper::Close { page: 2 },
+            ToHelper::Reload { page: 4 },
             ToHelper::Released { page: 3, slot: 2 },
             ToHelper::Shutdown,
         ]);

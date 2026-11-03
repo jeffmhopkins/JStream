@@ -106,7 +106,7 @@ pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use transition::{
     CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
-    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, TransitionEffect, TransitionPresetInfo,
+    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
     TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
     check_preset_timing, initial_preset,
 };

@@ -327,6 +327,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
   the engine updates live settings in place (core's README › Open items).
+  `restart_on_show` (live, default off) reloads the page each time the program shows it
+  again (`show`), so an HTML graphic or stinger plays its entrance every time.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as

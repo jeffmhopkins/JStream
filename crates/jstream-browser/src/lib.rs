@@ -86,6 +86,11 @@ pub trait BrowserPage: Send {
     /// loaded, and on every load after.
     fn set_css(&mut self, css: &str);
 
+    /// Loads the page again from its location, as if it had just opened: its scripts and
+    /// CSS animations start over. Its frames keep showing the old page until the new
+    /// one paints.
+    fn reload(&mut self);
+
     /// The page's audio, which the engine records into a mixer input with
     /// [`PageAudio::open`]. It is silent until the page plays something.
     fn audio(&self) -> &Arc<PageAudio>;

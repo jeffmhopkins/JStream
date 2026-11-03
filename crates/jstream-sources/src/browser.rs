@@ -107,6 +107,21 @@ impl BrowserKind {
                 },
                 ParamDescriptor {
                     description: Some(
+                        "Load the page again each time the program shows it again, so its \
+                         animations play from the start: for an HTML graphic or a stinger \
+                         that should play its entrance every time."
+                            .into(),
+                    ),
+                    live: true,
+                    ..param(
+                        "restart_on_show",
+                        "Restart when shown",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
                         "Let a page from the internet make requests to this computer and \
                          the local network (localhost, 192.168.x.x and the like), for \
                          widgets that talk to an app running here. Off, those requests are \
@@ -258,6 +273,19 @@ impl Source for BrowserSource {
 
     fn next_change(&self, _: MediaTime) -> Option<MediaTime> {
         None
+    }
+
+    /// Reloads the page when `restart_on_show` is set (a kind built on `browser` without
+    /// it never does).
+    fn show(&mut self, _: MediaTime) {
+        if self
+            .settings
+            .get("restart_on_show")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            self.page.reload();
+        }
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {

@@ -139,7 +139,10 @@ recipes for a lower third and a ticker (`scroll` with a negative speed and a `ga
 grouping a multi-part graphic as a nested scene whose item's
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
-`delay_ms`, building what the built-in kinds can't draw as HTML in a `browser` source's
+`delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
+keyframe variants and blend modes (`item.set_blend`), choosing between `fade`, `move` and
+a `stinger` preset (its `scene`, `cut_ms` and items' appear and disappear effects),
+building what the built-in kinds can't draw as HTML in a `browser` source's
 `html` (and falling back to them where no browser is available), and checking each step with `video.snapshot` (building on preview when a
 scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting

@@ -1362,6 +1362,17 @@ impl<'a> Planner<'a, '_> {
         if redrawn {
             out.keep_read(planned.tracks.iter().map(|(visual, _)| &visual.image));
         }
+        // A stinger's scene plays over all of it, its items drawn as they are placed.
+        if let Some(stinger) = &running.run.stinger {
+            let cut_ms = stinger.cut_ms as f32;
+            if let Some(scene) = stinger.scene.as_ref().filter(|id| self.drawn(id).is_some()) {
+                let overlay = self.endpoint(scene, false, out);
+                planned
+                    .tracks
+                    .extend(transition::through(&overlay, &running.run, cut_ms));
+            }
+            planned.end_ms = planned.end_ms.max(running.run.duration_ms as f32);
+        }
         planned
     }
 

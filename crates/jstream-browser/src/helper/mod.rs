@@ -203,6 +203,11 @@ impl Host {
                     page.set_css(css);
                 }
             }
+            ToHelper::Reload { page } => {
+                if let Some(page) = self.pages().get(&page).cloned() {
+                    page.reload();
+                }
+            }
             ToHelper::Close { page } => {
                 if let Some(page) = self.pages().remove(&page) {
                     page.close();
@@ -471,6 +476,13 @@ impl PageShared {
         let frame = lock(&self.browser).as_ref().and_then(|b| b.0.main_frame());
         if let Some(frame) = frame {
             run_script(&frame, &script);
+        }
+    }
+
+    /// Loads the page again; its custom CSS goes in again on load, as on the first.
+    fn reload(&self) {
+        if let Some(browser) = lock(&self.browser).as_ref() {
+            browser.0.reload();
         }
     }
 

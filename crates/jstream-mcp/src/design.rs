@@ -7,7 +7,8 @@
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` kind, how to group, scroll
-//! and animate, and when to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas and scale with it.
+//! and animate, how to use 3D placement and blend modes, which transition to use
+//! (including a `stinger`), and when to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -65,6 +66,28 @@ fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 12
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. \
+Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
+interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
+and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
+from `tilt_deg` -90 to 0, or a card that turns in from `turn_deg` 70, reads as a \
+designed move; keep angles under 90 and pair them with opacity. `item.set_blend` sets \
+how an item composites: `screen` or `additive` for light leaks, glints and glows over \
+the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
+items stay `normal`. \
+Transitions between scenes: `fade` for calm changes, `move` when the scenes share \
+items, and `stinger` for a branded wipe. A stinger preset (`transition.create`, kind \
+`stinger`, about 800-1200 ms) names a `scene` it plays over the switch and a `cut_ms` \
+(about half the duration) when the picture under it cuts. Build that scene like any \
+graphic: full-height bars, panels or a logo plate that together cover the canvas at \
+the cut. Each of its items comes in by its own `item.set_transition` `appear` effect \
+and `delay_ms`, holds over the cut and goes by its `disappear` effect after it, so \
+`slide` panels close in from the nearest edges and open out again (staggered by \
+40-80 ms with `delay_ms`, or by stacking order with the preset's `stagger_ms`), and \
+`scale` plates pop in and out; for a one-way sweep or anything more choreographed, use \
+an HTML stinger. Make sure the bars cover the whole canvas at `cut_ms`, check \
+with `video.snapshot` mid-switch, and make it the scenes' `transition_in` \
+(`scene.set_transitions`) or name it in the switch. An HTML stinger is a `browser` \
+source with `restart_on_show` on, so it plays from the start each time. \
 HTML graphics: for a layout the built-in kinds can't draw (rich type, icons, tables, \
 SVG, CSS gradients, blend modes or 3D transforms, choreographed CSS animation), make a \
 `browser` source and give it the whole page in `html`, its CSS and scripts inline. Set \

@@ -287,6 +287,14 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": true
       },
       {
+        "id": "restart_on_show",
+        "type": "bool",
+        "default": false,
+        "label": "Restart when shown",
+        "description": "Load the page again each time the program shows it again, so its animations play from the start: for an HTML graphic or a stinger that should play its entrance every time.",
+        "live": true
+      },
+      {
         "id": "local_network",
         "type": "bool",
         "default": false,

@@ -73,6 +73,7 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("height", false),
             ("fps", false),
             ("css", true),
+            ("restart_on_show", true),
             ("local_network", false)
         ]
     );
@@ -177,6 +178,37 @@ fn html_opens_a_page_built_from_the_text() {
             .expect("a page")
             .request("ws://127.0.0.1:8080/")
     );
+}
+
+/// With `restart_on_show`, the page loads again each time the program shows it again,
+/// so an HTML graphic's entrance plays every time; without it, it keeps running.
+#[test]
+fn restart_on_show_reloads_the_page_when_shown() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let at = MediaTime::zero(Timebase::MILLIS);
+    let mut kept = create(&ctx, &settings(&[("html", json!("<p>a</p>"))])).expect("a page");
+    let mut restarted = create(
+        &ctx,
+        &settings(&[
+            ("html", json!("<p>b</p>")),
+            ("restart_on_show", json!(true)),
+        ]),
+    )
+    .expect("a page");
+    kept.show(at);
+    restarted.show(at);
+    restarted.show(at);
+    let pages = browser.pages();
+    assert_eq!(pages[0].reloads(), 0);
+    assert_eq!(pages[1].reloads(), 2);
+    // Live: turning it off stops the reloads without reopening the page.
+    restarted
+        .update(&settings(&[("html", json!("<p>b</p>"))]))
+        .expect("a live change");
+    restarted.show(at);
+    assert_eq!(browser.pages().len(), 2);
+    assert_eq!(pages[1].reloads(), 2);
 }
 
 /// #347: the source's opt-in lets a page from the internet reach a local app.

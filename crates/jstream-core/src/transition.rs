@@ -24,8 +24,8 @@ use std::sync::Arc;
 use jstream_graph::Graph;
 use jstream_media::MediaTime;
 use jstream_protocol::{
-    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneId,
-    Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
+    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, Reference,
+    STINGER, SceneId, Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
@@ -40,6 +40,18 @@ pub(crate) struct Run {
     pub(crate) easing: Easing,
     pub(crate) unmatched: TransitionEffect,
     pub(crate) stagger_ms: u32,
+    /// For a `stinger`, what it plays over the switch; `None` for every other kind.
+    pub(crate) stinger: Option<Stinger>,
+}
+
+/// A `stinger` transition's settings, resolved.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Stinger {
+    /// The scene drawn over the switch, if the preset names one.
+    pub(crate) scene: Option<SceneId>,
+    /// When the picture under it cuts to the new scene, in milliseconds from the start:
+    /// at most the duration.
+    pub(crate) cut_ms: u32,
 }
 
 /// The preset a switch from `from` to `to` uses (ADR-0029 §2), and what it runs: `None`
@@ -73,7 +85,7 @@ pub(crate) fn resolve(
     // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
     let pairs = match preset.kind() {
         MOVE => true,
-        FADE => false,
+        FADE | STINGER => false,
         _ => return Ok((id, None)),
     };
     if preset.duration_ms() == 0 {
@@ -85,6 +97,21 @@ pub(crate) fn resolve(
         .and_then(|value| value.as_u64())
         .and_then(|ms| u32::try_from(ms).ok())
         .unwrap_or(0);
+    let stinger = (preset.kind() == STINGER).then(|| Stinger {
+        scene: settings
+            .get("scene")
+            .and_then(Reference::from_value)
+            .and_then(|reference| match reference {
+                Reference::Scene { scene_id } => Some(scene_id),
+                _ => None,
+            }),
+        cut_ms: settings
+            .get("cut_ms")
+            .and_then(|value| value.as_u64())
+            .and_then(|ms| u32::try_from(ms).ok())
+            .unwrap_or(0)
+            .min(preset.duration_ms()),
+    });
     let run = Run {
         preset_id: id.clone(),
         pairs,
@@ -92,6 +119,7 @@ pub(crate) fn resolve(
         easing: preset.easing(),
         unmatched: TransitionEffect::from_setting(settings.get("unmatched")),
         stagger_ms,
+        stinger,
     };
     Ok((id, Some(run)))
 }
@@ -246,6 +274,12 @@ pub(crate) fn plan(
     run: &Run,
     by_item: bool,
 ) -> (Planned, Vec<Option<usize>>) {
+    if let Some(stinger) = &run.stinger {
+        return (
+            cut_under(from, to, stinger.cut_ms as f32),
+            vec![None; from.len() + to.len()],
+        );
+    }
     let duration_ms = run.duration_ms as f32;
     let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
         delay_ms,
@@ -312,6 +346,71 @@ pub(crate) fn plan(
     (Planned { tracks, end_ms }, partners)
 }
 
+/// A stinger's picture under its overlay: `from` shows until `cut_ms` and `to` from
+/// then on, pairing nothing and with no effects.
+fn cut_under(from: &[Visual], to: &[Visual], cut_ms: f32) -> Planned {
+    let at_cut = Timing {
+        delay_ms: cut_ms,
+        duration_ms: 0.0,
+        easing: Easing::Linear,
+    };
+    let leaving = from.iter().map(|item| {
+        let track = Track::Disappear {
+            from: item.at,
+            effect: Effect::None,
+            timing: at_cut,
+        };
+        (item.clone(), track)
+    });
+    let arriving = to.iter().map(|item| {
+        let track = Track::Appear {
+            to: item.at,
+            effect: Effect::None,
+            timing: at_cut,
+        };
+        (item.clone(), track)
+    });
+    Planned {
+        tracks: leaving.chain(arriving).collect(),
+        end_ms: cut_ms,
+    }
+}
+
+/// A stinger's `overlay` (its scene's items, bottom first) as tracks drawn over the
+/// switch: each item comes in by its own appear effect after its delay plus
+/// `stagger_ms` × its index, and is in by `cut_ms`; it goes by its disappear effect
+/// after the cut, by the same delay, and is gone by `duration_ms`.
+pub(crate) fn through(
+    overlay: &[Visual],
+    run: &Run,
+    cut_ms: f32,
+) -> impl Iterator<Item = (Visual, Track)> {
+    let duration_ms = run.duration_ms as f32;
+    overlay.iter().enumerate().map(move |(index, item)| {
+        let delay_ms = item.settings.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
+        let easing = item.settings.easing.resolve(run.easing);
+        let enter = Timing {
+            delay_ms: delay_ms.min(cut_ms),
+            duration_ms: (cut_ms - delay_ms).max(0.0),
+            easing,
+        };
+        let leave_ms = (cut_ms + delay_ms).min(duration_ms);
+        let leave = Timing {
+            delay_ms: leave_ms,
+            duration_ms: duration_ms - leave_ms,
+            easing,
+        };
+        let track = Track::Through {
+            at: item.at,
+            appear: effect(item.settings.appear, run.unmatched),
+            enter,
+            disappear: effect(item.settings.disappear, run.unmatched),
+            leave,
+        };
+        (item.clone(), track)
+    })
+}
+
 /// `track` following `timing` instead of its own: a group's child moves with the group
 /// item's progress (ADR-0049 §3).
 pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
@@ -330,6 +429,8 @@ pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
             effect,
             timing,
         },
+        // A stinger's overlay keeps its own: it never moves inside a group.
+        through @ Track::Through { .. } => through,
     }
 }
 
@@ -392,6 +493,7 @@ mod tests {
             easing: Easing::Linear,
             unmatched: TransitionEffect::Scale,
             stagger_ms: 100,
+            stinger: None,
         }
     }
 
@@ -404,6 +506,7 @@ mod tests {
                     Track::Pair { .. } => "pair",
                     Track::Appear { .. } => "appear",
                     Track::Disappear { .. } => "disappear",
+                    Track::Through { .. } => "through",
                 };
                 (visual.source_id.to_string(), kind)
             })
