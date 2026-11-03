@@ -360,6 +360,89 @@ impl Engine {
         Ok(CallResult::action())
     }
 
+    /// `pack.write`, `pack.delete`, `pack.list` and `pack.read` (ADR-0097), or `None`
+    /// for any other call. Run under the packs' lock, as `effect.enable` is, so the
+    /// watcher is held while a write stages, swaps and loads, and its update is
+    /// installed before the lock is let go.
+    fn pack_call(
+        &self,
+        client_id: &ClientId,
+        call: &Call,
+    ) -> Option<Result<CallResult, ProtocolError>> {
+        // An engine that watches no packs folder (`watch_effect_packs`) loads no packs.
+        let no_packs = |call: &str| {
+            Err(ProtocolError::Unsupported {
+                call: call.to_owned(),
+            })
+        };
+        match call {
+            Call::Action {
+                action: Action::PackWrite { pack, files },
+            } => {
+                let writer = lock(&self.shared.state)
+                    .client_names
+                    .get(client_id)
+                    .cloned()
+                    .unwrap_or_default();
+                let mut packs = lock(&self.shared.effect_packs);
+                let Some(packs) = packs.as_mut() else {
+                    return Some(no_packs("pack.write"));
+                };
+                Some(packs.write(pack, files, &writer).map(|(info, update)| {
+                    if let Some(update) = update {
+                        self.shared.install_effects(update);
+                    }
+                    CallResult::Action {
+                        result: Some(ActionResult::PackWrite { pack: info }),
+                    }
+                }))
+            }
+            Call::Action {
+                action: Action::PackDelete { pack },
+            } => {
+                let mut packs = lock(&self.shared.effect_packs);
+                let Some(packs) = packs.as_mut() else {
+                    return Some(no_packs("pack.delete"));
+                };
+                Some(packs.delete(pack).map(|update| {
+                    if let Some(update) = update {
+                        self.shared.install_effects(update);
+                    }
+                    CallResult::action()
+                }))
+            }
+            Call::Query {
+                query: Query::PackList,
+            } => {
+                let packs = lock(&self.shared.effect_packs);
+                let Some(packs) = packs.as_ref() else {
+                    return Some(no_packs("pack.list"));
+                };
+                Some(Ok(CallResult::Query {
+                    result: QueryResult::PackList {
+                        packs: packs.list(),
+                    },
+                }))
+            }
+            Call::Query {
+                query: Query::PackRead { pack, path },
+            } => {
+                let packs = lock(&self.shared.effect_packs);
+                let Some(packs) = packs.as_ref() else {
+                    return Some(no_packs("pack.read"));
+                };
+                Some(
+                    packs
+                        .read(pack, path.as_deref())
+                        .map(|files| CallResult::Query {
+                            result: QueryResult::PackRead { files },
+                        }),
+                )
+            }
+            _ => None,
+        }
+    }
+
     /// Installs a pack update as the watcher, a blame or `effect.enable` does.
     #[cfg(test)]
     pub(crate) fn install_effects(&self, update: crate::effect_packs::Update) {
@@ -1138,6 +1221,8 @@ impl Engine {
             _ => None,
         };
         let result = if let Some(result) = self.plugin_call(client_id, &call) {
+            result
+        } else if let Some(result) = self.pack_call(client_id, &call) {
             result
         } else if let Call::Action {
             action: Action::EffectEnable { kind_id },

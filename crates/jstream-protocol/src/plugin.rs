@@ -210,6 +210,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.enable", N),
     // A person re-enables a quarantined effect (#349); a plugin never does.
     ("effect.enable", N),
+    ("pack.write", N),
+    ("pack.delete", N),
+    ("pack.list", Class(R)),
+    ("pack.read", Class(R)),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),

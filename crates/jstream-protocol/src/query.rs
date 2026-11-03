@@ -179,6 +179,28 @@ pub enum Query {
     /// that shows once it restarts.
     #[serde(rename = "font.list")]
     FontList,
+    /// Lists the effect packs in the engine's packs folder (0.71, ADR-0097), ordered by
+    /// pack ID: each one's folder, its kinds while it loads, and the client that last
+    /// wrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left
+    /// out. Packs are not collection state, so no `rev`. Fails with `unsupported` from an
+    /// engine that loads no packs.
+    #[serde(rename = "pack.list")]
+    PackList,
+    /// Reads one effect pack's files (0.71, ADR-0097): the text of its `effect.toml` and
+    /// `.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,
+    /// a file's `text` is left out; read it by `path`. With `path`, only that file, and
+    /// an image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which
+    /// only a person can have put there, fails with `too_large`. Fails with `not_found`
+    /// (entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it
+    /// doesn't have, and `unsupported` from an engine that loads no packs.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack ID.
+        pack: String,
+        /// One file of it, `/`-separated. Omitted for every file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -283,6 +305,8 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
             Query::FontList => "font.list",
+            Query::PackList => "pack.list",
+            Query::PackRead { .. } => "pack.read",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
@@ -564,6 +588,18 @@ pub enum QueryResult {
         /// The installed fonts, ordered by family, then style, then path.
         fonts: Vec<FontInfo>,
     },
+    /// The result of `pack.list`.
+    #[serde(rename = "pack.list")]
+    PackList {
+        /// The packs, ordered by ID.
+        packs: Vec<crate::PackInfo>,
+    },
+    /// The result of `pack.read`.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack's files, ordered by path: every file, or the one `path` named.
+        files: Vec<crate::PackFileInfo>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -627,6 +663,8 @@ impl QueryResult {
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::FontList { .. } => "font.list",
+            QueryResult::PackList { .. } => "pack.list",
+            QueryResult::PackRead { .. } => "pack.read",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",

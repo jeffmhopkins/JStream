@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use jstream_effects::{Effect, PackWatcher, ShaderSource};
-use jstream_protocol::{KindDescriptor, ProtocolError, Settings};
+use jstream_protocol::{KindDescriptor, PackInfo, ProtocolError, Settings};
 use jstream_render::VideoFilter;
 use serde::{Deserialize, Serialize};
 
@@ -213,14 +213,20 @@ pub(crate) struct Packs {
     blamed: BTreeMap<String, u32>,
     /// The last [`Update::seq`] made.
     seq: u64,
+    /// The client name of each pack's last `pack.write` (ADR-0097 decision 5), by pack ID.
+    writers: BTreeMap<String, String>,
 }
 
 impl Packs {
     /// Watches `root`, a folder of pack folders, with the quarantine its
-    /// [`QUARANTINE_FILE`] keeps. Nothing loads until the first [`Self::poll`].
+    /// [`QUARANTINE_FILE`] keeps. First recovers a pack write that stopped part-way
+    /// ([`crate::pack_store::recover`]). Nothing loads until the first [`Self::poll`].
     pub(crate) fn new(root: PathBuf) -> Self {
+        crate::pack_store::recover(&root);
         let quarantine = read_quarantine(&root.join(QUARANTINE_FILE));
+        let writers = crate::pack_store::read_writers(&root);
         Self {
+            writers,
             watcher: PackWatcher::new(root, jstream_render::FILTER_PRELUDE),
             loaded: BTreeMap::new(),
             sources: BTreeMap::new(),
@@ -417,6 +423,107 @@ impl Packs {
         Ok(Some(self.update(Vec::new(), Vec::new())))
     }
 
+    /// `pack.write` (ADR-0097): replaces pack `pack` whole with `files`, written by the
+    /// client named `writer`, and loads it at once. The caller holds the packs' lock, so
+    /// the watcher too: no poll sees the pack half written. Returns the pack as
+    /// `pack.list` shows it, and the update its new kinds make.
+    pub(crate) fn write(
+        &mut self,
+        pack: &str,
+        files: &[jstream_protocol::PackFile],
+        writer: &str,
+    ) -> Result<(PackInfo, Option<Update>), ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let decoded = crate::pack_store::decode(files)?;
+        let root = self.watcher.root().to_owned();
+        std::fs::create_dir_all(&root).map_err(|error| ProtocolError::Internal {
+            reason: format!("couldn't make the packs folder {}: {error}", root.display()),
+        })?;
+        let home = crate::pack_store::write(&root, pack, &decoded, |dir| {
+            jstream_effects::load_pack(dir, jstream_render::FILTER_PRELUDE)
+        })?;
+        self.writers.insert(pack.to_owned(), writer.to_owned());
+        crate::pack_store::save_writers(&root, &self.writers);
+        tracing::info!(pack, writer, files = files.len(), "effect pack written");
+        // Its files may keep the sizes and times of the ones they replaced.
+        self.watcher.mark_stale(&home);
+        let update = self.poll();
+        let info = self
+            .list()
+            .into_iter()
+            .find(|info| info.id == pack && root.join(&info.folder) == home)
+            .ok_or_else(|| ProtocolError::Internal {
+                reason: format!("pack `{pack}` was written but isn't in its folder"),
+            })?;
+        Ok((info, update))
+    }
+
+    /// `pack.delete` (ADR-0097): removes each folder whose `effect.toml` names pack ID
+    /// `pack`, loaded or not, and drops its kinds at once.
+    pub(crate) fn delete(&mut self, pack: &str) -> Result<Option<Update>, ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let root = self.watcher.root().to_owned();
+        crate::pack_store::delete(&root, pack)?;
+        if self.writers.remove(pack).is_some() {
+            crate::pack_store::save_writers(&root, &self.writers);
+        }
+        tracing::info!(pack, "effect pack deleted");
+        Ok(self.poll())
+    }
+
+    /// `pack.list` (ADR-0097): every folder in the packs folder whose `effect.toml`
+    /// names a pack ID, ordered by pack ID, then folder.
+    pub(crate) fn list(&self) -> Vec<PackInfo> {
+        let mut packs: Vec<PackInfo> = crate::pack_store::folders(self.watcher.root())
+            .into_iter()
+            .filter_map(|(folder, dir)| {
+                let loaded = self.watcher.packs().find(|p| p.dir() == dir);
+                let id = match loaded {
+                    Some(pack) => pack.id().to_owned(),
+                    None => jstream_effects::manifest_pack_id(&dir).ok()?,
+                };
+                let kinds = loaded.map_or_else(Vec::new, |pack| {
+                    pack.effects()
+                        .iter()
+                        .map(|e| e.kind_id().to_owned())
+                        .chain(pack.sources().iter().map(|s| s.kind_id().to_owned()))
+                        .collect()
+                });
+                Some(PackInfo {
+                    written_by: self.writers.get(&id).cloned(),
+                    id,
+                    folder,
+                    kinds,
+                    loaded: loaded.is_some(),
+                })
+            })
+            .collect();
+        packs.sort_by(|a, b| (&a.id, &a.folder).cmp(&(&b.id, &b.folder)));
+        packs
+    }
+
+    /// `pack.read` (ADR-0097): the files of pack `pack`, from the folder that loads it,
+    /// else the first whose `effect.toml` names it; with `path`, that one file.
+    pub(crate) fn read(
+        &self,
+        pack: &str,
+        path: Option<&str>,
+    ) -> Result<Vec<jstream_protocol::PackFileInfo>, ProtocolError> {
+        crate::pack_store::check_pack_id(pack)?;
+        let root = self.watcher.root();
+        let dir = self
+            .watcher
+            .packs()
+            .find(|p| p.id() == pack)
+            .map(|p| p.dir().to_owned())
+            .or_else(|| crate::pack_store::holders(root, pack).into_iter().next())
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: jstream_protocol::EntityKind::Pack,
+                id: pack.to_owned(),
+            })?;
+        crate::pack_store::read(&dir, path)
+    }
+
     /// Whether `kind_id` may not draw: quarantined by ID, by its pack, or by a digest of
     /// a module it draws.
     fn holds(&self, kind_id: &str) -> bool {
@@ -509,7 +616,7 @@ pub(crate) mod test_pack {
 
     pub(crate) const KIND: &str = "tint/mul";
 
-    const MANIFEST: &str = r##"
+    pub(crate) const MANIFEST: &str = r##"
 [pack]
 id = "tint"
 name = "Tint"

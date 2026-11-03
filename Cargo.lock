@@ -2864,6 +2864,7 @@ name = "jstream-core"
 version = "0.0.0"
 dependencies = [
  "arc-swap",
+ "base64 0.22.1",
  "blake3",
  "futures-core",
  "insta",

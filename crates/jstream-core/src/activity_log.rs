@@ -178,6 +178,12 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::PluginEnable { plugin_id } => {
             format!("Enabled plugin {}", quote(plugin_id.as_str()))
         }
+        Action::PackWrite { pack, files } => {
+            let n = files.len();
+            let s = if n == 1 { "" } else { "s" };
+            format!("Wrote effect pack {} ({n} file{s})", quote(pack))
+        }
+        Action::PackDelete { pack } => format!("Deleted effect pack {}", quote(pack)),
         other => capitalize(&humanize(other.name())),
     }
 }
