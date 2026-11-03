@@ -92,11 +92,25 @@ fn installs_checks_and_removes() {
     assert_eq!(mode(&store.library_path()), 0o600);
     assert_eq!(mode(&dir.join("codecs/openh264")), 0o700);
 
-    // A second install replaces it.
+    // A second install replaces it, and deletes a temporary file a run that stopped
+    // mid-write left; this process's own in-flight ones are kept.
+    let file = pin().file_name;
+    let left = dir.join(format!("codecs/openh264/{file}.0.7.part"));
+    let ours = dir.join(format!(
+        "codecs/openh264/{file}.{}.999.part",
+        std::process::id()
+    ));
+    std::fs::write(&left, b"half").expect("left");
+    std::fs::write(&ours, b"in flight").expect("ours");
     store.install(&fetch).expect("installs again");
+    assert!(!left.exists());
+    assert!(ours.exists());
 
+    std::fs::write(&left, b"half").expect("left again");
     store.remove().expect("removes");
     assert!(!store.is_installed());
+    assert!(!left.exists());
+    let _ = std::fs::remove_file(&ours);
     store.remove().expect("removing nothing succeeds");
     let _ = std::fs::remove_dir_all(dir);
 }

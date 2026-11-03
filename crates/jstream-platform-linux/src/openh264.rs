@@ -206,12 +206,13 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library. Afterwards software H.264 reports not installed. Removing
-    /// what isn't there succeeds.
+    /// Deletes the library, and any temporary file an earlier run left behind. Afterwards
+    /// software H.264 reports not installed. Removing what isn't there succeeds.
     ///
     /// # Errors
     /// [`PlatformError::Os`] when the file exists but can't be deleted.
     pub fn remove(&self) -> Result<(), PlatformError> {
+        self.sweep_parts();
         match fs::remove_file(self.library_path()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -273,13 +274,15 @@ impl OpenH264Store {
     /// place, so a reader never sees half a file. Each write has a temporary file of its
     /// own (this process's ID and a counter), so two downloads at once, from two clients'
     /// `codec.download`, never write into one file; each renames a whole, checked
-    /// library into place.
+    /// library into place. A temporary file another process left (one that stopped
+    /// mid-write) is deleted first.
     fn write(&self, library: &[u8]) -> std::io::Result<()> {
         static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(&self.dir)?;
+        self.sweep_parts();
         let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let part = self.dir.join(format!(
             "{}.{}.{n}.part",
@@ -296,6 +299,25 @@ impl OpenH264Store {
             let _ = fs::remove_file(&part);
         }
         result
+    }
+
+    /// Deletes the temporary files of writes by other processes: `write` names each
+    /// `<library>.<process ID>.<n>.part`, so one from another process ID was left by a
+    /// run that stopped mid-write. This process's own are in flight and kept. Best
+    /// effort: a file it can't list or delete stays.
+    fn sweep_parts(&self) {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        let ours = format!("{}.{}.", self.pin.file_name, std::process::id());
+        let prefix = format!("{}.", self.pin.file_name);
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.starts_with(&prefix) && name.ends_with(".part") && !name.starts_with(&ours) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
     }
 
     /// Writes `library` to the new file `part`, `0600`.
