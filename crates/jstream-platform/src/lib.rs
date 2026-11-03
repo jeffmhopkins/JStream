@@ -62,7 +62,7 @@ pub use media_file::{
     MediaAudioInfo, MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo, MediaVideoInfo,
 };
 pub use plugin_host::{HostBlock, HostRequest, PluginHost, PluginHosts};
-pub use process::ProcessCpu;
+pub use process::{ProcessCpu, ThreadCpu, ThreadTime};
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
 pub use video_device::{

@@ -91,6 +91,8 @@ pub struct Compositor {
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
     mip_pipelines: MipPipelines,
+    /// How long the last [`Self::render`] waited for its readback (ADR-0103).
+    readback_wait: std::time::Duration,
 }
 
 impl Compositor {
@@ -210,6 +212,7 @@ impl Compositor {
     /// A failed `stage` may already have armed the queue's next submit: the platform
     /// attaches the fences to whichever submit happens next.
     pub fn render(&mut self, scene: &Scene<'_>, readback: bool) -> Result<Output, RenderError> {
+        self.readback_wait = std::time::Duration::ZERO;
         self.load(scene)?;
         let width = scene.canvas.width();
         let height = scene.canvas.height();
@@ -278,11 +281,20 @@ impl Compositor {
         }
 
         let output = targets.output.clone();
+        let waiting = std::time::Instant::now();
         let pixels = match readback_buffer {
             Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
             None => None,
         };
+        self.readback_wait = waiting.elapsed();
         Ok(Output::new(output, width, height, pixels))
+    }
+
+    /// How long the last [`Self::render`] spent waiting for its readback: the GPU
+    /// finishing the frame and the copy to the CPU. Zero for a render with no readback.
+    /// A profile counts it apart from the composite it follows (ADR-0103).
+    pub fn readback_wait(&self) -> std::time::Duration {
+        self.readback_wait
     }
 
     /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
@@ -656,6 +668,7 @@ impl Compositor {
             staged: Vec::new(),
             filters,
             mip_pipelines,
+            readback_wait: std::time::Duration::ZERO,
         }
     }
 

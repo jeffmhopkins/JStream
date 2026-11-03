@@ -249,6 +249,9 @@ pub fn engine(
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
+    // `profile.get`'s threads (ADR-0103).
+    #[cfg(windows)]
+    engine.set_thread_cpu(Arc::new(jstream_platform_windows::WindowsThreadCpu));
     engine.start_stats_heartbeat();
     Ok(engine)
 }

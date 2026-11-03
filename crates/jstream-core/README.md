@@ -34,7 +34,8 @@ state machine. Contents:
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
-  and `start_stats_heartbeat` (`stats.tick`'s load, below); `open_plugin_dir`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `set_thread_cpu`
+  (`profile.get`'s threads, below); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
@@ -339,6 +340,21 @@ state machine. Contents:
   `ProcessCpu` (`Engine::set_process_cpu`), and the idle heartbeat
   (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
   below).
+- **Profile** (`profile/`, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)):
+  `profile.get`, answered outside the collection lock. The render thread and the
+  preview hub's thread each time their frames with a `DrawMeter` that
+  `snapshot::compose_metered` fills: each source's upload, each capture, each video
+  chain (an item's with its box), each nested scene's pass and the composite, and the
+  phases they make up, with the readback's wait (`Compositor::readback_wait`) in the
+  finish phase. A meter keeps its units in maps from frame to frame, so a steady frame
+  allocates nothing, and publishes running totals once a second through `arc-swap`
+  (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
+  `jstream-sources` thread counts each source's paints and builds, and the planner each
+  source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
+  reads all of them, the threads from the host's `ThreadCpu`
+  (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
+  and each `profile.get`, keeps a minute of samples, and answers a window as the
+  difference between the newest and the one from that long ago.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `tests/mcp.rs`,
@@ -2605,7 +2621,11 @@ registry lock, an entry's grant lock is a leaf, which a plugin's session also ta
 alone. The plugin file's lock comes before the registry lock: a save holds it while it
 reads the plugins and writes `plugins.json`, and nothing takes it under the registry
 lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
-calls take the collection lock as any session's do. A stream's poll takes only its queue's lock. No lock
+calls take the collection lock as any session's do. The live sources' `SourceMeters`
+(a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
+takes under the collection lock and `jstream-sources` and the profiler take alone; the
+`Profiler`'s history and thread-reader locks are never taken with the collection lock
+(*Profile* in [Purpose](#purpose)). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
 drops the collection lock before `Compositor::open`. The pipeline gate is not held
@@ -2989,10 +3009,14 @@ the render thread sends to the engine (the lost-device paragraph above). The ren
 (`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
-`render_ticks`. None of those threads lock the collection: the render thread reads the
+`render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
+too; a tick that fails part-way is discarded), which allocates nothing in a steady
+frame and publishes one snapshot of its totals about once a second, the meter's only
+allocation, handing the totals it replaces to the collector (*Profile* in
+[Purpose](#purpose)). None of those threads lock the collection: the render thread reads the
 render snapshot and then the live values on the parameter channel, which it draws over
 it, and what the render and mixer threads let go of (replaced snapshots and live
-values, GPU images, finished sessions' inputs, the frame buffers and encode targets of a
+values, GPU images, replaced profile totals, finished sessions' inputs, the frame buffers and encode targets of a
 mix no session needs any more, replaced lists of bus and source scopes) goes to the program stage's
 `jstream-collector` thread. `output.stop` during `starting` cancels that start and
 emits `stopped` only after the start has dropped its threads. The render and mixer
