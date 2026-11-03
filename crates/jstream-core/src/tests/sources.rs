@@ -1066,3 +1066,150 @@ fn deleting_a_source_forgets_its_capture_grant() {
     }
     assert_eq!(*crate::lock(&capture.forgot), vec!["screen".to_owned()]);
 }
+
+/// The centre pixel of the program mix, or `None` without an adapter outside CI.
+fn centre(control: &dyn Control) -> Option<[u8; 4]> {
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use jstream_protocol::{Query, QueryResult};
+    use std::io::Write;
+    let result = match super::query(control, Query::VideoSnapshot) {
+        Ok(result) => result,
+        Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "CI has no wgpu adapter: {error}"
+            );
+            let _ = writeln!(
+                std::io::stderr(),
+                "jstream-core: skipping scene source GPU test, no adapter: {error}"
+            );
+            return None;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot { png, .. } = result else {
+        panic!("not a snapshot: {result:?}");
+    };
+    let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+    let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+    Some([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+}
+
+/// #1018: a `scene` source's own video chain runs where it places its scene, and the
+/// result is placed like any source's frame (ADR-0065 §4), as an `image` source's
+/// does; with a chain on the scene too, the source's runs over the scene's output.
+#[test]
+fn a_scene_sources_chain_is_drawn_where_it_places_its_scene() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let filter = |owner: FilterOwner, id: &str, multiply: &str| Edit::FilterAdd {
+        owner,
+        chain: FilterChain::Video,
+        filter_id: FilterId::new(id),
+        kind: "color_correction".into(),
+        settings: settings(&[("multiply", json!(multiply))]),
+        enabled: None,
+        index: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source(
+                "white",
+                "color",
+                settings(&[
+                    ("color", json!("#ffffffff")),
+                    ("width", json!(1920)),
+                    ("height", json!(1080)),
+                ]),
+            ),
+            Edit::SourceCreate {
+                source_id: SourceId::new("nest"),
+                name: "nest".into(),
+                kind: SourceKind::Scene {
+                    scene_id: SceneId::new("b"),
+                },
+                settings: Settings::default(),
+                duplicated_from: None,
+            },
+            add("b", "b1", "white"),
+            add("a", "a1", "nest"),
+        ]),
+    )
+    .expect("a nests b");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let shot = || engine.render_hub().load();
+    assert!(shot().shot().chain(&SourceId::new("nest")).is_none());
+    let before = centre(&control);
+
+    batch(
+        &control,
+        edits(vec![filter(
+            FilterOwner::Source {
+                source_id: SourceId::new("nest"),
+            },
+            "tint",
+            "#ff0000",
+        )]),
+    )
+    .expect("the scene source filtered");
+    let chain = shot()
+        .shot()
+        .chain(&SourceId::new("nest"))
+        .cloned()
+        .expect("the scene source's chain is planned");
+    assert_eq!(chain.input_scene(), Some(&SceneId::new("b")));
+    assert_eq!(
+        shot().shot().chain_passes(),
+        [("b".to_owned(), 1)],
+        "the nested scene is drawn for the chain first"
+    );
+
+    // With a chain on the scene as well, the source's runs over its output.
+    batch(
+        &control,
+        edits(vec![filter(
+            FilterOwner::Scene {
+                scene_id: SceneId::new("b"),
+            },
+            "own",
+            "#00ffff",
+        )]),
+    )
+    .expect("the scene filtered");
+    let chain = shot()
+        .shot()
+        .chain(&SourceId::new("nest"))
+        .cloned()
+        .expect("the scene source's chain");
+    assert_eq!(
+        chain.input,
+        crate::snapshot::GpuKey::Filtered(crate::chain::ChainOwner::Scene(SceneId::new("b")))
+    );
+
+    let Some(before) = before else {
+        return;
+    };
+    assert_eq!(before, [0xff, 0xff, 0xff, 0xff], "b's white, unfiltered");
+    // White, times cyan by the scene's chain, then times red by the source's.
+    assert_eq!(centre(&control), Some([0, 0, 0, 0xff]));
+    batch(
+        &control,
+        edits(vec![Edit::FilterRemove {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("b"),
+            },
+            filter_id: FilterId::new("own"),
+        }]),
+    )
+    .expect("the scene's own filter removed");
+    assert_eq!(
+        centre(&control),
+        Some([0xff, 0, 0, 0xff]),
+        "the source's red tint alone"
+    );
+}

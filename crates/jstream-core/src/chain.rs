@@ -232,6 +232,16 @@ impl Chain {
             })
     }
 
+    /// The scene a `scene` source's chain runs over (ADR-0065 §4): the layer it draws
+    /// into for the chain, or its own chain's output. `None` for a chain over a frame,
+    /// a capture, a composite or an item's box.
+    pub(crate) fn input_scene(&self) -> Option<&SceneId> {
+        match &self.input {
+            GpuKey::Layer(scene, _) | GpuKey::Filtered(ChainOwner::Scene(scene)) => Some(scene),
+            _ => None,
+        }
+    }
+
     /// Points each filter that reads a scene `filtered` says has a chain at that chain's
     /// output, so a `scene_mask` sees the scene with its own filters, as it shows
     /// wherever it is placed.

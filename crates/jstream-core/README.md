@@ -1096,6 +1096,16 @@ leaves the scene composited as before. In a transition the scene is one picture
 it, Move falls back to that, and a filtered nested scene is never flattened into its
 items.
 
+A `scene` source's own video chain (ADR-0065 §4) runs where it places its scene, after
+the scene's own (#1018). Its chain (`ChainOwner::Source`) reads the scene drawn as a
+`scene_mask`'s scene is, at depth 1, or the scene's chain output when it has one, and
+its output is placed like any source's frame, at the size the chain draws for the
+canvas. It runs once per frame wherever the source is placed, and an item's effects on
+it read that output. In a transition the source shows one picture, never flattened into
+its scene's items. A source placed both where a keyframe draws its group through a view
+(ADR-0049 §3) and elsewhere has one chain, over the scene it was planned with first; the
+other place shows its scene unfiltered (logged at `debug`).
+
 An item's effects (ADR-0065 §5, in v1 under
 [ADR-0068](../../docs/adr/0068-item-effects-in-v1.md)) run over its box, once per frame,
 as the scene that draws the item draws it: a keyframe scene's items have chains of
@@ -1130,7 +1140,7 @@ plus one layer and pass per filter, and each item's effects as its box layer and
 plus one per effect, with each layer's texture bytes at the sizes `Chains` makes them
 (`Chain::layer_sizes`). It reads the plan the render hub holds, on the control side,
 so the render thread does no extra work. Not counted: a source's own chain, a scene a
-`scene_mask` reads, and the canvas-sized layer a nested scene without a chain is drawn
+`scene_mask` or a `scene` source's chain reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
 anyway). The output stage (below) runs only for an output's frame, so the engine hands
 `chain_cost` each running output (`Outputs::running`) as its frames are drawn since
