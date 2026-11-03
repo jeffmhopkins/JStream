@@ -276,6 +276,9 @@ pub(crate) enum SourceRef {
     Capture(CaptureKey),
     /// A source's frame or capture after its video chain, kept in [`Shot::chains`].
     Filtered(SourceId),
+    /// A `scene` source's video chain over the scene it places, planned under that ID
+    /// (ADR-0065 §4): [`ChainOwner::Placed`]'s output, kept in [`Shot::chains`].
+    Placed(SourceId, SceneId),
     /// An item's box after its effects (ADR-0065), as that scene draws the item: what a
     /// transition's track shows for an item with effects.
     Boxed(SceneId, ItemId),
@@ -650,6 +653,14 @@ impl Shot {
     #[cfg(test)]
     pub(crate) fn chain(&self, source_id: &SourceId) -> Option<&Chain> {
         self.chains.get(&ChainOwner::Source(source_id.clone()))
+    }
+
+    /// The video chain `scene` source `source_id` runs over scene `scene_id` where it
+    /// places it, for tests.
+    #[cfg(test)]
+    pub(crate) fn placed_chain(&self, source_id: &SourceId, scene_id: &SceneId) -> Option<&Chain> {
+        self.chains
+            .get(&ChainOwner::Placed(source_id.clone(), scene_id.clone()))
     }
 
     /// The effects chain of item `item_id` as scene `scene_id` draws it, for tests.
@@ -1157,6 +1168,37 @@ fn canvas_size(canvas: Canvas) -> [f32; 2] {
     [canvas.width as f32, canvas.height as f32]
 }
 
+/// The size a planned scene's picture is: the canvas, through the scene's chain when it
+/// has one.
+fn scene_size(out: &Shot, scene: &SceneId, canvas: Canvas) -> [u32; 2] {
+    let (width, height) = match out.chains.get(&ChainOwner::Scene(scene.clone())) {
+        Some(chain) => chain.output_size(canvas.width, canvas.height),
+        None => (canvas.width, canvas.height),
+    };
+    [width, height]
+}
+
+/// The size source `id`'s planned chain draws for its frame. `None` when either isn't
+/// in the shot.
+fn filtered_size(out: &Shot, id: &SourceId) -> Option<[u32; 2]> {
+    let chain = out.chains.get(&ChainOwner::Source(id.clone()))?;
+    let [width, height] = out.frames.get(id)?.extent;
+    let (width, height) = chain.output_size(width, height);
+    Some([width, height])
+}
+
+/// The size `scene` source `id`'s chain draws over `scene` (ADR-0065 §4): the scene's
+/// picture, through the chain.
+fn placed_size(out: &Shot, id: &SourceId, scene: &SceneId, canvas: Canvas) -> [u32; 2] {
+    let [width, height] = scene_size(out, scene, canvas);
+    let owner = ChainOwner::Placed(id.clone(), scene.clone());
+    let (width, height) = out
+        .chains
+        .get(&owner)
+        .map_or((width, height), |chain| chain.output_size(width, height));
+    [width, height]
+}
+
 /// When a transition that started at `start` and lasts `end_ms` ends, on the same clock.
 fn end_time(start: MediaTime, end_ms: f32) -> Option<MediaTime> {
     let ms = MediaTime::new(
@@ -1189,6 +1231,9 @@ fn key(image: &SourceRef, shot: &Shot) -> GpuKey {
             }
         }
         SourceRef::Filtered(id) => GpuKey::Filtered(ChainOwner::Source(id.clone())),
+        SourceRef::Placed(id, scene) => {
+            GpuKey::Filtered(ChainOwner::Placed(id.clone(), scene.clone()))
+        }
         SourceRef::Boxed(scene, item) => {
             GpuKey::Filtered(ChainOwner::Item(scene.clone(), item.clone()))
         }
@@ -1607,6 +1652,16 @@ impl<'a> Planner<'a, '_> {
                     matches!(self.shown(source, out), Some(SourceRef::Filtered(_)))
                 })
             }
+            // Over the ID the scene was planned under, a group's view included.
+            SourceRef::Placed(id, scene) => {
+                let state = self.state;
+                state.source(id).is_some_and(|source| {
+                    matches!(
+                        self.scened(source, scene.clone(), out, &mut BTreeSet::new()),
+                        SourceRef::Placed(..)
+                    )
+                })
+            }
             SourceRef::Scene(id) => {
                 self.collect(id, out, &mut BTreeSet::new());
                 true
@@ -1635,8 +1690,7 @@ impl<'a> Planner<'a, '_> {
         let image = match source.kind() {
             SourceKind::Scene { scene_id } => {
                 let nested = self.nested(keyframe, scene_id);
-                self.collect(&nested, out, &mut BTreeSet::new());
-                SourceRef::Scene(nested)
+                self.scened(source, nested, out, &mut BTreeSet::new())
             }
             _ => match self.shown(source, out) {
                 Some(image) => image,
@@ -1668,22 +1722,11 @@ impl<'a> Planner<'a, '_> {
             self.assets,
         )?;
         let canvas = self.state.canvas();
-        let output = |chain: Option<&Chain>, [width, height]: [u32; 2]| {
-            let (w, h) = chain.map_or((width, height), |chain| chain.output_size(width, height));
-            [w, h]
-        };
         let input = match source {
             SourceRef::Frame(id) => out.frames.get(id).map(|frame| frame.extent),
-            SourceRef::Filtered(id) => out.frames.get(id).map(|frame| {
-                output(
-                    out.chains.get(&ChainOwner::Source(id.clone())),
-                    frame.extent,
-                )
-            }),
-            SourceRef::Scene(id) => Some(output(
-                out.chains.get(&ChainOwner::Scene(id.clone())),
-                [canvas.width, canvas.height],
-            )),
+            SourceRef::Filtered(id) => filtered_size(out, id),
+            SourceRef::Placed(id, scene) => Some(placed_size(out, id, scene, canvas)),
+            SourceRef::Scene(id) => Some(scene_size(out, id, canvas)),
             SourceRef::Capture(_) | SourceRef::Boxed(..) => None,
         };
         let geometry = match item.placement() {
@@ -1774,16 +1817,19 @@ impl<'a> Planner<'a, '_> {
                             .iter()
                             .all(|inner| inner.blend().is_normal())
                         && self.scene_chain(scene_id).is_none()
+                        && !self.filters_scene(source)
                         && !item.effects().iter().any(|effect| effect.enabled())
                     {
                         self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
                         continue;
                     }
-                    self.collect(scene_id, out, &mut BTreeSet::new());
-                    (
-                        SourceRef::Scene(scene_id.clone()),
-                        Some([canvas.width, canvas.height]),
-                    )
+                    match self.scened(source, scene_id.clone(), out, &mut BTreeSet::new()) {
+                        SourceRef::Placed(id, scene) => {
+                            let size = placed_size(out, &id, &scene, canvas);
+                            (SourceRef::Placed(id, scene), Some(size))
+                        }
+                        image => (image, Some([canvas.width, canvas.height])),
+                    }
                 }
                 _ => match self.shown(source, out) {
                     Some(SourceRef::Frame(id)) => {
@@ -1792,17 +1838,13 @@ impl<'a> Planner<'a, '_> {
                     }
                     // A filtered frame is the size the chain draws for it.
                     Some(SourceRef::Filtered(id)) => {
-                        let chain = out.chains.get(&ChainOwner::Source(id.clone()));
-                        let size = out.frames.get(&id).zip(chain).map(|(frame, chain)| {
-                            let [width, height] = frame.extent;
-                            let (w, h) = chain.output_size(width, height);
-                            [w, h]
-                        });
+                        let size = filtered_size(out, &id);
                         (SourceRef::Filtered(id), size)
                     }
                     // A capture's size isn't known when planning: the canvas stands in.
                     Some(capture @ SourceRef::Capture(_)) => (capture, None),
-                    Some(SourceRef::Scene(_) | SourceRef::Boxed(..)) | None => continue,
+                    Some(SourceRef::Scene(_) | SourceRef::Placed(..) | SourceRef::Boxed(..))
+                    | None => continue,
                 },
             };
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
@@ -1867,8 +1909,7 @@ impl<'a> Planner<'a, '_> {
                 let source = match source.kind() {
                     SourceKind::Scene { scene_id } => {
                         let nested = self.nested(keyframe, scene_id);
-                        self.collect(&nested, out, path);
-                        SourceRef::Scene(nested)
+                        self.scened(source, nested, out, path)
                     }
                     _ => match self.shown(source, out) {
                         Some(source) => source,
@@ -1914,6 +1955,41 @@ impl<'a> Planner<'a, '_> {
             }
             Look::Capture(spec) => Some(SourceRef::Capture(spec)),
         }
+    }
+
+    /// What `source`, a `scene` source, shows of scene `nested`, the ID its scene is
+    /// planned under there (the scene, or a group's view through a keyframe): the
+    /// nested scene, collected into `out`, then the source's own video chain when a
+    /// filter of it runs, whose output is placed like any source's frame (ADR-0065 §4).
+    /// The chain ([`ChainOwner::Placed`]) reads the scene's layer, or the scene's own
+    /// chain's output when it has one, and goes in `out` once per shot for each ID.
+    fn scened(
+        &mut self,
+        source: &Source,
+        nested: SceneId,
+        out: &mut Shot,
+        path: &mut BTreeSet<SceneId>,
+    ) -> SourceRef {
+        self.collect(&nested, out, path);
+        let owner = ChainOwner::Placed(source.id().clone(), nested.clone());
+        if out.chains.contains_key(&owner) {
+            return SourceRef::Placed(source.id().clone(), nested);
+        }
+        let input = key(&SourceRef::Scene(nested.clone()), out);
+        let filters = source.filters().chain(FilterChain::Video);
+        match Chain::of_filters(&owner, filters, input, self.assets) {
+            Some(chain) => {
+                self.add_chain(owner, chain, out);
+                SourceRef::Placed(source.id().clone(), nested)
+            }
+            None => SourceRef::Scene(nested),
+        }
+    }
+
+    /// Whether a filter of `source`'s video chain runs, so a `scene` source shows its
+    /// scene as one filtered picture.
+    fn filters_scene(&self, source: &Source) -> bool {
+        Chain::of(source, GpuKey::Program, self.assets).is_some()
     }
 
     /// What `source`, which is not a scene, shows: [`Self::look`]'s frame or capture,
@@ -2084,6 +2160,7 @@ impl Shot {
             let owner = match image {
                 SourceRef::Frame(_) | SourceRef::Capture(_) => continue,
                 SourceRef::Filtered(id) => ChainOwner::Source(id),
+                SourceRef::Placed(id, scene) => ChainOwner::Placed(id, scene),
                 SourceRef::Boxed(scene, item) => ChainOwner::Item(scene, item),
                 SourceRef::Scene(id) => {
                     if !scenes.insert(id.clone()) {
@@ -2106,6 +2183,7 @@ impl Shot {
             }
             if let Some(chain) = self.chains.get(&owner) {
                 stack.extend(chain.scenes().cloned().map(SourceRef::Scene));
+                stack.extend(chain.input_scene().cloned().map(SourceRef::Scene));
             }
         }
         self.scenes.retain(|id, _| scenes.contains(id));
@@ -2285,6 +2363,10 @@ impl ChainOrder {
                     SourceRef::Filtered(source) => {
                         self.chain(shot, &ChainOwner::Source(source.clone()), done);
                     }
+                    SourceRef::Placed(source, scene) => {
+                        let read = ChainOwner::Placed(source.clone(), scene.clone());
+                        self.chain(shot, &read, done);
+                    }
                     SourceRef::Scene(inner) => {
                         let read = ChainOwner::Scene(inner.clone());
                         if shot.chains.contains_key(&read) {
@@ -2302,6 +2384,15 @@ impl ChainOrder {
                     }
                     SourceRef::Frame(_) | SourceRef::Capture(_) | SourceRef::Boxed(..) => {}
                 }
+            }
+            // A `scene` source's chain reads its scene's layer, or the scene's own
+            // chain's output (ADR-0065 §4).
+            match &chain.input {
+                GpuKey::Layer(scene, depth) => {
+                    visit(shot, scene, *depth, &mut BTreeSet::new(), done, self);
+                }
+                GpuKey::Filtered(read) => self.chain(shot, read, done),
+                _ => {}
             }
             for scene in chain.scenes() {
                 let read = ChainOwner::Scene(scene.clone());
@@ -2394,6 +2485,15 @@ fn visit_into(
             SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
             SourceRef::Filtered(source) => {
                 let owner = ChainOwner::Source(source.clone());
+                passes.filtered(shot, &owner, done);
+                GpuKey::Filtered(owner)
+            }
+            // Its chain reads the scene at depth 1, so its nesting restarts there.
+            SourceRef::Placed(source, inner) => {
+                if path.contains(inner) {
+                    continue;
+                }
+                let owner = ChainOwner::Placed(source.clone(), inner.clone());
                 passes.filtered(shot, &owner, done);
                 GpuKey::Filtered(owner)
             }
@@ -3033,7 +3133,8 @@ impl Shot {
     /// frame runs once, before any mix draws. A scene's chain is its canvas-sized
     /// composite and one layer and pass per filter; an item's effects are its box's
     /// layer and pass and one per effect, at the sizes [`Chains`] makes them. A source's
-    /// chain, a scene a `scene_mask` reads, and the reference layer a nested scene
+    /// chain (a `scene` source's included), a scene a `scene_mask` or a `scene` source's
+    /// chain reads, and the reference layer a nested scene
     /// without a chain is drawn into for an item's effects (in place of the layer it
     /// would be drawn into anyway) are not counted.
     ///
@@ -3074,7 +3175,10 @@ impl Shot {
                         &mut cost.item_passes,
                     )
                 }
-                ChainOwner::Source(_) | ChainOwner::Master(_) | ChainOwner::Output(_) => continue,
+                ChainOwner::Source(_)
+                | ChainOwner::Placed(..)
+                | ChainOwner::Master(_)
+                | ChainOwner::Output(_) => continue,
             };
             let sizes = chain.layer_sizes(input.0, input.1);
             // The composite or the box, then one per filter.
