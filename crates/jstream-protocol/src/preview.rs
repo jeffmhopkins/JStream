@@ -6,7 +6,7 @@
 //! frames themselves are [`BinaryFrame`]s, which only the session that subscribed
 //! receives. Each frame starts with a fixed [`BINARY_HEADER_LEN`]-byte header (the
 //! layout is on [`BinaryHeader`]) followed by one encoded picture: an H.264 access unit
-//! in Annex B form, or a baseline JPEG.
+//! in Annex B form, a baseline JPEG, or a PNG.
 
 use crate::error::ProtocolError;
 use crate::id::Rev;
@@ -30,6 +30,9 @@ pub enum PreviewCodec {
     /// One baseline JPEG per frame, every one a keyframe. The fallback when the engine
     /// has no H.264 encoder or the client can't decode H.264.
     Jpeg,
+    /// One PNG per frame, every one a keyframe (ADR-0093, since 0.69): lossless, for a
+    /// screenshot rather than a moving picture. An older server refuses the name.
+    Png,
 }
 
 impl PreviewCodec {
@@ -38,6 +41,7 @@ impl PreviewCodec {
         match self {
             PreviewCodec::H264 => 1,
             PreviewCodec::Jpeg => 2,
+            PreviewCodec::Png => 3,
         }
     }
 
@@ -46,6 +50,7 @@ impl PreviewCodec {
         match byte {
             1 => Some(PreviewCodec::H264),
             2 => Some(PreviewCodec::Jpeg),
+            3 => Some(PreviewCodec::Png),
             _ => None,
         }
     }
@@ -213,7 +218,7 @@ const FLAG_END: u8 = 2;
 /// |---|---|---|
 /// | 0 | 1 | version, [`BINARY_VERSION`] |
 /// | 1 | 1 | kind: 1 = preview |
-/// | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG |
+/// | 2 | 1 | codec: 0 = none (an end frame), 1 = H.264, 2 = JPEG, 3 = PNG (0.69) |
 /// | 3 | 1 | flags: bit 0 keyframe, bit 1 end of stream; the rest are 0 |
 /// | 4 | 4 | channel, as the client named it in `preview.subscribe` |
 /// | 8 | 2 | picture width, in pixels |
@@ -473,6 +478,14 @@ mod tests {
         let back = BinaryFrame::parse(&end.to_bytes()).expect("parses");
         assert!(back.header.end && back.header.codec.is_none());
         assert_eq!(&*back.payload, b"no encoder");
+    }
+
+    #[test]
+    fn every_codec_round_trips_through_its_byte() {
+        for codec in [PreviewCodec::H264, PreviewCodec::Jpeg, PreviewCodec::Png] {
+            assert_eq!(PreviewCodec::from_byte(codec.to_byte()), Some(codec));
+        }
+        assert_eq!(PreviewCodec::from_byte(4), None);
     }
 
     #[test]

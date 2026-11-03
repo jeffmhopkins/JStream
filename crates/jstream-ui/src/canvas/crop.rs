@@ -527,6 +527,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let keyframe = SceneInfo {
             overrides: Vec::new(),

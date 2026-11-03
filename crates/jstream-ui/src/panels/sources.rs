@@ -57,6 +57,8 @@ struct Row {
     /// The source's type icon.
     icon: &'static str,
     visible: bool,
+    /// Whether the item's canvas box is locked (ADR-0093).
+    locked: bool,
     /// Whether the source is placed in other scenes too.
     shared: bool,
     favourite: bool,
@@ -264,6 +266,7 @@ impl Walk<'_> {
                 name,
                 icon: icon_of(source.map(|s| &s.kind)),
                 visible: item.visible,
+                locked: item.locked,
                 shared: is_shared(collection, item),
                 favourite,
                 scene_id: scene_id.clone(),
@@ -472,6 +475,7 @@ pub fn Sources() -> impl IntoView {
             name,
             icon,
             visible,
+            locked,
             shared,
             favourite,
             scene_id: row_scene,
@@ -620,6 +624,17 @@ pub fn Sources() -> impl IntoView {
                 });
             }
         };
+        // The lock belongs to the item, so a keyframe sets it on its parent's item too.
+        let toggle_lock = {
+            let item = item_id.clone();
+            move |_: leptos::ev::MouseEvent| {
+                send(Edit::ItemSetLocked {
+                    item_id: item.clone(),
+                    locked: !locked,
+                });
+            }
+        };
+        let lock_label = format!("Lock {name}");
         let toggle_favourite = {
             let id = source_id.clone();
             move || {
@@ -792,6 +807,17 @@ pub fn Sources() -> impl IntoView {
                     on:click=toggle
                 >
                     <Icon name=if visible { "eye" } else { "eye-off" } size=14 />
+                </button>
+                <button
+                    type="button"
+                    class="hov tree-tool lock"
+                    class:on=locked
+                    title="Locked: the canvas won't move it"
+                    aria-label=lock_label
+                    aria-pressed=locked.to_string()
+                    on:click=toggle_lock
+                >
+                    <Icon name="lock" size=14 />
                 </button>
                 <TagButton popover=popover name=picker_name />
                 <Star name=star_name on=Signal::stored(favourite) toggle=toggle_favourite />
@@ -1028,6 +1054,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         Collection {
             canvas: Canvas {

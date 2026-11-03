@@ -248,7 +248,8 @@ state machine. Contents:
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
   (`Control::binary`), in H.264 on a software `jstream-encode` session when the
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
-  encoder of its own), drawn on the engine's `jstream-preview` thread with its own
+  encoder of its own), or in PNG for a client that asks for it to take a screenshot
+  (`video.snapshot`'s encoder, [ADR-0093](../../docs/adr/0093-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
   compositor and its own captures of what the mix shows, a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
@@ -476,6 +477,7 @@ state machine. Contents:
   preview streams (`src/tests/preview.rs`: no subscription without a binary channel,
   JPEG without an encoder following the mix's changes and the canvas size, H.264 from
   the platform fakes starting at a keyframe and JPEG beside it for a client that asks,
+  a full-size PNG for a client that asks for it alone,
   the subscription checks and limit, unsubscribe and the session's end, and a reader
   that stops reading holding a bounded queue and resuming in order, a live value
   sent at once with the same `rev`, a display and a webcam the program shows captured
@@ -707,7 +709,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
-  its own through the test-only `with_font_dirs`).
+  its own through the test-only `with_font_dirs`). A font whose path isn't UTF-8 is left
+  out, since a lossy copy of its path would name another file.
 - **YouTube** actions and queries (`youtube.*`) run with no engine lock held, since
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
@@ -1603,8 +1606,8 @@ is `not_found`, a request with `scene_id` or `source` too (or both) is
 (`PreviewHub::end_source`).
 
 The codec is picked when the client subscribes: the first of its `codecs` the engine
-can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends) and
-JPEG always. One `jstream-preview` thread per engine, started by the first stream and
+can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends), and
+JPEG and PNG always. One `jstream-preview` thread per engine, started by the first stream and
 gone once none is left, serves them all. It owns a compositor (`Compositor::open`,
 hardware adapter first with the software one as the fallback, or the CPU stand-in
 under `with_cpu_compositor`) and keeps each stream's

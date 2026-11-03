@@ -181,6 +181,35 @@ fn without_an_encoder_the_preview_is_jpeg_and_follows_the_mix() {
     assert_eq!(decode(&resized.payload), (360, 360));
 }
 
+/// A client taking a screenshot asks for PNG (ADR-0093): every frame a lossless
+/// keyframe, at the size asked for.
+#[test]
+fn a_client_that_asks_for_png_gets_lossless_pictures() {
+    let engine = with_h264();
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    let call = Call::Action {
+        action: Action::PreviewSubscribe {
+            channel: 3,
+            max_width: Some(1920),
+            max_height: Some(1080),
+            fps: Some(1),
+            codecs: vec![PreviewCodec::Png],
+            scene_id: None,
+            source: None,
+            source_id: None,
+        },
+    };
+    act(&control, call).expect("subscribed");
+    let first = frame(&mut frames);
+    assert_eq!(first.header.codec, Some(PreviewCodec::Png));
+    assert!(first.header.keyframe && !first.header.end);
+    assert_eq!((first.header.width, first.header.height), (1920, 1080));
+    let decoder = png::Decoder::new(std::io::Cursor::new(&first.payload[..]));
+    let reader = decoder.read_info().expect("a PNG");
+    assert_eq!((reader.info().width, reader.info().height), (1920, 1080));
+}
+
 #[test]
 fn with_an_encoder_the_preview_is_h264_starting_at_a_keyframe() {
     let engine = with_h264();

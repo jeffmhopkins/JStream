@@ -674,6 +674,8 @@ struct Facts {
     cropped: bool,
     /// Whether the primary item is shown, and how it blends.
     visible: bool,
+    /// Whether the primary item's box is locked (ADR-0093).
+    locked: bool,
     blend: BlendMode,
     /// The primary item's source, its name and kind, and whether it has a picture.
     source_id: SourceId,
@@ -729,6 +731,7 @@ impl Facts {
                 .collect(),
             cropped: selected.iter().any(|i| i.crop != Crop::NONE),
             visible: primary.visible,
+            locked: primary.locked,
             blend: primary.blend,
             source_id: source.source_id.clone(),
             name: source.name.clone(),
@@ -1191,6 +1194,22 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         (false, _) => crate::projector::pop_out_source(cx.studio, facts.source_id.clone()),
         _ => crate::projector::pop_out(cx.studio, None),
     };
+    // A nested scene's screenshot is the scene's, any other source's the source alone.
+    let screenshot = match (many, &facts.kind) {
+        (true, _) => None,
+        (false, SourceKind::Scene { scene_id }) => Some(crate::screenshot::entry(
+            "Screenshot (scene)",
+            cx.studio,
+            Some(cx.session),
+            Some(crate::screenshot::Shot::Scene(scene_id.clone())),
+        )),
+        (false, _) => Some(crate::screenshot::entry(
+            "Screenshot (source)",
+            cx.studio,
+            Some(cx.session),
+            Some(crate::screenshot::Shot::Source(facts.source_id.clone())),
+        )),
+    };
     let labels = labels_entry(cx, &facts.source_id);
     let audio = facts.audio.map(|on| {
         let source_id = facts.source_id.clone();
@@ -1228,6 +1247,23 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         })
         .checked(on)
     };
+    // OBS's Lock: the item's box takes no canvas drag (ADR-0093). It belongs to the
+    // item, so a keyframe sets it on the parent's item; the primary item's state names
+    // the check, and each selected item takes the other.
+    let lock = {
+        let (ids, on) = (facts.items.clone(), facts.locked);
+        Entry::item("Lock", move || {
+            cx.send(
+                ids.iter()
+                    .map(|item_id| Edit::ItemSetLocked {
+                        item_id: item_id.clone(),
+                        locked: !on,
+                    })
+                    .collect(),
+            );
+        })
+        .checked(on)
+    };
     let clip = clip_entries(cx, scene_id, &facts.items);
     let filter_clip = filter_clip_entries(cx, &facts);
     let transform_clip = transform_clip_entries(cx, scene_id, &facts);
@@ -1250,9 +1286,11 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 None => entry.disabled_if(keyframe),
             })
         });
-        let mut list = vec![visible, properties, filters];
+        let mut list = vec![visible, lock, properties, filters];
         list.extend(filter_clip);
-        list.extend([labels, pop_out, Entry::Sep]);
+        list.extend([labels, pop_out]);
+        list.extend(screenshot);
+        list.push(Entry::Sep);
         list.extend(clip);
         list.push(Entry::Sep);
         list.extend(audio);
@@ -1293,6 +1331,7 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             },
             Entry::Sep,
             visible,
+            lock,
             Entry::Sep,
         ]);
         list.extend(filter_clip);
@@ -1301,9 +1340,11 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
-        list.extend([visible, properties, filters]);
+        list.extend([visible, lock, properties, filters]);
         list.extend(filter_clip);
-        list.extend([labels, pop_out, Entry::Sep]);
+        list.extend([labels, pop_out]);
+        list.extend(screenshot);
+        list.push(Entry::Sep);
         list.extend(sharing_entries(cx, &facts));
     }
     list.extend(clip);
@@ -1545,6 +1586,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: Default::default(),
+            locked: false,
         }
     }
 

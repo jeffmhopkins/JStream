@@ -358,6 +358,7 @@ impl Item {
             opacity: self.opacity,
             blend: self.blend,
             transition: self.transition,
+            locked: self.locked,
         }
     }
 }

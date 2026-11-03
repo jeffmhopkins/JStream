@@ -893,6 +893,9 @@ pub struct Item {
     /// [`Chains`] so the filter edits address it as they address any owner's.
     pub(crate) effects: Chains,
     pub(crate) transition: ItemTransition,
+    /// Whether its canvas box is locked (ADR-0093): an editing aid the engine stores and
+    /// reports, and never enforces.
+    pub(crate) locked: bool,
 }
 
 impl Item {

@@ -63,6 +63,8 @@ pub struct CanvasItem {
     pub crop: Crop,
     /// Its source's own size in pixels, while the engine knows it.
     pub source_size: Option<(u32, u32)>,
+    /// Whether its box is locked (ADR-0093): the canvas selects it but never drags it.
+    pub locked: bool,
 }
 
 /// The scene being edited, at one revision.
@@ -106,6 +108,11 @@ impl Layout {
     pub fn item(&self, item_id: &ItemId) -> Option<&CanvasItem> {
         self.items.iter().find(|item| &item.item_id == item_id)
     }
+
+    /// Whether the item is locked (ADR-0093), so no drag, handle or arrow key moves it.
+    pub fn is_locked(&self, item_id: &ItemId) -> bool {
+        self.item(item_id).is_some_and(|item| item.locked)
+    }
 }
 
 impl Layout {
@@ -139,6 +146,7 @@ impl Layout {
                 visible: item.visible,
                 crop: item.crop,
                 source_size: collection.source_size(sizes, &item.source_id),
+                locked: item.locked,
             })
             .collect();
         Layout {
@@ -611,6 +619,20 @@ mod tests {
         let unsized_edits =
             crate::canvas::crop::clear(&collection, &Sizes::new(), &"s2".into(), &ids);
         assert_eq!(unsized_edits.len(), 1);
+    }
+
+    #[test]
+    fn a_locked_item_is_known_to_the_layout() {
+        let control = engine();
+        assert!(!load(&control, "s2").is_locked(&"box".into()));
+        now(control.call(Call::Batch(Batch::single(Edit::ItemSetLocked {
+            item_id: "box".into(),
+            locked: true,
+        }))))
+        .expect("lock");
+        let layout = load(&control, "s2");
+        assert!(layout.is_locked(&"box".into()));
+        assert!(!layout.is_locked(&"missing".into()));
     }
 
     #[test]

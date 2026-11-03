@@ -550,9 +550,11 @@ pub fn Canvas() -> impl IntoView {
         event.prevent_default();
         let selection = selected_boxes(&current);
         let shift = event.shift_key();
+        // A locked item in the selection gives it no handles (ADR-0093).
+        let held = selection.iter().any(|(id, _)| current.is_locked(id));
         // A handle of the selection: the group's when several items are selected, else
         // the one item's.
-        if selection.len() > 1 {
+        if !held && selection.len() > 1 {
             let bounds = Bounds::around(selection.iter().map(|(_, g)| g));
             if let Some(handle) = bounds.and_then(|b| group::handle_at(b, point, fit))
                 && let Some(gesture) = GroupGesture::new(handle.into(), selection.clone(), point)
@@ -560,7 +562,8 @@ pub fn Canvas() -> impl IntoView {
                 start(&event, point, Action::Group(gesture), &current);
                 return;
             }
-        } else if let Some((item_id, geometry)) = selection.first()
+        } else if !held
+            && let Some((item_id, geometry)) = selection.first()
             && let Some((handle, picture)) =
                 single_handle(&current, item_id, geometry, fit, point, event.alt_key())
         {
@@ -612,7 +615,7 @@ pub fn Canvas() -> impl IntoView {
             studio.toggle_item(&hit);
             return;
         }
-        let moving: Vec<(ItemId, ItemGeometry)> = if was_selected {
+        let mut moving: Vec<(ItemId, ItemGeometry)> = if was_selected {
             selection
         } else if shift {
             studio.toggle_item(&hit);
@@ -626,7 +629,10 @@ pub fn Canvas() -> impl IntoView {
                 .into_iter()
                 .collect()
         };
+        // The click selects a locked item, but a drag moves only the unlocked ones.
+        moving.retain(|(id, _)| !current.is_locked(id));
         let action = match moving.as_slice() {
+            [] => return,
             [(item_id, geometry)] => Action::One {
                 item_id: item_id.clone(),
                 gesture: Gesture {
@@ -650,7 +656,10 @@ pub fn Canvas() -> impl IntoView {
             return;
         };
         let selection = selected_boxes(&current);
-        let handle = if selection.len() > 1 {
+        let held = selection.iter().any(|(id, _)| current.is_locked(id));
+        let handle = if held {
+            None
+        } else if selection.len() > 1 {
             Bounds::around(selection.iter().map(|(_, g)| g))
                 .and_then(|b| group::handle_at(b, point, fit))
                 .map(|h| (h, false))
@@ -662,7 +671,7 @@ pub fn Canvas() -> impl IntoView {
         let under = transform::topmost_at(current.boxes(), point).cloned();
         let on_selected = under
             .as_ref()
-            .is_some_and(|id| selection.iter().any(|(s, _)| s == id));
+            .is_some_and(|id| selection.iter().any(|(s, _)| s == id) && !current.is_locked(id));
         let next = match handle {
             Some((_, true)) => "crosshair",
             Some((handle, false)) => handle_cursor(handle),
@@ -899,6 +908,7 @@ pub fn Canvas() -> impl IntoView {
                 };
                 let moved: Vec<(ItemId, ItemGeometry)> = selected_boxes(&current)
                     .into_iter()
+                    .filter(|(id, _)| !current.is_locked(id))
                     .filter_map(|(id, start)| Some((id, transform::nudge(&start, dx, dy)?)))
                     .collect();
                 if moved.is_empty() {
@@ -1018,6 +1028,12 @@ pub fn Canvas() -> impl IntoView {
             let props_scene = scene.clone();
             vec![
                 crate::projector::pop_out(studio, scene.clone()),
+                crate::screenshot::entry(
+                    "Screenshot (scene)",
+                    studio,
+                    session,
+                    scene.clone().map(crate::screenshot::Shot::Scene),
+                ),
                 Entry::Sep,
                 select,
                 snap,
@@ -1284,6 +1300,18 @@ pub fn Canvas() -> impl IntoView {
     let selection_chrome = move || {
         let fit = viewport.get()?;
         let picked = shown_selection();
+        // A locked item in the selection shows its outline and readout, but no handles.
+        let locked = layout.with(|l| {
+            l.as_ref()
+                .is_some_and(|l| chosen.with(|c| c.iter().any(|id| l.is_locked(id))))
+        });
+        let lock_note = |text: String| {
+            if locked {
+                format!("{text}  · locked")
+            } else {
+                text
+            }
+        };
         match picked.as_slice() {
             [] => None,
             [geometry] => {
@@ -1339,8 +1367,8 @@ pub fn Canvas() -> impl IntoView {
                 Some(
                     view! {
                         {ghost}
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET, colour, cropping)}
-                        {pill(fit, text, middle, bounds.bottom, 10.0, colour)}
+                        {(!locked).then(|| chrome(fit, squares, top, knob, STEM_LENGTH, ROTATE_OFFSET, colour, cropping))}
+                        {pill(fit, lock_note(text), middle, bounds.bottom, 10.0, colour)}
                     }
                     .into_any(),
                 )
@@ -1382,8 +1410,8 @@ pub fn Canvas() -> impl IntoView {
                             stroke-dasharray="4 3"
                             vector-effect="non-scaling-stroke"
                         />
-                        {chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET, ACCENT, false)}
-                        {pill(fit, text, (o.left + o.right) / 2.0, o.bottom, 12.0, ACCENT)}
+                        {(!locked).then(|| chrome(fit, squares, top, knob, STEM_LENGTH, GROUP_ROTATE_OFFSET, ACCENT, false))}
+                        {pill(fit, lock_note(text), (o.left + o.right) / 2.0, o.bottom, 12.0, ACCENT)}
                     }
                     .into_any(),
                 )

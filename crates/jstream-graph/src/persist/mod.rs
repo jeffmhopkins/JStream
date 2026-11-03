@@ -363,6 +363,10 @@ struct FileItem {
     /// Its transition settings (ADR-0029 §6); omitted while they are the defaults.
     #[serde(default, skip_serializing_if = "ItemTransition::is_default")]
     transition: ItemTransition,
+    /// Whether its canvas box is locked (ADR-0093); omitted while unlocked, so a
+    /// collection with no locked item saves as it did before, with no schema bump.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    locked: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -588,6 +592,7 @@ impl Graph {
                                 blend: (!item.blend.is_normal()).then_some(item.blend),
                                 effects: self.file_filters(&item.effects.video),
                                 transition: item.transition,
+                                locked: item.locked,
                             }
                         })
                         .collect(),
@@ -1063,10 +1068,19 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if !item.transition.is_default() {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetTransition {
                         item_id: item.id.clone(),
                         transition: item.transition,
+                    },
+                ));
+            }
+            if item.locked {
+                edits.push((
+                    object,
+                    Edit::ItemSetLocked {
+                        item_id: item.id.clone(),
+                        locked: true,
                     },
                 ));
             }

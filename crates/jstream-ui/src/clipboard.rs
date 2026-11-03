@@ -13,9 +13,10 @@
 //! As in OBS, filters and a transform have clipboards of their own, filled from the
 //! item menus. Copy filters takes the primary item's source's chains; Paste filters adds
 //! them after each selected item's source's own, and Paste filters, replacing, removes
-//! those first (a chain the source doesn't have is left out). Copy transform takes the
-//! primary item's box and crop; Paste transform gives them to each selected item (in a
-//! keyframe, as its override).
+//! those first (a chain the source doesn't have, or the clip has nothing for, is left
+//! as it is). Copy transform takes the primary item's whole placement (box, fit,
+//! rotation, 3D and flips) and crop; Paste transform gives them to each selected item
+//! (in a keyframe, as its override).
 //!
 //! Docs: docs/UI-FEATURES.md#keyboard
 
@@ -218,7 +219,8 @@ pub fn paste_filter_edits(
                 &filters.audio,
             ),
         ] {
-            if !has {
+            // A chain the clip has nothing for keeps its own filters, even when replacing.
+            if !has || copied.is_empty() {
                 continue;
             }
             if replace {
@@ -538,6 +540,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: Default::default(),
+            locked: false,
         }
     }
 
@@ -692,6 +695,13 @@ mod tests {
                 ("add", "logo".into(), "Video:vignette".into()),
             ]
         );
+        // Replacing from a clip with no video filters leaves the source's own.
+        let audio_only = FilterChains {
+            video: Vec::new(),
+            audio: copied.audio.clone(),
+        };
+        let kept = paste_filter_edits(&c, &audio_only, &sources[..1], true, &mut counter());
+        assert!(kept.is_empty(), "{kept:?}");
     }
 
     #[test]

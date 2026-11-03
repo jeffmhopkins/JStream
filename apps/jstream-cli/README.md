@@ -140,6 +140,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
   `scene.set_options`, `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
+  `item.set_locked <item-id> true|false` locks or unlocks an item's canvas box
+  (protocol 0.69).
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine draws every mode (protocol 0.47).
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
