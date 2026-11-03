@@ -942,6 +942,15 @@ status = "done"
 prs = [360]
 
 [[item]]
+id = "3D2"
+milestone = "M3"
+title = "3D scenes with a camera"
+status = "review"
+prs = [1038]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; then the protocol, graph, render and core parts, and the UI's camera fields and orbit drag"
+needs = ["build"]
+
+[[item]]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
