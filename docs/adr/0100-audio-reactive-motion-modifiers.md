@@ -14,10 +14,10 @@ tier = "agent"
 
 <a id="context"></a>
 ## Context
-The starship cockpit scene (tracking issue #1056) has lights, a monitor spectrum and
-hologram meters that react to music. Its pages couldn't hear the mix, so the audio was
-simulated at 118 BPM with 32 made-up bands (#1060). The engine already hears the mix in
-two places:
+Scenes often want items that react to the music: lights that pulse to the program mix,
+meters, a logo that pumps with the bass. A page can't hear the mix, so today such a scene
+simulates its audio in JavaScript (#1060, found while building a complex native scene for
+tracking issue #1056). The engine already hears the mix in two places:
 - the `waveform` and `spectrum` sources draw a bus or a source from an `AudioScope`,
   a lock-free ring the mixer thread pushes each block into (#362, #459);
 - a shader source with `audio = true`
@@ -26,7 +26,7 @@ two places:
   render thread and allocates nothing while it does.
 
 What is missing is a way for an ordinary item to follow those numbers: a light's
-opacity rising on each kick, a speaker's scale pumping with the bass, a glow's strength
+opacity rising on each kick, a logo's scale pumping with the bass, a glow's strength
 following the master level. [ADR-0099](0099-native-motion-modifiers-and-timelines.md)
 proposes motion modifiers, an ordered `motion` list on an item whose values add to (or
 multiply) its properties each frame, and leaves "audio-driven modifiers (#1060)" to this
@@ -111,7 +111,7 @@ kind, and the MCP design guidance gets one recipe for light that pulses to the m
 
 <a id="consequences"></a>
 ## Consequences
-- **Easier:** the cockpit's lights, meters and speaker pumps follow the real program mix
+- **Easier:** lights, meters and pulsing logos follow the real program mix
   with a few modifiers and no page. Agents add them over MCP with the same tool that adds
   a wiggle.
 - **Harder:** a frame now depends on audio as well as on time, so a render test that
