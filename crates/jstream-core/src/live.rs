@@ -366,13 +366,7 @@ impl LiveSources {
                 ticket: 0,
                 running: None,
             });
-            // A pack source's stand-in is built from its size alone: its program takes
-            // the other settings live.
-            let settings = if pack_source::is_pack_kind(kind) {
-                pack_source::stand_in_settings(source.settings())
-            } else {
-                source.settings().clone()
-            };
+            let settings = built_from(kind, source.settings());
             if entry.kind == kind && entry.settings == settings {
                 continue;
             }
@@ -1157,9 +1151,58 @@ impl MediaClock for SystemClock {
     }
 }
 
+/// The settings a source of `kind` is built from, which a change to builds it again: all of
+/// them, but a pack source's stand-in is built from its size alone, as its program takes
+/// the other settings live.
+fn built_from(kind: &str, settings: &Settings) -> Settings {
+    if pack_source::is_pack_kind(kind) {
+        pack_source::stand_in_settings(settings)
+    } else {
+        settings.clone()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::density_for;
+    use super::{built_from, density_for};
+    use jstream_protocol::Settings;
+    use serde_json::json;
+
+    /// A shader source's stand-in is built again for a new size only; any other kind for
+    /// any change.
+    #[test]
+    fn only_a_size_change_builds_a_shader_source_again() {
+        let of = |pairs: &[(&str, serde_json::Value)]| -> Settings {
+            pairs
+                .iter()
+                .map(|(id, value)| ((*id).to_owned(), value.clone()))
+                .collect()
+        };
+        let before = of(&[
+            ("width", json!(64)),
+            ("height", json!(32)),
+            ("speed", json!(1.0)),
+        ]);
+        let faster = of(&[
+            ("width", json!(64)),
+            ("height", json!(32)),
+            ("speed", json!(2.0)),
+        ]);
+        let wider = of(&[
+            ("width", json!(128)),
+            ("height", json!(32)),
+            ("speed", json!(1.0)),
+        ]);
+        assert_eq!(
+            built_from("glow/ramp", &before),
+            built_from("glow/ramp", &faster)
+        );
+        assert_ne!(
+            built_from("glow/ramp", &before),
+            built_from("glow/ramp", &wider)
+        );
+        assert_ne!(built_from("color", &before), built_from("color", &faster));
+    }
 
     #[test]
     fn a_density_is_the_next_quarter_step_of_a_doubling() {

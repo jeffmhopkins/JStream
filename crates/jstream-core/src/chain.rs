@@ -410,7 +410,8 @@ struct Running {
     /// The scene layers a program's slots hold, as handed to `filter`, to tell when a
     /// layer is remade.
     slots: Vec<Option<Arc<Image>>>,
-    /// What measures a program's audio, made when it first hears some.
+    /// What measures a program's audio: made with the filter, or when it starts to hear
+    /// some, so on a chain or settings change and never while a steady frame draws.
     meter: Option<Box<AudioMeter>>,
     filter: VideoFilter,
     /// The version of the asset whose image `filter` reads, if any.
@@ -729,7 +730,7 @@ fn sync(
                     effect: f.effect.clone(),
                     program: f.program.as_ref().map(|p| (p.source.clone(), p.shown)),
                     slots: Vec::new(),
-                    meter: None,
+                    meter: meter_for(f),
                     filter,
                     reference: None,
                     scene: None,
@@ -769,6 +770,9 @@ fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFi
         // The new filter holds no slot yet.
         running.slots.clear();
         running.settings = filter.settings.clone();
+        if running.meter.is_none() {
+            running.meter = meter_for(filter);
+        }
         return;
     }
     if let (Some((_, shown)), Some((_, now))) = (&mut running.program, &program)
@@ -781,6 +785,19 @@ fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFi
         running.filter.set_settings(&filter.settings);
         running.settings = filter.settings.clone();
     }
+    if running.meter.is_none() {
+        running.meter = meter_for(filter);
+    }
+}
+
+/// A meter for `filter` when it is a program that hears a scope: its FFT is planned and
+/// its buffers made here, so measuring allocates nothing.
+fn meter_for(filter: &ChainFilter) -> Option<Box<AudioMeter>> {
+    filter
+        .program
+        .as_ref()
+        .filter(|p| p.heard.is_some())
+        .map(|_| Box::new(AudioMeter::new()))
 }
 
 /// Gives `running` the image of the asset `filter` reads, when that asset changed: the
@@ -832,12 +849,12 @@ fn scene_read(kind: &str, settings: &Settings) -> Option<SceneId> {
 }
 
 /// Measures what `running`, a program, hears from `heard` at `at`, and hands it over for
-/// this frame. The meter is made on its first frame, with its FFT planned then; a frame
-/// after that allocates nothing and takes no lock.
+/// this frame. The meter was made with the filter or when it started to hear
+/// ([`meter_for`]), so this allocates nothing and takes no lock.
 fn hear(running: &mut Running, heard: &Heard, at: MediaTime) {
-    let meter = running
-        .meter
-        .get_or_insert_with(|| Box::new(AudioMeter::new()));
+    let Some(meter) = running.meter.as_mut() else {
+        return;
+    };
     let ms = at
         .rescale(
             jstream_media::Timebase::MILLIS,
@@ -1286,6 +1303,72 @@ mod tests {
         let sky = plan(&graph, 2);
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &sky, 1);
         assert_eq!(pixel, WHITE, "the sky scene shows where it has alpha");
+    }
+
+    /// A shader source whose pack isn't loaded (or whose kind is quarantined, which
+    /// leaves it out of the loaded sources) runs no program; a new size makes its
+    /// feedback layers again, so it starts over from transparent.
+    #[test]
+    fn a_shader_source_runs_nothing_unloaded_and_starts_over_at_a_new_size() {
+        use crate::effect_packs::test_pack::{self, Temp};
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let temp = Temp::new("chain-source-size");
+        let source = test_pack::source(&temp);
+        let loaded = FilterAssets::new().with_sources(Arc::new(
+            [(test_pack::SOURCE_KIND.to_owned(), source.clone())]
+                .into_iter()
+                .collect(),
+        ));
+        let mut graph = graph(&[]).with_kinds([source.descriptor()]);
+        let glow = |settings: Settings| Edit::SourceCreate {
+            source_id: SourceId::new("glow"),
+            name: "Glow".into(),
+            kind: SourceKind::Builtin {
+                kind: test_pack::SOURCE_KIND.into(),
+            },
+            settings,
+            duplicated_from: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                glow(Settings::default()),
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("main"),
+                    item_id: ItemId::new("glow"),
+                    source_id: SourceId::new("glow"),
+                    transform: None,
+                    geometry: None,
+                    opacity: None,
+                    blend: None,
+                },
+            ],
+        );
+        let unloaded = shot_with(&graph, &FilterAssets::default());
+        assert!(
+            unloaded.pack_kinds().is_empty(),
+            "no program while unloaded"
+        );
+        assert_eq!(unloaded.chain_count(), 0);
+
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let shot = shot_with(&graph, &loaded);
+        let mut grey = |shot: &Shot| draw(&mut compositor, (&mut cache, &mut chains), shot, 1)[0];
+        let (first, second) = (grey(&shot), grey(&shot));
+        assert!(first < second, "{first} {second}");
+        apply(
+            &mut graph,
+            vec![Edit::SourceSetSettings {
+                source_id: SourceId::new("glow"),
+                patch: [("width", serde_json::json!(32))].into_iter().collect(),
+            }],
+        );
+        let wider = shot_with(&graph, &loaded);
+        assert_eq!(grey(&wider), first, "new layers start transparent");
+        assert_eq!(chains.len(), 1, "the program took the size in place");
     }
 
     /// A shader source that hears audio measures its scope each frame it draws: its
