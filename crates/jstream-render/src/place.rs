@@ -144,6 +144,13 @@ pub(crate) fn shape_seen(
     match placement {
         Placement::Legacy(transform) => legacy(source_width, source_height, transform, crop),
         Placement::Geometry(geometry) => boxed(source_width, source_height, geometry, crop, view),
+        Placement::Layer(_) => {
+            let (w, h) = (source_width as f32, source_height as f32);
+            Ok(Some(Shape::flat(
+                [[0.0, 0.0], [w, 0.0], [w, h], [0.0, h]],
+                [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            )))
+        }
     }
 }
 
@@ -152,7 +159,7 @@ pub(crate) fn shape_seen(
 /// if at the canvas centre.
 pub(crate) fn depth(view: &CameraView, placement: Placement) -> f64 {
     match placement {
-        Placement::Geometry(geometry) => view.depth_of(geometry),
+        Placement::Geometry(geometry) | Placement::Layer(geometry) => view.depth_of(geometry),
         Placement::Legacy(_) => view.canvas_depth(),
     }
 }

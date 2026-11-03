@@ -163,9 +163,9 @@ source, so anything JStream can show can be on a model:
 
 **6. Drawing.** For each model item, the compositor:
 1. draws the model through the camera (or the item's viewer) with its own depth test,
-   cleared per model, into a transparent layer the size of the canvas, scissored to the
-   model's projected bounds. Opaque and masked triangles draw first, then blended
-   triangles far to near by triangle-centre depth, as glTF viewers do;
+   cleared per model, into a transparent layer the size of the canvas. Opaque and masked
+   primitives draw first, then blended ones far to near by the depth of their centres,
+   testing depth without writing it, as glTF viewers commonly do;
 2. runs the source's video filters, then the item's effects, over that layer, in canvas
    pixels (a model has no flat box to run them in, so its effects always run over the
    canvas);

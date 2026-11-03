@@ -1,15 +1,17 @@
 //! Media value types shared by capture, render, audio, encode and output code: timestamps
-//! and time bases, pixel formats, CPU video frames, audio buffers and encoded packets.
+//! and time bases, pixel formats, CPU video frames, audio buffers, encoded packets and 3D
+//! models.
 //! Layer 0: plain data and invariants only, with no I/O, GPU or platform code, and no
 //! dependencies on other JStream crates.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-media/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-media/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md, docs/adr/0107-3d-models.md
 
 #![forbid(unsafe_code)]
 
 mod audio;
 mod color;
 mod error;
+pub mod model;
 mod packet;
 mod pixel;
 mod time;

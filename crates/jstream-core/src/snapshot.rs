@@ -359,6 +359,9 @@ impl Boxed {
     fn geometry_of(&self, placement: Placement, crop: Crop) -> Option<ItemGeometry> {
         match placement {
             Placement::Geometry(geometry) => Some(geometry),
+            // A model's layer covers the canvas; its box is the model's pose, not where
+            // the layer's pixels are, so it has none to pair by.
+            Placement::Layer(_) => None,
             Placement::Legacy(transform) => {
                 let [width, height] = self.input?;
                 let transform = jstream_protocol::ItemTransform {
@@ -2461,6 +2464,8 @@ impl Shot {
 fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
     let scale = match placement {
         Placement::Legacy(transform) => transform.scale[0].abs().max(transform.scale[1].abs()),
+        // Drawn at its own size.
+        Placement::Layer(_) => 1.0,
         Placement::Geometry(geometry) => {
             let cut = ProtocolCrop {
                 left: crop.left,
