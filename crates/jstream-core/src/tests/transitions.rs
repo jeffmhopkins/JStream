@@ -788,6 +788,14 @@ fn a_stingers_items_keep_their_scenes_camera() {
         Some(vec![Some(a), Some(b), Some(b)]),
         "a 3D stinger scene through its own camera"
     );
+    // A stinger that cuts another short sorts its items apart from the held ones.
+    clock.advance(100_000);
+    switch(&control, "a", Some("sting")).expect("cut it short");
+    let runs = hub.load().shot().track_depth_runs().expect("a stinger");
+    assert!(
+        runs.contains(&1) && runs.last() == Some(&2),
+        "held c1 in run 1, the new stinger's c1 in run 2: {runs:?}"
+    );
 }
 
 /// A Move cut short by another Move keeps moving one camera, from where it was, for

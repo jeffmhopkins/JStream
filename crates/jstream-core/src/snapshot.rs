@@ -512,6 +512,9 @@ struct TrackCameras {
     /// Whether it is a Move, whose tracks share one moving camera; a Fade's leaving
     /// tracks keep the camera they leave from.
     pairs: bool,
+    /// The depth run a stinger's items sort in: one past every run held from the
+    /// screen, so a stinger's never sort with those of one it cut short.
+    overlay_run: u32,
 }
 
 impl TrackCameras {
@@ -543,6 +546,19 @@ impl TrackCameras {
                 Some(lerp_camera(&from, &to, k))
             }
             _ => to,
+        }
+    }
+}
+
+impl TrackCameras {
+    /// The depth run `track` sorts in (ADR-0094 decision 4): a stinger's items one of
+    /// their own (`overlay_run`), kept when a switch takes them from the screen, so they
+    /// stay over the scenes under them through an equal camera; everything else `0`.
+    fn depth_run(&self, track: &Track, seen: Seen) -> u32 {
+        match seen {
+            Seen::Held { depth_run, .. } => depth_run,
+            Seen::AsPlanned if matches!(track, Track::Through { .. }) => self.overlay_run,
+            Seen::AsPlanned => 0,
         }
     }
 }
@@ -763,7 +779,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, seen)| depth_run(track, *seen))
+                .map(|(_, track, seen)| t.cameras.depth_run(track, *seen))
                 .collect()
         })
     }
@@ -1247,7 +1263,7 @@ pub(crate) fn on_screen(
     planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
         Seen::Held {
             camera: cameras.camera(track, visual.seen, elapsed_ms),
-            depth_run: depth_run(track, visual.seen),
+            depth_run: cameras.depth_run(track, visual.seen),
         }
     })
 }
@@ -1462,6 +1478,17 @@ impl<'a> Planner<'a, '_> {
                 easing: running.run.easing,
             },
             pairs: running.run.pairs,
+            overlay_run: match &running.from {
+                From::OnScreen(visuals) => visuals
+                    .iter()
+                    .filter_map(|visual| match visual.seen {
+                        Seen::Held { depth_run, .. } => Some(depth_run),
+                        Seen::AsPlanned => None,
+                    })
+                    .max()
+                    .map_or(1, |run| run.saturating_add(1)),
+                From::Scene(_) => 1,
+            },
         }
     }
 
@@ -4063,19 +4090,9 @@ fn fill_tracks<'a>(
             visible: true,
             camera: transition.cameras.camera(track, *seen, elapsed),
             // A stinger's items sort on their own, over the scenes under them.
-            depth_run: depth_run(track, *seen),
+            depth_run: transition.cameras.depth_run(track, *seen),
         })
     }));
-}
-
-/// The depth run a transition's track sorts in (ADR-0094 decision 4): a stinger's items
-/// one of their own, kept when a switch takes them from the screen, so they stay over
-/// the scenes under them through an equal camera; everything else `0`.
-fn depth_run(track: &Track, seen: Seen) -> u32 {
-    match seen {
-        Seen::Held { depth_run, .. } => depth_run,
-        Seen::AsPlanned => u32::from(matches!(track, Track::Through { .. })),
-    }
 }
 
 /// `image`, of size `from`, fitted inside `into`: scaled by the same factor both ways
@@ -4707,6 +4724,7 @@ pub(crate) mod tests {
             overlay: None,
             timing,
             pairs: true,
+            overlay_run: 1,
         };
         let planned = Seen::AsPlanned;
         let halfway = cameras.camera(&leaving, planned, 500.0).expect("3D");
@@ -4834,6 +4852,7 @@ pub(crate) mod tests {
                     easing: jstream_protocol::Easing::Linear,
                 },
                 pairs: false,
+                overlay_run: 1,
             },
             end_ms: 1000.0,
         };

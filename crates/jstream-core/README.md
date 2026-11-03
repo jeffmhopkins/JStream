@@ -945,8 +945,9 @@ between two 3D scenes interpolates the camera with the Move's own timing
 a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
 keeps each side's own camera on its items. A stinger's items are seen through their
 own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
-`depth_run` of their own, so they sort among themselves and stay over the scenes
-under them. A switch that cuts a transition short takes what is on screen with the
+`depth_run` of their own (one past every run held from the screen,
+`TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
+under them and over a stinger they cut short. A switch that cuts a transition short takes what is on screen with the
 camera each item was seen through and the depth run it sorted in (`Seen::Held`): it
 leaves through that camera, a stinger's items still over what they covered, and only a
 screen seen through one camera (a Move cut short) moves it toward the new scene's, for
