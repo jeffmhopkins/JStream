@@ -128,12 +128,13 @@ order from binding 4, a texture and four functions of its name: `n(uv)`, `n_wrap
 columns. A pass reads only what it lists. The contract is the effect's, with the header's
 own declarations allowed, and an error names the file it is in (the `common` file or the
 pass's) with that file's line. Inputs map to `ProgramInput`s: a pass, an image (in name
-order), or a slot: the `scene` parameters in declaration order, then the audio.
+order), a slot (the `scene` parameters in declaration order), or `audio`, render's audio
+data image.
 `ShaderSource` implements render's `ExternalProgram`; `video_filter(settings)` makes the
 filter that draws it, `size` reads `width` and `height` (a default for a value out of
-range), `scene_params` and `audio_slot` say which slot is which, and `migrate` is an
+range), `scene_params` says which slot is which, `hears` whether it reads audio, and `migrate` is an
 effect's. The watcher stamps a source's `common`, pass and image files too, and reports a
-source kind changed when its descriptor, WGSL or images do. Tests cover the descriptor,
+source kind changed when its descriptor, passes (WGSL, scale, inputs) or images do. Tests cover the descriptor,
 the manifest rules, errors naming their file and line, a bad image, the watcher, and a
 two-pass source with feedback, an image and a scene slot drawn on the test adapter.
 

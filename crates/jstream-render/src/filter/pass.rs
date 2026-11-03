@@ -615,6 +615,33 @@ impl Ctx<'_> {
         image::layer(&self.maker, width, height)
     }
 
+    /// Records clearing `target`, a layer, to transparent.
+    pub(crate) fn clear(&mut self, target: &Image) -> Result<(), RenderError> {
+        let Some(view) = target.target() else {
+            return Err(RenderError::Invalid {
+                what: "clear target",
+                detail: "the target is not a layer".into(),
+            });
+        };
+        drop(self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-clear"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        }));
+        Ok(())
+    }
+
     /// Records one fullscreen draw of `draw.shader` into `draw.target`.
     pub(crate) fn draw(&mut self, draw: &Draw<'_>) -> Result<(), RenderError> {
         self.draw_ref(

@@ -32,7 +32,7 @@ use crate::pack::{MAX_SHADER_BYTES, read, real_path};
 use crate::shader::{self, Layout};
 
 /// How many spectrum bands, and waveform samples, the `audio` input holds: its width.
-pub const AUDIO_BANDS: usize = 64;
+pub const AUDIO_BANDS: usize = jstream_render::PROGRAM_AUDIO_BANDS;
 
 /// The largest image file a source reads.
 pub const MAX_IMAGE_BYTES: u64 = 4 * 1024 * 1024;
@@ -121,7 +121,6 @@ impl ShaderSource {
             .enumerate()
             .map(|(n, p)| (p.id.as_str(), n))
             .collect();
-        let audio_slot = scenes.len();
         let mut passes = Vec::with_capacity(section.passes.len());
         for pass in &section.passes {
             let (path, text) = load_text(&pass.shader, at(format!("pass.{}.shader", pass.id)))?;
@@ -136,7 +135,7 @@ impl ShaderSource {
                 } else if let Some(k) = scenes.iter().position(|s| s == name) {
                     ProgramInput::Slot(k)
                 } else if name == AUDIO_INPUT && section.audio {
-                    ProgramInput::Slot(audio_slot)
+                    ProgramInput::Audio
                 } else {
                     // The manifest check names every input.
                     return Err(PackError::Manifest {
@@ -213,10 +212,10 @@ impl ShaderSource {
         &self.scenes
     }
 
-    /// The slot the audio data image fills, for a source that hears audio: the one after
-    /// the scenes'.
-    pub fn audio_slot(&self) -> Option<usize> {
-        self.audio.then_some(self.scenes.len())
+    /// Whether it hears audio (`audio = true`): it then has the `audio` and
+    /// `audio_source` settings, and a pass may read [`ProgramInput::Audio`].
+    pub fn hears(&self) -> bool {
+        self.audio
     }
 
     /// Where each parameter with a uniform form sits in the `Params` uniform.
