@@ -28,7 +28,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 |---|---|---|
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
-| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start; the macOS tester launcher puts it on the clipboard for two minutes (see [Server](#server)) |
+| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts; the macOS tester launcher puts it on the clipboard for two minutes (see [Server](#server)) |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
@@ -91,6 +91,7 @@ covers = [
   "crates/jstream-server/src/session.rs",
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
+  "crates/jstream-server/src/token_file.rs",
 ]
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
 -->
@@ -112,6 +113,10 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
+  The desktop app serves only its window, on an OS-picked port with a token kept in
+  memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
+  (4455 by default), turns MCP on and takes its token from a token file with the
+  daemon's checks, which both hosts share (`jstream_server::token_file`).
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
   refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
   connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
@@ -122,7 +127,7 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
+  On Windows (#548) the daemon's token (and the desktop app's, with `--mcp`), devices and log files, the desktop app's log file
   (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
   file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
@@ -380,7 +385,7 @@ injection), and so using its full access against the user.
 
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
-MCP off. Tool arguments and results are not logged; the audit log records who changed
+MCP off unless started with `--mcp`, which serves it behind the same token and checks. Tool arguments and results are not logged; the audit log records who changed
 what, without arguments. Agents can read the last 100 entries with `activity.list`,
 each with a sentence that names objects and gives values but never settings, targets
 or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.
