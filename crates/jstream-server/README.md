@@ -64,6 +64,10 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
   connection and sent as WebSocket binary messages, dropping up to the next keyframe
   when the client reads slowly.
+- **Token file** (`token_file.rs`): the control token file the hosts that let outside
+  clients in keep (the daemon, and the desktop app with `--mcp`): `load_or_create`
+  reuses a user-only file's token or creates the file, user-only, with a new random one,
+  and `device_file` names the devices file beside it (ADR-0006).
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
 Not here yet: a TLS listener ([Open questions](#design)). `ServerConfig::tls` says
