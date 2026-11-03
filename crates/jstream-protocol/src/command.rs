@@ -14,7 +14,7 @@ use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
-use crate::geometry::ItemGeometry;
+use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
@@ -136,8 +136,9 @@ pub enum Edit {
     },
     /// Deletes a scene and its items; the sources they placed stay. Rejected with
     /// `invalid_argument` while a `scene` source or a video mix shows it, or any source's
-    /// settings refer to it: delete those sources, point those mixes elsewhere, or clear
-    /// those references, first (in the same batch if needed). Hotkey bindings whose
+    /// or transition preset's settings refer to it (a stinger's `scene`): delete those
+    /// sources, point those mixes elsewhere, or clear those references, first (in the
+    /// same batch if needed). Hotkey bindings whose
     /// action names the scene are not blockers: they are removed with it (ADR-0040 §3).
     /// A scene with keyframe scenes is refused the same way, the variants listed as its
     /// blockers; delete them first. Inverse: `scene.create` with its role (omitted for
@@ -745,6 +746,22 @@ pub enum Edit {
         #[serde(flatten)]
         options: SceneOptions,
     },
+    /// Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a
+    /// 3D scene: its items are placed in one 3D space by their geometry and seen through
+    /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
+    /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
+    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
+    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
+    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// `scene.set_camera` with the previous camera, then each removed override.
+    #[serde(rename = "scene.set_camera")]
+    SceneSetCamera {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new camera. Omitted removes it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        camera: Option<SceneCamera>,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -1090,6 +1107,7 @@ impl Edit {
             Edit::SceneSetFolder { .. } => "scene.set_folder",
             Edit::SceneSetMeta { .. } => "scene.set_meta",
             Edit::SceneSetOptions { .. } => "scene.set_options",
+            Edit::SceneSetCamera { .. } => "scene.set_camera",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",

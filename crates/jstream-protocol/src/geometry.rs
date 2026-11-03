@@ -11,8 +11,12 @@ use crate::finite::Finite32;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod camera;
 mod drawn;
 
+pub use camera::{
+    CameraView, DEFAULT_FOV_DEG, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, SceneCamera, Vec3,
+};
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
 
 /// How the cropped source fills the item's box.
@@ -181,6 +185,12 @@ pub enum GeometryError {
     /// is past [`MAX_DRAWN_PX`](drawn::MAX_DRAWN_PX) ([`ItemGeometry::check_drawable`]).
     #[error("the item draws too far from the canvas")]
     TooFar,
+    /// A scene camera's `fov_deg` is outside 1 to 170 degrees (ADR-0094).
+    #[error("fov_deg must be from 1 to 170")]
+    FieldOfView,
+    /// A scene camera's `position` is closer than 0.001 px to its `target` (ADR-0094).
+    #[error("the camera's position must differ from its target")]
+    CameraAtTarget,
 }
 
 /// A point in canvas pixels, x right and y down.

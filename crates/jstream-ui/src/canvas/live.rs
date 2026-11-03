@@ -8,7 +8,7 @@
 
 use super::model::{self, CanvasError};
 use crate::app::SessionContext;
-use jstream_control::protocol::{Crop, GestureId, ItemGeometry, ItemId, SceneId};
+use jstream_control::protocol::{Crop, GestureId, ItemGeometry, ItemId, SceneCamera, SceneId};
 use leptos::task::spawn_local;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,6 +34,8 @@ struct State {
     scene_id: SceneId,
     /// The newest values not yet sent.
     latest: Option<Values>,
+    /// The newest camera not yet sent, for an orbit or dolly (ADR-0094).
+    latest_camera: Option<SceneCamera>,
     end: Option<End>,
     /// Whether a call is in flight.
     busy: bool,
@@ -63,6 +65,7 @@ impl Live {
                 gesture,
                 scene_id,
                 latest: None,
+                latest_camera: None,
                 end: None,
                 busy: false,
                 opened: false,
@@ -79,6 +82,17 @@ impl Live {
             return;
         }
         state.latest = Some((placed, crops));
+        drop(state);
+        self.wake();
+    }
+
+    /// Shows the scene through `camera` on output.
+    pub fn show_camera(&self, camera: SceneCamera) {
+        let mut state = self.state.borrow_mut();
+        if state.end.is_some() {
+            return;
+        }
+        state.latest_camera = Some(camera);
         drop(state);
         self.wake();
     }
@@ -117,16 +131,17 @@ impl Live {
     /// Sends the latest values, then the end, one call at a time.
     async fn pump(self) {
         loop {
-            let (gesture, scene_id, latest, end, opened) = {
+            let (gesture, scene_id, latest, camera, end, opened) = {
                 let mut state = self.state.borrow_mut();
                 let latest = state.latest.take();
+                let camera = state.latest_camera.take();
                 // The end waits until no values are left before it.
-                let end = if latest.is_none() {
+                let end = if latest.is_none() && camera.is_none() {
                     state.end.take()
                 } else {
                     None
                 };
-                if latest.is_none() && end.is_none() {
+                if latest.is_none() && camera.is_none() && end.is_none() {
                     state.busy = false;
                     return;
                 }
@@ -134,6 +149,7 @@ impl Live {
                     state.gesture.clone(),
                     state.scene_id.clone(),
                     latest,
+                    camera,
                     end,
                     state.opened,
                 )
@@ -142,8 +158,11 @@ impl Live {
                 self.state.borrow_mut().busy = false;
                 return;
             };
-            if let Some((placed, crops)) = latest {
-                match model::live_set(&*open.control, gesture, scene_id, placed, crops).await {
+            if latest.is_some() || camera.is_some() {
+                let (placed, crops) = latest.unwrap_or_default();
+                match model::live_set(&*open.control, gesture, scene_id, placed, crops, camera)
+                    .await
+                {
                     Ok(()) => self.state.borrow_mut().opened = true,
                     Err(error) => (self.report)(&error),
                 }
@@ -159,7 +178,9 @@ impl Live {
                 _ => {}
             }
             // Ended: the busy flag stays set, so nothing is sent after the end.
-            self.state.borrow_mut().latest = None;
+            let mut state = self.state.borrow_mut();
+            state.latest = None;
+            state.latest_camera = None;
             return;
         }
     }

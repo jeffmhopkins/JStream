@@ -24,8 +24,9 @@ use std::sync::Arc;
 use jstream_graph::Graph;
 use jstream_media::MediaTime;
 use jstream_protocol::{
-    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, SceneId,
-    Settings, SourceId, TransitionEffect, TransitionPresetId, TransitionStarted,
+    Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, Reference,
+    STINGER, SceneCamera, SceneId, Settings, SourceId, TransitionEffect, TransitionPresetId,
+    TransitionStarted,
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
@@ -40,6 +41,18 @@ pub(crate) struct Run {
     pub(crate) easing: Easing,
     pub(crate) unmatched: TransitionEffect,
     pub(crate) stagger_ms: u32,
+    /// For a `stinger`, what it plays over the switch; `None` for every other kind.
+    pub(crate) stinger: Option<Stinger>,
+}
+
+/// A `stinger` transition's settings, resolved.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Stinger {
+    /// The scene drawn over the switch, if the preset names one.
+    pub(crate) scene: Option<SceneId>,
+    /// When the picture under it cuts to the new scene, in milliseconds from the start:
+    /// at most the duration.
+    pub(crate) cut_ms: u32,
 }
 
 /// The preset a switch from `from` to `to` uses (ADR-0029 §2), and what it runs: `None`
@@ -72,8 +85,11 @@ pub(crate) fn resolve(
     };
     // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
     let pairs = match preset.kind() {
-        MOVE => true,
-        FADE => false,
+        // A Move between a 3D scene and a 2D one has no one space to move in, so it
+        // fades (ADR-0094 decision 7).
+        MOVE => from
+            .is_none_or(|from| camera_of(graph, from).is_some() == camera_of(graph, to).is_some()),
+        FADE | STINGER => false,
         _ => return Ok((id, None)),
     };
     if preset.duration_ms() == 0 {
@@ -85,6 +101,21 @@ pub(crate) fn resolve(
         .and_then(|value| value.as_u64())
         .and_then(|ms| u32::try_from(ms).ok())
         .unwrap_or(0);
+    let stinger = (preset.kind() == STINGER).then(|| Stinger {
+        scene: settings
+            .get("scene")
+            .and_then(Reference::from_value)
+            .and_then(|reference| match reference {
+                Reference::Scene { scene_id } => Some(scene_id),
+                _ => None,
+            }),
+        cut_ms: settings
+            .get("cut_ms")
+            .and_then(|value| value.as_u64())
+            .and_then(|ms| u32::try_from(ms).ok())
+            .unwrap_or(0)
+            .min(preset.duration_ms()),
+    });
     let run = Run {
         preset_id: id.clone(),
         pairs,
@@ -92,6 +123,7 @@ pub(crate) fn resolve(
         easing: preset.easing(),
         unmatched: TransitionEffect::from_setting(settings.get("unmatched")),
         stagger_ms,
+        stinger,
     };
     Ok((id, Some(run)))
 }
@@ -115,6 +147,42 @@ pub(crate) struct Visual {
     /// For a group that moves as one item within a family, its children's tracks
     /// inside its layer (ADR-0049 §3); `None` for everything else.
     pub(crate) inside: Option<Arc<Inside>>,
+    /// The camera it is seen through: a planned scene's item takes its transition's,
+    /// and what a switch takes from the screen keeps the one it was seen through.
+    pub(crate) seen: Seen,
+}
+
+/// The camera a [`Visual`] is seen through (ADR-0094 decision 7).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) enum Seen {
+    /// The camera its transition gives its track.
+    #[default]
+    AsPlanned,
+    /// Taken from the screen mid-transition: the camera it was seen through then
+    /// (`None` for 2D) and the depth run it was sorted in, both of which it keeps as it
+    /// leaves, so a stinger's items stay over the scenes they covered.
+    Held {
+        camera: Option<SceneCamera>,
+        depth_run: u32,
+    },
+}
+
+/// The one camera every visual taken from the screen was seen through, or `Err` when
+/// they differ (a Fade or a stinger between scenes with different cameras), so the
+/// switch that takes them can't move one camera. `Ok(None)` for 2D, or nothing shown.
+pub(crate) fn shared_camera(visuals: &[Visual]) -> Result<Option<SceneCamera>, ()> {
+    let mut held = visuals.iter().map(|visual| match visual.seen {
+        Seen::Held { camera, .. } => camera,
+        Seen::AsPlanned => None,
+    });
+    let Some(first) = held.next() else {
+        return Ok(None);
+    };
+    if held.all(|camera| camera == first) {
+        Ok(first)
+    } else {
+        Err(())
+    }
 }
 
 /// A group's children as a Move within a family draws them inside the group's layer
@@ -150,6 +218,9 @@ pub(crate) struct Running {
     /// Whether it switches between members of one family, so `move` pairs by item
     /// (ADR-0049 §3).
     pub(crate) by_item: bool,
+    /// The camera it moves from (ADR-0094 decision 7): the scene it leaves's, or the one
+    /// on screen when it cut a transition short. `None` from a 2D scene.
+    pub(crate) from_camera: Option<SceneCamera>,
 }
 
 impl Running {
@@ -157,6 +228,15 @@ impl Running {
     pub(crate) fn elapsed_ms(&self, at: MediaTime) -> f32 {
         elapsed_ms(self.start, at)
     }
+}
+
+/// The camera scene `id` draws through (ADR-0094): its own, or a keyframe scene's
+/// parent's. `None` for a 2D scene or a scene that doesn't exist.
+pub(crate) fn camera_of(graph: &Graph, id: &SceneId) -> Option<SceneCamera> {
+    let state = graph.state();
+    state
+        .scene(id)
+        .and_then(|scene| state.effective_camera(scene))
 }
 
 /// Milliseconds from `start` to `at`, on the same clock.
@@ -178,11 +258,22 @@ impl Planned {
     /// the placement it came from. A group's children inside its layer are held where
     /// they are then.
     pub(crate) fn on_screen(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Vec<Visual> {
+        self.on_screen_seen(elapsed_ms, canvas, |visual, _| visual.seen)
+    }
+
+    /// [`Self::on_screen`], each visual seen through the camera `seen` gives its track.
+    pub(crate) fn on_screen_seen(
+        &self,
+        elapsed_ms: f32,
+        canvas: [f32; 2],
+        seen: impl Fn(&Visual, &Track) -> Seen,
+    ) -> Vec<Visual> {
         self.tracks
             .iter()
             .filter_map(|(visual, track)| {
                 track.sample(elapsed_ms, canvas).map(|at| Visual {
                     at,
+                    seen: seen(visual, track),
                     inside: visual.inside.as_ref().map(|inside| {
                         Arc::new(Inside {
                             planned: inside.planned.held(elapsed_ms, canvas),
@@ -246,6 +337,12 @@ pub(crate) fn plan(
     run: &Run,
     by_item: bool,
 ) -> (Planned, Vec<Option<usize>>) {
+    if let Some(stinger) = &run.stinger {
+        return (
+            cut_under(from, to, stinger.cut_ms as f32),
+            vec![None; from.len() + to.len()],
+        );
+    }
     let duration_ms = run.duration_ms as f32;
     let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
         delay_ms,
@@ -312,6 +409,71 @@ pub(crate) fn plan(
     (Planned { tracks, end_ms }, partners)
 }
 
+/// A stinger's picture under its overlay: `from` shows until `cut_ms` and `to` from
+/// then on, pairing nothing and with no effects.
+fn cut_under(from: &[Visual], to: &[Visual], cut_ms: f32) -> Planned {
+    let at_cut = Timing {
+        delay_ms: cut_ms,
+        duration_ms: 0.0,
+        easing: Easing::Linear,
+    };
+    let leaving = from.iter().map(|item| {
+        let track = Track::Disappear {
+            from: item.at,
+            effect: Effect::None,
+            timing: at_cut,
+        };
+        (item.clone(), track)
+    });
+    let arriving = to.iter().map(|item| {
+        let track = Track::Appear {
+            to: item.at,
+            effect: Effect::None,
+            timing: at_cut,
+        };
+        (item.clone(), track)
+    });
+    Planned {
+        tracks: leaving.chain(arriving).collect(),
+        end_ms: cut_ms,
+    }
+}
+
+/// A stinger's `overlay` (its scene's items, bottom first) as tracks drawn over the
+/// switch: each item comes in by its own appear effect after its delay plus
+/// `stagger_ms` × its index, and is in by `cut_ms`; it goes by its disappear effect
+/// after the cut, by the same delay, and is gone by `duration_ms`.
+pub(crate) fn through(
+    overlay: &[Visual],
+    run: &Run,
+    cut_ms: f32,
+) -> impl Iterator<Item = (Visual, Track)> {
+    let duration_ms = run.duration_ms as f32;
+    overlay.iter().enumerate().map(move |(index, item)| {
+        let delay_ms = item.settings.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
+        let easing = item.settings.easing.resolve(run.easing);
+        let enter = Timing {
+            delay_ms: delay_ms.min(cut_ms),
+            duration_ms: (cut_ms - delay_ms).max(0.0),
+            easing,
+        };
+        let leave_ms = (cut_ms + delay_ms).min(duration_ms);
+        let leave = Timing {
+            delay_ms: leave_ms,
+            duration_ms: duration_ms - leave_ms,
+            easing,
+        };
+        let track = Track::Through {
+            at: item.at,
+            appear: effect(item.settings.appear, run.unmatched),
+            enter,
+            disappear: effect(item.settings.disappear, run.unmatched),
+            leave,
+        };
+        (item.clone(), track)
+    })
+}
+
 /// `track` following `timing` instead of its own: a group's child moves with the group
 /// item's progress (ADR-0049 §3).
 pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
@@ -330,6 +492,8 @@ pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
             effect,
             timing,
         },
+        // A stinger's overlay keeps its own: it never moves inside a group.
+        through @ Track::Through { .. } => through,
     }
 }
 
@@ -352,6 +516,63 @@ mod tests {
     };
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
+
+    /// A Move between a 3D scene and a 2D one runs as a Fade; between two 3D scenes, or
+    /// two 2D ones, it moves (ADR-0094 decision 7).
+    #[test]
+    fn a_move_between_3d_and_2d_fades() {
+        use jstream_graph::Graph;
+        use jstream_protocol::{Canvas, Edit, SceneCamera, SceneId, Settings};
+
+        let scene = |id: &str| Edit::SceneCreate {
+            scene_id: SceneId::new(id),
+            name: id.into(),
+            role: None,
+        };
+        let camera = |id: &str| Edit::SceneSetCamera {
+            scene_id: SceneId::new(id),
+            camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+        };
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    scene("flat"),
+                    scene("flat2"),
+                    scene("set"),
+                    scene("set2"),
+                    camera("set"),
+                    camera("set2"),
+                    Edit::TransitionCreate {
+                        preset_id: TransitionPresetId::new("glide"),
+                        name: "Glide".into(),
+                        kind: "move".into(),
+                        duration_ms: 600,
+                        easing: Easing::EaseOut,
+                        settings: Settings::new(),
+                    },
+                ],
+                None,
+            )
+            .expect("edits");
+        let pairs = |from: &str, to: &str| {
+            let named = TransitionPresetId::new("glide");
+            super::resolve(
+                &graph,
+                Some(&SceneId::new(from)),
+                &SceneId::new(to),
+                Some(&named),
+            )
+            .expect("resolves")
+            .1
+            .expect("runs")
+            .pairs
+        };
+        assert!(pairs("set", "set2"));
+        assert!(pairs("flat", "flat2"));
+        assert!(!pairs("set", "flat"));
+        assert!(!pairs("flat", "set"));
+    }
 
     fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
         super::plan(from, to, run, by_item).0
@@ -381,6 +602,7 @@ mod tests {
             settings: ItemTransition::default(),
             effects: Vec::new(),
             inside: None,
+            seen: super::Seen::AsPlanned,
         }
     }
 
@@ -392,6 +614,7 @@ mod tests {
             easing: Easing::Linear,
             unmatched: TransitionEffect::Scale,
             stagger_ms: 100,
+            stinger: None,
         }
     }
 
@@ -404,6 +627,7 @@ mod tests {
                     Track::Pair { .. } => "pair",
                     Track::Appear { .. } => "appear",
                     Track::Disappear { .. } => "disappear",
+                    Track::Through { .. } => "through",
                 };
                 (visual.source_id.to_string(), kind)
             })

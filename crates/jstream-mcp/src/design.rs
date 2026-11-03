@@ -6,8 +6,11 @@
 //! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` and `timer` kinds, and how to
-//! group, scroll and animate. Numbers are for a 1920×1080 canvas and scale with it.
+//! settings that make graphics look finished, the `shape` and `timer` kinds, how to
+//! group, scroll and animate, how to use 3D placement and blend modes, how to build a 3D
+//! set with a scene camera (ADR-0094), which transition to use (including a `stinger`),
+//! and when to build a graphic as HTML in a `browser` source. Numbers are for a
+//! 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -70,6 +73,56 @@ fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 12
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. \
+Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
+interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
+and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
+from `tilt_deg` -90 to 0, or a card that turns in from `turn_deg` 70, reads as a \
+designed move; keep angles under 90 and pair them with opacity. `item.set_blend` sets \
+how an item composites: `screen` or `additive` for light leaks, glints and glows over \
+the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
+items stay `normal`. \
+3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
+`roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
+y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
+turn it about its centre; its own `perspective_px` is ignored. The canvas is the plane \
+z = 0 seen from straight in front: the framing camera looks at the canvas centre \
+(`target` x 960, y 540, z 0 at 1080p) from `position` z = (height / 2) / tan(fov / 2), \
+about 1304 at the default 45°, and through it a flat item lands exactly on its 2D \
+box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
+low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
+the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
+variant) and a `move` transition, which glides the camera with the items. Put \
+graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
+source of the 3D set. \
+Transitions between scenes: `fade` for calm changes, `move` when the scenes share \
+items, and `stinger` for a branded wipe. A stinger preset (`transition.create`, kind \
+`stinger`, about 800-1200 ms) names a `scene` it plays over the switch and a `cut_ms` \
+(about half the duration) when the picture under it cuts. Build that scene like any \
+graphic: full-height bars, panels or a logo plate that together cover the canvas at \
+the cut. Each of its items comes in by its own `item.set_transition` `appear` effect \
+and `delay_ms`, holds over the cut and goes by its `disappear` effect after it, so \
+`slide` panels close in from the nearest edges and open out again (staggered by \
+40-80 ms with `delay_ms`, or by stacking order with the preset's `stagger_ms`), and \
+`scale` plates pop in and out; for a one-way sweep or anything more choreographed, use \
+an HTML stinger. Make sure the bars cover the whole canvas at `cut_ms`, check \
+with `video.snapshot` mid-switch, and make it the scenes' `transition_in` \
+(`scene.set_transitions`) or name it in the switch. An HTML stinger is a `browser` \
+source with `restart_on_show` on, so it plays from the start each time; the reload \
+takes a page load, and until the new page paints the stinger shows the last frame \
+of its previous run, so start and end its animation transparent, keep it light \
+(inline, no remote assets) and leave a few hundred ms before `cut_ms`. \
+HTML graphics: for a layout the built-in kinds can't draw (rich type, icons, tables, \
+SVG, CSS gradients, blend modes or 3D transforms, choreographed CSS animation), make a \
+`browser` source and give it the whole page in `html`, its CSS and scripts inline. Set \
+its `width` and `height` to the canvas and place its item full-frame, or to the \
+graphic's bounds; the default `css` makes the page transparent, so draw only the \
+graphic and leave `body` without a background. Fonts and images can come from https \
+URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Changing `html` \
+reloads the page, which replays the entrance and blanks it for a moment, so put text \
+that changes during a show in a `text` source over it. If creating the source fails \
+because no browser is available on this system, build the graphic from the built-in \
+kinds instead. \
 Check your work: after each step take a `video.snapshot` and look at it critically \
 (alignment, overlap, legibility, crowding, anything off the safe area) and fix what's \
 wrong before reporting. When a scene is on program, build changes on another scene or \

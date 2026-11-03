@@ -39,7 +39,9 @@ pub use audio::{MAX_CHUNK_FRAMES, PageAudio, PageAudioStream};
 pub use cef::{CefBackend, CefConfig};
 #[cfg(all(windows, feature = "helper"))]
 pub use helper::run_helper;
-pub use page::{DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, PageLocation, PageSpec, css_script};
+pub use page::{
+    DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec, css_script,
+};
 pub use request::{RequestPolicy, Verdict};
 
 use jstream_platform::{GpuContext, GpuFrame};
@@ -83,6 +85,11 @@ pub trait BrowserPage: Send {
     /// Replaces the page's custom CSS ([`css_script`]): it applies now if the page has
     /// loaded, and on every load after.
     fn set_css(&mut self, css: &str);
+
+    /// Loads the page again from its location, as if it had just opened: its scripts and
+    /// CSS animations start over. Its frames keep showing the old page until the new
+    /// one paints.
+    fn reload(&mut self);
 
     /// The page's audio, which the engine records into a mixer input with
     /// [`PageAudio::open`]. It is silent until the page plays something.

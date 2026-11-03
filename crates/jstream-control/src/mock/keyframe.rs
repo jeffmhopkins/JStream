@@ -323,6 +323,7 @@ impl Collection {
             folder: None,
             meta: Default::default(),
             options: Default::default(),
+            camera: None,
             filters: Default::default(),
             variant_of: Some(variant_of.clone()),
             overrides: Overrides::new(),

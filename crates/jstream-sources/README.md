@@ -128,7 +128,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   keeps one, calls both before it builds the sources an edit changed, and feeds every
   scope in it from its mixer thread. Its locks are taken only to find, make or drop a
   scope, never by the thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
-  `spectrum` draws, for the engine to feed.
+  `spectrum` draws, for the engine to feed. For a kind outside this crate with the same
+  `audio` and `audio_source` settings (a shader source that hears audio, ADR-0093),
+  `heard_source(settings)` names that source and `heard_scope(scopes, settings)` finds
+  the scope it hears.
+- `AudioMeter` (`scope/meter.rs`): what a shader source hears of a scope each frame, as
+  `Metered`: the window's RMS level and peak, an onset (1 when the level jumps above its
+  recent average, falling back), `METER_BANDS` (64) log-spaced bands from 20 Hz on the
+  `spectrum` kind's dB scale, and the window at 64 evenly spaced points. Levels and bands
+  rise at once and fall over a few frames. `AudioMeter::new` plans the FFT and allocates
+  its buffers, so `measure(scope, ms)` allocates nothing and takes no lock, and can run
+  on the engine's render thread. It hears silence once the ring has stood still for a
+  quarter second, as the scope sources do, and a non-finite sample as silence. Tests
+  measure a 1 kHz tone, then silence, and a window with NaN and infinite samples.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -142,7 +154,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   mix and light in linear light. The same settings always draw the same picture
   (integer hashes, no platform randomness), and `seed` picks another. Every setting but
   the size is live; an update draws the frame again on the sources thread, about a
-  third of a second for 1080p in a release build.
+  third of a second for 1080p in a release build. So the size is capped below other
+  kinds': at most 7680 a side and 7680 × 4320 pixels in all, either way round, which
+  `create` checks before drawing, naming the side to shrink. A backdrop is soft and
+  scales up with no visible loss.
 - `color`: one frame of the `color` setting (`#rrggbb` or `#rrggbbaa`, straight
   alpha), `width` by `height` pixels. The colour is live; a size change needs a new
   source. The frame must also fit the decoded-memory cap: 16384x16384 RGBA is exactly
@@ -350,16 +365,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   than a bin shows its nearest bin. Bars at least three pixels wide have a
   one-pixel gap.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
-  `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
-  opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
+  scripts inline; it wins over the URL when it isn't blank), or the `file` asset
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
   the engine updates live settings in place (core's README › Open items).
+  `restart_on_show` (live, default off) reloads the page each time the program shows it
+  again (`show`), so an HTML graphic or stinger plays its entrance every time.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
-  off, `jstream-browser`'s request policy refuses them (#347). `youtube_chat` never sets
+  off, `jstream-browser`'s request policy refuses them (#347), for a page given as
+  `html` too. `youtube_chat` never sets
   it. The page's picture is only on the GPU (`gpu_frame`), so
   `frame` is a transparent frame of the page's size, and the page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
@@ -521,7 +540,7 @@ alignment, padding, outline, live updates, font assets and limits, drawing at a
 density (twice the pixels for the same extent, kept across an update, clamped to
 `MAX_DENSITY`, lowered to a 4K canvas's pixels, halved to fit the limits, and a short
 line filling the canvas drawn at the 13x it is shown at, a bundled face picked live, letter spacing widening a line, and a shadow growing the frame but not the background), plus golden PNGs in `tests/data/text`, one of
-them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, and that a look changes live while a new size restarts it. `tests/shape.rs` draws a
+them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `tests/backdrop.rs` checks the backdrop's descriptor (all but the size live), that a backdrop is opaque and the same for the same settings, that the light and vignette brighten its pool and darken its edges, that the style and texture set how much it mottles, that a look changes live while a new size restarts it, and that the size is capped at 7680 a side and 7680 × 4320 pixels, a larger one refused naming the side to shrink (#1025). `tests/shape.rs` draws a
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and

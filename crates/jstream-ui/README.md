@@ -63,7 +63,8 @@ Contents ([Design](#design) explains the choices):
   the master stage's chains, and `chains` to read any owner's; a keyframe scene's items
   are its parent's with its overrides applied (effects included), `shown_items`, and the children of the
   groups in its tree likewise, `keyframe_children`, which `item_in` and the selection
-  count as its own), the program and preview
+  count as its own, and `camera_of`, the camera a 3D scene is seen through, a
+  keyframe's override or else its parent's), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
   in either mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
@@ -85,7 +86,8 @@ Contents ([Design](#design) explains the choices):
   layer moves, canvas arrangements, reference ↔ clone switches, grouping and
   ungrouping they send, tested natively), `clipboard.rs` (copy and paste, KB-05: the
   page's own clipboard of items or a scene, and the batches Paste, Paste scene and
-  Duplicate scene send, tested natively), `dialog.rs` (`Modal`,
+  Duplicate scene send; also the item menu's clipboards of one source's filters and one
+  item's box and crop, and the edits their pastes send, tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
@@ -94,7 +96,7 @@ Contents ([Design](#design) explains the choices):
   favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
   and the `LabelManager` context that opens it in the Scenes or Sources panel,
-  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, 3D, crop,
+  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
@@ -307,7 +309,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings and effects, or duplicates the copied scene. For one item of a source placed more than once, or a
+  with their placement settings and effects, or duplicates the copied scene. As OBS's
+  does, the item menu also copies the primary item's source's filters (`FilterClip`)
+  and pastes them onto each selected item's source, after its own or replacing them,
+  chain by chain, and copies the primary item's box and crop (`TransformClip`) onto each
+  selected item, each paste one batch. For one item of a source placed more than once, or a
   copy whose original exists, it switches between a reference and an independent clone
   (decision register D3): `source.duplicate` and `item.set_source` to the copy, or
   `item.set_source` back to the original and `source.delete` of a copy nothing else
@@ -477,7 +483,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, the Background color, Show in multiview and Include its audio when nested: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview, Include its audio when nested and the
+  camera: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
@@ -490,7 +497,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The background is a colour swatch, which keeps an alpha the text gives, beside the
   text, blank for none; a keyframe scene's shows its parent's and is disabled. The scene's hotkey is the first binding
   whose action switches to it. Defaults clears the overrides, the hotkey and the
-  background and checks both switches. Duplicate scene copies the scene's options with it. On the right, in the source Properties dialog's shell, are the
+  background and checks both switches, keeping the camera. Below the audio switch, a 3D
+  camera check gives the scene a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)),
+  starting from `SceneCamera::framing`, with its position, target, field of view, roll
+  and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
+  `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
+  an override that starts from the parent's camera, offered only while the parent has
+  one. A note warns when items already have depth or angles (`has_3d_items`).
+  Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
@@ -517,7 +531,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   added removed, one it removed added back where it was, a chain it reordered put back
   in order, each setting it sent and each switch it pressed put back, including those
   whose change the engine hasn't reported yet; what another client changed stays, but
-  for the settings of a filter the window also edited. An
+  for the settings of a filter the window also edited. An item's effects in a keyframe
+  that followed the item's own as the window opened (`following_keyframes`, ADR-0088)
+  are not put back filter by filter: the window's first edit there gave the keyframe its
+  own effects, so the batch clears that override (`item.clear_override` of `effects`),
+  which drops every edit made there meanwhile, and the keyframe follows the item again
+  (#1028). A keyframe whose override came from an add made just before the window
+  opened, which the window adopts, keeps it. An
   edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
@@ -756,14 +776,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the one the switch names, else the selected scene's transition in, else the default.
   The editor sends each change at once, as a `transition.update` naming only what
   changed (after a kind change, the patch is against the new kind's defaults, as the
-  engine applies it): Name, the kind as a Cut / Fade / Move segmented control, and for
+  engine applies it): Name, the kind as a Cut / Fade / Move / Stinger segmented control, and for
   every kind but a cut the duration, the kind's parameters and the easing. Under them a
   note counts the scenes that override with it ("Overrides: N in, M out."), and Make
   default and Delete show for every preset but the default. The engine's preset wins:
   each change it reports resets the fields to it. The kind's parameters come from
   `kind.list` and `kind.describe` (category `transition`), or the built-in `cut`,
-  `fade` and `move` when the engine can't list them; enum, boolean, number and text
-  parameters are editable, others read-only. A value the editor refuses is not sent.
+  `fade`, `move` and `stinger` when the engine can't list them; enum, boolean, number and text
+  parameters are editable, others read-only (so a stinger's scene is set over MCP or the
+  CLI for now). A value the editor refuses is not sent.
   Each scene's `transition_in` and `transition_out` can also be set in a folded table
   under the editor. The engine runs the transitions, `move` pairing and gliding items,
   and the program preview shows them, so the page draws none itself.
@@ -983,6 +1004,21 @@ browser, and `mod.rs` is the component.
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). Undo and redo (Ctrl+Z, Ctrl+Shift+Z and Ctrl+Y while the canvas has focus, and
   the Edit menu) are `history.undo` and `history.redo`; nothing left to undo is
   silent, and an `undo_conflict` is explained in the problem bar.
+- **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
+  scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
+  parent's, from `Collection::camera_of`) draws each outline through the camera with
+  `project_seen`, and a press hits the box the engine draws on top: the nearest along
+  the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
+  plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
+  the pointer, and nothing snaps; the boxes have no handles, and a marquee touches
+  each box's on-screen bounds. Alt-drag orbits the camera about its target (0.3° per
+  screen pixel, at most 85° above or below it) and Alt+Shift-drag dollies it
+  (`exp(0.005 × px)`, no closer than 10 px): the drag shows the camera on the overlay
+  and on output through the gesture's `live.set` of `scene.set_camera`, and the drop
+  commits one `scene.set_camera` with `ends_gesture`, so the orbit is one undo step.
+  The overlay keeps the dragged camera until the collection has it. In place of the
+  selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos

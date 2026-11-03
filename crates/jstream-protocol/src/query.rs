@@ -7,7 +7,7 @@ use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
-use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
+use crate::geometry::{Canvas, ItemGeometry, PlacementForm, SceneCamera};
 use crate::hotkey::HotkeyBinding;
 use crate::id::{
     BusId, DeviceId, FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
@@ -152,7 +152,8 @@ pub enum Query {
     /// `folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists
     /// those `blockers`). The plan removes the items that place a deleted source, deletes
     /// the `scene` sources that show a deleted scene (and their items), and sets settings
-    /// references to the target to `null`, keeping the sources that hold them. For a
+    /// references to the target to `null`, keeping the sources and transition presets that
+    /// hold them. For a
     /// folder it moves what sits in it up to the folder's parent; for a label it takes
     /// the label off the sources carrying it. It also lists the hotkey bindings the
     /// delete removes with what they name (ADR-0040 §3), which need no edit of their own.
@@ -837,6 +838,12 @@ pub struct SceneInfo {
     /// parses as none.
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
+    /// Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,
+    /// its override of its parent's camera; the keyframe shows the parent's camera where
+    /// it has none. Omitted for none, so missing (also from an older server) parses as a
+    /// 2D scene.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera: Option<SceneCamera>,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,

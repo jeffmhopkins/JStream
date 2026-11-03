@@ -376,6 +376,10 @@ impl BrowserPage for LinkPage {
         });
     }
 
+    fn reload(&mut self) {
+        self.link.send(&ToHelper::Reload { page: self.id });
+    }
+
     fn audio(&self) -> &Arc<PageAudio> {
         &self.page.audio
     }

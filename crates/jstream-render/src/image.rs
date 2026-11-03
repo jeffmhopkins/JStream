@@ -594,10 +594,46 @@ fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
     out
 }
 
+/// Rewrites `image`, a data image of [`upload_unit_f16`] at `width` by `height`, with
+/// `bytes`: its texels as little-endian `f16` RGBA, each channel 0 to 1 (see
+/// [`unit_f16_bytes`]). Writes nothing for bytes of another length.
+pub(crate) fn rewrite_unit_f16(gpu: &Gpu, image: &Image, bytes: &[u8]) {
+    let (width, height) = (image.width(), image.height());
+    if bytes.len() as u64 != u64::from(width) * u64::from(height) * 8 {
+        return;
+    }
+    gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: image.texture(),
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        bytes,
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(width * 8),
+            rows_per_image: Some(height),
+        },
+        extent(width, height),
+    );
+}
+
+/// Writes `value`, clamped to 0 to 1 (a NaN as 0), as the little-endian `f16` of a data
+/// image's channel into `out` (two bytes).
+pub(crate) fn unit_f16_bytes(value: f32, out: &mut [u8]) {
+    let value = if value.is_nan() {
+        0.0
+    } else {
+        value.clamp(0.0, 1.0)
+    };
+    out.copy_from_slice(&f16_bits(value).to_le_bytes());
+}
+
 /// IEEE 754 binary16 bits of `value`, rounded to nearest, ties to even.
 ///
-/// Only for the values [`premultiply_to_f16`] produces: finite and in `0..=1`, so there is
-/// no sign, overflow, infinity or NaN to handle.
+/// Only for finite values in `0..=1` ([`premultiply_to_f16`]'s and [`unit_f16_bytes`]'s),
+/// so there is no sign, overflow, infinity or NaN to handle.
 fn f16_bits(value: f32) -> u16 {
     debug_assert!((0.0..=1.0).contains(&value), "{value} is outside 0..=1");
     let bits = value.to_bits();

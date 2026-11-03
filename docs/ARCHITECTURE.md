@@ -179,7 +179,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          filters { video[] }, items[] }   flat display order
+│                          camera?, filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -222,7 +222,14 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
-  turn, depth and per-item perspective, drawn in stacking order with no depth buffer. `crop` is in source pixels. A source's current size is runtime state,
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer.
+  A scene with a `camera` (`SceneCamera`: position, target, field of view, roll and
+  `depth_sort`) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  canvas extended toward the viewer is one space, each item's geometry is its pose
+  there (`depth_px` its `z`), the camera sees them all, and its own perspective is
+  ignored. Its items draw far to near by the depth of their centre, with stacking
+  order breaking ties. A keyframe scene's variant follows its parent's camera unless it
+  overrides it, and only a parent with a camera allows overrides. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
   protocol 0.3's transform as written, which the compositor evaluates against the
   source's current size every frame. Only an explicit `item.set_geometry` turns it into
@@ -319,8 +326,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   ([ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)).
 - **Transitions** ([ADR-0029](adr/0029-transitions.md),
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)): a preset's kind
-  is a transition kind with a descriptor. `cut`, `fade` and `move` are the first, so a
-  new kind (a stinger, a WGSL wipe) needs no protocol change. `duration_ms` and `easing`
+  is a transition kind with a descriptor. `cut`, `fade`, `move` and `stinger` are the
+  built-in ones, so a new kind (a WGSL wipe) needs no protocol change. `duration_ms` and `easing`
   stay preset fields; `unmatched` and `stagger_ms` are settings of `fade` and `move`. A
   switch to a preset whose kind is missing cuts. Exactly one preset is the
   default, and it can't be deleted. Deleting a preset clears the overrides that use it in
@@ -329,7 +336,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   the default. `SceneItem.transition { delay_ms, easing, glide, appear, disappear }`
   belongs to the placement, keyed by item ID. **Move** pairs outgoing and incoming items
   that place the same source (the k-th placement with the k-th, in stacking order) and
-  interpolates each pair; **Fade** pairs nothing; **Cut** switches on the next tick.
+  interpolates each pair; **Fade** pairs nothing; **Stinger** cuts at its `cut_ms`
+  under its `scene`, whose items come in over the switch and go after it; **Cut**
+  switches on the next tick.
   Unpaired items appear or disappear with their effect. The running transition is
   runtime state beside `program_scene`, never collection state.
 - The preview shown in the UI is a protocol stream, not an `Output`.
@@ -438,9 +447,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   shows `Program` at the canvas size and base rate; a mix an output shows can't be
   deleted. Outputs share a session by mix and profile. `Preview` shows `Program`: no
   mix draws studio mode's preview scene yet.
-  Transition presets (`cut`, `fade` and `move`, built-in kinds with descriptors), the
-  default preset, each scene's `transition_in` and `transition_out` and each item's
-  `transition`: a new collection holds one preset, `cut`, as its default, so a switch
+  Transition presets (`cut`, `fade`, `move` and `stinger`, built-in kinds with
+  descriptors), the default preset, each scene's `transition_in` and `transition_out`
+  and each item's `transition`: a new collection holds one preset, `cut`, as its default, so a switch
   cuts until a client adds another.
   Audio (protocol 0.19): an audio source's `audio` (`enabled`, `follow`, fader and
   mute; a nested scene source has no fader or mute), the master bus and up to 15
@@ -684,6 +693,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   behaviour options, so far whether its audio reaches the Mixer when nested and its
   background colour
   ([ADR-0089](adr/0089-scene-options-and-nested-audio.md), protocol 0.65).
+  `scene.set_camera` gives a scene a camera, making it a 3D scene, or removes it; it is
+  a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
+  protocol 0.70).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -758,9 +770,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `live.ended`; protocol 0.26): actions that override live-adjustable parameters during
   a drag or a live dialog, with no `rev` bump or undo step; one batch carrying `ends_gesture`
   commits the gesture ([ADR-0032](adr/0032-live-edits-and-undo.md)). Built for item
-  placements and crops, and since 0.67 a source's settings that its kind marks `live`,
+  placements and crops, since 0.67 a source's settings that its kind marks `live`,
   so a Properties dialog applies as you edit
-  ([ADR-0091](adr/0091-source-settings-as-live-values.md)); audio faders follow with
+  ([ADR-0091](adr/0091-source-settings-as-live-values.md)), and since 0.70 a 3D
+  scene's camera ([ADR-0094](adr/0094-scene-cameras.md)); audio faders follow with
   the mixer's parameter channel.
 - **History** (`history.undo`, `history.redo`): per-client undo and redo, a fourth kind
   of call that applies a step's inverse (or the step again) as one `rev` bump
@@ -975,7 +988,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, and checking each step with `video.snapshot`), since what an agent
+  scenes, 3D sets through a scene camera, and checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
 
@@ -1024,6 +1037,15 @@ clipped by the near plane, with a per-vertex `w` for perspective-correct texturi
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
 anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+An item in a 3D scene ([ADR-0094](adr/0094-scene-cameras.md)) carries its scene's
+camera and always takes that path: the same polygon, built through the camera's view
+(`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
+consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
+keeps a stinger's items over the scenes under them), far to near by the depth of their
+centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
+two scenes each side's items keep their own camera, a Move between two 3D scenes
+interpolates the camera, and what a switch takes from the screen mid-Fade or
+mid-stinger leaves through the camera each item had.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
@@ -1075,7 +1097,10 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 chain runtime runs a source's video chain before placement, and a scene's over its
 composite once per frame wherever the scene shows, and an item's effects over its box
 ([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
-frame. Still outside this crate: the render
+frame. A shader source's program ([ADR-0093](adr/0093-shader-sources-from-effect-packs.md))
+draws through the same harness: a filter of several passes that ignores its input,
+reads its own earlier frames, the pack's images and the scenes the chain runtime hands
+it, and reports the source's size. Still outside this crate: the render
 thread (in `jstream-core`), P010, loading effect packs (`jstream-effects`; this
 crate draws them through the filter harness), and the output path below.
 
@@ -1109,8 +1134,8 @@ Windows hardware, which only a hardware run can check.
 during it, the program mix is a synthetic item list whose transforms and opacity come
 from the transition state, drawn over both scenes' source images. The control thread
 pairs the items when the switch starts and publishes the plan in the shot, one
-`jstream_render::transition::Track` per item (a pair, an appearance or a
-disappearance, each with its delay, duration and easing); the render thread only
+`jstream_render::transition::Track` per item (a pair, an appearance, a disappearance,
+or a stinger item's pass through, each with its delay, duration and easing); the render thread only
 samples each track at the frame's media time. A switch mid-transition starts from what
 is on screen: the control thread samples the running plan at the switch time with the
 same function, so both threads agree on it without the render thread keeping any
@@ -1235,7 +1260,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`, an output's `audio_bus`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

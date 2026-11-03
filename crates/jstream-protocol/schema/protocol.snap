@@ -2098,7 +2098,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nsettings refer to it: delete those sources, point those mixes elsewhere, or clear\nthose references, first (in the same batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
+          "description": "Deletes a scene and its items; the sources they placed stay. Rejected with\n`invalid_argument` while a `scene` source or a video mix shows it, or any source's\nor transition preset's settings refer to it (a stinger's `scene`): delete those\nsources, point those mixes elsewhere, or clear those references, first (in the\nsame batch if needed). Hotkey bindings whose\naction names the scene are not blockers: they are removed with it (ADR-0040 §3).\nA scene with keyframe scenes is refused the same way, the variants listed as its\nblockers; delete them first. Inverse: `scene.create` with its role (omitted for\n`scene`), or `scene.create_variant` for a keyframe scene, then `scene.reorder`\nto its old display position (unless it was last), `scene.set_transitions` if it\nhad an override, `scene.set_folder` and `scene.set_meta` if it had a folder or\nmetadata, then each deleted item's `item.remove` inverse, from bottom to top (a\nkeyframe scene's overrides instead, as placement edits with its `scene_id`), then\n`hotkey.set` for each removed binding.",
           "properties": {
             "scene_id": {
               "$ref": "#/$defs/SceneId",
@@ -3347,6 +3347,35 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "type": {
               "const": "scene.set_options",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, a coordinate past the\ndrawable bound, or a camera on a keyframe scene whose parent has none. Removing a\nparent's camera also removes its keyframe scenes' overrides. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
+          "properties": {
+            "camera": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneCamera"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The new camera. Omitted removes it."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_camera",
               "type": "string"
             }
           },
@@ -7055,7 +7084,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The batch that deletes a scene, source, bus, folder or label together with\neverything that refers to it, which `scene.delete`, `source.delete`, `bus.delete`,\n`folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists\nthose `blockers`). The plan removes the items that place a deleted source, deletes\nthe `scene` sources that show a deleted scene (and their items), and sets settings\nreferences to the target to `null`, keeping the sources that hold them. For a\nfolder it moves what sits in it up to the folder's parent; for a label it takes\nthe label off the sources carrying it. It also lists the hotkey bindings the\ndelete removes with what they name (ADR-0040 §3), which need no edit of their own.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
+          "description": "The batch that deletes a scene, source, bus, folder or label together with\neverything that refers to it, which `scene.delete`, `source.delete`, `bus.delete`,\n`folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists\nthose `blockers`). The plan removes the items that place a deleted source, deletes\nthe `scene` sources that show a deleted scene (and their items), and sets settings\nreferences to the target to `null`, keeping the sources and transition presets that\nhold them. For a\nfolder it moves what sits in it up to the folder's parent; for a label it takes\nthe label off the sources carrying it. It also lists the hotkey bindings the\ndelete removes with what they name (ADR-0040 §3), which need no edit of their own.\nThe client shows it, then sends its `edits` as an ordinary batch with\n`expected_rev` set to the result's `rev`; undo is that batch's inverse. Fails with\n`not_found` if the target doesn't exist.",
           "properties": {
             "target": {
               "$ref": "#/$defs/DeleteTarget",
@@ -8178,6 +8207,38 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "SceneCamera": {
+      "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+      "properties": {
+        "depth_sort": {
+          "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
+          "type": "boolean"
+        },
+        "fov_deg": {
+          "$ref": "#/$defs/Finite32",
+          "default": 45.0,
+          "description": "Vertical field of view, in degrees, from 1 to 170. Default 45."
+        },
+        "position": {
+          "$ref": "#/$defs/Vec3",
+          "description": "Where the camera is."
+        },
+        "roll_deg": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Rotation of the picture about the viewing axis, clockwise, in degrees. Default 0."
+        },
+        "target": {
+          "$ref": "#/$defs/Vec3",
+          "description": "The point it looks at. At least 0.001 px from `position`."
+        }
+      },
+      "required": [
+        "position",
+        "target"
+      ],
+      "type": "object"
+    },
     "SceneId": {
       "description": "A scene in the collection.",
       "type": "string"
@@ -8191,6 +8252,17 @@ source: crates/jstream-protocol/src/fixtures.rs
             "string",
             "null"
           ]
+        },
+        "camera": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneCamera"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera; the keyframe shows the parent's camera where\nit has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
         "color": {
           "description": "The scene's colour, sRGB as `#rrggbb`. Omitted for none.",
@@ -8946,6 +9018,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Vec3": {
+      "description": "A point or a direction in a scene's 3D space, in scene pixels: x right, y down, z\ntoward the viewer, the canvas at `z = 0`.",
+      "properties": {
+        "x": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Right."
+        },
+        "y": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Down."
+        },
+        "z": {
+          "$ref": "#/$defs/Finite32",
+          "description": "Toward the viewer."
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "z"
+      ],
+      "type": "object"
+    },
     "VideoCodec": {
       "description": "A video codec. Serialized as a snake_case string. Streams carry HEVC and AV1 in\nenhanced RTMP; a recording takes H.264 only so far, and its start fails with another.\nA machine with no encoder for the codec, or none that fits the profile's\n`hardware`, fails `output.start`.",
       "oneOf": [
@@ -9495,5 +9590,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.68"
+  "title": "JStream protocol 0.70"
 }

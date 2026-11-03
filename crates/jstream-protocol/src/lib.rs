@@ -62,9 +62,10 @@ pub use event::{
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
 pub use geometry::{
-    Canvas, CanvasPoint, ContentRect, DrawnPolygon, DrawnVertex, FitMode, GeometryError,
-    ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX, NEAR_W, Placed, PlacementForm,
-    ProjectedQuad, Size, legacy_quad,
+    CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
+    FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX,
+    MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm, ProjectedQuad,
+    SceneCamera, Size, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
@@ -106,7 +107,7 @@ pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use transition::{
     CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
-    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, TransitionEffect, TransitionPresetInfo,
+    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
     TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
     check_preset_timing, initial_preset,
 };

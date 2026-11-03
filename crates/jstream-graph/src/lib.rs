@@ -12,6 +12,7 @@
 
 mod apply;
 mod audio;
+mod camera;
 mod deps;
 mod encoder;
 mod filter;
