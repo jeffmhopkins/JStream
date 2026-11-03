@@ -12,6 +12,7 @@
 //! scenes they set (`studio.get`),
 //! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
 //! [`MOCK_WINDOW`]),
+//! `font.list` (two made-up fonts of one family, [`MOCK_FONTS`], whose files don't exist),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
 //! `plugin.list` (always empty: the mock runs no plugins),
@@ -39,15 +40,15 @@ use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
     Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
     CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Event, Finite32, GeometryError, GestureId, GestureInfo, Hello,
-    HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET, IdempotencyKey, ItemGeometry,
-    ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome, MAX_GESTURES_PER_CLIENT,
-    MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState, PROTOCOL_VERSION, PixelSize,
-    PlacementForm, ProtocolError, Query, QueryResult, RecordContainer, Reference, RequestId,
-    Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, Settings,
-    SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize, TransitionPresetId,
-    TransitionStarted, TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo, Welcome,
-    is_live_adjustable,
+    EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
+    GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
+    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome,
+    MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState,
+    PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer,
+    Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
+    SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize,
+    TransitionPresetId, TransitionStarted, TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo,
+    Welcome, is_live_adjustable,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -347,6 +348,13 @@ pub const MOCK_DISPLAY: &str = "mock:display";
 /// The capture target ID of the one window the mock's `capture.targets` lists, titled
 /// "Mock window".
 pub const MOCK_WINDOW: &str = "mock:window";
+
+/// The fonts the mock's `font.list` lists, as (family, style, path): made up, so a
+/// UI's font picker has something to offer. The files don't exist.
+pub const MOCK_FONTS: [(&str, &str, &str); 2] = [
+    ("Mock Sans", "Bold", "/mock/fonts/MockSans-Bold.ttf"),
+    ("Mock Sans", "Regular", "/mock/fonts/MockSans-Regular.ttf"),
+];
 
 /// How many undo steps each client keeps unless [`MockEngine::with_history_limit`]
 /// says otherwise, as in the engine.
@@ -1158,6 +1166,16 @@ impl State {
                         primary: false,
                     },
                 ],
+            },
+            Query::FontList => QueryResult::FontList {
+                fonts: MOCK_FONTS
+                    .iter()
+                    .map(|(family, style, path)| FontInfo {
+                        remote_family: (*family).into(),
+                        remote_style: (*style).into(),
+                        path: (*path).into(),
+                    })
+                    .collect(),
             },
             Query::LiveList => QueryResult::LiveList {
                 gestures: self
@@ -3246,6 +3264,26 @@ mod tests {
             source_id: SourceId::new("webcam_2"),
         });
         assert_eq!(batch(&*control, unplaced), Ok(Rev(2)));
+    }
+
+    #[test]
+    fn font_list_lists_the_made_up_fonts() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let Ok(QueryResult::FontList { fonts }) = query(&*control, Query::FontList) else {
+            panic!("a font.list result");
+        };
+        let shown: Vec<_> = fonts
+            .iter()
+            .map(|f| {
+                (
+                    f.remote_family.as_str(),
+                    f.remote_style.as_str(),
+                    f.path.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(shown, super::MOCK_FONTS);
     }
 
     #[test]
