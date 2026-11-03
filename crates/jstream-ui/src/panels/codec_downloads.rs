@@ -243,6 +243,46 @@ fn Terms(download: CodecDownloadInfo) -> impl IntoView {
     }
 }
 
+/// The installed downloads in `downloads`, which the About dialog lists.
+pub fn installed(downloads: &[CodecDownloadInfo]) -> Vec<CodecDownloadInfo> {
+    downloads.iter().filter(|d| d.installed).cloned().collect()
+}
+
+/// The About dialog's list of the installed codec downloads (#1119): each one's name and
+/// version, Cisco's notice with the link to its licence, and the licence's full text,
+/// since Cisco's conditions 3 and 4 ask for them wherever the app presents licensing
+/// information. Nothing while none is installed, or from an engine that offers none or
+/// is older than 0.69.
+#[component]
+pub(crate) fn InstalledCodecs() -> impl IntoView {
+    let state = CodecDownloads::load();
+    view! {
+        <Show when=move || state.downloads.with(|d| d.iter().any(|d| d.installed))>
+            <section class="about-codecs" aria-label="Third-party codecs">
+                <h3 class="about-codecs-title">"Third-party codecs"</h3>
+                {move || {
+                    state
+                        .downloads
+                        .with(|d| installed(d))
+                        .into_iter()
+                        .map(|download| {
+                            view! {
+                                <div class="about-codec">
+                                    <p class="about-codec-name">
+                                        {format!("{} {}", download.name, download.version)}
+                                    </p>
+                                    <Notice download=download.clone() />
+                                    <Terms download=download />
+                                </div>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </section>
+        </Show>
+    }
+}
+
 /// The offer for `download`: what it is, why, Cisco's notice, and its Download button.
 #[component]
 pub(crate) fn Offer(
@@ -342,7 +382,7 @@ pub(crate) fn Downloads(
 
 #[cfg(test)]
 mod tests {
-    use super::{download_label, needed_by_draft, offer_reason};
+    use super::{download_label, installed, needed_by_draft, offer_reason};
     use jstream_control::protocol::{
         CodecDownloadInfo, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
         HardwarePreference, VideoCodec,
@@ -459,5 +499,13 @@ mod tests {
             download_label(&openh264(false, false)),
             "Download Cisco's OpenH264 2.6.0"
         );
+    }
+
+    #[test]
+    fn about_lists_only_installed_downloads() {
+        assert!(installed(&[openh264(false, false)]).is_empty());
+        let listed = installed(&[openh264(true, false)]);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].download_id, "openh264");
     }
 }
