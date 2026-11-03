@@ -517,7 +517,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   added removed, one it removed added back where it was, a chain it reordered put back
   in order, each setting it sent and each switch it pressed put back, including those
   whose change the engine hasn't reported yet; what another client changed stays, but
-  for the settings of a filter the window also edited. An
+  for the settings of a filter the window also edited. An item's effects in a keyframe
+  that followed the item's own as the window opened (`following_keyframes`, ADR-0088)
+  are not put back filter by filter: the window's first edit there gave the keyframe its
+  own effects, so the batch clears that override (`item.clear_override` of `effects`),
+  which drops every edit made there meanwhile, and the keyframe follows the item again
+  (#1028). A keyframe whose override came from an add made just before the window
+  opened, which the window adopts, keeps it. An
   edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
@@ -756,14 +762,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the one the switch names, else the selected scene's transition in, else the default.
   The editor sends each change at once, as a `transition.update` naming only what
   changed (after a kind change, the patch is against the new kind's defaults, as the
-  engine applies it): Name, the kind as a Cut / Fade / Move segmented control, and for
+  engine applies it): Name, the kind as a Cut / Fade / Move / Stinger segmented control, and for
   every kind but a cut the duration, the kind's parameters and the easing. Under them a
   note counts the scenes that override with it ("Overrides: N in, M out."), and Make
   default and Delete show for every preset but the default. The engine's preset wins:
   each change it reports resets the fields to it. The kind's parameters come from
   `kind.list` and `kind.describe` (category `transition`), or the built-in `cut`,
-  `fade` and `move` when the engine can't list them; enum, boolean, number and text
-  parameters are editable, others read-only. A value the editor refuses is not sent.
+  `fade`, `move` and `stinger` when the engine can't list them; enum, boolean, number and text
+  parameters are editable, others read-only (so a stinger's scene is set over MCP or the
+  CLI for now). A value the editor refuses is not sent.
   Each scene's `transition_in` and `transition_out` can also be set in a folded table
   under the editor. The engine runs the transitions, `move` pairing and gliding items,
   and the program preview shows them, so the page draws none itself.

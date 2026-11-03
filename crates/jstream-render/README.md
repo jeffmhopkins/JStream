@@ -81,7 +81,9 @@ and calls this crate.
   a `Track` is one item's part in a transition: a `Pair` that interpolates between two
   `Endpoint`s (a geometry, a crop and an opacity), an `Appear` or a `Disappear` with
   its effect (`Fade`, `Scale` to 65 %, `Slide` to the nearest canvas edge, or `None`),
-  each with its `Timing` (delay, duration and easing); `None` waits for the delay,
+  each with its `Timing` (delay, duration and easing), or a `Through` (a stinger's
+  overlay item) that samples as its `Appear` half until its `leave` timing starts and as
+  its `Disappear` half from then on; `None` waits for the delay,
   then shows or hides the item at once. `Track::sample` gives the
   endpoint at a time since the start, or nothing once the item is invisible; it is a
   pure function, so the render thread and the control thread that retargets a running

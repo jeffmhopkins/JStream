@@ -28,12 +28,17 @@
 //!     page: once the main frame navigates to the web
 //!     ([`main_frame_to`](RequestPolicy::main_frame_to)), an opaque frame inside it is
 //!     the web's;
+//!   - in an inline HTML source (a `data:` page, whose own origin is opaque too) an
+//!     opaque origin may when the source opts in, while the main frame is still on
+//!     `data:`. Like a file page's access, this covers every opaque frame inside the
+//!     page, so a sandboxed or `data:` frame that a third-party frame creates counts as
+//!     the page's own;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own.
 //!
 //!   Every other origin from the internet is refused. CEF can't tell one opaque origin
 //!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
-//!   file page creates counts as the file page's.
+//!   file page, or inside an opted-in HTML page, creates counts as that page's.
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
@@ -83,6 +88,8 @@ enum Home {
     File,
     /// A blank page.
     Blank,
+    /// A page given as its HTML: a `data:` document, with an opaque origin.
+    Html,
 }
 
 /// A web origin, as [`Origin::parse`] reads it.
@@ -129,11 +136,15 @@ impl RequestPolicy {
             PageLocation::Web(url) => Home::Web(Origin::parse(url)),
             PageLocation::File(_) => Home::File,
             PageLocation::Blank => Home::Blank,
+            PageLocation::Html(_) => Home::Html,
         };
         let home_local = match &home {
             // A page whose host can't be read counts as one from the internet.
             Home::Web(origin) => origin.as_ref().is_some_and(|o| is_local(&o.host)),
             Home::File | Home::Blank => true,
+            // Given as text, by whoever edits the source: like a page from the internet,
+            // it reaches the local network only when its spec opts in.
+            Home::Html => false,
         };
         let folder = match location {
             PageLocation::File(file) => file.parent().and_then(|dir| {
@@ -142,7 +153,7 @@ impl RequestPolicy {
                     resolved: dir.canonicalize().ok()?,
                 })
             }),
-            PageLocation::Blank | PageLocation::Web(_) => None,
+            PageLocation::Blank | PageLocation::Web(_) | PageLocation::Html(_) => None,
         };
         Self {
             folder,
@@ -174,7 +185,8 @@ impl RequestPolicy {
     /// Whether `initiator` (an origin, as for [`check_from`](Self::check_from)) may make
     /// requests to this computer and the local network: it is itself local, it is the
     /// source's own origin and the source's location is local or it opted in, or it is
-    /// opaque in a file or blank page whose main frame hasn't left it. Chromium's Local
+    /// opaque in a file or blank page whose main frame hasn't left it (or in a page given
+    /// as HTML that opted in). Chromium's Local
     /// Network Access prompt is answered with this, for the prompt's requesting origin
     /// (`permission.rs`).
     pub fn local_allowed_from(&self, initiator: Option<&str>) -> bool {
@@ -187,8 +199,12 @@ impl RequestPolicy {
             Some(origin) => self.home_local && self.home == Home::Web(Some(origin)),
             // Opaque (`null`), or a file's.
             None => {
-                matches!(self.home, Home::File | Home::Blank)
-                    && !self.left_home.load(Ordering::Acquire)
+                let home = match self.home {
+                    Home::File | Home::Blank => true,
+                    Home::Html => self.home_local,
+                    Home::Web(_) => false,
+                };
+                home && !self.left_home.load(Ordering::Acquire)
             }
         }
     }
@@ -205,6 +221,7 @@ impl RequestPolicy {
         let home = match &self.home {
             Home::File => scheme.as_deref() == Some("file"),
             Home::Blank => scheme.as_deref() == Some("about"),
+            Home::Html => scheme.as_deref() == Some("data"),
             Home::Web(own) => own.is_some() && Origin::parse(url) == *own,
         };
         self.left_home.store(!home, Ordering::Release);
@@ -599,6 +616,7 @@ mod tests {
         for location in [
             PageLocation::Blank,
             PageLocation::Web("https://example.com/".into()),
+            PageLocation::Html("<p>hi</p>".into()),
         ] {
             let policy = RequestPolicy::for_location(&location);
             assert!(deny(policy.check(&file)));
@@ -610,6 +628,71 @@ mod tests {
         assert!(folder(&gone).is_none());
         assert!(deny(gone.check(&file)));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// A page given as HTML reaches the local network only when its source opts in, and
+    /// only while its main frame stays on its own `data:` document.
+    #[test]
+    fn an_html_page_reaches_the_local_network_only_when_opted_in() {
+        let spec = PageSpec {
+            location: PageLocation::Html("<p>hi</p>".into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: false,
+        };
+        let page = RequestPolicy::for_page(&spec);
+        assert!(!page.local_allowed_from(None));
+        assert!(!page.local_allowed_from(Some("null")));
+        assert!(deny(
+            page.check_from("http://127.0.0.1:4455/", Some("null"))
+        ));
+        assert!(deny(page.check("http://192.168.1.1/")));
+        assert_eq!(
+            page.check("https://fonts.example.com/a.woff2"),
+            Verdict::Allow
+        );
+        assert_eq!(page.check("data:image/png;base64,AA=="), Verdict::Allow);
+
+        let opted = RequestPolicy::for_page(&PageSpec {
+            local_network: true,
+            ..spec
+        });
+        assert!(opted.local_allowed_from(None));
+        assert_eq!(
+            opted.check_from("http://127.0.0.1:4455/", Some("null")),
+            Verdict::Allow
+        );
+        // Another `data:` document is still its own; a page on the web is not.
+        opted.main_frame_to("data:text/html;base64,PHA+");
+        assert!(opted.local_allowed_from(Some("null")));
+        opted.main_frame_to("https://example.com/");
+        assert!(!opted.local_allowed_from(Some("null")));
+    }
+
+    /// An opted-in HTML page's access reaches every opaque frame inside it, as a file
+    /// page's does (#721): a sandboxed frame that a third-party frame creates reports
+    /// `null` like the page's own documents, so it gets the access too. A third-party
+    /// frame with a real origin does not.
+    #[test]
+    fn an_opted_in_html_page_s_access_covers_every_opaque_frame_in_it() {
+        let opted = RequestPolicy::for_page(&PageSpec {
+            location: PageLocation::Html("<iframe src=\"https://widget.example/\">".into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: true,
+        });
+        // The widget's own origin is refused local targets.
+        assert!(deny(opted.check_from(
+            "http://192.168.1.1/",
+            Some("https://widget.example")
+        )));
+        // A sandboxed frame it makes is opaque, indistinguishable from the page's own.
+        assert_eq!(
+            opted.check_from("http://192.168.1.1/", Some("null")),
+            Verdict::Allow
+        );
     }
 
     /// #347: a page from the internet can't reach this computer or the local network.

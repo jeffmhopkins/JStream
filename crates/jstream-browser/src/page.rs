@@ -17,6 +17,9 @@ pub const MAX_CSS_BYTES: usize = 64 * 1024;
 pub const DEFAULT_CSS: &str =
     "body { background-color: rgba(0, 0, 0, 0); margin: 0px auto; overflow: hidden; }";
 
+/// The longest HTML a page given as text takes ([`PageLocation::Html`]), in bytes.
+pub const MAX_HTML_BYTES: usize = 128 * 1024;
+
 /// The longest URL a page takes, in bytes.
 const MAX_URL_BYTES: usize = 8 * 1024;
 
@@ -34,9 +37,12 @@ pub struct PageSpec {
     pub css: String,
     /// Whether a page from the internet may make requests to this computer and the local
     /// network, for widgets that talk to a local app. Off, they are refused
-    /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, it covers only the origin of
-    /// the source's own URL: a third-party frame inside it, or a page it navigates or
-    /// redirects to, is refused all the same (#721).
+    /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, for a page from a URL it
+    /// covers only the origin of the source's own URL: a third-party frame inside it, or
+    /// a page it navigates or redirects to, is refused all the same (#721). An inline
+    /// [`PageLocation::Html`] page has an opaque origin, so its opt-in works like a file
+    /// page's access: it covers every opaque frame inside the page, one a third-party
+    /// frame creates included, while the main frame is still on `data:`.
     pub local_network: bool,
 }
 
@@ -49,6 +55,11 @@ pub enum PageLocation {
     Web(String),
     /// A local HTML file, by its absolute host path.
     File(PathBuf),
+    /// A page given as its HTML, at most [`MAX_HTML_BYTES`]: loaded as a `data:` URL, so
+    /// it has an opaque origin, no folder to load files from, and no access to this
+    /// computer or the local network unless its spec opts in
+    /// ([`RequestPolicy`](crate::RequestPolicy)).
+    Html(String),
 }
 
 impl PageLocation {
@@ -94,14 +105,55 @@ impl PageLocation {
         Ok(Self::Web(url.to_owned()))
     }
 
+    /// A page given as its `html`: [`PageLocation::Html`], or [`PageLocation::Blank`]
+    /// for text that is only whitespace.
+    ///
+    /// # Errors
+    /// [`BrowserError::Url`] for HTML over [`MAX_HTML_BYTES`].
+    pub fn html(html: &str) -> Result<Self, BrowserError> {
+        if html.len() > MAX_HTML_BYTES {
+            return Err(BrowserError::Url {
+                reason: format!("the HTML is longer than {} KiB", MAX_HTML_BYTES / 1024),
+            });
+        }
+        if html.trim().is_empty() {
+            return Ok(Self::Blank);
+        }
+        Ok(Self::Html(html.to_owned()))
+    }
+
     /// The URL the browser loads.
     pub fn to_url(&self) -> String {
         match self {
             Self::Blank => "about:blank".to_owned(),
             Self::Web(url) => url.clone(),
             Self::File(path) => file_url(path),
+            Self::Html(html) => format!("data:text/html;charset=utf-8;base64,{}", base64(html)),
         }
     }
+}
+
+/// `text`'s UTF-8 bytes in standard base64 (RFC 4648), padded.
+fn base64(text: &str) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(char::from(ALPHABET[((n >> (18 - 6 * i)) & 63) as usize]));
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
 }
 
 /// The `file:` URL of an absolute host path, percent-encoded, as Chromium expects it.
@@ -188,6 +240,31 @@ fn js_string(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn html_pages_load_as_base64_data_urls() {
+        assert_eq!(PageLocation::html(" \n "), Ok(PageLocation::Blank));
+        let page = PageLocation::html("<b>é</b>").expect("short HTML");
+        assert_eq!(page, PageLocation::Html("<b>é</b>".into()));
+        assert_eq!(
+            page.to_url(),
+            "data:text/html;charset=utf-8;base64,PGI+w6k8L2I+"
+        );
+        // RFC 4648's test vectors, for the padding.
+        for (text, encoded) in [
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+        ] {
+            assert_eq!(base64(text), encoded);
+        }
+        assert!(PageLocation::html(&"a".repeat(MAX_HTML_BYTES)).is_ok());
+        assert!(matches!(
+            PageLocation::html(&"a".repeat(MAX_HTML_BYTES + 1)),
+            Err(BrowserError::Url { .. })
+        ));
+    }
 
     #[test]
     fn web_urls_are_http_or_https_with_a_host() {
