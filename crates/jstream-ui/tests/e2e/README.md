@@ -381,6 +381,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
+- **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
+  camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
+  top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
+  back and which draws the box smaller; Alt-drag on the canvas shows the camera's
+  readout, sends live values, and commits one `scene.set_camera` with a moved camera as
+  one revision, which one undo puts back.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the

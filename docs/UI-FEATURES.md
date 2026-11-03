@@ -455,7 +455,8 @@ not remove them; they move into the prototype's look.
   top, else stacking order). Dragging a box moves it in its own depth plane, under the
   pointer, with no snapping; a 3D scene's boxes have no resize or rotate handles, which
   the Transform panel's fields replace, and a marquee touches each box's on-screen
-  bounds. Alt-drag orbits the camera about its target (up to 85° above or below it),
+  bounds. Alt-drag orbits the camera about its target (up to 85° above or below it, or
+  no further than a camera typed in Properties already is),
   Alt+Shift-drag dollies it, live on output (`live.set` of `scene.set_camera`) and
   committed as one undo step; on a keyframe scene that writes its camera override. The
   pill under the frame reads the camera's position and distance to its target.
