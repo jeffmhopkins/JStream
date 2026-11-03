@@ -951,6 +951,14 @@ note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen throug
 needs = ["build"]
 
 [[item]]
+id = "3D3"
+milestone = "M3"
+title = "3D models with materials and live textures"
+status = "planned"
+prs = []
+note = "ADR-0107: a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
+
+[[item]]
 id = "Y4"
 milestone = "M3"
 title = "YouTube chat, metadata, health and audience stats"
