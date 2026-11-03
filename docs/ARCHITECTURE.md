@@ -650,7 +650,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
