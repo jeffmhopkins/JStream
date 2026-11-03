@@ -29,7 +29,16 @@ pub struct Options {
     pub ui_dir: Option<PathBuf>,
     /// `--no-vcam`: run the engine without the virtual camera.
     pub no_vcam: bool,
+    /// `--mcp`: let agents and other outside clients in, on a fixed port with the data
+    /// folder's token file ([`host::Agents`]).
+    pub mcp: bool,
+    /// `--port <port>`: the port `--mcp` listens on, instead of [`host::MCP_PORT`].
+    pub port: Option<u16>,
 }
+
+/// What the app takes, for the message about an argument it doesn't.
+const USAGE: &str = "the app takes only `--ui-dir <folder>`, `--no-vcam`, `--mcp` and \
+                     `--port <port>` (with `--mcp`)";
 
 /// Parses the arguments after the program name.
 pub fn parse(args: &[OsString]) -> Result<Options, String> {
@@ -42,13 +51,21 @@ pub fn parse(args: &[OsString]) -> Result<Options, String> {
                 _ => return Err("`--ui-dir` needs a folder".to_owned()),
             },
             Some("--no-vcam") => options.no_vcam = true,
+            Some("--mcp") => options.mcp = true,
+            Some("--port") => match args.next().and_then(|port| port.to_str()?.parse().ok()) {
+                Some(port) if port != 0 => options.port = Some(port),
+                _ => return Err("`--port` needs a port from 1 to 65535".to_owned()),
+            },
             _ => {
                 return Err(format!(
-                    "unknown argument `{}`; the app takes only `--ui-dir <folder>` and `--no-vcam`",
+                    "unknown argument `{}`; {USAGE}",
                     arg.to_string_lossy()
                 ));
             }
         }
+    }
+    if options.port.is_some() && !options.mcp {
+        return Err("`--port` is the port `--mcp` listens on: pass `--mcp` too".to_owned());
     }
     Ok(options)
 }
@@ -109,11 +126,16 @@ pub fn start(
             !options.no_vcam,
             secrets,
         )?;
+        let agents = options.mcp.then(|| host::Agents {
+            port: options.port.unwrap_or(host::MCP_PORT),
+            token_file: data.join(host::TOKEN_FILE),
+        });
         Host::start(
             engine,
             ui::ORIGIN,
             secrets,
             Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE)),
+            agents.as_ref(),
         )
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
@@ -191,7 +213,7 @@ mod tests {
             parse(&args(&["--ui-dir", "dist"])),
             Ok(Options {
                 ui_dir: Some(PathBuf::from("dist")),
-                no_vcam: false,
+                ..Options::default()
             })
         );
         assert_eq!(
@@ -199,10 +221,40 @@ mod tests {
             Ok(Options {
                 ui_dir: Some(PathBuf::from("dist")),
                 no_vcam: true,
+                ..Options::default()
             })
         );
         assert!(parse(&args(&["--ui-dir"])).is_err());
         assert!(parse(&args(&["--ui-dir", ""])).is_err());
         assert!(parse(&args(&["--port", "1"])).is_err());
+    }
+
+    /// `--mcp` lets agents in; `--port` moves it and means nothing without it.
+    #[test]
+    fn mcp_takes_an_optional_port() {
+        assert_eq!(
+            parse(&args(&["--mcp"])),
+            Ok(Options {
+                mcp: true,
+                ..Options::default()
+            })
+        );
+        assert_eq!(
+            parse(&args(&["--mcp", "--port", "4460"])),
+            Ok(Options {
+                mcp: true,
+                port: Some(4460),
+                ..Options::default()
+            })
+        );
+        let alone = parse(&args(&["--port", "4460"])).expect_err("needs --mcp");
+        assert!(alone.contains("pass `--mcp` too"), "{alone}");
+        for bad in [
+            &["--mcp", "--port"][..],
+            &["--mcp", "--port", "0"],
+            &["--mcp", "--port", "x"],
+        ] {
+            assert!(parse(&args(bad)).is_err(), "{bad:?}");
+        }
     }
 }
