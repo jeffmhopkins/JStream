@@ -434,7 +434,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
   asks again each time the field gets focus, so a window opened since shows up; until
   the first list arrives, or while the engine can't list targets, it is the ID as text,
-  and a failed refresh keeps the last list. Fields
+  and a failed refresh keeps the last list. A font setting (an `asset` that takes
+  `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
+  ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
+  (stored as an `absolute` asset of its path), and "Other file…", which shows the
+  root and path below it (`font_choices`, tested natively); a stored file the list
+  doesn't name selects "Other file…". Until the list arrives, or if the engine can't
+  list fonts, only the root and path show. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
