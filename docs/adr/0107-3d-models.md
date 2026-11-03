@@ -100,6 +100,10 @@ from texture coordinates. Images are PNG or JPEG, decoded by the image source's 
   the model draws in its rest pose; each ignored feature is logged once. A file that
   *requires* an extension the loader doesn't have (Draco, meshopt, KTX2) is an error that
   names it.
+- **Confined.** A `.gltf`'s buffers and images are files beside it under the same asset
+  root, resolved and checked as any asset path is, so `..` can't leave the root; a
+  URL is refused. `data:` URIs are decoded in place, and every accessor, buffer view and
+  `.glb` chunk is checked against the bytes it names before it is read.
 - **Bounded.** The file and each buffer and image file count against the asset size cap
   the image source uses. A model may have at most 2,000,000 triangles and 64 textures,
   and take at most 512 MiB in all: its vertex and index data and its textures with their
@@ -109,7 +113,9 @@ from texture coordinates. Images are PNG or JPEG, decoded by the image source's 
   source is created or updated, on the thread that does that for every source, and so
   does building each texture's mips. The render thread uploads a model once per version
   and then only draws it
-  ([R-RT-002](../RULES.md#R-RT-002)).
+  ([R-RT-002](../RULES.md#R-RT-002)). That upload is a copy of up to the 512 MiB cap in
+  one tick, so a very large model can cost the frame it first shows in; a primitive
+  larger than one of the adapter's buffers is refused there, not drawn.
 
 **3. Placing a model.** An item places a model as it places any source; its geometry is
 the model's pose:
@@ -129,8 +135,13 @@ the model's pose:
 - **Crop** doesn't apply to a model and is ignored.
 - **Precision.** The full model-to-clip transform is composed on the CPU in `f64`,
   relative to the camera, and only the result is `f32`, so a far camera or a large scene
-  doesn't jitter. Depth is a reversed `Depth32Float` with its near plane at ADR-0050's
-  `w = 1/256` and no far plane.
+  doesn't jitter. Depth is a reversed `Depth32Float` (larger is nearer, cleared to 0).
+  With perspective (a camera, or an item's `perspective_px`) it is `NEAR_W / w`, so its
+  near plane is ADR-0050's `w = 1/256` and it has no far plane. Without perspective
+  (`w = 1`) it is linear in the model's own depth: `0.5 + 0.45 · z / reach`, where
+  `reach` is the largest distance of the placed bounds' corners from the item's plane
+  (at least 1 px), so the whole model sits inside 0.05 to 0.95 and its faces still hide
+  each other.
 
 **4. Lighting.** A model is shaded with glTF's metallic-roughness model (Lambert diffuse,
 GGX specular) in linear light, into the compositor's linear working space.
@@ -170,12 +181,18 @@ source, so anything JStream can show can be on a model:
    testing depth without writing it, as glTF viewers commonly do;
 2. runs the source's video filters, then the item's effects, over that layer, in canvas
    pixels (a model has no flat box to run them in, so its effects always run over the
-   canvas);
+   canvas). Each item of a model gets its own layer, so its source's filters run once per
+   item that shows it, as they would over each item's picture of any source;
 3. composites the layer like any item, with its opacity and blend, in its place in the
    scene's order: in a 3D scene, the depth of the item's centre along the viewing axis
    (ADR-0094 decision 4), so a model sorts with cards exactly as a card does.
 
 A scene with no model draws exactly as before: no new pass, target or pipeline.
+
+Where something reads a source as a flat picture rather than placing it as an item
+(another model's `texture`, a thumbnail, a snapshot of the source alone), a model source
+reads as its stand-in: a transparent frame at its size. A model is seen only where an
+item places it.
 
 **7. Depth between models and cards.** In a 3D scene with a model, the scene's pass gets
 one depth target. A model's layer writes its depth there where the model covered the pixel
@@ -185,8 +202,9 @@ hidden where the model is nearer. A card drawn before a model doesn't hide it: c
 have no depth of their own, as ADR-0094 says. A scene with no model has no depth target.
 
 **8. Bounds and picking.** `source.sizes` and `source.size_changed` report a model's size
-as the width and height of its bounds, at 512 px for the larger, and gain an optional
-`depth` for a source with depth (omitted for every other source, so it is a minor
+as the width and height of its bounds, at 512 px for the larger, and `SourceSize` gains
+an optional `depth` beside its `width` and `height`, in the same pixels, for a source with
+depth (omitted for every other source, so it is a minor
 protocol addition). An item of a model is placed by that size as any new item is. The UI
 outlines and hits a model's item by its 3D bounds (the item's box extruded by the model's
 depth through decision 3), the nearest one under the pointer winning in a 3D scene, through
