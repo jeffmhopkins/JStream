@@ -541,6 +541,7 @@ mod tests {
             items: Vec::new(),
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let mut c = Collection {
             scenes: vec![keyframe],

@@ -1376,6 +1376,7 @@ mod tests {
             overrides: Vec::new(),
             items: Vec::new(),
             filters: Default::default(),
+            camera: None,
         }
     }
 

@@ -7,8 +7,10 @@
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` kind, how to group, scroll
-//! and animate, how to use 3D placement and blend modes, which transition to use
-//! (including a `stinger`), and when to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas and scale with it.
+//! and animate, how to use 3D placement and blend modes, how to build a 3D set with a
+//! scene camera (ADR-0094), which transition to use (including a `stinger`), and when
+//! to build a graphic as HTML in a `browser` source. Numbers are for a 1920×1080 canvas
+//! and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -74,6 +76,19 @@ designed move; keep angles under 90 and pair them with opacity. `item.set_blend`
 how an item composites: `screen` or `additive` for light leaks, glints and glows over \
 the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
 items stay `normal`. \
+3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
+`roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
+y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
+turn it about its centre; its own `perspective_px` is ignored. The canvas is the plane \
+z = 0 seen from straight in front: the framing camera looks at the canvas centre \
+(`target` x 960, y 540, z 0 at 1080p) from `position` z = (height / 2) / tan(fov / 2), \
+about 1304 at the default 45°, and through it a flat item lands exactly on its 2D \
+box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
+low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
+the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
+variant) and a `move` transition, which glides the camera with the items. Put \
+graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
+source of the 3D set. \
 Transitions between scenes: `fade` for calm changes, `move` when the scenes share \
 items, and `stinger` for a branded wipe. A stinger preset (`transition.create`, kind \
 `stinger`, about 800-1200 ms) names a `scene` it plays over the switch and a `cut_ms` \

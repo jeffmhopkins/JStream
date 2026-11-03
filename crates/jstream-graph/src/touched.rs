@@ -90,6 +90,8 @@ enum Prop {
     Meta,
     /// A scene's options (ADR-0089).
     Options,
+    /// A scene's camera (ADR-0094).
+    Camera,
     /// A label's colour and icon.
     Look,
 }
@@ -338,6 +340,9 @@ impl Touched {
             }
             Edit::SceneSetOptions { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Options);
+            }
+            Edit::SceneSetCamera { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::Camera);
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {
                 self.exists.insert(Object::Label(label_id.clone()));

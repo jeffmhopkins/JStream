@@ -1059,6 +1059,7 @@ mod tests {
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
                 transition_in: None,
                 transition_out: None,
+                camera: None,
             }],
             ..Collection::default()
         }

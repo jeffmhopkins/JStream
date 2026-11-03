@@ -737,6 +737,8 @@ pub(crate) fn read(
         opacity: 1.0,
         blend: jstream_render::BlendMode::Normal,
         visible: true,
+        camera: None,
+        depth_run: 0,
     }];
     let scene = Scene {
         canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),

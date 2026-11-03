@@ -83,6 +83,9 @@ pub struct Compositor {
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
+    /// The order a 3D scene's items draw in (ADR-0094 decision 4), kept to reuse its
+    /// allocation: each item's depth along the camera's axis and its index.
+    order: Vec<(f64, usize)>,
     /// The holds staged for the submit being built, and their textures, which the
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
@@ -649,6 +652,7 @@ impl Compositor {
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
+            order: Vec::new(),
             staged: Vec::new(),
             filters,
             mip_pipelines,
@@ -660,7 +664,40 @@ impl Compositor {
         self.draws.clear();
         let canvas_w = scene.canvas.width() as f32;
         let canvas_h = scene.canvas.height() as f32;
-        for (index, item) in scene.items.iter().enumerate() {
+        // Stacking order, or far to near within each run of items seen through one camera
+        // that sorts, in one `depth_run` (ADR-0094 decision 4); equal depths keep
+        // stacking order.
+        self.order.clear();
+        self.order.extend(
+            scene
+                .items
+                .iter()
+                .enumerate()
+                .map(|(index, _)| (0.0, index)),
+        );
+        let mut start = 0;
+        while start < scene.items.len() {
+            let (camera, run) = (scene.items[start].camera, scene.items[start].depth_run);
+            let end = scene.items[start..]
+                .iter()
+                .position(|item| item.camera != camera || item.depth_run != run)
+                .map_or(scene.items.len(), |run| start + run);
+            if let Some(camera) = camera.filter(|camera| camera.depth_sort) {
+                let view = view_of(camera, scene)?;
+                for slot in &mut self.order[start..end] {
+                    slot.0 = place::depth(&view, scene.items[slot.1].placement);
+                }
+                // Unstable, so it allocates nothing; the index breaks ties, which keeps
+                // stacking order among items at one depth.
+                self.order[start..end]
+                    .sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+            }
+            start = end;
+        }
+        let mut view: Option<(jstream_protocol::SceneCamera, jstream_protocol::CameraView)> = None;
+        for at in 0..self.order.len() {
+            let index = self.order[at].1;
+            let item = &scene.items[index];
             // Checked for hidden items too, so a scene is valid or not regardless of
             // visibility. Another compositor's bind group would reach a wgpu panic.
             if !item.image.owner().is(&self.owner) {
@@ -677,7 +714,13 @@ impl Compositor {
             }
             self.blends.steps(item.blend)?;
             let (width, height) = item.image.extent();
-            let mut shape = place::shape(width, height, item.placement, item.crop)?;
+            if let Some(camera) = item.camera
+                && view.as_ref().is_none_or(|(seen, _)| *seen != camera)
+            {
+                view = Some((camera, view_of(camera, scene)?));
+            }
+            let seen = item.camera.and(view.as_ref()).map(|(_, view)| view);
+            let mut shape = place::shape_seen(width, height, item.placement, item.crop, seen)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
@@ -1127,6 +1170,23 @@ impl std::fmt::Debug for Compositor {
             .field("adapter", &self.adapter_description())
             .finish_non_exhaustive()
     }
+}
+
+/// `camera` seen on `scene`'s canvas, or [`RenderError::Invalid`] for a camera the
+/// collection would refuse.
+fn view_of(
+    camera: jstream_protocol::SceneCamera,
+    scene: &Scene<'_>,
+) -> Result<jstream_protocol::CameraView, RenderError> {
+    camera
+        .view(jstream_protocol::Canvas {
+            width: scene.canvas.width(),
+            height: scene.canvas.height(),
+        })
+        .map_err(|error| RenderError::Invalid {
+            what: "camera",
+            detail: error.to_string(),
+        })
 }
 
 /// The texels of a `width` by `height` target that `shape` can touch, a texel of margin

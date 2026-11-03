@@ -483,6 +483,12 @@ pub fn duplicate_scene_edits(
             options: scene.options.clone(),
         });
     }
+    if scene.camera.is_some() {
+        edits.push(Edit::SceneSetCamera {
+            scene_id: new_id.clone(),
+            camera: scene.camera,
+        });
+    }
     if scene.transition_in.is_some() || scene.transition_out.is_some() {
         edits.push(Edit::SceneSetTransitions {
             scene_id: new_id.clone(),
@@ -568,6 +574,7 @@ mod tests {
             overrides: Vec::new(),
             items,
             filters: Default::default(),
+            camera: None,
         }
     }
 
@@ -810,6 +817,7 @@ mod tests {
         c.scenes[0].folder = Some(FolderId::new("fld"));
         c.scenes[0].transition_in = Some(TransitionPresetId::new("fade"));
         c.scenes[0].options.include_audio = false;
+        c.scenes[0].camera = Some(jstream_control::protocol::SceneCamera::framing(c.canvas));
         c.scenes[0].filters = FilterChains {
             video: vec![blur()],
             audio: Vec::new(),
@@ -830,6 +838,11 @@ mod tests {
                 Edit::SceneSetOptions { scene_id, options } => {
                     assert_eq!((scene_id.as_str(), options.include_audio), ("copy", false));
                     "options"
+                }
+                Edit::SceneSetCamera { scene_id, camera } => {
+                    assert_eq!(scene_id.as_str(), "copy");
+                    assert!(camera.is_some());
+                    "camera"
                 }
                 Edit::SceneSetTransitions { .. } => "transitions",
                 Edit::FilterAdd {
@@ -856,6 +869,7 @@ mod tests {
                 "reorder",
                 "folder",
                 "options",
+                "camera",
                 "transitions",
                 "scene filter",
                 "item",

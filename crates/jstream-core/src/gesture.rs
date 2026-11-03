@@ -32,6 +32,8 @@ enum Param {
     Crop(Option<SceneId>, ItemId),
     /// One setting of a source, which its kind marks `live` (ADR-0091).
     Setting(SourceId, String),
+    /// A scene's camera, or a keyframe scene's override of it (ADR-0094).
+    Camera(SceneId),
 }
 
 impl Param {
@@ -50,6 +52,7 @@ impl Param {
             Edit::ItemSetCrop {
                 item_id, scene_id, ..
             } => Some(Param::Crop(keyframe(scene_id), item_id.clone())),
+            Edit::SceneSetCamera { scene_id, .. } => Some(Param::Camera(scene_id.clone())),
             _ => None,
         }
     }
@@ -58,7 +61,7 @@ impl Param {
     fn item(&self) -> Option<&ItemId> {
         match self {
             Param::Placement(_, item_id) | Param::Crop(_, item_id) => Some(item_id),
-            Param::Setting(..) => None,
+            Param::Setting(..) | Param::Camera(_) => None,
         }
     }
 
@@ -66,7 +69,7 @@ impl Param {
     fn keyframe(&self) -> Option<&SceneId> {
         match self {
             Param::Placement(keyframe, _) | Param::Crop(keyframe, _) => keyframe.as_ref(),
-            Param::Setting(..) => None,
+            Param::Setting(..) | Param::Camera(_) => None,
         }
     }
 }
@@ -300,14 +303,17 @@ impl Gestures {
 
     /// Drops every live value that `exists` says has nothing left to draw it: a batch
     /// deleted its item, or the keyframe scene it is addressed to (the second
-    /// argument, `None` for the item's own). Returns whether any went.
+    /// argument, `None` for the item's own), its source, or the scene whose camera it
+    /// sets. Returns whether any went.
     pub(crate) fn drop_missing(
         &mut self,
         exists: impl Fn(&ItemId, Option<&SceneId>) -> bool,
         source_exists: impl Fn(&SourceId) -> bool,
+        scene_exists: impl Fn(&SceneId) -> bool,
     ) -> bool {
         let here = |param: &Param| match param {
             Param::Setting(source_id, _) => source_exists(source_id),
+            Param::Camera(scene_id) => scene_exists(scene_id),
             _ => param
                 .item()
                 .is_some_and(|item| exists(item, param.keyframe())),
