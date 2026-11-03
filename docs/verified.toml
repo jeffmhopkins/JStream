@@ -2409,7 +2409,7 @@ stamp = { hash = "b3:ab830c2047701e47", by = "agent:obs-ui-thread", note = "Adde
 stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "effect(), REVERSIBLE_ACTIONS, OUTPUT_ONLY_EDITS, refuse_output_only_edits and the annotation tests match the paragraph" }
 
 ["CRATE-jstream-mcp#purpose"."body"]
-stamp = { hash = "b3:8d504af503b308a3", by = "agent:claude", note = "Re-read against ADR-0098: tools are destructive only for an action outside REVERSIBLE_ACTIONS (output, device, pairing, ui_settings); batch refuses output.delete and output.set_target and is no longer destructive; instructions and tests match" }
+stamp = { hash = "b3:8d504af503b308a3", by = "agent:claude", note = "Tools bullet: REVERSIBLE_ACTIONS names the actions that do not make a tool destructive, so the destructive tools are device, history, output, pairing and ui_settings (an action outside the list or a history call, ADR-0098); decoding refuses youtube targets and, in batch, the OUTPUT_ONLY_EDITS that can remove a stream key" }
 
 ["CRATE-jstream-mcp#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
@@ -2439,7 +2439,7 @@ stamp = { hash = "b3:c8ffb4cb6fdf8595" }
 stamp = { hash = "b3:ab830c2047701e47", by = "agent:obs-ui-thread", note = "tools.rs adds the font tool's description and tests.rs counts 32 tools; purpose describes tools by noun generally, so it holds." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/tools.rs"]
-stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "tools.rs: effect() marks a tool destructive for an action outside REVERSIBLE_ACTIONS or a history call (ADR-0098 r1 B1); REVERSIBLE_ACTIONS and OUTPUT_ONLY_EDITS, the batch refusal and their tests; the Tools bullet names both lists" }
+stamp = { hash = "b3:9f50d4d4e422dd0a", by = "agent:claude", note = "tools.rs: effect() marks a tool destructive for an action outside REVERSIBLE_ACTIONS or a history call (ADR-0098); REVERSIBLE_ACTIONS and OUTPUT_ONLY_EDITS, the batch refusal and their tests; the Tools bullet names both lists" }
 
 ["CRATE-jstream-media#purpose"."body"]
 stamp = { hash = "b3:f8fe3ef93a3c141d", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
@@ -5796,7 +5796,7 @@ stamp = { hash = "b3:3d3001bba844d9a7", by = "agent:threat-model-covers", note =
 stamp = { hash = "b3:2e3a686f5d15ee5b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the MCP agents section against #955: the remote-text paragraph now also names a window's name in capture.targets (title, or on macOS the application's name) as third-party text that the capture tool's description and the server instructions mark as data, never instructions (checked in crates/jstream-mcp tools.rs and server.rs), cites ADR-0085, drops 'today the only third-party text', and ADR-0085 is added to depends_on; the rest of the section still holds." }
 
 ["THREAT-MODEL#mcp"."dep:docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
-stamp = { hash = "b3:6a460bf4efdf9dfa", by = "agent:claude", note = "ADR-0098 added to depends_on; the section matches its decision, history destructive included" }
+stamp = { hash = "b3:d9c7698aeaa621e4", by = "agent:claude", note = "ADR-0098 context now counts three things lost outright, with the reversible actions as a separate paragraph; its decision (history destructive, batch refusing output-only edits) is unchanged and the section still matches it" }
 
 ["THREAT-MODEL#pairing"."body"]
 stamp = { hash = "b3:933767e326fe4ee3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#769: devices-file gap no longer says it only inherits its folder's ACL; checked devices.rs create_private (tmp file then rename) and read_file's check_private_file on Windows; what remains is the Windows hardware run (#546, #344 open)" }

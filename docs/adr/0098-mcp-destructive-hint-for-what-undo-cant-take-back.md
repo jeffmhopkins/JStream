@@ -28,7 +28,7 @@ Every edit is undoable by the client that made it, a delete included
 ([ADR-0013](0013-command-model.md), [ADR-0032](0032-live-edits-and-undo.md)), within
 the limits of undo: 100 steps, `undo_conflict` when another client changed the same
 thing, and, for a deleted source, what the engine forgets with it (such as a capture
-portal's grant). Four things are lost outright:
+portal's grant). Three things are lost outright:
 
 - **Actions with effects outside JStream's state:** `output.start` and `output.stop` (a
   live stream starts or ends), `output.set_key` and `output.clear_key` (a secret is
@@ -39,10 +39,11 @@ portal's grant). Four things are lost outright:
 - **History calls.** The engine removes the stream key of an output that a history call
   deletes or moves to another server, as it does for the edit itself, so an undo past an
   `output.create` or `output.set_target` removes a key that redo doesn't put back.
-- The other actions change only what JStream shows or measures, and another call puts
-  it back: `scene.switch`, `studio.set_preview`, `live.set` and `live.cancel`,
-  `audio.reset_loudness`, and `preview.subscribe` and `preview.unsubscribe` (which fail
-  over MCP anyway).
+
+The other actions change only what JStream shows or measures, and another call puts it
+back: `scene.switch`, `studio.set_preview`, `live.set` and `live.cancel`,
+`audio.reset_loudness`, and `preview.subscribe` and `preview.unsubscribe` (which fail over
+MCP anyway).
 
 <a id="decision"></a>
 ## Decision
