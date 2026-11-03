@@ -1757,6 +1757,48 @@ pub fn window_scopes(
     scopes
 }
 
+/// Adds `target`'s filter, as `now` holds it, to what the Filters window opened with
+/// (`opened`), at its place in `now`, unless the window already holds it: a filter added
+/// just before the window opened, which the collection didn't hold yet.
+pub fn adopt(opened: &mut Vec<(FilterOwner, FilterChains)>, target: &Target, now: &FilterChains) {
+    let Some((which, index, filter)) = [FilterChain::Video, FilterChain::Audio]
+        .into_iter()
+        .find_map(|which| {
+            let chain = now.chain(which);
+            chain
+                .iter()
+                .position(|f| f.filter_id == target.filter_id)
+                .map(|i| (which, i, chain[i].clone()))
+        })
+    else {
+        return;
+    };
+    let pos = match opened.iter().position(|(o, _)| *o == target.owner) {
+        Some(pos) => pos,
+        None => {
+            opened.push((target.owner.clone(), FilterChains::default()));
+            opened.len() - 1
+        }
+    };
+    let chains = &mut opened[pos].1;
+    let held = [FilterChain::Video, FilterChain::Audio]
+        .into_iter()
+        .any(|w| {
+            chains
+                .chain(w)
+                .iter()
+                .any(|f| f.filter_id == target.filter_id)
+        });
+    if held {
+        return;
+    }
+    let chain = match which {
+        FilterChain::Video => &mut chains.video,
+        FilterChain::Audio => &mut chains.audio,
+    };
+    chain.insert(index.min(chain.len()), filter);
+}
+
 /// Numbers each Filters window, so one closing never forgets a later one's log.
 static WINDOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -1961,6 +2003,31 @@ fn WindowBody(
     // A just-added filter may not be in the collection yet: the window waits for it
     // until a state at or after the batch's revision lacks it.
     let added_at = RwSignal::new(dialogs.added_at.get_untracked());
+    let opened = StoredValue::new(opened);
+    // Opened on a filter just added, which the collection may not hold yet: it joins
+    // what the window opened with once it arrives, so Cancel puts it back as added.
+    if let (Some(at), Some(filter_id)) = (added_at.get_untracked(), selected.get_untracked()) {
+        let target = Target {
+            owner: owner.clone(),
+            filter_id,
+        };
+        let adopted = StoredValue::new(false);
+        Effect::new(move |_| {
+            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+            if adopted.get_value() || rev < Some(at) {
+                return;
+            }
+            adopted.set_value(true);
+            let Some(chains) = untrack(|| {
+                studio
+                    .collection
+                    .with(|c| c.as_ref()?.chains(&target.owner).map(Cow::into_owned))
+            }) else {
+                return;
+            };
+            opened.update_value(|opened| adopt(opened, &target, &chains));
+        });
+    }
     // A filter the Add filter dialog over the window just added: the window shows it.
     Effect::new(move |_| {
         if let Some((filter_id, rev)) = dialogs.landed.get() {
@@ -1997,7 +2064,6 @@ fn WindowBody(
             selected.set(next);
         }
     });
-    let opened = StoredValue::new(opened);
     let cancel = move || {
         let log = dialogs
             .log
@@ -3734,6 +3800,77 @@ mod tests {
             },
         ];
         assert!(window_restore(&opened, &log, |_, _| None).is_empty());
+    }
+
+    /// A filter added just before the window opened joins what it opened with, where the
+    /// chain holds it, once; so Cancel puts its settings and switch back as added.
+    #[test]
+    fn a_filter_added_before_the_window_joins_what_it_opened_with() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("src_bg"),
+        };
+        let filter = |id: &str| FilterInfo {
+            filter_id: FilterId::new(id),
+            kind: "blur".into(),
+            enabled: true,
+            settings: Settings::new(),
+        };
+        let mut opened = vec![(
+            owner.clone(),
+            FilterChains {
+                video: vec![filter("a")],
+                ..FilterChains::default()
+            },
+        )];
+        let now = FilterChains {
+            video: vec![filter("a"), filter("new")],
+            ..FilterChains::default()
+        };
+        let target = Target {
+            owner: owner.clone(),
+            filter_id: FilterId::new("new"),
+        };
+        adopt(&mut opened, &target, &now);
+        adopt(&mut opened, &target, &now);
+        let ids: Vec<_> = opened[0]
+            .1
+            .video
+            .iter()
+            .map(|f| f.filter_id.as_str().to_owned())
+            .collect();
+        assert_eq!(ids, ["a", "new"]);
+        let mut patch = Settings::new();
+        patch.insert("radius", json!(20));
+        let log = vec![
+            Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("new"),
+                patch,
+            },
+            Edit::FilterSetEnabled {
+                owner: owner.clone(),
+                filter_id: FilterId::new("new"),
+                enabled: false,
+            },
+        ];
+        let edits = window_restore(&opened, &log, |_, _| Some(filter("new")));
+        let mut back = Settings::new();
+        back.insert("radius", Value::Null);
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterSetSettings {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("new"),
+                    patch: back
+                },
+                Edit::FilterSetEnabled {
+                    owner,
+                    filter_id: FilterId::new("new"),
+                    enabled: true
+                },
+            ]
+        );
     }
 
     #[test]

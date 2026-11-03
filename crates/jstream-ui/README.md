@@ -507,7 +507,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
   `fresh_id`; the new filter opens in place, or in the Filters window when it has more
-  than three settings or isn't described yet. Edit filters… in the item menus selects the item and shows the
+  than three settings or isn't described yet, the window adding it to what it opened
+  with once the store holds it (`adopt`), so Cancel puts it back as added. Added from
+  the open window, any filter is selected there instead (`landed`). Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
   device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable

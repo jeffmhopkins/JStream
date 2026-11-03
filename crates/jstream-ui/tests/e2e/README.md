@@ -250,7 +250,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   With three kinds described, Cancel in the window putting back what its own list did
   (an eye on a filter never shown, × on Sharpen) and dropping a Blur added from the
   window, which the Add filter dialog opened over and which the window then showed,
-  keeping those earlier changes.
+  keeping those earlier changes; then a Blur added from the panel, which opens the
+  window on it, whose changed size and switch Cancel puts back, keeping the filter.
   With three kinds described (`describeKinds`): the rows' summaries and carets, a click
   on a filter with four settings opening the dialog, Cancel pressed straight after a
   change there still putting the filter back (the change and its restore as two

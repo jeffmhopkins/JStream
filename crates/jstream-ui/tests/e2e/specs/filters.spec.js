@@ -194,6 +194,23 @@ test('Cancel in the Filters window puts back what its rows did too, and adding a
   await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen', 'Blur']);
   await expect(videoRows(panel(page)).nth(1)).toHaveClass(/\boff\b/);
   await expect(videoRows(panel(page)).first()).not.toHaveClass(/\boff\b/);
+
+  // Blur added from the panel opens the window on it, perhaps before the store holds
+  // it: Cancel still puts back its switch and a changed setting, and keeps the filter.
+  await panel(page).getByRole('button', { name: '+ Add filter…' }).click();
+  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Blur' }).click();
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
+  await expect(rows.nth(2)).toHaveClass(/\bselected\b/);
+  await dialog.getByRole('spinbutton').first().fill('50');
+  await dialog.getByRole('spinbutton').first().press('Tab');
+  await dialog.getByRole('switch', { name: 'Filter on' }).click();
+  await expect(rows.nth(2)).toHaveClass(/\boff\b/);
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen', 'Blur', 'Blur']);
+  await expect(videoRows(panel(page)).nth(2)).not.toHaveClass(/\boff\b/);
+  await expect(videoRows(panel(page)).nth(2).locator('.filter-summary')).toHaveText('defaults');
 });
 
 /** A float setting as `kind.describe` reports it. */
