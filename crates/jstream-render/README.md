@@ -169,7 +169,8 @@ and calls this crate.
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
 not here: P010 conversion, BT.601 and BT.2020 matrices, encode-target allocation,
-loading WGSL effect packs (`jstream-effects`; this crate only draws them), the video
+loading WGSL effect packs and shader-source programs (`jstream-effects`; this crate
+only draws them), the video
 filter chain runtime (`jstream-core`'s; the built-in filters' passes are here, see
 [Filters](#filters)) and the master chain. The GPU pipeline's encode
 steps stay in
@@ -188,8 +189,10 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 returns what it frees as `Reclaimed`, so that thread can hand it to a collector
 ([R-RT-003](../../docs/RULES.md#R-RT-003)). The images this crate drops itself are a
 multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
-for, and a video delay's held frames when its delay goes to 0, its input size changes or
-its memory cap shrinks (**Filters**), so only when a filter's size or settings change; the
+for, a video delay's held frames when its delay goes to 0, its input size changes or
+its memory cap shrinks, and a shader-source program's feedback layers when its size
+changes or it restarts on a show (**Filters**), so only when a filter's size or settings
+change or its source is shown again; the
 same goes for a filter draw's two small uniform buffers, which hold no texture. GPU
 calls may allocate inside the driver; this crate does not allocate per item on the
 steady path.
@@ -557,7 +560,8 @@ cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
   drawing thread (R-RT-003). Besides its scratch layers and these buffers, a filter keeps
   between frames only the video delay's ring of held frames (its own layers,
   `Ctx::layer`, never scratch ones) and the reference image an asset or scene kind is
-  given (`VideoFilter::set_reference`, see Assets and references below).
+  given (`VideoFilter::set_reference`, see Assets and references below), and a
+  shader-source program's images, slots and feedback layers (below).
 
 **External kinds** (effect packs, ADR-0035). `ExternalFilter` is the seam for a kind
 whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prelude
@@ -565,6 +569,37 @@ whose WGSL arrives at run time: a label (the kind ID), WGSL appended to the prel
 a settings map. `VideoFilter::external(kind_id, filter, settings)` draws it as one
 replacing pass. [`jstream-effects`](../jstream-effects/README.md#purpose) implements it
 for each pack effect.
+
+**Shader-source programs** (ADR-0093, `src/filter/program/`). `ExternalProgram` is the
+seam for a shader source's program: a label, 1 to `PROGRAM_MAX_PASSES` (8) passes, the
+pack's decoded images, the `Params` bytes, and the picture's size for a settings map.
+`VideoFilter::program(kind_id, program, settings)` draws it as a filter that ignores its
+input (the source's stand-in frame) and reports the program's size as its output size,
+so the chain runtime keeps, updates and retires it like any filter. Each pass is one
+replacing draw of its WGSL appended to `PROGRAM_PRELUDE` (its own `prelude.wgsl`, then
+the shared `colour.wgsl` helpers the filter prelude also ends with, then `noise.wgsl`'s
+`hash12`, `hash22`, `noise` and `fbm`). Its bindings: the `sys` uniform at 0 (the
+source's and the pass's sizes, `time` since the program last started, `clock` as
+media-clock seconds wrapped to an hour, the frame count, the audio levels and each
+input's alpha mode), a linear clamp sampler at 1, a linear repeating one at 2, `Params`
+at `PROGRAM_PARAMS_BINDING` (3), and its inputs from `FIRST_INPUT_BINDING` (4) up, at
+most `PROGRAM_MAX_INPUTS` (12). The runtime makes a bind group layout per input count
+on first use, and caches pass pipelines as it caches filter shaders, under
+`<label>#<pass>`. A pass draws at its `scale` of the program's size, the last one at the
+whole size. An input reads another pass (listed earlier, this frame's picture; the pass
+itself or one listed later, the frame before's), one of the program's images (uploaded
+on the first draw, and again for another compositor), or a slot the chain runtime fills
+(`VideoFilter::set_input`: a scene's composite, the audio data image), transparent while
+empty. A pass read back as feedback draws into one of two layers it keeps (`Ctx::layer`)
+and swaps every frame; they start transparent, are made again at a new size, and are
+dropped by `VideoFilter::restart`, which also starts `time` and the frame count from 0.
+A feedback last pass is copied into the output. Every other pass draws into scratch
+layers, and a non-feedback last pass straight into the output. `VideoFilter::set_audio`
+hands over the levels for the next frame. A program whose layers at its size (one per
+pass, two for a feedback pass, `Rgba16Float`) would take more than `MAX_PROGRAM_BYTES`
+(512 MiB) fails to draw, so a live `width` and `height` can't take gigabytes. Tests draw programs of one and two passes,
+feedback on the pass itself and on a later pass with a restart, images and slots, and
+`sys`, and a program over the cap, on the test adapter.
 
 **The kinds.** Each group documents its kinds here as it lands.
 

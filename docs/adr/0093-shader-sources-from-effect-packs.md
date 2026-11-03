@@ -1,12 +1,12 @@
 <!-- @doc
 id = "ADR-0093"
-title = "Shader sources from effect packs, and packs written over the protocol"
+title = "Shader sources from effect packs"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0093: Shader sources from effect packs, and packs written over the protocol
+# ADR-0093: Shader sources from effect packs
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -27,9 +27,9 @@ core per layer at 1080p60, steps its motion at the page's frame rate, and a refl
 needs a full-resolution copy and a blur per layer. A shader computes the same streaks
 analytically from time, on the engine's GPU, in the same frame as the compositor.
 
-Agents can't write a pack either. A pack is a folder on the engine's disk, and no
-command reaches it, so an agent over MCP can't add a shader, see why it fails to
-compile, or fix it.
+Agents can't write a pack either: no command reaches the packs folder. Whether they may
+is a security-posture question, so it is decided apart, in
+[ADR-0095](0095-agents-write-effect-packs.md); this ADR doesn't depend on its answer.
 
 <a id="decision"></a>
 ## Decision
@@ -78,35 +78,22 @@ compile, or fix it.
    [ADR-0087](0087-effect-quarantine-after-gpu-device-loss.md) does for effects. A
    quarantined or unloaded shader kind draws transparent at its size. A reloaded pack
    keeps its sources: each draws the new program from its next frame.
-5. **Packs are written over the protocol.** Three actions and a query:
-   - `pack.write` replaces one pack folder whole with the files it carries, then loads it
-     at once, without waiting for the poll. Text files are sent as text, images as
-     base64. It answers with the kinds the pack now has. A pack that fails to load is
-     not kept: its old version stays, and the error is `invalid_argument` with each
-     problem's file, line and message, so an agent can fix it in one more call.
-   - `pack.delete` removes one pack folder.
-   - `pack.list` names the packs in the folder with their kinds, and `pack.read` returns
-     one pack's files, so an agent can edit a pack it didn't write.
-   A written pack is limited to 64 files, 4 MiB in all, the existing per-file limits,
-   and file names ending in `.toml`, `.wgsl`, `.png` or `.jpg`/`.jpeg`, under the
-   pack's asset-path rules. A pack is written into a new folder beside the old one and
-   swapped in with a rename, so a reader never sees half of it. These are actions, not
-   edits: the folder is on the engine's disk, not in the collection, so undo doesn't
-   reach it. WASM plugins can't call them ([ADR-0069](0069-wasm-plugin-limits-and-capabilities.md)
-   places them under "never").
+5. **A source's layers are bounded.** The layers a program draws into at its size (one
+   per pass, two for a pass read back as feedback, `Rgba16Float`) may take at most
+   512 MiB. A program over it draws nothing and the failure is logged, like a filter
+   that fails, so a `width` and `height` set live can't take gigabytes of GPU memory.
 
 <a id="consequences"></a>
 ## Consequences
-- Agents can make and fix native animated graphics in one call each, and the program
-  stage draws them at full frame rate with no browser.
-- Who can do what doesn't change: a client with the control token can already run any
-  command, and a pack was already code the engine runs. The WGSL is validated by naga
-  before anything draws it, a pack folder is the only place written, and a shader that
-  hangs the GPU is quarantined. So this is an agent-tier decision.
+- Packs can make native animated graphics, and the program stage draws them at full
+  frame rate with no browser.
+- Who can do what doesn't change: a pack is still a folder a person puts in the packs
+  folder, the WGSL is validated by naga before anything draws it, and a shader that
+  hangs the GPU is quarantined under ADR-0087. So this is an agent-tier decision.
 - `effect.toml` grows a second table kind. A pack written for an older JStream still
   loads, and a pack with `[[source]]` tables fails to load on an older JStream (its
   manifest refuses unknown fields), which is what a pack author would want.
-- The protocol gains four commands and a `PROTOCOL_VERSION` bump; the MCP tools follow.
+- No protocol change: shader sources are `source` kinds, created and set like any other.
 - A shader source that draws every frame costs GPU time every frame. Nothing caps a
   pass's cost: naga can't bound a loop, and quarantine is the backstop.
 - Reading a source (not a scene) as an image is left out: a scene with the source in it

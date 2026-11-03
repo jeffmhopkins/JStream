@@ -176,6 +176,7 @@ impl PackWatcher {
                 tracing::info!(
                     pack = pack.id(),
                     effects = pack.effects().len(),
+                    sources = pack.sources().len(),
                     "effect pack loaded"
                 );
                 diff(folder.pack.as_ref(), Some(&pack), &mut changes.kinds);
@@ -276,26 +277,47 @@ fn stamp(files: &[PathBuf]) -> Stamp {
         .collect()
 }
 
+/// What a kind draws, to tell a changed kind from an unchanged one: its descriptor, its
+/// WGSL and a shader source's images.
+#[derive(PartialEq)]
+struct Drawn<'a> {
+    descriptor: &'a jstream_protocol::KindDescriptor,
+    wgsl: Vec<&'a str>,
+    images: Vec<&'a [u8]>,
+}
+
 /// The kind changes from `old` to `new`.
 fn diff(old: Option<&Pack>, new: Option<&Pack>, out: &mut Vec<KindChange>) {
-    let kinds = |pack: Option<&Pack>| -> BTreeMap<String, Effect> {
-        pack.map(|p| {
-            p.effects()
-                .iter()
-                .map(|e| (e.kind_id().to_owned(), e.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
-    };
+    fn kinds(pack: Option<&Pack>) -> BTreeMap<String, Drawn<'_>> {
+        let Some(pack) = pack else {
+            return BTreeMap::new();
+        };
+        let effects = pack.effects().iter().map(|e| {
+            let drawn = Drawn {
+                descriptor: e.descriptor(),
+                wgsl: vec![e.wgsl()],
+                images: Vec::new(),
+            };
+            (e.kind_id().to_owned(), drawn)
+        });
+        let sources = pack.sources().iter().map(|s| {
+            let drawn = Drawn {
+                descriptor: s.descriptor(),
+                wgsl: s.passes().iter().map(|p| &*p.wgsl).collect(),
+                images: jstream_render::ExternalProgram::images(s)
+                    .iter()
+                    .map(|i| &*i.rgba)
+                    .collect(),
+            };
+            (s.kind_id().to_owned(), drawn)
+        });
+        effects.chain(sources).collect()
+    }
     let (old, new) = (kinds(old), kinds(new));
-    for (id, effect) in &new {
+    for (id, drawn) in &new {
         match old.get(id) {
             None => out.push(KindChange::Added(id.clone())),
-            Some(before)
-                if before.descriptor() != effect.descriptor() || before.wgsl() != effect.wgsl() =>
-            {
-                out.push(KindChange::Changed(id.clone()));
-            }
+            Some(before) if before != drawn => out.push(KindChange::Changed(id.clone())),
             Some(_) => {}
         }
     }

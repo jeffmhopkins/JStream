@@ -9,6 +9,7 @@ use jstream_protocol::{KindCategory, KindDescriptor, Settings};
 use crate::error::PackError;
 use crate::manifest::{self, Manifest};
 use crate::shader::{self, Layout};
+use crate::source::ShaderSource;
 
 /// The manifest's file name in a pack folder.
 pub const MANIFEST: &str = "effect.toml";
@@ -27,35 +28,34 @@ pub struct Pack {
     description: Option<String>,
     dir: PathBuf,
     effects: Vec<Effect>,
+    sources: Vec<ShaderSource>,
 }
 
 impl Pack {
     /// Loads the pack in `dir`, validating every effect's WGSL against the host's
-    /// `prelude` (see [`crate::shader`]). Any error fails the whole pack.
+    /// `prelude` (see [`crate::shader`]) and every shader source's passes against
+    /// [`jstream_render::PROGRAM_PRELUDE`]. Any error fails the whole pack.
     pub fn load(dir: &Path, prelude: &str) -> Result<Self, PackError> {
         let manifest_path = dir.join(MANIFEST);
         let text = read(&manifest_path, MAX_MANIFEST_BYTES)?;
-        let Manifest { pack, effects } = manifest::parse(&manifest_path, &text)?;
+        let Manifest {
+            pack,
+            effects,
+            sources,
+        } = manifest::parse(&manifest_path, &text)?;
         let root = dir.canonicalize().map_err(|source| PackError::Io {
             path: dir.to_owned(),
             source,
         })?;
         let mut loaded = Vec::with_capacity(effects.len());
         for effect in effects {
-            let path = dir.join(&effect.shader);
-            // The manifest's path rules keep it in the folder; this catches a symlink
-            // that leads out of it.
-            let real = path.canonicalize().map_err(|source| PackError::Io {
-                path: path.clone(),
-                source,
-            })?;
-            if !real.starts_with(&root) {
-                return Err(PackError::Manifest {
-                    path: manifest_path,
-                    at: format!("effect.{}.shader", effect.id),
-                    message: "leads outside the pack folder".into(),
-                });
-            }
+            let path = real_path(
+                dir,
+                &root,
+                &effect.shader,
+                &manifest_path,
+                &format!("effect.{}.shader", effect.id),
+            )?;
             let source = read(&path, MAX_SHADER_BYTES)?;
             let params: Vec<_> = effect.params.iter().map(manifest::descriptor).collect();
             let layout = Layout::new(&params);
@@ -83,13 +83,37 @@ impl Pack {
                 shader_path: path,
             });
         }
+        let sources = sources
+            .into_iter()
+            .map(|section| {
+                ShaderSource::load(
+                    &pack.id,
+                    dir,
+                    &root,
+                    &manifest_path,
+                    section,
+                    jstream_render::PROGRAM_PRELUDE,
+                )
+            })
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             id: pack.id,
             name: pack.name,
             description: pack.description,
             dir: dir.to_owned(),
             effects: loaded,
+            sources,
         })
+    }
+
+    /// The shader sources (ADR-0093), in manifest order.
+    pub fn sources(&self) -> &[ShaderSource] {
+        &self.sources
+    }
+
+    /// The shader source whose kind ID is `kind_id`.
+    pub fn source(&self, kind_id: &str) -> Option<&ShaderSource> {
+        self.sources.iter().find(|s| s.kind_id() == kind_id)
     }
 
     /// The pack ID, the first half of each of its kind IDs.
@@ -212,15 +236,47 @@ impl Effect {
     }
 }
 
-/// The shader paths, relative to the pack folder, that the manifest at `path` names.
+/// The files, relative to the pack folder, that the manifest at `path` names: each
+/// effect's shader, and each shader source's `common` file, pass files and images.
 pub(crate) fn shader_files(path: &Path) -> Result<Vec<String>, PackError> {
     let text = read(path, MAX_MANIFEST_BYTES)?;
     let manifest = manifest::parse(path, &text)?;
-    Ok(manifest.effects.into_iter().map(|e| e.shader).collect())
+    let mut files: Vec<String> = manifest.effects.into_iter().map(|e| e.shader).collect();
+    for source in manifest.sources {
+        files.extend(source.common);
+        files.extend(source.passes.into_iter().map(|p| p.shader));
+        files.extend(source.images.into_values());
+    }
+    Ok(files)
+}
+
+/// The file `rel` names in the pack folder `dir` (canonically `root`), for the manifest
+/// field `at`. The manifest's path rules keep it in the folder; this catches a symlink
+/// that leads out of it.
+pub(crate) fn real_path(
+    dir: &Path,
+    root: &Path,
+    rel: &str,
+    manifest_path: &Path,
+    at: &str,
+) -> Result<PathBuf, PackError> {
+    let path = dir.join(rel);
+    let real = path.canonicalize().map_err(|source| PackError::Io {
+        path: path.clone(),
+        source,
+    })?;
+    if !real.starts_with(root) {
+        return Err(PackError::Manifest {
+            path: manifest_path.to_owned(),
+            at: at.to_owned(),
+            message: "leads outside the pack folder".into(),
+        });
+    }
+    Ok(path)
 }
 
 /// Reads a whole file of at most `limit` bytes as UTF-8.
-fn read(path: &Path, limit: u64) -> Result<String, PackError> {
+pub(crate) fn read(path: &Path, limit: u64) -> Result<String, PackError> {
     let io = |source| PackError::Io {
         path: path.to_owned(),
         source,

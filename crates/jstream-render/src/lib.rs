@@ -27,8 +27,10 @@ pub use compositor::Compositor;
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::RenderError;
 pub use filter::{
-    ExternalFilter, FilterClock, Lut, LutError, PRELUDE as FILTER_PRELUDE, VideoFilter,
-    descriptors as video_filter_descriptors, lut_image,
+    ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING, FilterClock, Lut, LutError,
+    MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_MAX_INPUTS, PROGRAM_MAX_PASSES,
+    PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage, ProgramInput, ProgramPass,
+    VideoFilter, descriptors as video_filter_descriptors, lut_image,
 };
 pub use gpu::OpenOptions;
 pub use image::Image;
