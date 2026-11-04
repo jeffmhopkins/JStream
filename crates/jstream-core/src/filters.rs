@@ -508,6 +508,21 @@ pub(crate) struct Chain {
 }
 
 impl Chain {
+    /// Each of this chain's filters' resolved key and the mixer's id for it (`None` for
+    /// one the mixer refused), for tests: a filter rebuilt gets a new id.
+    #[cfg(test)]
+    pub(crate) fn keys(&self) -> Vec<(Option<InputId>, Option<jstream_audio::FilterId>)> {
+        self.filters
+            .iter()
+            .map(|slot| {
+                (
+                    slot.chained.key,
+                    slot.control.as_ref().map(FilterControl::id),
+                )
+            })
+            .collect()
+    }
+
     /// Brings `host`'s chain in line with `wanted`, at `now`. When only settings
     /// changed, and none that rebuilds a filter, each changed built-in filter is updated
     /// in place, so its state (a gate's envelope, a delay line) carries on; otherwise

@@ -255,6 +255,13 @@ struct WantedState {
     /// Each source's mixer input's packets, as the last pass saw them, for tests.
     #[cfg(test)]
     packets: BTreeMap<SourceId, u64>,
+    /// Each source's mixer input and its chain's filters, as the last pass saw them,
+    /// for tests.
+    #[cfg(test)]
+    keyed: BTreeMap<SourceId, Keyed>,
+    /// The same, as the first pass that recorded each source saw it, for tests.
+    #[cfg(test)]
+    first_keyed: BTreeMap<SourceId, Keyed>,
     /// Each source's audio filter chain, as the mixer runs it. Sources without filters
     /// have no entry.
     chains: BTreeMap<SourceId, Vec<Chained>>,
@@ -433,6 +440,19 @@ impl AudioSources {
     #[cfg(test)]
     pub(crate) fn packets(&self, source_id: &SourceId) -> Option<u64> {
         lock(&self.wanted.state).packets.get(source_id).copied()
+    }
+
+    /// `source_id`'s mixer input and its chain's filters, as the program stage's last
+    /// pass saw them.
+    #[cfg(test)]
+    pub(crate) fn keyed(&self, source_id: &SourceId) -> Option<Keyed> {
+        lock(&self.wanted.state).keyed.get(source_id).cloned()
+    }
+
+    /// The same, as the first pass that recorded `source_id` saw it.
+    #[cfg(test)]
+    pub(crate) fn first_keyed(&self, source_id: &SourceId) -> Option<Keyed> {
+        lock(&self.wanted.state).first_keyed.get(source_id).cloned()
     }
 
     /// How the program stage fares with `source_id`, while it runs.
@@ -781,6 +801,18 @@ struct Pass {
     /// Each source's mixer input's packets so far, for tests.
     #[cfg(test)]
     packets: BTreeMap<SourceId, u64>,
+    /// Each source's mixer input and its chain's filters, for tests.
+    #[cfg(test)]
+    keyed: BTreeMap<SourceId, Keyed>,
+}
+
+/// A recording source's mixer input, and each of its chain's filters' resolved key and
+/// mixer id ([`Chain::keys`]), for tests.
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Keyed {
+    pub(crate) input: InputId,
+    pub(crate) filters: Vec<(Option<InputId>, Option<jstream_audio::FilterId>)>,
 }
 
 /// A change in one input worth a log line.
@@ -840,6 +872,13 @@ impl Pass {
         #[cfg(test)]
         {
             state.packets = self.packets;
+            for (id, keyed) in &self.keyed {
+                state
+                    .first_keyed
+                    .entry(id.clone())
+                    .or_insert_with(|| keyed.clone());
+            }
+            state.keyed = self.keyed;
         }
         let now = Wants::of(&state);
         state.status = self
@@ -978,12 +1017,29 @@ impl Open {
                 Some((id.clone(), live.control.stats().packets))
             })
             .collect();
+        #[cfg(test)]
+        let keyed = self
+            .inputs
+            .iter()
+            .filter_map(|(key, input)| {
+                let (Key::Source(id), Some(live)) = (key, &input.live) else {
+                    return None;
+                };
+                let keyed = Keyed {
+                    input: live.control.id(),
+                    filters: live.chain.keys(),
+                };
+                Some((id.clone(), keyed))
+            })
+            .collect();
         Pass {
             status,
             monitor_status,
             notes,
             #[cfg(test)]
             packets,
+            #[cfg(test)]
+            keyed,
         }
     }
 
