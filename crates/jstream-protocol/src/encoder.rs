@@ -252,6 +252,42 @@ pub struct EncoderSessionInfo {
     pub dedicated: bool,
 }
 
+/// A codec library the engine downloads on a person's request, as `codec.downloads`
+/// lists it (0.69, ADR-0061). On Linux it is Cisco's OpenH264: JStream never ships it,
+/// and downloads Cisco's own binary from Cisco's server only when a person asks, since
+/// Cisco's patent licence covers that copy alone. A client offering the download shows
+/// `notice` with a link to `license_url`, and sends `codec.download` only when the
+/// person confirms.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CodecDownloadInfo {
+    /// The download's ID, which `codec.download` and `codec.delete` take: `openh264`.
+    pub download_id: String,
+    /// What it is, for people: "Cisco's OpenH264 (software H.264)".
+    pub name: String,
+    /// The codec it encodes. An output whose profile asks for it in software
+    /// (`hardware: avoid`), or on a machine with no hardware encoder for it, needs it.
+    pub codec: VideoCodec,
+    /// The release the engine pins, such as `2.6.0`. A newer one comes with a JStream
+    /// update.
+    pub version: String,
+    /// The attribution the maker's licence asks for, shown wherever the download is
+    /// offered and in the app's licence information: "OpenH264 Video Codec provided by
+    /// Cisco Systems, Inc.".
+    pub notice: String,
+    /// The maker's licence for its binary, linked beside `notice`.
+    pub license_url: String,
+    /// That licence's full text, which a client reproduces where it presents licensing
+    /// information for the download (Cisco's condition 4), beside the offer and the
+    /// installed codec.
+    pub license_text: String,
+    /// Whether it is downloaded and in place.
+    pub installed: bool,
+    /// Whether this machine has a hardware encoder for `codec`. When it has none, an
+    /// output that encodes `codec` needs this download whatever its profile's
+    /// `hardware` preference, except `require`, which then fails.
+    pub hardware_encoder: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{EncoderProfile, HardwarePreference, RateControl, VideoCodec};

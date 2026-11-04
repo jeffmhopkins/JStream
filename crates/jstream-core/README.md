@@ -753,6 +753,14 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   most call the Live API (see *YouTube* under *Outputs*). Without `with_youtube`,
   YouTube's API features are off: `youtube.status` answers `unavailable` and the others
   `action_failed` saying the build has no OAuth client, and clients hide them.
+- **Codec downloads** (`codec.downloads`, `codec.download`, `codec.delete`, protocol
+  0.69, `codec_downloads.rs`) are answered from the codec backend's
+  `Codecs::downloads`, `download` and `delete_download` with no engine lock held, since
+  a download blocks for as long as Cisco's server takes. The list says, per download,
+  whether `Codecs::list` has a hardware encoder for its codec. An ID the backend doesn't
+  list, or an engine with no backends, is `invalid_argument` on `download_id`; a failed
+  download or delete is `action_failed` with the platform's reason. With no backends
+  the list is empty, as the mock's is.
 - **Plugin** actions (`plugin.*`) run with no engine lock held, since a plugin loads,
   and may call back into the engine, while its install or enable waits (see *WASM
   plugins*).

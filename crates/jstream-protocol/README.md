@@ -74,7 +74,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
+  `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -107,7 +107,9 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
   and `EncoderSessionInfo`, the per-output sharing and cost `output.status` reports
-  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
+  ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); and
+  `CodecDownloadInfo`, a codec library the engine downloads on a person's request
+  ([Codec downloads](#codec-downloads)).
 - **Video mixes** (`mix.rs`): `VideoMix`, what an output's video shows: a `MixInput`
   (`program`, `preview` or one `scene`), a `MixResolution` and an `fps_divisor` of the
   base frame rate, with its range checks (`VideoMix::problem`, shared by every
@@ -136,7 +138,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
@@ -275,10 +277,12 @@ effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
 limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
 may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
 binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
-codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
-left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.70 because of `scene.set_camera` and
 `SceneInfo.camera`, a live value too
-([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
+([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.69 because of the
+`codec.downloads` query and the `codec.download` and `codec.delete` actions, which
+download Cisco's OpenH264 on a person's request ([Codec downloads](#codec-downloads),
+[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
 `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
 takes a source's settings whose kind marks them `live` (`source.set_settings`,
 [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -1310,6 +1314,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
+- `codec.downloads`: the codec libraries the engine can download on a person's request,
+  ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
+  downloads* below).
 - `delete.plan {target}`: the batch that deletes a scene, source or bus (`target` is
   `{"type":"scene","scene_id":…}`, `{"type":"source","source_id":…}` or, since 0.24,
   `{"type":"bus","bus_id":…}`), or a folder or label (`{"type":"folder","folder_id":…}`,
@@ -1870,6 +1877,31 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
   over that read by `path` is `too_large`), and with `path` an image's `base64`.
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
+
+<a id="codec-downloads"></a>
+## Codec downloads
+<!-- @section
+covers = ["crates/jstream-protocol/src/encoder.rs"]
+-->
+
+Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
+straight to the user's machine, so on Linux the engine downloads it from Cisco when a
+person asks, and never ships it
+([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.69:
+- **`codec.downloads`** lists what the engine can download, ordered by ID, each a
+  `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
+  the pinned `version`, the `notice` and `license_url` a client shows wherever it offers
+  it, the licence's full `license_text`, which the client reproduces there too, whether it is `installed`, and whether the machine has a `hardware_encoder` for
+  its codec, so a client can tell when an output needs it. An engine whose platform
+  downloads nothing (Windows, macOS), or that has no codec backend, lists none.
+- **`codec.download {download_id}`** downloads it from the maker's server, checks it
+  against the engine's pin and puts it in place, answering once that is done; outputs
+  started afterwards can encode with it. A download that fails or doesn't match the pin
+  is `action_failed` with the reason, and nothing is kept.
+- **`codec.delete {download_id}`** deletes it again; a running output keeps its encoder.
+- Both are `invalid_argument` on `download_id` for an ID the list doesn't hold. All
+  three are for a person, like `plugin.install`: no MCP tool carries them, no plugin is
+  granted them and no hotkey binds the actions.
 
 <a id="shared-values"></a>
 ## Shared values

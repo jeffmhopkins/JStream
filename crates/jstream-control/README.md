@@ -254,6 +254,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md));
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
+- `codec.downloads` listing none, and `codec.download` and `codec.delete` answered with
+  `invalid_argument` on `download_id`, as an engine with no codec backend answers them,
+  unless `MockEngine::with_codec_downloads` offered downloads: then they are listed, and
+  the actions mark one installed or not, fetching nothing;
 - `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
   as an engine that watches no packs folder answers them
   ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;

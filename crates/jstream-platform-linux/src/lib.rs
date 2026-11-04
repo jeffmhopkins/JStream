@@ -73,9 +73,10 @@ pub use codec::choose_encoder;
 pub use gpu::LinuxGpu;
 #[cfg(target_os = "linux")]
 pub use openh264::{
-    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_ENCODER_NAME,
-    OPENH264_LICENSE_URL, OPENH264_NOTICE, OPENH264_PIN, OpenH264Encoder, OpenH264Pin,
-    OpenH264Store, openh264_encoder_info, wants_software,
+    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DOWNLOAD_ID,
+    OPENH264_ENCODER_NAME, OPENH264_LICENSE_TEXT, OPENH264_LICENSE_URL, OPENH264_NOTICE,
+    OPENH264_PIN, OpenH264Encoder, OpenH264Pin, OpenH264Store, openh264_encoder_info,
+    wants_software,
 };
 #[cfg(target_os = "linux")]
 pub use pairing::PairedAudio;

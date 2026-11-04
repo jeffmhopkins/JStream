@@ -431,7 +431,7 @@ handlers; the real UI makes them work.
 <a id="beyond"></a>
 ## Beyond the prototype
 <!-- @section
-covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs", "crates/jstream-ui/src/plugins.rs"]
+covers = ["crates/jstream-ui/src/session.rs", "crates/jstream-ui/src/host.rs", "crates/jstream-ui/src/pairing.rs", "crates/jstream-ui/src/plugins.rs", "crates/jstream-ui/src/panels/codec_downloads.rs"]
 -->
 
 The real UI does these and the prototype doesn't show them. Matching the prototype must
@@ -477,6 +477,12 @@ not remove them; they move into the prototype's look.
   preference and the AAC bit rate. A mix has what it shows (the program, the preview or
   one scene), its size, with vertical 1080 × 1920 and 720 × 1280 among the presets, and
   its rate as a share of the base rate.
+- The OpenH264 download (LNX2, [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)):
+  on Linux, Encoders offers Cisco's OpenH264 when the machine has no hardware H.264
+  encoder or a profile asks for software H.264, and the encoder form offers it under the
+  hardware choice while the draft would need it. Each offer names Cisco, shows Cisco's
+  notice with a link to its licence and the licence's full text under "Licence terms", and downloads only when the person presses its
+  button; once installed, the notice and link stay beside a Delete button.
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.
 - Settings forms generated from kind descriptors, with groups, advanced settings,
