@@ -738,7 +738,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
 - **Timelines** (protocol 0.87, a placeholder,
-  [ADR-0114](adr/0114-timelines-on-the-wire.md), building ADR-0099's decision 4): a
+  [ADR-0115](adr/0115-timelines-on-the-wire.md), building ADR-0099's decision 4): a
   scene holds timelines of timed cues, written whole by `timeline.set` and removed by
   `timeline.delete`. A timeline's ID is unique across the collection, so
   `timeline.play`, `timeline.stop` and `timeline.seek`, a hotkey and a cue name it alone.
@@ -1369,7 +1369,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
-  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0114) bumped it
+  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
   migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.

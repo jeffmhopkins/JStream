@@ -120,13 +120,13 @@ history call
 today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
-may set such a value, [ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)). `history` stays
+may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
 itself, #1107), the `preview` actions, `scene.zoom_camera`
 ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
-puts back and nothing stores), `source.restart` (ADR-0114, which a switch to a scene
+puts back and nothing stores), `source.restart` (ADR-0115, which a switch to a scene
 that restarts on show does too) and `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
 opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
@@ -206,7 +206,7 @@ modifier for something that follows a bus or a beat, which hears only while an o
 runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
-([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)), and checking
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

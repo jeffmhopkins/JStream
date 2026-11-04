@@ -56,7 +56,7 @@ opaque_id!(
     SceneId
 );
 opaque_id!(
-    /// A timeline a scene holds (ADR-0114). Unique across the collection, so an action
+    /// A timeline a scene holds (ADR-0115). Unique across the collection, so an action
     /// names it alone.
     TimelineId
 );

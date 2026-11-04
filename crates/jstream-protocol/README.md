@@ -153,7 +153,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
   `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent)
-  and its `timelines` (since 0.87, ADR-0114, omitted while empty), and `studio.get`
+  and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
@@ -300,7 +300,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `timeline.play`, `timeline.stop`, `timeline.seek`, `source.restart`,
 `SceneInfo.timelines`, `studio.get`'s `timelines`, the `timeline.changed` and
 `timeline.cue_fired` events and the `timeline` entity kind
-([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md), a placeholder number the
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md), a placeholder number the
 release queue sets); 0.86 because of the `audio` motion kind and its `MotionMeasure`
 and `MotionCurve` ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md));
 0.85 because of
@@ -1844,14 +1844,14 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
   a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.zoom_camera`, which
-  changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0114) and `outputs` (`output.start`, `output.stop`). Everything else is
+  changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
   `timeline.*` edits and actions, whose cues run actions the `edit` class can't
-  (ADR-0114).
+  (ADR-0115).
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -2169,12 +2169,12 @@ disappearing one as its old scene said.
 ## Timelines
 <!-- @section
 covers = ["crates/jstream-protocol/src/timeline.rs"]
-depends_on = ["docs/adr/0114-timelines-on-the-wire.md"]
+depends_on = ["docs/adr/0115-timelines-on-the-wire.md"]
 -->
 
 Since 0.87 a scene holds timelines
 ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md) decision 4,
-[ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md), `timeline.rs`):
+[ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md), `timeline.rs`):
 `SceneInfo.timelines`, ordered by ID, each a `TimelineInfo` of timed cues.
 - **Shape:** a `timeline_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`,
   unique across the collection, so an action names it alone), a `name`, a

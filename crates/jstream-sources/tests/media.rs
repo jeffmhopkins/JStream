@@ -199,7 +199,7 @@ fn showing_it_again_restarts_it_when_asked() {
     assert_eq!(shown(&mut keeps, 300), 7, "it plays on");
 }
 
-/// `source.restart` (ADR-0114) plays the file from its start whatever `restart_on_show`.
+/// `source.restart` (ADR-0115) plays the file from its start whatever `restart_on_show`.
 #[test]
 fn a_restart_plays_it_from_the_start() {
     let (dir, fake) = setup("restart-call", clip());

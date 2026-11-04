@@ -1,5 +1,5 @@
 //! Timelines on the wire ([ADR-0099](../../../docs/adr/0099-native-motion-modifiers-and-timelines.md)
-//! decision 4, [ADR-0114](../../../docs/adr/0114-timelines-on-the-wire.md)): timed cues a
+//! decision 4, [ADR-0115](../../../docs/adr/0115-timelines-on-the-wire.md)): timed cues a
 //! scene holds, each running a protocol action at a time from the timeline's start.
 //!
 //! A scene holds its timelines in `SceneInfo.timelines`, which `timeline.set` and

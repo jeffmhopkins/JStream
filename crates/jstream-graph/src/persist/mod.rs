@@ -133,7 +133,7 @@ fn v4_to_v5(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Version 6 adds a scene's timelines (`scenes[].timelines`, ADR-0114). A version 5 file
+/// Version 6 adds a scene's timelines (`scenes[].timelines`, ADR-0115). A version 5 file
 /// has none, so it upgrades unchanged; one there is refused, as version 5 refused it.
 fn v5_to_v6(value: &mut Value) -> Result<(), String> {
     let scenes = value.get("scenes").and_then(Value::as_array);
@@ -333,7 +333,7 @@ struct FileScene {
     /// whose item has left the scene, which is inert.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     camera_follow: Option<CameraFollow>,
-    /// Its timelines (ADR-0114, schema_version 6), ordered by ID; omitted when it has
+    /// Its timelines (ADR-0115, schema_version 6), ordered by ID; omitted when it has
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     timelines: Vec<TimelineInfo>,

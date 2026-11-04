@@ -1,4 +1,4 @@
-//! The timelines playing ([ADR-0114](../../../docs/adr/0114-timelines-on-the-wire.md),
+//! The timelines playing ([ADR-0115](../../../docs/adr/0115-timelines-on-the-wire.md),
 //! ADR-0099 decision 4): studio state, like the program scene, which
 //! `timeline.play`, `timeline.stop` and `timeline.seek` change and `studio.get` reports.
 //!

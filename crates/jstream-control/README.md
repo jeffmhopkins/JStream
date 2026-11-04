@@ -345,7 +345,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
   switch cuts and reports it, a switch naming another preset is `not_found`, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
-  `internal`. So do timelines ([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)):
+  `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   the `timeline.*` edits and actions and `source.restart` answer `internal`, and
   `studio.get` lists no timeline playing;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is

@@ -693,7 +693,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+                "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -711,7 +711,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+                "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -729,7 +729,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to play it from, in milliseconds from its start.",
@@ -754,7 +754,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+                "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -3353,7 +3353,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+                "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -3376,7 +3376,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+                "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -5310,7 +5310,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "TimelineId": {
-            "description": "A timeline a scene holds (ADR-0114). Unique across the collection, so an action\nnames it alone.",
+            "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
             "type": "string"
           },
           "TimelineInfo": {
@@ -7813,7 +7813,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+                "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -7831,7 +7831,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+                "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -7849,7 +7849,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to play it from, in milliseconds from its start.",
@@ -7874,7 +7874,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+                "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -10473,7 +10473,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+                "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -10496,7 +10496,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+                "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -12430,7 +12430,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "TimelineId": {
-            "description": "A timeline a scene holds (ADR-0114). Unique across the collection, so an action\nnames it alone.",
+            "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
             "type": "string"
           },
           "TimelineInfo": {
@@ -15170,7 +15170,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+                "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -15188,7 +15188,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+                "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -15206,7 +15206,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to play it from, in milliseconds from its start.",
@@ -15231,7 +15231,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+                "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -17830,7 +17830,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+                "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -17853,7 +17853,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+                "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -19777,7 +19777,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "TimelineId": {
-            "description": "A timeline a scene holds (ADR-0114). Unique across the collection, so an action\nnames it alone.",
+            "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
             "type": "string"
           },
           "TimelineInfo": {
@@ -22575,7 +22575,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+                "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -23324,7 +23324,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+                "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -23342,7 +23342,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+                "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -23360,7 +23360,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to play it from, in milliseconds from its start.",
@@ -23385,7 +23385,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+                "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
                     "$ref": "#/$defs/SourceId",
@@ -25984,7 +25984,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+                "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -26007,7 +26007,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+                "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -27941,7 +27941,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "TimelineId": {
-            "description": "A timeline a scene holds (ADR-0114). Unique across the collection, so an action\nnames it alone.",
+            "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
             "type": "string"
           },
           "TimelineInfo": {
@@ -28210,7 +28210,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `timeline` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+                "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -28233,7 +28233,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+                "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -28251,7 +28251,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+                "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -28269,7 +28269,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+                "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
                 "properties": {
                   "timeline_id": {
                     "$ref": "#/$defs/TimelineId",
@@ -28287,7 +28287,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+                "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
                 "properties": {
                   "at_ms": {
                     "description": "Where to play it from, in milliseconds from its start.",

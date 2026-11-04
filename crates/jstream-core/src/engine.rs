@@ -3155,7 +3155,7 @@ struct State {
     /// When each item's `triggered` motion modifiers were last fired, by
     /// `item.trigger_motion` (#1107): the origin of their clock.
     fired: crate::motion::Fired,
-    /// The timelines playing (ADR-0114): studio state, like the program scene.
+    /// The timelines playing (ADR-0115): studio state, like the program scene.
     timelines: crate::timelines::Timelines,
     /// While a timeline's cue runs, its exact time on the animation clock, which a
     /// transition or a fire it starts takes as its start (ADR-0099 decision 4).
@@ -3547,7 +3547,7 @@ impl State {
         self.cue_at.unwrap_or_else(|| self.live.now())
     }
 
-    /// `timeline.play` (`from_ms` `None`) and `timeline.seek` (ADR-0114): starts
+    /// `timeline.play` (`from_ms` `None`) and `timeline.seek` (ADR-0115): starts
     /// `timeline_id` from its start or from `from_ms`, replacing any play of it, and
     /// emits `timeline.changed`. A seek first runs, at once, the state cues before
     /// `from_ms` that a play from the start would have left in force
@@ -3636,7 +3636,7 @@ impl State {
         Ok(())
     }
 
-    /// `timeline.stop` (ADR-0114): stops `timeline_id` where it is, emitting
+    /// `timeline.stop` (ADR-0115): stops `timeline_id` where it is, emitting
     /// `timeline.changed` if it was playing.
     fn timeline_stop(
         &mut self,
@@ -3708,7 +3708,7 @@ impl State {
     }
 
     /// Fires every playing timeline's cues due by now, in the order they fall due
-    /// across timelines, and emits each loop and end (ADR-0114). A cue that plays a
+    /// across timelines, and emits each loop and end (ADR-0115). A cue that plays a
     /// timeline starts it at the cue's time, so its first cues are due at once: they
     /// run in the next round, up to [`crate::timelines::MAX_ROUNDS`] rounds a tick.
     /// Returns when the next cue or pass boundary falls due, if any timeline plays.

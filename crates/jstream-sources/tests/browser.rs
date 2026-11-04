@@ -256,7 +256,7 @@ fn restart_on_show_reloads_the_page_when_shown() {
     assert_eq!(pages[1].reloads(), 2);
 }
 
-/// `source.restart` (ADR-0114) loads the page again whatever `restart_on_show`.
+/// `source.restart` (ADR-0115) loads the page again whatever `restart_on_show`.
 #[test]
 fn a_restart_reloads_the_page() {
     let browser = FakeBrowser::new();

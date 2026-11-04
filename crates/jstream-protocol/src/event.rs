@@ -274,7 +274,7 @@ pub enum Event {
         /// losses, or nothing it could switch to): the outputs that drew on it fail.
         recovering: bool,
     },
-    /// A timeline started, was sought, looped, ended, stopped or was removed (ADR-0114,
+    /// A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,
     /// since 0.87): never once a frame. Playing is studio state, so it carries no `rev`.
     #[serde(rename = "timeline.changed")]
     TimelineChanged {
@@ -292,7 +292,7 @@ pub enum Event {
         /// Which pass it is on: 0 the first.
         pass: u64,
     },
-    /// A timeline's cue fired (ADR-0114, since 0.87), once per cue on each pass, and once
+    /// A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once
     /// for each cue `timeline.seek` runs. The cue's action has its own events (a
     /// `scene.switch` cue's `studio.changed` follows).
     #[serde(rename = "timeline.cue_fired")]

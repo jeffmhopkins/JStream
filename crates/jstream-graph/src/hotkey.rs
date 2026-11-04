@@ -79,7 +79,7 @@ fn exists(state: &State, entity: EntityKind, id: &str) -> bool {
 }
 
 /// Removes every binding whose action names an item or a timeline the collection no
-/// longer has (ADR-0101, ADR-0114): `item.remove`, and the deletes that take items with
+/// longer has (ADR-0101, ADR-0115): `item.remove`, and the deletes that take items with
 /// them (`scene.delete`, `source.delete`), drop the bindings of `item.show`, `item.hide`
 /// and `item.toggle` naming those items, and `timeline.delete` and `scene.delete` those
 /// of `timeline.play`, `timeline.stop` and `timeline.seek` naming its timelines.

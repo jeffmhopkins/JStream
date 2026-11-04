@@ -925,7 +925,7 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
-    /// Stores a timeline in a scene (ADR-0114, since 0.87): a new one, or the whole of
+    /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
     /// exist; with `already_exists` (entity `timeline`) for an ID another scene's timeline
@@ -944,7 +944,7 @@ pub enum Edit {
         /// The timeline, whole.
         timeline: TimelineInfo,
     },
-    /// Deletes a timeline (ADR-0114, since 0.87). A playing one stops, with a
+    /// Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a
     /// `timeline.changed` `removed`. Hotkey bindings whose action names it are removed
     /// with it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other
     /// timelines that name it stay, inert. Rejected with `not_found` (entity
@@ -1618,7 +1618,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         modifier_id: Option<String>,
     },
-    /// Plays a timeline from its start (ADR-0114, since 0.87), or from its start again if
+    /// Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if
     /// it is playing. Its cues fire at their times on the animation clock (ADR-0099
     /// decision 2), on every pass of a loop, until it ends or is stopped. Playing is
     /// studio state like the program scene: it changes no `rev`, is never undone, and
@@ -1634,7 +1634,7 @@ pub enum Action {
         /// The timeline to play.
         timeline_id: TimelineId,
     },
-    /// Stops a playing timeline (ADR-0114, since 0.87), where it is: what its cues did
+    /// Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did
     /// stays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing
     /// succeeds and emits nothing. Fails with `not_found` for a timeline the collection
     /// doesn't hold.
@@ -1643,7 +1643,7 @@ pub enum Action {
         /// The timeline to stop.
         timeline_id: TimelineId,
     },
-    /// Plays a timeline from `at_ms` on its first pass (ADR-0114, since 0.87), whether or
+    /// Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or
     /// not it was playing, so the scene shows what it would if the timeline had played
     /// there: first the cues before `at_ms` that set a state run at once, only the last
     /// one for each thing they set (the program scene, an item's visibility, a shared
@@ -1659,7 +1659,7 @@ pub enum Action {
         /// Where to play it from, in milliseconds from its start.
         at_ms: u32,
     },
-    /// Restarts a source from its beginning (ADR-0114, since 0.87): a `browser` page
+    /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
     /// loads again, and a `media` file plays from its start. Other kinds have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
     /// shows yet. Runtime state like a scene switch's restart: it changes no `rev` and is
@@ -2040,7 +2040,7 @@ impl Action {
 
 impl Action {
     /// Why this action can't be a timeline cue, as the field within the action and the
-    /// reason, or `None` if it can (ADR-0099 decision 4, ADR-0114). A cue runs one of a
+    /// reason, or `None` if it can (ADR-0099 decision 4, ADR-0115). A cue runs one of a
     /// closed set: `scene.switch`, `item.show`, `item.hide`, `item.toggle`,
     /// `item.trigger_motion`, `values.set`, `source.restart`, and `timeline.play`,
     /// `timeline.stop` and `timeline.seek`. Each is an action a hotkey can run too, and

@@ -705,7 +705,7 @@ impl LiveSources {
         self.worker.now()
     }
 
-    /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0114):
+    /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0115):
     /// [`Source::restart`] on its running instance, at its own time now. A source with no
     /// running instance has nothing to restart.
     pub(crate) fn restart(&mut self, source_id: &SourceId) {

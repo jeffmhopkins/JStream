@@ -34,7 +34,7 @@ const V4: &str = include_str!("fixtures/v4.json");
 const V5: &str = include_str!("fixtures/v5.json");
 
 /// A collection file at schema version 6, the current one: version 5 with a timeline in
-/// scene `a` and a hotkey that plays it (ADR-0114). The same rule applies once version 7
+/// scene `a` and a hotkey that plays it (ADR-0115). The same rule applies once version 7
 /// exists.
 const V6: &str = include_str!("fixtures/v6.json");
 
@@ -315,7 +315,7 @@ fn v5_graph() -> Graph {
 
 /// The v5 fixture's collection, plus timeline `t_intro` in scene `a`, which switches to
 /// scene `b`, shows an item and plays itself from a range, and hotkey `F6` that plays it
-/// (ADR-0114), in one more batch: rev 7.
+/// (ADR-0115), in one more batch: rev 7.
 fn v6_graph() -> Graph {
     use jstream_protocol::{Action, Chord, TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
     let mut graph = v5_graph();

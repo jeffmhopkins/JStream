@@ -1,4 +1,4 @@
-//! Timelines ([ADR-0114](../../../docs/adr/0114-timelines-on-the-wire.md)): the
+//! Timelines ([ADR-0115](../../../docs/adr/0115-timelines-on-the-wire.md)): the
 //! `timeline.set` and `timeline.delete` edits, and the timelines a scene holds.
 //!
 //! A timeline belongs to one scene, but its ID is unique across the collection, so an

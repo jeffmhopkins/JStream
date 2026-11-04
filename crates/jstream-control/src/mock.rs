@@ -22,7 +22,7 @@
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
 //! session. It does no persistence or real output work, and knows no transition preset
 //! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
-//! not mocked. Neither are timelines (ADR-0114): the `timeline.*` edits and actions and
+//! not mocked. Neither are timelines (ADR-0115): the `timeline.*` edits and actions and
 //! `source.restart`, so `studio.get` never lists a timeline playing.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,

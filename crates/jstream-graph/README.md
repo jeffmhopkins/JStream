@@ -61,7 +61,7 @@ protocol's types (`Overrides`).
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
   scene's is an override of its parent's), its camera's `camera_motion` and
   `camera_follow` (ADR-0113, a family's only), its `timelines` ordered by ID
-  (ADR-0114), and its items in stacking order, bottom
+  (ADR-0115), and its items in stacking order, bottom
   first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
@@ -398,7 +398,7 @@ with no inverse. The engine draws open gestures' source settings through it
   scene stays, inert; a deleted scene's inverse restores them after its items
   (`camera::restore`). `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
-- **Timelines** (`timeline.rs`, [ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)):
+- **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   `timeline.set` stores a timeline in a scene (the scene `not_found`, then
   `TimelineInfo::problem` as `invalid_argument` at `timeline.…`, then an ID another scene
   holds `already_exists`, then a 33rd timeline in the scene) and is undone by
@@ -428,7 +428,7 @@ with no inverse. The engine draws open gestures' source settings through it
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md),
-  [ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)), so none dangles: the result's `removed_hotkeys` lists them,
+  [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), so none dangles: the result's `removed_hotkeys` lists them,
   and the edit's inverse ends with a `hotkey.set` for each, after the object is back.
   `delete.plan` lists the bindings by applying its plan to a copy.
   `State::visible_in` reads a placement's visibility as `item.set_visible` with that
@@ -518,7 +518,7 @@ bump either. An override's `effects` (ADR-0088), written with each filter's
 an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 `schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
 omitted while absent, are `schema_version` 5; a follow whose item has left the scene
-isn't written, so reloading never refuses it. A scene's `timelines` (ADR-0114), ordered
+isn't written, so reloading never refuses it. A scene's `timelines` (ADR-0115), ordered
 by ID and omitted while empty, are `schema_version` 6. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and

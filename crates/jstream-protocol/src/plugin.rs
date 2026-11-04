@@ -225,7 +225,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // Moves an item for a moment, as `item.set_motion` sets how it moves (#1107).
     ("item.trigger_motion", Class(E)),
     // A timeline's cues run actions, `scene.switch` and `values.set` among them, that
-    // the edit class alone can't (ADR-0114), so writing or playing one is "never" until a
+    // the edit class alone can't (ADR-0115), so writing or playing one is "never" until a
     // PR decides which class may. Restarting a source changes what is on air, as a
     // switch does.
     ("timeline.play", N),

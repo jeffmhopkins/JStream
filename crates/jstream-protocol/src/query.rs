@@ -543,7 +543,7 @@ pub enum QueryResult {
         /// collection has no scene, and by a server older than 0.30.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
-        /// The timelines playing (ADR-0114, since 0.87), ordered by ID, each with where
+        /// The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where
         /// it is now. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         timelines: Vec<PlayingTimeline>,
@@ -976,7 +976,7 @@ pub struct SceneInfo {
     /// Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_follow: Option<CameraFollow>,
-    /// Its timelines (ADR-0114, since 0.87), ordered by ID: timed cues that
+    /// Its timelines (ADR-0115, since 0.87), ordered by ID: timed cues that
     /// `timeline.play` runs. Omitted when it has none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub timelines: Vec<TimelineInfo>,

@@ -1,4 +1,4 @@
-//! Timelines (ADR-0114): `timeline.set` and `timeline.delete`, their checks and
+//! Timelines (ADR-0115): `timeline.set` and `timeline.delete`, their checks and
 //! inverses, the global ID, a deleted scene's timelines, and the hotkeys bound to one.
 
 use super::{add, apply_err, apply_ok, fixture, invalid_reason};

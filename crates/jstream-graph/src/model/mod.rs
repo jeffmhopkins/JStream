@@ -760,7 +760,7 @@ pub struct Scene {
     /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
     /// item no longer in the scene, which leaves it inert.
     pub(crate) camera_follow: Option<CameraFollow>,
-    /// Its timelines (ADR-0114), by ID.
+    /// Its timelines (ADR-0115), by ID.
     pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
@@ -832,7 +832,7 @@ impl Scene {
         self.camera_follow.as_ref()
     }
 
-    /// Its timelines (ADR-0114), ordered by ID.
+    /// Its timelines (ADR-0115), ordered by ID.
     pub fn timelines(&self) -> &BTreeMap<TimelineId, TimelineInfo> {
         &self.timelines
     }

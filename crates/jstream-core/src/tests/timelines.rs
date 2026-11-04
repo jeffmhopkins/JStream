@@ -1,4 +1,4 @@
-//! Timelines (ADR-0114) through `InProcessControl`: `timeline.set` stores timed cues in
+//! Timelines (ADR-0115) through `InProcessControl`: `timeline.set` stores timed cues in
 //! a scene, `timeline.play` fires them on the animation clock as the actions they hold,
 //! `timeline.seek` runs only the state cues before where it starts, and deleting a
 //! timeline stops it and takes the hotkeys bound to it.

@@ -254,7 +254,7 @@ pub enum EntityKind {
     /// An effect pack (0.72, ADR-0097). Only an error answering a `pack.*` command names
     /// it, so a client older than 0.72, which sends none, never reads it.
     Pack,
-    /// A timeline a scene holds (ADR-0114). Only an error answering a `timeline.*`
+    /// A timeline a scene holds (ADR-0115). Only an error answering a `timeline.*`
     /// command, or a `hotkey.set` or `timeline.set` naming one, names it, so a client
     /// that sends none never reads it.
     Timeline,

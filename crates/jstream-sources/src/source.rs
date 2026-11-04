@@ -47,7 +47,7 @@ pub trait Source: Send {
 
     /// Starts the source again from its beginning at `at`, on the same clock as
     /// [`frame`](Self::frame), whatever its `restart_on_show` (`source.restart`,
-    /// ADR-0114): a `browser` page loads again and a `media` file plays from its start.
+    /// ADR-0115): a `browser` page loads again and a `media` file plays from its start.
     /// The default does nothing, for a kind with nothing to restart.
     fn restart(&mut self, at: MediaTime) {
         let _ = at;

@@ -113,7 +113,7 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// picture back, though in a keyframe a hide's new override stays until
 /// `item.clear_override`), a live value and its cancel, the loudness meter's reset, a fired
 /// motion (#1107, which stills itself), a follow camera's zoom (ADR-0113: another zoom puts
-/// it back, and nothing stores it), a source's restart (ADR-0114: a page or file starts
+/// it back, and nothing stores it), a source's restart (ADR-0115: a page or file starts
 /// again, as a switch to a scene with `restart_on_show` restarts it), and a preview stream
 /// (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
@@ -1085,7 +1085,7 @@ mod tests {
         // that undo never reaches (ADR-0097), `ui_settings.set` replaces a person's
         // settings, `values.set` replaces a value that a page granted it may send off
         // the machine (ADR-0102), `timeline.play` runs cues that may set such a value
-        // (ADR-0114), and an undo past an `output.create` removes a stream key redo doesn't
+        // (ADR-0115), and an undo past an `output.create` removes a stream key redo doesn't
         // restore.
         let destructive: Vec<&str> = all
             .iter()

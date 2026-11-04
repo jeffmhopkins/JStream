@@ -31,7 +31,7 @@ enum Object {
     Hotkey(Chord),
     Folder(FolderId),
     Label(LabelId),
-    /// A timeline, whole: `timeline.set` writes all of it (ADR-0114).
+    /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
     Timeline(TimelineId),
 }
 

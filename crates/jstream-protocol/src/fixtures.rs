@@ -567,7 +567,7 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
         },
-        // A timeline, then its delete (ADR-0114).
+        // A timeline, then its delete (ADR-0115).
         Edit::TimelineSet {
             scene_id: SceneId::new("scn_1"),
             timeline: volley(),
@@ -1412,7 +1412,7 @@ pub(crate) fn actions() -> Vec<Action> {
             item_id: ItemId::new("itm_1"),
             modifier_id: None,
         },
-        // Timelines (ADR-0114).
+        // Timelines (ADR-0115).
         Action::TimelinePlay {
             timeline_id: TimelineId::new("tl_volley"),
         },
@@ -1429,7 +1429,7 @@ pub(crate) fn actions() -> Vec<Action> {
     ]
 }
 
-/// A timeline that runs a sequence of cues and loops a range of it (ADR-0114).
+/// A timeline that runs a sequence of cues and loops a range of it (ADR-0115).
 fn volley() -> TimelineInfo {
     let show = |at_ms: u32, item: &str| {
         TimelineCue::new(

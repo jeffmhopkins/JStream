@@ -318,7 +318,7 @@ state machine. Contents:
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
 - **Timelines** (`timelines.rs`,
-  [ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)): the timelines playing,
+  [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
   restarts a live source (`LiveSources::restart`).
@@ -1110,10 +1110,10 @@ switch a Fade (`transition::shared_camera`).
 ## Timelines
 <!-- @section
 covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs"]
-depends_on = ["crates/jstream-protocol/README.md#timelines", "docs/adr/0114-timelines-on-the-wire.md"]
+depends_on = ["crates/jstream-protocol/README.md#timelines", "docs/adr/0115-timelines-on-the-wire.md"]
 -->
 
-The engine plays timelines ([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md))
+The engine plays timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md))
 as studio state beside the program scene (`timelines.rs`): `Timelines` keeps, for each
 one playing, when its pass 0 started on the animation clock (the media clock the sources
 and the render thread draw on, in nanoseconds), how far its cues have fired, its pass,
@@ -3017,7 +3017,7 @@ a sink, and answers `activity.list` from them; a restarted engine starts empty. 
 or action the sentence table doesn't name reads as its command name. A timeline's cues
 get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
 one, and `timeline.cue_fired` reports each cue
-([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)).
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)).
 
 Live values are logged once per gesture, never per `live.set`
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` and `live.cancel`
