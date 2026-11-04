@@ -10,7 +10,7 @@
 //! whole list, and a keyframe scene can override it whole (`OverrideField::Motion`).
 //!
 //! An `audio` modifier ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md),
-//! since 0.82) follows a measure of a bus or a source instead of the clock: the engine
+//! since 0.84) follows a measure of a bus or a source instead of the clock: the engine
 //! measures what it hears each frame and follows it with the modifier's attack and
 //! release.
 
@@ -115,7 +115,7 @@ impl MotionShape {
     ];
 }
 
-/// What an `audio` modifier measures of what it hears (since 0.82).
+/// What an `audio` modifier measures of what it hears (since 0.84).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -139,7 +139,7 @@ pub enum MotionMeasure {
 }
 
 /// How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.
-/// None overshoots (since 0.82).
+/// None overshoots (since 0.84).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -202,7 +202,7 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
-    /// Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from
+    /// Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from
     /// `floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with
     /// `attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence
     /// is `from`. It hears what a `spectrum` source with the same `audio` and

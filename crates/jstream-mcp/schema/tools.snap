@@ -3619,7 +3619,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.82).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
             "oneOf": [
               {
                 "const": "linear",
@@ -3644,7 +3644,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.82).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
             "oneOf": [
               {
                 "const": "level",
@@ -3774,7 +3774,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -9796,7 +9796,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.82).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
             "oneOf": [
               {
                 "const": "linear",
@@ -9821,7 +9821,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.82).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
             "oneOf": [
               {
                 "const": "level",
@@ -9951,7 +9951,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -11216,7 +11216,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.82).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
             "oneOf": [
               {
                 "const": "linear",
@@ -11241,7 +11241,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.82).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
             "oneOf": [
               {
                 "const": "level",
@@ -11371,7 +11371,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -16016,7 +16016,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.82).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
             "oneOf": [
               {
                 "const": "linear",
@@ -16041,7 +16041,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.82).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
             "oneOf": [
               {
                 "const": "level",
@@ -16171,7 +16171,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,

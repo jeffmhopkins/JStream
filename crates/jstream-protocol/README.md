@@ -138,7 +138,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
   `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
-  shares ([Motion](#design)). Since 0.82 `MotionKind::Audio`, with its `MotionMeasure`
+  shares ([Motion](#design)). Since 0.84 `MotionKind::Audio`, with its `MotionMeasure`
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
@@ -224,9 +224,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   within which any source draws a legacy transform: its position within `MAX_DRAWN_PX`
   and its scale within ±`MAX_LEGACY_SCALE` (100 000, #1130). They are enough, not
   needed, and no edit checks them (ADR-0022); motion keeps a moved transform within
-  them. `PROTOCOL_VERSION` is 0.82 because of the
+  them. `PROTOCOL_VERSION` is 0.84 because of the
   `audio` motion kind and its `MotionMeasure` and `MotionCurve`
-  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)); 0.81 because of
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), with 0.82 and
+  0.83 left to changes that claimed them first; 0.81 because of
   `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
   `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)),
   with 0.76 to 0.80 left to changes that claimed them first; 0.75 because of the
@@ -1794,7 +1795,7 @@ after 1.0:
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
-  `MotionCurve`, 0.82): a later kind or property won't break a 0.81 client's
+  `MotionCurve`, 0.84): a later kind or property won't break a 0.81 client's
   `state.get`, and a 0.81 client reads an `audio` modifier as an unknown kind. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
@@ -1825,7 +1826,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
   `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
   100 000, rates within ±100 000.
-- **`audio`** (since 0.82,
+- **`audio`** (since 0.84,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)) follows what it
   hears instead of a clock: the program mix (the master after its filters, as the
   outputs hear it), a bus named by `audio` after its fader, or a source named by

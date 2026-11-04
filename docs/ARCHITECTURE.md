@@ -654,7 +654,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
   whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), and since
-  0.82 a modifier can follow a bus or a source's audio
+  0.84 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
