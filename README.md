@@ -147,12 +147,191 @@ ADRs that govern each file are found and kept true, and the PR loop that lands a
 Generated from [`docs/progress.toml`](docs/progress.toml) by `cargo xtask docs generate`
 and drift-checked by `docs check`, so it changes in the same PR as the work.
 
+Progress is shown two ways. **By release** groups the roadmap items by the alpha they
+first ship in: the alphas already tagged, then the next one, which lists what it still
+waits on first. **By goal** groups the same items by the roadmap's milestones.
+
 JStream is done when every item below is merged and has passed its Windows run, where it
 needs one.
 [ROADMAP › Endgame](ROADMAP.md#endgame) defines that and gives the order the rest lands
 in, and **What's left** lists each unfinished item with the steps it still needs.
 
 <!-- @generated begin progress -->
+### By release
+
+An item counts toward the release it first ships in.
+
+| Release | Goal | Status | Progress | Merged | In review | Planned |
+|---|---|---|---|---|---|---|
+| `0.1.0-alpha.1` | The first portable Windows build: scenes, sources, mixing, streaming, recording and the virtual camera, driven from the UI or an agent | 📦 released as `v0.1.0-alpha.1` | `██████████` 100% | 114 | 0 | 0 |
+| `0.1.0-alpha.2` | Fixes and UI work on the first build | 📦 released as `v0.1.0-alpha.2` | `██████████` 100% | 1 | 0 | 0 |
+| `0.1.0-alpha.3` | Fixes, compositor blend modes and capture pickers | 📦 released as `v0.1.0-alpha.3` | no items | 0 | 0 | 0 |
+| `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 🔨 next | `█████░░░░░` 45% | 9 | 9 | 2 |
+| Not scheduled | Roadmap items no release is gathering yet | ⏳ later | `░░░░░░░░░░` 0% | 0 | 0 | 12 |
+
+<details>
+<summary><b>0.1.0-alpha.1</b>: 114 of 114 merged</summary>
+
+| ID | Item | Milestone | Status | PRs |
+|---|---|---|---|---|
+| A4 | Go-live runbook and smoke | M1a | 🧪 merged, Windows run pending: the go-live smoke and graceful stop (item 11 of the Windows hardware pass); its live YouTube steps are #337 | #234 |
+| A6b | Daemon YouTube wiring | M1a | 🧪 merged, Windows run pending: #312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337 | #312 |
+| C4c | Webcam source (CPU path, MJPEG on Windows, paired audio) | M1b | 🧪 merged, Windows run pending: landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam) | #654, #658, #726 |
+| C5 | Audio sources | M1b | 🧪 merged, Windows run pending: the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass) | #238 |
+| C8 | Browser source (CEF) | M1b | 🧪 merged, Windows run pending: the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again | #283, #289, #298, #326 |
+| D9 | Audio monitoring: a bus's monitor device and tap point | M1b | 🧪 merged, Windows run pending: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream | #801, #816, #822 |
+| G2 | vcam media source DLL | M1c | 🧪 merged, Windows run pending: the pacing rerun (#777, with item 6 of the Windows hardware pass) | #174, #195, #200, #229 |
+| G3c | --register-vcam | M1c | 🧪 merged, Windows run pending: Windows run (#563) | #235, #565 |
+| H8 | Hardware acceleration by default, with GPU fallback and device-loss recovery | M1d | 🧪 merged, Windows run pending: #437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); landed with wave/m1-5 (#877): a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); #734's webcam restart fixed by #796 in the same landing; open follow-up #443 (#667 fixed by #672 and #694) | #437, #568, #569, #580, #604, #708, #829 |
+| U4p | Live preview on canvas | M2 | 🧪 merged, Windows run pending: the canvas's H.264 preview path on Windows (#380) | #302 |
+| T1 | Studio mode and transitions | M2 | 🧪 merged, Windows run pending: #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
+| C9 | Media file source | M2 | 🧪 merged, Windows run pending: the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass | #245, #322, #875 |
+| R1 | Workspace, CI checks and the review gate | M0 | ✅ merged | #3, #6, #7, #8 |
+| R2 | Docs checker: check, verify, for, back-references | M0 | ✅ merged | #9, #10, #11, #13, #14, #15 |
+| R3 | lint-deps and governance checks | M0 | ✅ merged | #16, #17 |
+| R4 | Foundation crates: types, media, protocol, control | M0 | ✅ merged | #19, #23, #27 |
+| S1 | Spike S1: GPU interop | M0 | ✅ merged | #18, #52 |
+| S2 | Spike S2: virtual camera | M0 | ✅ merged | #25, #52 |
+| S3 | Spike S3: clock and drift | M0 | ✅ merged | #24, #53 |
+| C7 | Spike S4: CEF browser source | M0 | ✅ merged | #178, #190 |
+| I3 | docs log and docs review | M0 | ✅ merged | #145 |
+| H7 | Docs stamp conflicts (merge-main, ADR-0042) | M0 | ✅ merged | #181, #182, #187 |
+| H6 | Doc follow-ups (#102) | M0 | ✅ merged | #230 |
+| L1 | Capture, compositor, MF encode, FLV and RTMPS pipeline | M1a | ✅ merged | #58, #61, #66, #68, #111, #118 |
+| L2 | Engine, daemon, CLI and MCP first cut | M1a | ✅ merged | #33, #35, #47, #65, #70 |
+| L3 | video.snapshot and stats.tick | M1a | ✅ merged | #113, #121 |
+| I1 | MCP over HTTP | M1a | ✅ merged | #153 |
+| A1 | Outputs in the collection | M1a | ✅ merged | #142 |
+| A2a | Credential store (Windows) | M1a | ✅ merged | #141 |
+| A2b | Stream key actions | M1a | ✅ merged | #142 |
+| A5 | Outputs in CLI and mock | M1a | ✅ merged | #166 |
+| A3 | Daemon goes live on Windows | M1a | ✅ merged: the maintainer waived the Windows 11 Pro N run: there is no N-edition VM, and #333 stays open to keep the gap on record | #226 |
+| A6 | Daemon --collection and audit log | M1a | ✅ merged | #232 |
+| E3a | GPU capture frames | M1a | ✅ merged | #173 |
+| E3b | Render takes GPU frames | M1a | ✅ merged | #219 |
+| Y1 | jstream-youtube crate | M1a | ✅ merged | #167 |
+| Y2 | OAuth token store | M1a | ✅ merged | #169 |
+| YA | ADR-0041 one sign-in | M1a | ✅ merged | #214 |
+| Y3 | YouTube in the engine | M1a | ✅ merged | #223 |
+| B4 | Kind descriptors and settings | M1b | ✅ merged | #155 |
+| B3 | Canvas and item geometry | M1b | ✅ merged | #183 |
+| B8 | Audit log | M1b | ✅ merged | #171 |
+| B2 | Per-client undo and redo | M1b | ✅ merged | #176, #198, #203, #239 |
+| B5 | References and clones | M1b | ✅ merged | #196 |
+| B9 | delete.plan and blockers | M1b | ✅ merged | #197 |
+| B1 | Collection persistence | M1b | ✅ merged | #205 |
+| B6 | Groups and item.move | M1b | ✅ merged | #184 |
+| B10 | Program scene switching | M1b | ✅ merged | #201 |
+| B6-f | Groups in mock and CLI | M1b | ✅ merged | #210 |
+| B6-r | scene.create role | M1b | ✅ merged | #211 |
+| B7 | Opacity, blend, filters | M1b | ✅ merged | #252 |
+| C6 | Nested scene rendering | M1b | ✅ merged | #147 |
+| C4a | Video device trait | M1b | ✅ merged | #158 |
+| C4b | Media Foundation webcam backend | M1b | ✅ merged | #177, #225, #227 |
+| C1a | Sources crate: color, image | M1b | ✅ merged | #179, #217 |
+| C1b | Sources render live | M1b | ✅ merged | #222 |
+| C2 | Text source | M1b | ✅ merged | #221 |
+| C3 | Display and window capture sources | M1b | ✅ merged: #365 landed with wave/m1-2 (#545); its Windows run passed (#378) | #365 |
+| D1 | Live mixer inputs | M1b | ✅ merged | #149, #199 |
+| D3 | Loudness meters | M1b | ✅ merged | #152 |
+| D7a | Filter kernels | M1b | ✅ merged | #159 |
+| D2 | Buses and send matrix | M1b | ✅ merged | #192 |
+| D4 | No-allocation test | M1b | ✅ merged | #191 |
+| D7b | Filter chains in the mixer | M1b | ✅ merged | #231 |
+| D5 | Audio in the protocol | M1b | ✅ merged | #240 |
+| D6 | when_shown activity gain | M1b | ✅ merged | #299 |
+| E1 | Render snapshots, GPU lifetime | M1b | ✅ merged | #172, #215 |
+| F1 | fMP4 muxer | M1b | ✅ merged | #151 |
+| F2a | Recording file sink | M1b | ✅ merged | #156 |
+| F2b | Record output kind | M1b | ✅ merged | #170 |
+| F3 | Encoder profiles and sharing | M1b | ✅ merged | #208 |
+| I2 | Live values | M1b | ✅ merged | #244 |
+| G1 | vcam protocol crate | M1c | ✅ merged | #144 |
+| G3a | vcam producer (engine side) | M1c | ✅ merged | #194 |
+| G3b | VirtualCam output kind | M1c | ✅ merged | #213, #297 |
+| G3d | Virtual camera in the UI and the desktop app | M1c | ✅ merged: its Windows run passed (#390) | #316 |
+| P1 | Portable Windows zip | M1c | ✅ merged | #271 |
+| H0 | RTMP reconnect, rotating logs and crash reports | M1d | ✅ merged | #126, #127, #131 |
+| H1 | N-edition detection | M1d | ✅ merged | #148 |
+| H2 | Deny duplicate crate versions | M1d | ✅ merged | #157 |
+| H3 | Weekly sweep job | M1d | ✅ merged | #160, #165 |
+| H4 | Flaky shutdown tests | M1d | ✅ merged | #150 |
+| H5 | Server hardening | M1d | ✅ merged | #140 |
+| F4 | Keyframe on demand | M1d | ✅ merged | #146 |
+| Q1 | Fuzz and property tests | M1d | ✅ merged | #277 |
+| Q2 | Headless end-to-end test | M1d | ✅ merged | #269 |
+| U0 | Leptos UI skeleton | M2 | ✅ merged | #250 |
+| U2a | ADR-0044 pairing | M2 | ✅ merged | #248 |
+| U2 | Serve the UI | M2 | ✅ merged | #246, #247 |
+| U2b | Device pairing | M2 | ✅ merged | #265, #288 |
+| U3a | Scenes, sources, properties | M2 | ✅ merged | #256 |
+| U3b | Outputs and go-live panel | M2 | ✅ merged | #254 |
+| U3c | Mixer panel | M2 | ✅ merged | #308 |
+| U4 | Canvas editing | M2 | ✅ merged | #255, #302 |
+| U1 | Preview stream | M2 | ✅ merged | #251 |
+| U5 | Tauri desktop app | M2 | ✅ merged | #258 |
+| Q3 | UI end-to-end tests | M2 | ✅ merged | #309 |
+| Q4 | Performance benchmarks | M2 | ✅ merged | #361 |
+| Q5 | Threat model | M2 | ✅ merged | #358 |
+| T1u | Studio-mode UI | M2 | ✅ merged: #304 landed with wave/m1-3 (#754) | #304 |
+| E2 | Video mixes | M2 | ✅ merged | #259 |
+| D8 | Master and output audio chains | M2 | ✅ merged | #249, #303 |
+| D8p | Audio chain protocol fields | M2 | ✅ merged | #303 |
+| W1 | Audio waveform and spectrum sources | M2 | ✅ merged | #315, #460, #463, #466 |
+| B11 | Folders and labels | M2 | ✅ merged: #323 landed with wave/m1-3 (#754) | #323 |
+| K2 | Keyframe scenes: model and evaluator | M2 | ✅ merged | #350 |
+| B12 | Source sizes as runtime state (source.sizes) | M2 | ✅ merged: ADR-0022 decision 4: the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40) and capture sources' sizes from the render thread (#826, #805) landed with wave/m1-5 (#877); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement | #806, #826 |
+| C2b | Crisp text at any item scale | M2 | ✅ merged: #749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810) | #781 |
+| F5 | Enhanced RTMP (HEVC/AV1) | M3 | ✅ merged | #163 |
+| E3c | Encode from GPU frames | M3 | ✅ merged | #325 |
+| E3d | Composite to NV12 on the GPU | M3 | ✅ merged | #280 |
+| F6 | HEVC and AV1 encode | M3 | ✅ merged: #364 landed with wave/m1-2 (#545); its Windows run passed (#366); choosing HEVC or AV1 from a client is F6b | #364 |
+| X1 | Full 3D transforms and WGSL effect packs | M3 | ✅ merged: effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), the mip chains built from the crop and rebuilt once per change (#687), and part 3, accepting 3D at protocol 0.34 (#629), landed with wave/m3-3 (#786) | #359, #368, #611, #622, #624, #643, #687, #629 |
+| 3D1 | 3D transforms: rendering ADR and spike | M3 | ✅ merged | #360 |
+
+</details>
+
+<details>
+<summary><b>0.1.0-alpha.2</b>: 1 of 1 merged</summary>
+
+| ID | Item | Milestone | Status | PRs |
+|---|---|---|---|---|
+| E2b | Privacy screen and encoder sharing key | M2 | ✅ merged: the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen (#317, #804) was removed at the maintainer's request, ADR-0080 (#894) | #317, #804, #894 |
+
+</details>
+
+<details open>
+<summary><b>0.1.0-alpha.4</b>: 9 of 20 merged</summary>
+
+| ID | Item | Milestone | Status | PRs |
+|---|---|---|---|---|
+| MO2 | A one-shot shake that a hotkey fires and that decays | M3 | ⏳ planned: Built on MO1's motion and HK1's hotkeys; pushes after both merge |  |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | ⏳ planned: Cut once every other alpha.4 item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile |  |
+| MO1 | Native motion: ADR-0099's model and keyframe tracks, then continuous modifiers on items drawn each frame (item.set_motion) | M3 | 🔍 in review: The model and keyframe tracks merged (#1074); item.set_motion (#1125, protocol 0.81) passed review and waits its turn in the protocol queue | #1074, #1125 |
+| MO3 | Audio-reactive motion bindings that follow a bus or a source (ADR-0100) | M3 | 🔍 in review: ADR-0100 and its model merged (#1076); the bindings drawn from the render loop are #1149, a draft stacked on MO1 | #1076, #1149 |
+| HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🔍 in review: Passed review (protocol 0.80); waits its turn in the protocol queue | #1082 |
+| FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🔍 in review: Protocol 0.82; back in review after its protocol renumber | #1080 |
+| PA1 | Page API: browser source pages read the engine through window.jstream (ADR-0102) | M3 | 🔍 in review: ADR-0102 (#1077) and shared values, part 1 (#1127, protocol 0.78), merged; part 2, window.jstream with clock, visibility, scenes and values, is #1146 | #1077, #1127, #1146 |
+| CB1 | Compositing that matches a browser: sRGB-encoded blend modes, item effects over the canvas, and opacity above 1 as a gain | M3 | 🔍 in review: normal_srgb and additive_srgb (#1109, protocol 0.75) and canvas-space item effects (#1111, protocol 0.76) merged; opacity as a gain (#1104, protocol 0.83) is back in review after its renumber | #1109, #1111, #1104 |
+| PS1 | Software compositing and idle sources cost less: a hidden browser page rests, a nested scene is drawn once a frame, and blur taps are bounded | M3 | 🔍 in review: #1100 merged; #1106 passed review and waits to merge | #1100, #1106 |
+| CH1 | File filters such as Apply LUT on the program and output chains | M3 | 🔍 in review: Protocol 0.79 | #1134 |
+| LB1 | A local web browser source's first load passes on Linux | M3 | 🔍 in review | #1094 |
+| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| V0 | Video filter chain runtime | M1b | ✅ merged: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; effect-pack kinds are drawn, with the packs folder watched by the engine (#971). No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730, #971 |
+| V4 | Scene filter chains and item effects | M1b | ✅ merged: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968) | #802, #813, #815, #823, #824, #897, #921, #944, #968 |
+| K1 | Keyframe scenes, folders, organisation metadata and hotkeys | M2 | ✅ merged: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53, #941) and overrides of a group's children (protocol 0.55, #947) and a Move of an unflattened group's children inside its layer (#948) are built; then the UI (#846, #970): the canvas's live values on a keyframe, and a group's children overridden from their rows and the Inspector; keyframe overrides of an item's effects (ADR-0088, protocol 0.63, #985), in the protocol, graph, engine and the Filters panel | #319, #720, #941, #947, #970, #985 |
+| 3D2 | 3D scenes with a camera | M3 | ✅ merged: ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110); depth of field, a focus distance and blur on the camera (ADR-0108, protocol 0.77, #1122) | #1038, #1044, #1053, #1110, #1122 |
+| CL2 | A too_large error for oversized plugin state | M3 | ✅ merged: ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly | #794, #981 |
+| AG1 | Agents reach the desktop app: --mcp with a token file, Connect an agent docs, and MCP prompts only for what undo can't take back | M3 | ✅ merged | #1055, #1079, #1091 |
+| TM1 | Timer source that keeps counting through edits, with a restart counter | M3 | ✅ merged | #1039, #1117 |
+| PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | M3 | ✅ merged | #1087 |
+
+</details>
+
+### By goal
+
+Each goal is a milestone of the roadmap.
+
 | Milestone | Progress | Merged | In review | Planned |
 |---|---|---|---|---|
 | [M0: Foundation and risk spikes](ROADMAP.md#m0) | `██████████` 100% | 11 | 0 | 0 |
@@ -161,12 +340,12 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█████░░░░░` 47% | 9 | 0 | 10 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████░░░░░░` 36% | 12 | 9 | 12 |
 
-121 of 133 items are merged; 13 of those still wait on a run on Windows hardware.
+124 of 147 items are merged; 13 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 25 items, by next step: 🔨 build 13, 🧪 Windows run 11, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 36 items, by next step: 🔨 build 24, 🧪 Windows run 11, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -197,6 +376,17 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F6b | Choose HEVC or AV1 from a client | M3 | 🔨 build | F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877) | #807, #814 |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | M3 | 🔨 build | ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
 | X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🧪 Windows run | ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| MO1 | Native motion: ADR-0099's model and keyframe tracks, then continuous modifiers on items drawn each frame (item.set_motion) | M3 | 🔨 build | The model and keyframe tracks merged (#1074); item.set_motion (#1125, protocol 0.81) passed review and waits its turn in the protocol queue | #1074, #1125 |
+| MO2 | A one-shot shake that a hotkey fires and that decays | M3 | 🔨 build | Built on MO1's motion and HK1's hotkeys; pushes after both merge |  |
+| MO3 | Audio-reactive motion bindings that follow a bus or a source (ADR-0100) | M3 | 🔨 build | ADR-0100 and its model merged (#1076); the bindings drawn from the render loop are #1149, a draft stacked on MO1 | #1076, #1149 |
+| HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🔨 build | Passed review (protocol 0.80); waits its turn in the protocol queue | #1082 |
+| FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🔨 build | Protocol 0.82; back in review after its protocol renumber | #1080 |
+| PA1 | Page API: browser source pages read the engine through window.jstream (ADR-0102) | M3 | 🔨 build | ADR-0102 (#1077) and shared values, part 1 (#1127, protocol 0.78), merged; part 2, window.jstream with clock, visibility, scenes and values, is #1146 | #1077, #1127, #1146 |
+| CB1 | Compositing that matches a browser: sRGB-encoded blend modes, item effects over the canvas, and opacity above 1 as a gain | M3 | 🔨 build | normal_srgb and additive_srgb (#1109, protocol 0.75) and canvas-space item effects (#1111, protocol 0.76) merged; opacity as a gain (#1104, protocol 0.83) is back in review after its renumber | #1109, #1111, #1104 |
+| PS1 | Software compositing and idle sources cost less: a hidden browser page rests, a nested scene is drawn once a frame, and blur taps are bounded | M3 | 🔨 build | #1100 merged; #1106 passed review and waits to merge | #1100, #1106 |
+| CH1 | File filters such as Apply LUT on the program and output chains | M3 | 🔨 build | Protocol 0.79 | #1134 |
+| LB1 | A local web browser source's first load passes on Linux | M3 | 🔨 build |  | #1094 |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🔨 build, then 🧪 Windows run | Cut once every other alpha.4 item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile |  |
 
 </details>
 
@@ -363,7 +553,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 9 of 19 merged</summary>
+<summary><b>M3</b> Depth and reach: 12 of 33 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -386,6 +576,20 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | ⏳ planned: ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
 | CL2 | A too_large error for oversized plugin state | ✅ merged: ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly | #794, #981 |
 | X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| AG1 | Agents reach the desktop app: --mcp with a token file, Connect an agent docs, and MCP prompts only for what undo can't take back | ✅ merged | #1055, #1079, #1091 |
+| TM1 | Timer source that keeps counting through edits, with a restart counter | ✅ merged | #1039, #1117 |
+| PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
+| MO1 | Native motion: ADR-0099's model and keyframe tracks, then continuous modifiers on items drawn each frame (item.set_motion) | 🔍 in review: The model and keyframe tracks merged (#1074); item.set_motion (#1125, protocol 0.81) passed review and waits its turn in the protocol queue | #1074, #1125 |
+| MO2 | A one-shot shake that a hotkey fires and that decays | ⏳ planned: Built on MO1's motion and HK1's hotkeys; pushes after both merge |  |
+| MO3 | Audio-reactive motion bindings that follow a bus or a source (ADR-0100) | 🔍 in review: ADR-0100 and its model merged (#1076); the bindings drawn from the render loop are #1149, a draft stacked on MO1 | #1076, #1149 |
+| HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | 🔍 in review: Passed review (protocol 0.80); waits its turn in the protocol queue | #1082 |
+| FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🔍 in review: Protocol 0.82; back in review after its protocol renumber | #1080 |
+| PA1 | Page API: browser source pages read the engine through window.jstream (ADR-0102) | 🔍 in review: ADR-0102 (#1077) and shared values, part 1 (#1127, protocol 0.78), merged; part 2, window.jstream with clock, visibility, scenes and values, is #1146 | #1077, #1127, #1146 |
+| CB1 | Compositing that matches a browser: sRGB-encoded blend modes, item effects over the canvas, and opacity above 1 as a gain | 🔍 in review: normal_srgb and additive_srgb (#1109, protocol 0.75) and canvas-space item effects (#1111, protocol 0.76) merged; opacity as a gain (#1104, protocol 0.83) is back in review after its renumber | #1109, #1111, #1104 |
+| PS1 | Software compositing and idle sources cost less: a hidden browser page rests, a nested scene is drawn once a frame, and blur taps are bounded | 🔍 in review: #1100 merged; #1106 passed review and waits to merge | #1100, #1106 |
+| CH1 | File filters such as Apply LUT on the program and output chains | 🔍 in review: Protocol 0.79 | #1134 |
+| LB1 | A local web browser source's first load passes on Linux | 🔍 in review | #1094 |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | ⏳ planned: Cut once every other alpha.4 item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile |  |
 
 </details>
 <!-- @generated end progress -->

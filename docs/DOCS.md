@@ -694,16 +694,20 @@ differs. Two of them come from ADR `@doc` metadata
 
 It also generates one block from data rather than from docs:
 
-- **The `progress` block** in `README.md`: a table of the milestones with how many of
-  their items are merged, in review or planned, then each milestone's items, all from
-  `docs/progress.toml`. That file lists the milestones and each roadmap item's
-  milestone, title, `status` (`done`, `hardware` for merged work still waiting on a run
+- **The `progress` block** in `README.md`: first a table of the releases with how many
+  of their items are merged, in review or planned, and each release's items (the next
+  release's open, its unfinished items first); then the same table for the milestones,
+  the project's goals, and each milestone's items, all from `docs/progress.toml`. That
+  file lists the releases (a `version`, a `goal`, and the git `tag` once one has
+  shipped; tagged releases come first), the milestones, and each roadmap item's
+  milestone, the `release` it first ships in when one is gathering it, title, `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
   deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
   (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its
   run), and the block's **What's left** table shows each such item with them, linking
   the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
-  fails when the file doesn't parse or breaks those rules. A PR that delivers or advances
+  fails when the file doesn't parse or breaks those rules, including an item that names
+  a release it doesn't list, or an unmerged item in a release that has shipped. A PR that delivers or advances
   an item updates its entry, so the README changes with the work.
   `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
   each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
