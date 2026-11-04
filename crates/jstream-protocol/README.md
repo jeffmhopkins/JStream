@@ -1890,8 +1890,8 @@ ADR-0032's live values either, which are a gesture's uncommitted edits.
   `statusbar`).
 - A hotkey may bind `values.set`, checked at bind time as the call is: a binding with a
   bad name or an oversized value is refused (`bind_problem`), so a saved binding never
-  fails every press. Its value is then saved with the binding. A plugin may call `values.list` (class `read`), never
-  `values.set`, which no class names yet.
+  fails every press. Its value is then saved with the binding. A plugin may call
+  `values.list` (class `read`), never `values.set`, which no class names yet.
 
 <a id="errors"></a>
 ## Errors
