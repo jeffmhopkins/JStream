@@ -96,7 +96,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.set_locked <item-id> true|false
   item.set_effects_space <item-id> box|canvas
   item.set_source <item-id> <source-id>
-  item.set_opacity <item-id> <0..1>
+  item.set_opacity <item-id> <0..4>
   item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
                  |difference|exclusion
   item.set_crop <item-id> <left> <top> <right> <bottom>

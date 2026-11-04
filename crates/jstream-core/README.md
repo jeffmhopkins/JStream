@@ -251,7 +251,7 @@ state machine. Contents:
   evaluated each time a pass draws the item, at the frame's animation time, and added
   to its placement, crop and opacity after any live value (`apply`: position, size,
   rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
-  placement, crop rounded and never below 0, opacity clamped to 0 to 1; a 3D model's drawn layer,
+  placement, crop rounded and never below 0, opacity kept within 0 and `MAX_OPACITY`, so a gain above 1 (#1101) stays one; a 3D model's drawn layer,
   already placed in its pixels, stays put). An item whose effects run over the canvas
   (ADR-0106) moves inside its canvas-sized layer, which stays over the canvas, also in
   a transition, where that layer takes only the motion's opacity. The item's

@@ -312,7 +312,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output that carries audio an audio chain, and their filters can't hold a scene,
   source or bus reference yet; from 0.79 they may name a file (an asset), so a LUT
   grades the program or one output. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
-  multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
+  multiplier in [0, 1], and above 1, up to 4, a gain on its light, #1101) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
   browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
@@ -1115,7 +1115,8 @@ under a studio rig fixed to the camera, or unlit; the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane.
-Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
+Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
+light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
 target under the item, and overlay, difference, exclusion, `normal_srgb` and
@@ -1213,7 +1214,7 @@ is on screen: the control thread samples the running plan at the switch time wit
 same function, so both threads agree on it without the render thread keeping any
 state. Rotation, tilt and turn take the shortest way round. The easing curves are one
 shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
-are clamped to a hard range: opacity to `[0, 1]`, crop to `[0, source size]`, size to
+are clamped to a hard range: opacity to `[0, 4]`, crop to `[0, source size]`, size to
 `≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a

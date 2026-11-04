@@ -50,7 +50,7 @@ pub use audio::{
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, SceneRole, SourceKind, Vec2,
+    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,

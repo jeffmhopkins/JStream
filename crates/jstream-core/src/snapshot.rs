@@ -4543,7 +4543,7 @@ fn fill_items<'a>(
 fn moved_track(canvas_box: bool, by: &jstream_anim::Offsets, sampled: Endpoint) -> Endpoint {
     if canvas_box {
         Endpoint {
-            opacity: by.opacity_of(sampled.opacity),
+            opacity: motion::opacity_of(by, sampled.opacity),
             ..sampled
         }
     } else {

@@ -274,7 +274,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.82 because of the frame
+`PROTOCOL_VERSION` is 0.83 because `item.set_opacity`,
+`item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101);
+0.82 because of the frame
 sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.81 because of
 `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
 `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
@@ -837,7 +839,9 @@ parameters), so a reader of 0.7 messages sees no change for those.
 covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/finite.rs"]
 -->
 
-All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
+All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha multiplier (default 1), and from
+0.83 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
+`additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
@@ -2063,7 +2067,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   100 000, rates within ±100 000.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
-  and opacity is then clamped to 0 to 1. Two modifiers on one property add up.
+  and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source

@@ -73,7 +73,9 @@ and calls this crate.
 - `visible == false`, a crop that leaves no pixels, a scale of zero, a box with neutral
   3D so large its content overflows `f32`, or a legacy transform whose corners leave
   `f32`'s range (#1130) draws nothing.
-- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
+- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1, and above 1, up to
+  `MAX_OPACITY` (4), a gain on the item's light: the shader multiplies its premultiplied
+  colour by the opacity and its alpha by at most 1 (#1101). `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
 - `Item.blend` is its `BlendMode` (re-exported), drawn per

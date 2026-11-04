@@ -183,7 +183,8 @@ with no inverse. The engine draws open gestures' source settings through it
   A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
   persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
-  `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
+  `item.add`'s `opacity` accept 0 to `MAX_OPACITY` (4; above 1 a gain on the item's
+  light, #1101), as do keyframe overrides; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
   [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by

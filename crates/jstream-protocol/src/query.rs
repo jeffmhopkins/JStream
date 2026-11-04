@@ -1053,8 +1053,9 @@ pub struct ItemInfo {
     pub crop: Crop,
     /// Whether it is drawn.
     pub visible: bool,
-    /// Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)
-    /// parses as 1.
+    /// Its opacity, from 0 to `MAX_OPACITY` (4): up to 1 an alpha multiplier, and above 1
+    /// (since 0.83, #1101) a gain on its light, as `item.set_opacity` sets it. Missing
+    /// (from a server older than this field) parses as 1.
     #[serde(default = "opaque")]
     pub opacity: Finite32,
     /// How it composites onto what is below it. Missing parses as `normal`.

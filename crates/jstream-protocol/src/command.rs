@@ -301,9 +301,13 @@ pub enum Edit {
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
     },
-    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
-    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
-    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are
+    /// multiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a
+    /// gain on the item's light: its premultiplied colour is multiplied by the opacity
+    /// while its alpha is multiplied by 1, so an `additive` item adds more light than its
+    /// source draws, and an item in another mode is drawn brighter. A value outside 0 to
+    /// [`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:
+    /// `item.set_opacity` with the previous value.
     #[serde(rename = "item.set_opacity")]
     ItemSetOpacity {
         /// The item to change.
@@ -311,7 +315,8 @@ pub enum Edit {
         /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
-        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        /// From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]
+        /// (its light that many times over).
         opacity: Finite32,
     },
     /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
@@ -2102,6 +2107,10 @@ impl Crop {
         bottom: 0,
     };
 }
+
+/// The highest item opacity `item.set_opacity`, `item.add` and a keyframe override
+/// accept (since 0.83, #1101). Above 1 an opacity is a gain on the item's light.
+pub const MAX_OPACITY: f32 = 4.0;
 
 /// Where an item's effects run (ADR-0106, since 0.76).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

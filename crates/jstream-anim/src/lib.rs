@@ -43,7 +43,7 @@ mod timeline;
 
 pub use audio::{Audio, Curve, Envelope, HIGH_HZ, LOW_HZ, MAX_ENVELOPE_MS, MIN_DB, Measure};
 pub use keyframe::{
-    Field, InvalidValue, Inverse, Keyframe, Override, Props, RestoreConflict, Value,
+    Field, InvalidValue, Inverse, Keyframe, MAX_OPACITY, Override, Props, RestoreConflict, Value,
 };
 pub use modifier::{
     Clock, InvalidModifier, Kind, MAX_MODIFIERS, Modifier, Offsets, Property, Shape, check_list,
