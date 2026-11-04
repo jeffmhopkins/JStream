@@ -48,7 +48,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
-  `output.set_target`, `output.set_encoder`, `output.set_video_mix`,
+  `output.set_target`, `output.set_path`, `output.set_encoder`, `output.set_video_mix`,
   `output.set_audio_buses`, `output.delete`,
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
@@ -67,7 +67,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`), with
+  `effect.enable`, `pack.write`, `pack.delete`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -115,7 +115,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list` and `plugin.list`, with `QueryResult`
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
+  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -148,7 +150,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `ParamDescriptor` and `ParamType`, the shapes that describe a source, filter or
   transition kind's parameters, and `Settings`, a map from parameter ID to a JSON value, whose `scene`,
   `source`, `bus` and `asset` references are tagged objects (`Reference`). The per-value checks
-  (`ParamDescriptor::check`, `check_asset_path`) and the settings schema
+  (`ParamDescriptor::check`, `check_asset_path`, and `not_a_reference`, the reason a value
+  isn't a reference, which sources reuse for their own checks) and the settings schema
   (`KindDescriptor::settings_schema`) are pure functions here, so every implementation
   shares them. No source or filter kind is defined here; the transition kinds are
   (Transitions above).
@@ -199,14 +202,28 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
+  `geometry/solid.rs` places a 3D model by an item
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ItemGeometry::solid(bounds, view)`
+  scales the model's `SolidBounds` into the box by its fit mode, flips, turns and moves
+  it, and returns a `Solid`: the map from the model's space to the viewing frame, in
+  `f64`, relative to the camera. Its `place` and `corners` are what an editor outlines and
+  hits, and `clip_matrix`, `view_matrix` and `normal_matrix` what the compositor draws
+  with, cast to `f32` only once composed.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.71 because of
-  `item.set_locked`, `ItemInfo.locked` and the `png` preview codec
-  ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69 left
-  to a change that claimed it first; 0.70 because of
-  `scene.set_camera` and `SceneInfo.camera`, a live value too
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of the
+  `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
+  `output.set_path` (#1072); 0.73 because of the `profile.get` query
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
+  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+  (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
+  limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
+  may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
+  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
+  left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+  `SceneInfo.camera`, a live value too
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
   `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
   takes a source's settings whose kind marks them `live` (`source.set_settings`,
@@ -717,12 +734,15 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
 sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
+`normal_srgb` and `additive_srgb` (0.75) are `normal` and `additive` mixed in
+sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
+same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain
@@ -801,8 +821,11 @@ as an asset path's last component. And
 `container` is `mp4` (fragmented). `output.start` writes `<path>.part` and fails with
 `action_failed` when `path` or `<path>.part` already exists, so a recording never
 overwrites; `output.stop` renames it to `path`. A recording output has no RTMP target,
-so `output.set_target` refuses it with `invalid_argument`; delete and re-create it to
-record elsewhere. A `virtual_cam` output (0.18) has no fields: it offers the program
+so `output.set_target` refuses it with `invalid_argument`. `output.set_path
+{output_id, path}` (0.74, #1072) points it at another file, checked like `path` above,
+keeping its container, encoder profile, mix, bus and filters; a running recording keeps
+its file, and the new path applies from the next `output.start`. On any other output it
+is `invalid_argument`, and its inverse is `output.set_path` with the previous path. A `virtual_cam` output (0.18) has no fields: it offers the program
 video to other apps on the engine's machine as a webcam, with no audio, at the canvas
 size it has when it starts and 30 fps. `output.start` fails with `action_failed` when
 the engine has no virtual camera, the camera isn't registered on the machine, or it
@@ -1097,6 +1120,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   root `absolute`. A collection lists its first font. The engine reads its OS's font
   folders on the first call and keeps the list, so a font installed later shows after
   a restart. Runtime state, so no `rev`. Added in 0.68.
+- `profile.get {seconds?, top?}`: where the engine's time went over the last
+  `seconds` (1 to 60, default 5), as a `ProfileInfo`
+  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)): each drawing
+  thread's (`program`, `preview`) frames, their average, 95th percentile and longest
+  time, the frames over `frame_budget_ms`, the program's skipped ticks and the time per
+  phase; the units of drawing work costliest first, each a `ProfileUnit` naming its
+  owner (a source's upload or chain, a capture, a scene's chain or pass, an item's
+  effects, a placed scene's chain, the composite, the master or an output's chain) with
+  its frames, average and recent longest time and share of its drawer's time; the
+  sources the `jstream-sources` thread and the planner spent time on; the plans; the
+  process's CPU; and its threads by name, as a percentage of one core (JStream's own
+  `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
+  cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
+  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
+  0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1642,6 +1680,29 @@ GPU, and the OS resets the device (#349,
   loaded pack has and no quarantine names. It is for a person, like `plugin.enable`: no
   MCP tool carries it, no plugin is granted it and no hotkey binds it.
 
+Since 0.72 a client can write the packs themselves
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md), `pack.rs`). These are
+actions and queries, not edits: undo doesn't reach the disk, and there is no `rev`.
+- **`pack.write {pack, files}`** replaces pack `pack` whole, or adds it, and loads it
+  at once; it answers `ActionResult::PackWrite` with the pack's `PackInfo`. Each
+  `PackFile` is a `path` and either `text` (`effect.toml`, `.wgsl`) or `base64` (`.png`,
+  `.jpg`, `.jpeg`, standard with padding). `files` over 3 MiB as sent
+  (`MAX_PACK_WRITE_BYTES`, so the request stays under ADR-0074's limit) is `too_large`
+  before it is decoded; more than 64 files (`MAX_PACK_FILES`), an image over 2 MiB
+  (`MAX_PACK_IMAGE_BYTES`), a bad pack ID or path, a pack another folder holds, a
+  folder `pack` that holds something else, and a pack that doesn't load are
+  `invalid_argument`, and the old version stays.
+- **`pack.delete {pack}`** removes the folder whose `effect.toml` names the pack, or is
+  `not_found` with `EntityKind::Pack`.
+- **`pack.list`** answers each pack's `PackInfo`: its `id`, `folder`, `kinds` while it
+  loads, `loaded`, and `written_by`, the client name of the last `pack.write` of that
+  pack ID (omitted when it gave none).
+- **`pack.read {pack, path?}`** answers `PackFileInfo`s: each file's `path`, `size` and
+  BLAKE3 `digest`, the `text` of text files (up to 3 MiB of text in all; a text file
+  over that read by `path` is `too_large`), and with `path` an image's `base64`.
+- Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
+  `read`) and never the writes, and no hotkey binds a pack action.
+
 ### Errors
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
@@ -1692,7 +1753,7 @@ after 1.0:
   clients skip. An unknown error code still has its `message`. From 0.9, an output's
   `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
   `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
-  value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
+  value of a string enum (`OutputState`, `EntityKind`, `BlendMode`) inside a known message breaks an
   older client's parse, so adding one needs open question 8 settled first. The same
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
@@ -1712,7 +1773,12 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
-  `Unknown` from the start.
+  `Unknown` from the start. 0.75 adds the `BlendMode` values `normal_srgb` and
+  `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
+  0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
+  whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
+  `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
+  break counts as a minor bump, are part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -1978,11 +2044,12 @@ described above.
    `live.changed`, meters) will need opt-in subscriptions. Until then every client
    receives a tick about once a second while the pipeline runs, and up to 30
    `live.changed` a second per gesture while someone drags.
-8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
-   fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
+8. **Unknown values in string enums.** `OutputState`, `EntityKind` and `BlendMode` have no
+   `Unknown` fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
    fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
-   outputs (see Compatibility); kept as a minor bump until this is decided.
+   outputs, and 0.75's `_srgb` blend modes break older clients reading items (see
+   Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
