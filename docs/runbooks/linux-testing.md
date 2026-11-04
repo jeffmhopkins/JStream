@@ -108,9 +108,12 @@ does each step only when it is needed, so running it again updates what changed:
 8. **Browser sandbox:** where the kernel restricts unprivileged user namespaces (Ubuntu's
    AppArmor setting, or the older Debian switch), `chrome-sandbox` is made setuid root, as
    ADR-0095 says an install must, in one root step that refuses a symlink or a file the
-   user doesn't own and changes the owner before the mode, so a file swapped in after the
-   check is the user's and gains nothing from the setuid bit. Elsewhere Chromium's
-   namespace sandbox needs nothing.
+   user doesn't own, which catches a mistake in the staged folder. It doesn't protect
+   against code already running as the user: the file sits in a folder the user owns, so
+   such code can put its own binary there before the step, or swap it in between the
+   checks and the `chmod`, and have it made setuid root during the one `sudo` the tester
+   approves. That is the risk of Chromium's setuid sandbox installed per user, and is
+   accepted for a tester build. Elsewhere Chromium's namespace sandbox needs nothing.
 9. **Install:** the staged folder replaces `~/.local/lib/jstream`, refusing while JStream
    runs; `~/.local/bin/jstream` links the launcher; and a `jstream.desktop` entry and the
    app icon go in `~/.local/share`. It then checks the daemon runs, warns when no Vulkan

@@ -501,8 +501,10 @@ browser_sandbox() {
     fi
     note "this kernel restricts user namespaces, so Chromium's sandbox helper must be setuid root"
     [ "$(id -u)" = 0 ] || note "sudo asks for your password to set that up"
-    # One root step, which refuses a symlink or a file that isn't the user's, so the mode
-    # change lands on the file the build staged (chown -h never follows a link).
+    # One root step that refuses a symlink or a file that isn't the user's: it catches a
+    # mistake in the staged folder. It doesn't stop code already running as the user, which
+    # can swap the file inside this user-owned folder between the checks and the chmod; the
+    # runbook names that risk.
     local script="f=\$1; u=\$2
         [ -f \"\$f\" ] && [ ! -L \"\$f\" ] && [ \"\$(stat -c %u \"\$f\")\" = \"\$u\" ] || exit 3
         chown -h root:root \"\$f\" && [ ! -L \"\$f\" ] && chmod 4755 \"\$f\""
