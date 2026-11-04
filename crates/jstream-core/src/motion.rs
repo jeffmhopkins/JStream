@@ -122,8 +122,9 @@ pub(crate) fn apply(
             moved.scale[0] = scaled(moved.scale[0]);
             moved.scale[1] = scaled(moved.scale[1]);
             moved.rotation_deg += by.rotation;
-            // One `item.set_transform` would refuse (stacked scales past
-            // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130).
+            // One past `ItemTransform::check_drawable`'s bounds (stacked scales past
+            // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130),
+            // so a stored transform already past them never moves.
             Placement::Legacy(if legacy_drawable(moved) {
                 moved
             } else {
@@ -215,8 +216,9 @@ impl TrackMotion {
     }
 }
 
-/// Whether a moved legacy transform is one `item.set_transform` would take: every
-/// value finite and within `ItemTransform::check_drawable`'s bounds.
+/// Whether a moved legacy transform is within the bounds that any source draws: every
+/// value finite and within `ItemTransform::check_drawable`'s bounds. No edit checks
+/// them (ADR-0022); motion keeps within them.
 fn legacy_drawable(t: jstream_render::LegacyTransform) -> bool {
     let finite = |v: f32| Finite32::new(v);
     let (Some(x), Some(y), Some(sx), Some(sy), Some(rotation_deg)) = (
@@ -489,8 +491,8 @@ mod tests {
         assert!(TrackMotion::same(ItemId::new("i"), Arc::from([])).is_still());
     }
 
-    /// #1130: stacked scales past what `item.set_transform` takes leave a legacy
-    /// transform where it is, as they leave a box.
+    /// #1130: stacked scales past `ItemTransform::check_drawable`'s bounds leave a
+    /// legacy transform where it is, as they leave a box.
     #[test]
     fn a_legacy_transform_scaled_past_drawable_stays_as_it_is() {
         let huge: Vec<Modifier> = (0..8)

@@ -123,9 +123,10 @@ pub(crate) fn shape(
 /// nothing to draw. `view` is the scene's camera (ADR-0094), through which a geometry
 /// item is placed in the scene's space; `None` in a 2D scene.
 ///
-/// A non-finite component, including a product that overflows, is
-/// [`RenderError::Invalid`], except a geometry's: one the graph stored draws or draws
-/// nothing (#629, #1046), so a neutral box too large for `f32` draws nothing.
+/// A non-finite component is [`RenderError::Invalid`]. A product that overflows is
+/// too, except where a stored placement makes it: a geometry the graph stored draws or
+/// draws nothing (#629, #1046), so a neutral box too large for `f32` draws nothing, and
+/// a finite legacy transform whose corners leave `f32` draws nothing (#1130).
 ///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite or not drawable.

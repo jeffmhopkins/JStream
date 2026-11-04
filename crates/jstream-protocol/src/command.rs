@@ -1921,7 +1921,8 @@ impl ItemTransform {
     }
 }
 
-/// The largest scale, either way, a legacy transform takes ([`ItemTransform::check_drawable`]).
+/// The largest scale, either way, within [`ItemTransform::check_drawable`]'s bounds. No
+/// edit checks it: `item.set_transform` stores any finite scale (ADR-0022).
 pub const MAX_LEGACY_SCALE: f32 = 100_000.0;
 
 impl Default for ItemTransform {

@@ -263,7 +263,9 @@ state machine. Contents:
   (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
   modifier stays at its start there. A legacy placement's signed scale keeps its flip,
   and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
-  legacy transform past what `item.set_transform` takes, stays unmoved (#1130).
+  legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
+  `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
+  never moves one, since every moved value of it is past them too.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
