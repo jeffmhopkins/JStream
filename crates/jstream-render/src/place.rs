@@ -177,8 +177,13 @@ fn legacy(
         scale: finite_vec(transform.scale)?,
         rotation_deg: Finite32::new(transform.rotation_deg).ok_or_else(not_finite)?,
     };
-    let placed =
-        legacy_quad(transform, crop, source_width, source_height).map_err(placement_error)?;
+    let placed = match legacy_quad(transform, crop, source_width, source_height) {
+        Ok(placed) => placed,
+        // Finite values can still put a corner past f32's range (a huge scale of a large
+        // source): it draws nothing rather than failing the frame, as a box does (#1130).
+        Err(GeometryError::NotFinite) => return Ok(None),
+        Err(err) => return Err(placement_error(err)),
+    };
     Ok(placed.map(|quad| Shape::flat(quad.corners.map(|point| [point.x, point.y]), quad.uvs)))
 }
 
@@ -529,6 +534,21 @@ mod tests {
         assert!(
             shape(0, 2, Placement::IDENTITY, Crop::NONE)
                 .expect("finite")
+                .is_none()
+        );
+    }
+
+    /// #1130: a finite transform whose corners overflow f32 draws nothing, and the frame
+    /// goes on.
+    #[test]
+    fn a_legacy_transform_past_f32_draws_nothing() {
+        let placement = Placement::Legacy(LegacyTransform {
+            scale: [1e35, 1.0],
+            ..LegacyTransform::IDENTITY
+        });
+        assert!(
+            shape(4096, 2, placement, Crop::NONE)
+                .expect("no error")
                 .is_none()
         );
     }

@@ -1345,30 +1345,33 @@ fn motion_saves_and_loads() {
     assert_eq!(loaded.to_collection_json(), json);
 }
 
-/// #1130: a legacy transform the compositor couldn't draw is refused, as a box is, on an
-/// item and in a keyframe alike.
+/// #1130: a legacy transform keeps its 0.3 meaning, so one past the bounds where any
+/// source draws it is still stored (ADR-0022), on an item and in a keyframe alike; the
+/// compositor draws it as nothing if it can't place it.
 #[test]
-fn set_transform_refuses_a_transform_past_drawable() {
+fn set_transform_still_takes_a_transform_past_drawable() {
     let mut graph = family();
     let f = |v: f32| Finite32::new(v).expect("finite");
-    let with = |x: f32, scale: f32| ItemTransform {
-        position: Vec2 { x: f(x), y: f(0.0) },
+    let huge = ItemTransform {
+        position: Vec2 {
+            x: f(2e15),
+            y: f(0.0),
+        },
         scale: Vec2 {
-            x: f(scale),
+            x: f(1e35),
             y: f(1.0),
         },
         rotation_deg: f(0.0),
     };
-    let set = |scene: Option<&str>, transform| Edit::ItemSetTransform {
-        item_id: ItemId::new("i1"),
-        scene_id: scene.map(SceneId::new),
-        transform,
-    };
+    assert!(huge.check_drawable().is_err());
     for scene in [None, Some("k")] {
-        for bad in [with(0.0, 1e35), with(0.0, -100_001.0), with(2e15, 1.0)] {
-            let (field, _) = invalid_reason(apply_err(&mut graph, vec![set(scene, bad)]));
-            assert_eq!(field, "edits.0.transform", "{scene:?} {bad:?}");
-        }
-        apply_ok(&mut graph, vec![set(scene, with(-1e15, -100_000.0))]);
+        apply_ok(
+            &mut graph,
+            vec![Edit::ItemSetTransform {
+                item_id: ItemId::new("i1"),
+                scene_id: scene.map(SceneId::new),
+                transform: huge,
+            }],
+        );
     }
 }

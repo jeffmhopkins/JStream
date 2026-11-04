@@ -70,8 +70,9 @@ and calls this crate.
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
-- `visible == false`, a crop that leaves no pixels, a scale of zero, or a box with neutral
-  3D so large its content overflows `f32` draws nothing.
+- `visible == false`, a crop that leaves no pixels, a scale of zero, a box with neutral
+  3D so large its content overflows `f32`, or a legacy transform whose corners leave
+  `f32`'s range (#1130) draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
@@ -513,6 +514,10 @@ function:
 - puts the destination rectangle's top-left at `position`, then rotates clockwise
   about that corner by `rotation_deg`. In y-down coordinates that is
   `x' = px + dx·cos θ − dy·sin θ`, `y' = py + dx·sin θ + dy·cos θ`.
+
+A finite transform whose corners leave f32's range (a huge scale of a large source)
+draws nothing rather than failing the frame, as a too-large neutral box does
+(`a_legacy_transform_past_f32_draws_nothing`, #1130).
 
 This crate then maps those canvas pixels into clip space:
 `x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.

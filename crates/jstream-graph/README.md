@@ -178,8 +178,8 @@ with no inverse. The engine draws open gestures' source settings through it
   (`edits.N.geometry.size`). Any tilt, turn, depth and perspective the compositor can
   draw is accepted from protocol 0.34 (ADR-0050; `ItemGeometry::check_drawable`, else
   `edits.N.geometry`); before, a non-neutral one was `invalid_argument`. A legacy
-  transform is checked too (`ItemTransform::check_drawable`, else
-  `edits.N.transform`, #1130), so no source size can put its corners past f32's range.
+  transform isn't checked beyond being finite: it keeps its 0.3 meaning (ADR-0022),
+  and the compositor draws one it can't place as nothing (#1130).
   A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
   persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
