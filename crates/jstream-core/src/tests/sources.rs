@@ -1549,6 +1549,9 @@ fn a_browser_page_rests_while_nothing_draws_it() {
         std::thread::sleep(Duration::from_millis(2));
     }
     let page = browser.pages().first().cloned().expect("the page opened");
+    // The page opens while the source is still being built: it is installed, and so
+    // looked at and rested, only once the build is done.
+    assert!(engine.settle_sources(), "the source was built");
     for _ in 0..3 {
         engine.replan();
     }
