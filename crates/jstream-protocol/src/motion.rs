@@ -8,8 +8,13 @@
 //! angles and crop edges add the modifier's value; scale and opacity are multiplied by
 //! `1 + value`, and opacity is then clamped to `0..=1`. `item.set_motion` writes the
 //! whole list, and a keyframe scene can override it whole (`OverrideField::Motion`).
+//!
+//! An `audio` modifier ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md))
+//! follows a measure of a bus or a source instead of the clock: the engine measures what
+//! it hears each frame and follows it with the modifier's attack and release.
 
 use crate::finite::Finite32;
+use crate::{BusId, SourceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -109,8 +114,53 @@ impl MotionShape {
     ];
 }
 
+/// What an `audio` modifier measures of what it hears.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MotionMeasure {
+    /// The RMS level of the latest window.
+    #[default]
+    Level,
+    /// The peak absolute sample of the latest window.
+    Peak,
+    /// A jump of the level above its recent average: 1 on the jump, else 0.
+    Onset,
+    /// The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine
+    /// inside the band reads 0 dBFS.
+    Band,
+    /// A measure this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument` and draws a stored
+    /// one as silence.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+/// How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.
+/// None overshoots.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MotionCurve {
+    /// As it is.
+    #[default]
+    Linear,
+    /// Cubic, slow at first: quiet passages stay low and only loud ones lift.
+    EaseIn,
+    /// Cubic, fast at first: quiet passages already show.
+    EaseOut,
+    /// Cubic at both ends.
+    EaseInOut,
+    /// A curve this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument`.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
 /// What a modifier does, with its parameters, tagged by `kind`.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum MotionKind {
@@ -151,6 +201,55 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
+    /// Follows a measure of a bus or a source (ADR-0100): the measure in dBFS from
+    /// `floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with
+    /// `attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence
+    /// is `from`. It hears what a `spectrum` source with the same `audio` and
+    /// `audio_source` would draw, and silence while that is silent.
+    Audio {
+        /// The bus it hears, after its fader. Omitted for the program mix: the master
+        /// after its filters, as the outputs hear it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audio: Option<BusId>,
+        /// A source to hear instead of the bus: that source after its own filters,
+        /// fader, mute and follow. Omitted to hear the bus.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        audio_source: Option<SourceId>,
+        /// What it measures. Default `level`.
+        #[serde(default)]
+        measure: MotionMeasure,
+        /// A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        low_hz: Option<Finite32>,
+        /// A `band` measure's highest frequency, in hertz, above `low_hz` and at most
+        /// 20000. Only with `band`.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        high_hz: Option<Finite32>,
+        /// The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.
+        /// Default -60.
+        #[serde(default = "default_floor_db")]
+        floor_db: Finite32,
+        /// The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0.
+        #[serde(default)]
+        ceiling_db: Finite32,
+        /// How fast it rises, in milliseconds, `0..=10000`. Default 10.
+        #[serde(default = "default_attack_ms")]
+        attack_ms: u32,
+        /// How fast it falls, in milliseconds, `0..=10000`. Default 250.
+        #[serde(default = "default_release_ms")]
+        release_ms: u32,
+        /// How the envelope is bent. Default `linear`.
+        #[serde(default)]
+        curve: MotionCurve,
+        /// Its value at silence, in the property's unit, within `-100000..=100000`.
+        /// Default 0.
+        #[serde(default)]
+        from: Finite32,
+        /// Its value at the ceiling, within `-100000..=100000`; below `from` to invert.
+        /// Default 1.
+        #[serde(default = "default_to")]
+        to: Finite32,
+    },
     /// A kind this version of the protocol doesn't know, from a newer server, so a
     /// 0.81 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
@@ -161,6 +260,22 @@ pub enum MotionKind {
 
 fn one_octave() -> u8 {
     1
+}
+
+fn default_floor_db() -> Finite32 {
+    Finite32::new(-60.0).unwrap_or(Finite32::ZERO)
+}
+
+fn default_attack_ms() -> u32 {
+    10
+}
+
+fn default_release_ms() -> u32 {
+    250
+}
+
+fn default_to() -> Finite32 {
+    Finite32::ONE
 }
 
 /// Where a modifier's time starts.
@@ -281,6 +396,26 @@ impl MotionKind {
         let magnitude = |v: Finite32| (0.0..=MAX_MAGNITUDE).contains(&v.get());
         let frequency = |v: Finite32| v.get() > 0.0 && v.get() <= MAX_FREQUENCY_HZ;
         match *self {
+            MotionKind::Audio {
+                measure,
+                low_hz,
+                high_hz,
+                floor_db,
+                ceiling_db,
+                attack_ms,
+                release_ms,
+                curve,
+                from,
+                to,
+                ..
+            } => audio_problem(
+                measure,
+                (low_hz, high_hz),
+                (floor_db, ceiling_db),
+                (attack_ms, release_ms),
+                curve,
+                (from, to),
+            ),
             MotionKind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -326,6 +461,60 @@ impl MotionKind {
             }
             MotionKind::Unknown => Some(("kind", "is not one this version of the protocol knows")),
         }
+    }
+}
+
+/// The longest attack or release, in milliseconds.
+const MAX_ENVELOPE_MS: u32 = 10_000;
+
+/// An `audio` modifier's first parameter out of range (ADR-0100 decision 3).
+fn audio_problem(
+    measure: MotionMeasure,
+    (low_hz, high_hz): (Option<Finite32>, Option<Finite32>),
+    (floor_db, ceiling_db): (Finite32, Finite32),
+    (attack_ms, release_ms): (u32, u32),
+    curve: MotionCurve,
+    (from, to): (Finite32, Finite32),
+) -> Option<(&'static str, &'static str)> {
+    let unknown = "is not one this version of the protocol knows";
+    let hz = |v: Finite32| (20.0..=20_000.0).contains(&v.get());
+    let end = |v: Finite32| v.get().abs() <= MAX_MAGNITUDE;
+    match measure {
+        MotionMeasure::Unknown => return Some(("measure", unknown)),
+        MotionMeasure::Band => match (low_hz, high_hz) {
+            (None, _) => return Some(("low_hz", "a band needs it")),
+            (Some(low), _) if !hz(low) => return Some(("low_hz", "must be within 20..=20000")),
+            (_, None) => return Some(("high_hz", "a band needs it")),
+            (Some(low), Some(high)) if !(hz(high) && high.get() > low.get()) => {
+                return Some(("high_hz", "must be above low_hz and at most 20000"));
+            }
+            _ => {}
+        },
+        _ => {
+            if low_hz.is_some() {
+                return Some(("low_hz", "only a band measure has it"));
+            }
+            if high_hz.is_some() {
+                return Some(("high_hz", "only a band measure has it"));
+            }
+        }
+    }
+    if !(-90.0..0.0).contains(&floor_db.get()) {
+        Some(("floor_db", "must be at least -90 and below 0"))
+    } else if !(ceiling_db.get() <= 0.0 && ceiling_db.get() > floor_db.get()) {
+        Some(("ceiling_db", "must be above floor_db and at most 0"))
+    } else if attack_ms > MAX_ENVELOPE_MS {
+        Some(("attack_ms", "must be within 0..=10000"))
+    } else if release_ms > MAX_ENVELOPE_MS {
+        Some(("release_ms", "must be within 0..=10000"))
+    } else if curve == MotionCurve::Unknown {
+        Some(("curve", unknown))
+    } else if !end(from) {
+        Some(("from", "must be within -100000..=100000"))
+    } else if !end(to) {
+        Some(("to", "must be within -100000..=100000"))
+    } else {
+        None
     }
 }
 
@@ -470,9 +659,110 @@ mod tests {
         ];
         for (kind, param) in cases {
             assert_eq!(
-                field_of(&[with(kind)]),
+                field_of(&[with(kind.clone())]),
                 Some(format!("motion.0.{param}")),
                 "{kind:?}"
+            );
+        }
+    }
+
+    /// ADR-0100: an `audio` modifier parses with its defaults, hears a bus or a source,
+    /// and each of its parameters is checked by name.
+    #[test]
+    fn an_audio_modifier_takes_defaults_and_checks_each_parameter() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("parses")
+        };
+        let light = parse(serde_json::json!({
+            "modifier_id": "light", "property": "opacity", "kind": "audio",
+            "from": -0.6, "to": 0.0
+        }));
+        let MotionKind::Audio {
+            audio,
+            audio_source,
+            measure,
+            floor_db,
+            ceiling_db,
+            attack_ms,
+            release_ms,
+            curve,
+            ..
+        } = &light.kind
+        else {
+            panic!("{light:?}");
+        };
+        assert_eq!((audio, audio_source), (&None, &None), "the program mix");
+        assert_eq!(*measure, MotionMeasure::Level);
+        assert_eq!((floor_db.get(), ceiling_db.get()), (-60.0, 0.0));
+        assert_eq!((*attack_ms, *release_ms), (10, 250));
+        assert_eq!(*curve, MotionCurve::Linear);
+        assert_eq!(field_of(std::slice::from_ref(&light)), None);
+        // It writes back what it read, and only what differs from a default is omitted.
+        let back = serde_json::to_value(&light).expect("writes");
+        assert_eq!(parse(back), light);
+
+        let bass = parse(serde_json::json!({
+            "modifier_id": "bass", "property": "scale", "kind": "audio",
+            "audio": "music", "measure": "band", "low_hz": 40.0, "high_hz": 120.0,
+            "curve": "ease_out", "attack_ms": 0, "release_ms": 400, "to": 0.1
+        }));
+        assert_eq!(field_of(std::slice::from_ref(&bass)), None);
+        let MotionKind::Audio { audio, .. } = &bass.kind else {
+            panic!("{bass:?}");
+        };
+        assert_eq!(audio.as_ref().map(BusId::as_str), Some("music"));
+
+        let field = |json: serde_json::Value| field_of(&[parse(json)]);
+        let audio = |extra: serde_json::Value| {
+            let mut json = serde_json::json!({
+                "modifier_id": "a", "property": "x", "kind": "audio"
+            });
+            for (k, v) in extra.as_object().expect("object") {
+                json[k] = v.clone();
+            }
+            json
+        };
+        let cases = [
+            (serde_json::json!({ "measure": "band" }), "low_hz"),
+            (
+                serde_json::json!({ "measure": "band", "low_hz": 10.0, "high_hz": 100.0 }),
+                "low_hz",
+            ),
+            (
+                serde_json::json!({ "measure": "band", "low_hz": 100.0 }),
+                "high_hz",
+            ),
+            (
+                serde_json::json!({ "measure": "band", "low_hz": 100.0, "high_hz": 100.0 }),
+                "high_hz",
+            ),
+            (
+                serde_json::json!({ "measure": "level", "low_hz": 100.0 }),
+                "low_hz",
+            ),
+            (
+                serde_json::json!({ "measure": "peak", "high_hz": 100.0 }),
+                "high_hz",
+            ),
+            (serde_json::json!({ "measure": "loudness" }), "measure"),
+            (serde_json::json!({ "floor_db": -91.0 }), "floor_db"),
+            (serde_json::json!({ "floor_db": 0.0 }), "floor_db"),
+            (
+                serde_json::json!({ "floor_db": -20.0, "ceiling_db": -30.0 }),
+                "ceiling_db",
+            ),
+            (serde_json::json!({ "ceiling_db": 1.0 }), "ceiling_db"),
+            (serde_json::json!({ "attack_ms": 10_001 }), "attack_ms"),
+            (serde_json::json!({ "release_ms": 10_001 }), "release_ms"),
+            (serde_json::json!({ "curve": "spring" }), "curve"),
+            (serde_json::json!({ "from": -100_001.0 }), "from"),
+            (serde_json::json!({ "to": 100_001.0 }), "to"),
+        ];
+        for (extra, param) in cases {
+            assert_eq!(
+                field(audio(extra.clone())),
+                Some(format!("motion.0.{param}")),
+                "{extra}"
             );
         }
     }
