@@ -234,11 +234,13 @@ origin) loads no local files, and reaches no local targets unless its source set
 `local_network`, and then only while its main frame stays on a `data:` document. Its
 opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
 opaque frame inside the page (see Gaps). CEF on Linux names the opaque origin `null`, not none, as
-the initiator of a web source's own first load (#1069), so the one main-frame load the
-helper itself started (the page's first load, or a reload it asked for) and its
-redirects, to the source's own origin with a `null` initiator while the main frame hasn't
-left that origin, are judged as the browser's own. Each main-frame load takes that mark,
-so a later `null` main-frame load, such as a sandboxed frame with `allow-top-navigation`
+the initiator of a web source's own first load (#1069), so a main-frame load the helper
+itself started, to the source's own origin with a `null` initiator while the main frame
+hasn't left that origin, is judged as the browser's own. The helper marks the URL it
+loads: the location when the page opens, the page's URL when it reloads it, and a
+redirect's target of that load. Only a `GET` of the marked URL takes the mark, so the
+most another `null` main-frame load can win, even racing a reload, is the page the helper
+is loading anyway. Any other one, such as a sandboxed frame with `allow-top-navigation`
 that a third-party frame made navigating the top to a path on a local source's server,
 stays opaque and is refused. The rule holds on every platform, though only Linux is known
 to need it.

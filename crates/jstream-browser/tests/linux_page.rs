@@ -46,34 +46,44 @@ fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// #1069: a page served from this computer loads in a source whose location is local.
+/// #1069: a page served from this computer loads in a source whose location is local,
+/// through the redirect its server answers the location with.
 #[test]
 #[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
 fn a_page_served_from_this_computer_loads() {
     let dir = temp_dir("http");
     let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
     let port = listener.local_addr().expect("its address").port();
-    // Answers every request with the page, until the test ends.
+    // Answers `/` with a redirect to `/index.html`, as dev servers do, and every other
+    // request with the page, until the test ends.
     std::thread::spawn(move || {
         for stream in listener.incoming() {
             let Ok(mut stream) = stream else { continue };
             let mut reader = BufReader::new(stream.try_clone().expect("the stream"));
             let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let root = line.starts_with("GET / ");
             while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
                 line.clear();
             }
-            let _ = write!(
-                stream,
-                "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\
-                 Connection: close\r\n\r\n{PAGE}",
-                PAGE.len()
-            );
+            let _ = if root {
+                write!(
+                    stream,
+                    "HTTP/1.1 302 Found\r\nLocation: /index.html\r\nContent-Length: 0\r\n\
+                     Connection: close\r\n\r\n"
+                )
+            } else {
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\
+                     Connection: close\r\n\r\n{PAGE}",
+                    PAGE.len()
+                )
+            };
         }
     });
-    paints_red(
-        &dir,
-        PageLocation::Web(format!("http://127.0.0.1:{port}/index.html")),
-    );
+    // The source's own first load, then its redirect (#1094's review, B3).
+    paints_red(&dir, PageLocation::Web(format!("http://127.0.0.1:{port}/")));
     let _ = std::fs::remove_dir_all(&dir);
 }
 

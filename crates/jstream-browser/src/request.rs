@@ -35,10 +35,11 @@
 //!     the page's own;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own. CEF on Linux names
-//!     `null` instead for the source's own first load (#1069), so the one main-frame load
-//!     the helper started (the page's first load, or a reload it asked for), to the
-//!     source's own web origin with an opaque initiator before the main frame has left
-//!     it, counts as one the browser started
+//!     `null` instead for the source's own first load (#1069), so a main-frame load the
+//!     helper started (a `GET` of the URL it marked: the location, the page's URL on a
+//!     reload, or a redirect's target of that load), to the source's own web origin with
+//!     an opaque initiator before the main frame has left it, counts as one the browser
+//!     started
 //!     ([`check_main_frame_from`](RequestPolicy::check_main_frame_from)). Any other
 //!     opaque main-frame load, such as a sandboxed frame navigating the top, stays
 //!     opaque and is refused local access.
@@ -65,6 +66,7 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Mutex, PoisonError};
 
 use crate::{PageLocation, PageSpec};
 
@@ -83,9 +85,10 @@ pub struct RequestPolicy {
     /// opaque origin is no longer the file or blank page's
     /// ([`main_frame_to`](Self::main_frame_to)).
     left_home: AtomicBool,
-    /// Whether the next main-frame load is one the helper started: the page's first load,
-    /// or a reload it asked for ([`expect_own_load`](Self::expect_own_load)).
-    own_load: AtomicBool,
+    /// The URL of the main-frame load the helper started and CEF hasn't yet asked about:
+    /// the page's location when it opens, the page's URL when the helper reloads it, or a
+    /// redirect's target of that load ([`expect_own_load`](Self::expect_own_load)).
+    own_load: Mutex<Option<String>>,
     denied: AtomicU64,
 }
 
@@ -170,7 +173,10 @@ impl RequestPolicy {
             home,
             home_local,
             left_home: AtomicBool::new(false),
-            own_load: AtomicBool::new(true),
+            own_load: Mutex::new(match location {
+                PageLocation::Web(url) => Some(url.clone()),
+                PageLocation::Blank | PageLocation::File(_) | PageLocation::Html(_) => None,
+            }),
             denied: AtomicU64::new(0),
         }
     }
@@ -193,22 +199,32 @@ impl RequestPolicy {
         verdict
     }
 
-    /// Marks the next main-frame load as one the helper started: called before a reload.
-    /// A new policy starts marked, for the page's first load.
-    pub fn expect_own_load(&self) {
-        self.own_load.store(true, Ordering::Release);
+    /// Marks a load of `url` in the main frame as one the helper started: before a
+    /// reload, with the page's URL, and when that load is redirected, with the target, as
+    /// CEF follows a redirect with a new request. A new web page starts marked with its
+    /// location, for its first load.
+    pub fn expect_own_load(&self, url: &str) {
+        *self.own_load.lock().unwrap_or_else(PoisonError::into_inner) = Some(url.to_owned());
     }
 
-    /// Takes the mark [`expect_own_load`](Self::expect_own_load) set: whether this
-    /// main-frame load is the one the helper started. Every main-frame load takes it, so
-    /// only the first after the page opens or the helper reloads it gets `true`; a
-    /// redirect of that load keeps the answer its load got.
-    pub fn take_own_load(&self) -> bool {
-        self.own_load.swap(false, Ordering::AcqRel)
+    /// Whether this main-frame request, for `url` (`get` when its method is `GET`), is the
+    /// load the helper started: a `GET` of the marked URL
+    /// ([`expect_own_load`](Self::expect_own_load)), compared without its fragment. That
+    /// takes the mark; any other request leaves it for the load it is waiting for. So the
+    /// most a page's own navigation can win from it is a load of the page the helper is
+    /// loading anyway.
+    pub fn take_own_load(&self, url: &str, get: bool) -> bool {
+        let mut mark = self.own_load.lock().unwrap_or_else(PoisonError::into_inner);
+        let own = get && mark.as_deref().is_some_and(|marked| same_load(marked, url));
+        if own {
+            *mark = None;
+        }
+        own
     }
 
     /// [`check_from`](Self::check_from) for a request that loads the main frame, where
-    /// `own_load` is what [`take_own_load`](Self::take_own_load) said for it. CEF on Linux
+    /// `own_load` is what [`take_own_load`](Self::take_own_load) said for it (for a
+    /// redirect, for the request it redirects). CEF on Linux
     /// names the opaque origin (`null`) as the initiator of the source's own first load,
     /// which the browser started (#1069). So the load the helper started, to the source's
     /// own web origin with an opaque initiator while the main frame hasn't left that
@@ -335,6 +351,20 @@ fn url_host(rest: &str) -> Option<String> {
 }
 
 /// [`url_host`], and what follows the host's `:` (the port as written), if anything.
+/// Whether `a` and `b` load the same document: the same origin, path and query, without
+/// a fragment, an empty path read as `/`.
+fn same_load(a: &str, b: &str) -> bool {
+    fn key(url: &str) -> Option<(Origin, &str, &str)> {
+        let origin = Origin::parse(url)?;
+        let url = url.split('#').next().unwrap_or_default();
+        let after = url.split_once("://")?.1;
+        let rest = after.find(['/', '?']).map_or("", |at| &after[at..]);
+        let (path, query) = rest.split_once('?').unwrap_or((rest, ""));
+        Some((origin, if path.is_empty() { "/" } else { path }, query))
+    }
+    key(a).is_some_and(|a| key(b) == Some(a))
+}
+
 fn host_port(rest: &str) -> Option<(String, Option<&str>)> {
     let authority = rest
         .strip_prefix("//")?
@@ -748,60 +778,80 @@ mod tests {
     /// origin.
     #[test]
     fn a_local_source_s_own_first_load_with_a_null_initiator_is_allowed() {
-        let local = RequestPolicy::for_location(&PageLocation::Web(
-            "http://127.0.0.1:8767/sky.html".into(),
-        ));
-        // The first load is the helper's own.
-        let own = local.take_own_load();
+        // One main-frame request as the helper's handler judges it: it takes the mark by
+        // its URL, and an allowed redirect of the helper's own load marks the target,
+        // which CEF then asks for as a new request.
+        fn load(policy: &RequestPolicy, url: &str, get: bool) -> (bool, Verdict) {
+            let own = policy.take_own_load(url, get);
+            (own, policy.check_main_frame_from(url, Some("null"), own))
+        }
+        fn redirect(policy: &RequestPolicy, own: bool, target: &str) -> Verdict {
+            let verdict = policy.check_main_frame_from(target, Some("null"), own);
+            if verdict == Verdict::Allow {
+                policy.main_frame_to(target);
+                if own {
+                    policy.expect_own_load(target);
+                }
+            }
+            verdict
+        }
+
+        let local = RequestPolicy::for_location(&PageLocation::Web("http://127.0.0.1:8767".into()));
+        // The first load is the helper's own, its empty path read as `/`.
+        let (own, verdict) = load(&local, "http://127.0.0.1:8767/", true);
         assert!(own);
+        assert_eq!(verdict, Verdict::Allow);
+        // B3 of #1094's review: `/` answers 301 to `/index.html`, and CEF asks again.
         assert_eq!(
-            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null"), own),
+            redirect(&local, own, "http://127.0.0.1:8767/index.html"),
             Verdict::Allow
         );
-        // Its redirect within the origin keeps that answer; to another local origin it
-        // is not the source's own load.
-        assert_eq!(
-            local.check_main_frame_from("http://127.0.0.1:8767/index.html", Some("null"), own),
-            Verdict::Allow
-        );
-        assert!(deny(local.check_main_frame_from(
-            "http://127.0.0.1:9000/",
-            Some("null"),
-            own
-        )));
+        let (own, verdict) = load(&local, "http://127.0.0.1:8767/index.html", true);
+        assert!(own);
+        assert_eq!(verdict, Verdict::Allow);
+        // A redirect of it to another local origin is not the source's own load.
+        assert!(deny(redirect(&local, own, "http://127.0.0.1:9000/")));
         // A subresource with an opaque initiator is not a load the browser started.
         assert!(deny(
             local.check_from("http://127.0.0.1:8767/a.png", Some("null"))
         ));
 
-        // B1 of #1094's review: a second opaque main-frame load, such as a sandboxed
-        // frame a third-party frame made navigating the top, is no longer the helper's.
-        let second = local.take_own_load();
-        assert!(!second);
-        assert!(deny(local.check_main_frame_from(
-            "http://127.0.0.1:8767/api/reset",
-            Some("null"),
-            second
-        )));
-        // A reload the helper asks for is its own again, once.
-        local.expect_own_load();
-        let reload = local.take_own_load();
+        // B1 of round 1: a later opaque main-frame load, such as a sandboxed frame a
+        // third-party frame made navigating the top, is not the helper's.
+        let local = RequestPolicy::for_location(&PageLocation::Web(
+            "http://127.0.0.1:8767/sky.html".into(),
+        ));
         assert_eq!(
-            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null"), reload),
-            Verdict::Allow
+            load(&local, "http://127.0.0.1:8767/sky.html#top", true),
+            (true, Verdict::Allow)
         );
-        assert!(!local.take_own_load());
+        assert!(deny(
+            load(&local, "http://127.0.0.1:8767/api/reset", true).1
+        ));
+        // B4 of round 2: while a reload is marked, that navigation, a POST of the page, or
+        // the page with another query, doesn't take the mark, which waits for the reload.
+        local.expect_own_load("http://127.0.0.1:8767/sky.html");
+        assert!(deny(
+            load(&local, "http://127.0.0.1:8767/api/reset", true).1
+        ));
+        assert!(deny(
+            load(&local, "http://127.0.0.1:8767/sky.html", false).1
+        ));
+        assert!(deny(
+            load(&local, "http://127.0.0.1:8767/sky.html?x=1", true).1
+        ));
+        assert_eq!(
+            load(&local, "http://127.0.0.1:8767/sky.html", true),
+            (true, Verdict::Allow)
+        );
+        // Taken once.
+        assert!(deny(load(&local, "http://127.0.0.1:8767/sky.html", true).1));
 
         // Once the main frame has left for the web, `null` is the web's, even for a load
         // the helper started.
         local.main_frame_to("https://example.com/");
-        local.expect_own_load();
-        let own = local.take_own_load();
-        assert!(deny(local.check_main_frame_from(
-            "http://127.0.0.1:8767/sky.html",
-            Some("null"),
-            own
-        )));
+        local.expect_own_load("http://127.0.0.1:8767/sky.html");
+        assert!(deny(load(&local, "http://127.0.0.1:8767/sky.html", true).1));
 
         // A named initiator is judged as before.
         let named =
@@ -824,31 +874,18 @@ mod tests {
             css: String::new(),
             local_network: true,
         });
-        let own = opted.take_own_load();
         assert_eq!(
-            opted.check_main_frame_from("http://192.168.1.10:8080/", Some("null"), own),
-            Verdict::Allow
+            load(&opted, "http://192.168.1.10:8080/", true),
+            (true, Verdict::Allow)
         );
-        let later = opted.take_own_load();
-        assert!(deny(opted.check_main_frame_from(
-            "http://192.168.1.10:8080/",
-            Some("null"),
-            later
-        )));
+        assert!(deny(load(&opted, "http://192.168.1.10:8080/", true).1));
 
         // A source from the internet gains nothing: its own load isn't local anyway, and a
-        // local target from it stays refused.
+        // local target from it stays refused, redirect or not.
         let web = RequestPolicy::for_location(&PageLocation::Web("https://example.com/".into()));
-        let own = web.take_own_load();
-        assert_eq!(
-            web.check_main_frame_from("https://example.com/", Some("null"), own),
-            Verdict::Allow
-        );
-        assert!(deny(web.check_main_frame_from(
-            "http://127.0.0.1/",
-            Some("null"),
-            own
-        )));
+        let (own, verdict) = load(&web, "https://example.com/", true);
+        assert_eq!(verdict, Verdict::Allow);
+        assert!(deny(redirect(&web, own, "http://127.0.0.1/")));
     }
 
     /// #347: a page from the internet can't reach this computer or the local network.

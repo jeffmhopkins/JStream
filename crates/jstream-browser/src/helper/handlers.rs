@@ -422,8 +422,8 @@ wrap_resource_request_handler! {
         // `None` for one the browser itself started.
         initiator: Option<String>,
         // Whether this request is the main-frame load the helper started (the page's
-        // first load or a reload it asked for), which its redirects keep (#1069). Shared
-        // by the handler's clones, as CEF holds it by reference.
+        // first load, a reload it asked for, or a redirect of one), #1069. Shared by the
+        // handler's clones, as CEF holds it by reference.
         own_load: Arc<AtomicBool>,
     }
 
@@ -442,7 +442,10 @@ wrap_resource_request_handler! {
             let page = &self.page.0;
             let main_frame = request.resource_type() == ResourceType::MAIN_FRAME;
             let verdict = if main_frame {
-                let own_load = page.policy.take_own_load();
+                let get = CefString::from(&request.method())
+                    .to_string()
+                    .eq_ignore_ascii_case("GET");
+                let own_load = page.policy.take_own_load(&url, get);
                 self.own_load.store(own_load, Ordering::Release);
                 page.policy
                     .check_main_frame_from(&url, self.initiator.as_deref(), own_load)
@@ -489,12 +492,10 @@ wrap_resource_request_handler! {
             let target = new_url.to_string();
             let main_frame =
                 request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME);
+            let own_load = main_frame && self.own_load.load(Ordering::Acquire);
             let verdict = if main_frame {
-                page.policy.check_main_frame_from(
-                    &target,
-                    self.initiator.as_deref(),
-                    self.own_load.load(Ordering::Acquire),
-                )
+                page.policy
+                    .check_main_frame_from(&target, self.initiator.as_deref(), own_load)
             } else {
                 page.policy.check_from(&target, self.initiator.as_deref())
             };
@@ -502,6 +503,11 @@ wrap_resource_request_handler! {
                 crate::Verdict::Allow => {
                     if main_frame {
                         page.policy.main_frame_to(&target);
+                    }
+                    // CEF follows the redirect with a new request, through a new handler:
+                    // the helper's own load carries over to it by its URL (#1069).
+                    if own_load {
+                        page.policy.expect_own_load(&target);
                     }
                 }
                 crate::Verdict::Deny(_) => {
