@@ -388,28 +388,47 @@ fn load_buffers(
     resources: &mut dyn Resources,
 ) -> Result<Vec<Rc<[u8]>>> {
     let mut out: Vec<Rc<[u8]>> = Vec::with_capacity(doc.buffers.len());
-    let mut read: BTreeMap<&str, Rc<[u8]>> = BTreeMap::new();
+    // Keyed by the decoded name, so `a.bin` and `%61.bin` are one read.
+    let mut read: BTreeMap<String, Rc<[u8]>> = BTreeMap::new();
     let mut total: u64 = 0;
+    let mut count = |bytes: &[u8]| {
+        total = total.saturating_add(bytes.len() as u64);
+        if total > MAX_MODEL_BYTES {
+            return Err(LoadError::new(format!(
+                "the model's buffers hold more than {} MiB",
+                MAX_MODEL_BYTES / (1024 * 1024)
+            )));
+        }
+        Ok(())
+    };
     for (index, buffer) in doc.buffers.iter().enumerate() {
         let bytes: Rc<[u8]> = match &buffer.uri {
-            Some(uri) => match read.get(uri.as_str()) {
-                Some(bytes) => Rc::clone(bytes),
-                None => {
-                    let bytes: Rc<[u8]> = read_uri(uri, resources)?.into();
-                    total = total.saturating_add(bytes.len() as u64);
-                    if total > MAX_MODEL_BYTES {
-                        return Err(LoadError::new(format!(
-                            "the model's buffers hold more than {} MiB",
-                            MAX_MODEL_BYTES / (1024 * 1024)
-                        )));
+            Some(uri) => {
+                let key = if uri.starts_with("data:") {
+                    uri.clone()
+                } else {
+                    percent_decode(uri)
+                };
+                match read.get(&key) {
+                    Some(bytes) => Rc::clone(bytes),
+                    None => {
+                        let bytes: Rc<[u8]> = read_uri(uri, resources)?.into();
+                        count(&bytes)?;
+                        read.insert(key, Rc::clone(&bytes));
+                        bytes
                     }
-                    read.insert(uri, Rc::clone(&bytes));
-                    bytes
                 }
-            },
-            None if index == 0 => bin
-                .ok_or_else(|| LoadError::new("buffer 0 has no URI and the file no binary chunk"))?
-                .into(),
+            }
+            None if index == 0 => {
+                let bytes: Rc<[u8]> = bin
+                    .ok_or_else(|| {
+                        LoadError::new("buffer 0 has no URI and the file no binary chunk")
+                    })?
+                    .into();
+                // The `.glb`'s own binary chunk counts toward the total too.
+                count(&bytes)?;
+                bytes
+            }
             None => return Err(LoadError::new(format!("buffer {index} has no URI"))),
         };
         if bytes.len() < buffer.byte_length {

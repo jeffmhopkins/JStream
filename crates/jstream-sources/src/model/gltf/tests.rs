@@ -451,6 +451,27 @@ fn the_buffers_together_are_capped() {
     let json = serde_json::to_vec(&doc).expect("serialises");
     let err = load(&json, &mut Big).expect_err("refused");
     assert!(err.0.contains("buffers hold more than 512 MiB"), "{err:?}");
+    // A `.glb`'s binary chunk counts too: 100 MiB of it and five 100 MiB files are over.
+    let (mut doc, mut bin) = triangle(json!({}), true);
+    bin.resize(100 * 1024 * 1024, 0);
+    let mut buffers = vec![json!({ "byteLength": bin.len() })];
+    buffers.extend((0..5).map(|i| json!({ "uri": format!("part{i}.bin"), "byteLength": 1 })));
+    doc["buffers"] = json!(buffers);
+    let err = load(&glb(&doc, &bin), &mut Big).expect_err("refused with the chunk");
+    assert!(err.0.contains("buffers hold more than 512 MiB"), "{err:?}");
+}
+
+#[test]
+fn two_spellings_of_one_file_are_read_once() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    doc["buffers"] = json!([
+        { "uri": "mesh.bin", "byteLength": bin.len() },
+        { "uri": "%6Desh.bin", "byteLength": bin.len() },
+    ]);
+    let json = serde_json::to_vec(&doc).expect("serialises");
+    let mut reads = Reads(bin, 0);
+    load(&json, &mut reads).expect("loads");
+    assert_eq!(reads.1, 1);
 }
 
 /// Counts decodes, to show the texture cap stops before decoding the 65th.
