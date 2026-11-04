@@ -1043,8 +1043,8 @@ browser, and `mod.rs` is the component.
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
   compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
-  (`camera::polygon`, #1054), and a press hits the box the engine draws on top: the nearest along
-  the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  (`camera::polygon`, #1054). A press hits the box the engine draws on top: the nearest
+  along the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
   the pointer, and nothing snaps; a group moves by the delta on the first selected
