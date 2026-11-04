@@ -113,6 +113,10 @@ a stolen token, local denial of service.
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
+  [ADR-0104](../adr/0104-network-listener-over-tls.md) decides how that changes, and
+  it is not built: an opt-in second listener for the network, TLS only with a
+  self-signed certificate clients pin by fingerprint, admitting device tokens and never
+  the control token.
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the
@@ -243,7 +247,17 @@ access. A page given as HTML (the `html` setting, loaded as a `data:` URL with a
 origin) loads no local files, and reaches no local targets unless its source sets
 `local_network`, and then only while its main frame stays on a `data:` document. Its
 opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
-opaque frame inside the page (see Gaps).
+opaque frame inside the page (see Gaps). CEF on Linux names the opaque origin `null`, not none, as
+the initiator of a web source's own first load (#1069), so a main-frame load the helper
+itself started, to the source's own origin with a `null` initiator while the main frame
+hasn't left that origin, is judged as the browser's own. The helper marks the URL it
+loads: the location when the page opens, the page's URL when it reloads it, and a
+redirect's target of that load. Only a `GET` of the marked URL takes the mark, so the
+most another `null` main-frame load can win, even racing a reload, is the page the helper
+is loading anyway. Any other one, such as a sandboxed frame with `allow-top-navigation`
+that a third-party frame made navigating the top to a path on a local source's server,
+stays opaque and is refused. The rule holds on every platform, though only Linux is known
+to need it.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except

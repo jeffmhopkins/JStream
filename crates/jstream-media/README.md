@@ -45,7 +45,8 @@ Contents:
   only uploads them. `Model::new` checks every index and reference and the caps: 2,000,000
   triangles, 64 textures, 4096 px a side, 512 MiB in all. `model::shapes` builds the
   built-in plane, cube, sphere, cylinder and cone, a unit across, and `compute_tangents`
-  fills tangents from texture coordinates.
+  fills tangents from texture coordinates. `Lighting` (`studio` or `unlit`) is how a model
+  is lit, which the `model` source sets and the renderer draws.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries

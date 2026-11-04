@@ -100,6 +100,15 @@ pub enum SourceError {
         /// Which limit it passed.
         what: String,
     },
+    /// A 3D model file the `model` source can't build (ADR-0107): not valid glTF, a
+    /// required extension it can't read, or a model past a cap.
+    #[error("asset `{path}` is not a model JStream can draw: {reason}")]
+    Model {
+        /// The path the reference holds.
+        path: String,
+        /// What is wrong with it.
+        reason: String,
+    },
     /// The kind plays through a platform backend the engine wasn't given, such as media
     /// files on a platform without a media backend, or a browser source in an engine
     /// built without browser sources.

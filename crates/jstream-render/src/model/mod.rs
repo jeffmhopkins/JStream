@@ -26,15 +26,7 @@ const FRAME_BYTES: u64 = 64 + 64 + 48 + 16;
 /// Bytes of a material's uniform: four `vec4`.
 const MATERIAL_BYTES: u64 = 64;
 
-/// How a model is lit (ADR-0107 decision 4).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Lighting {
-    /// The studio rig, fixed to the camera.
-    #[default]
-    Studio,
-    /// Base colour and emission as authored.
-    Unlit,
-}
+pub use jstream_media::model::Lighting;
 
 /// A model on the GPU, made by [`crate::Compositor::upload_model`]. Cheap to clone; a
 /// clone shares the buffers and textures.
