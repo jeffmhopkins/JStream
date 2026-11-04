@@ -71,7 +71,8 @@ fn included(state: &State, scene_id: &SceneId) -> bool {
 /// The sources `root` reaches: those its visible items place, and through each placed
 /// nested scene source whose audio is on, what that scene reaches. A keyframe scene's
 /// overrides apply to its parent's items and to the children of the groups in its tree
-/// (ADR-0024 §2), so a child it hides is not reached. The scene graph has no cycles;
+/// (ADR-0024 §2), so a child it hides is not reached, and so do the keyframe scenes a
+/// placed scene's placements are drawn through (ADR-0116). The scene graph has no cycles;
 /// each scene is still walked once per keyframe it is reached through.
 fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
     let mut reached = BTreeSet::new();
@@ -100,11 +101,16 @@ fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
                 && source.audio().is_none_or(|audio| audio.enabled)
                 && included(state, scene_id)
             {
-                // Only a group stays in the keyframe's tree.
+                // Only a group stays in the keyframe's tree, and only where the keyframe
+                // overrides one of its children, as the plan draws it; otherwise a scene
+                // is drawn through the keyframe its placements switched to (ADR-0116).
                 let group = state
                     .scene(scene_id)
                     .is_some_and(|inner| inner.role() == SceneRole::Group);
-                pending.push((scene_id.clone(), keyframe.filter(|_| group)));
+                let through = keyframe
+                    .filter(|keyframe| group && state.overrides_within(keyframe, scene_id))
+                    .or_else(|| state.placed_keyframe(scene_id));
+                pending.push((scene_id.clone(), through));
             }
         }
     }
@@ -257,6 +263,64 @@ mod tests {
         let a = SceneId::new("a");
         let gains = activity_gains(graph.state(), Some(&a));
         assert_eq!(gain(&gains, "nested_media"), 1.0);
+    }
+
+    /// A placed scene drawn through a keyframe that hides a child (ADR-0116) silences
+    /// it, as the plan draws it, and its own values bring it back. A keyframe of the
+    /// placing scene that overrides the child wins over the placed keyframe.
+    #[test]
+    fn a_placed_keyframe_hiding_a_child_silences_it() {
+        let mut graph = graph();
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("ck"),
+                    variant_of: SceneId::new("c"),
+                    name: "CK".into(),
+                },
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("c1"),
+                    scene_id: Some(SceneId::new("ck")),
+                    visible: false,
+                },
+            ],
+        );
+        let a = SceneId::new("a");
+        let placed = std::collections::BTreeMap::from([(SceneId::new("c"), SceneId::new("ck"))]);
+        let drawn = graph.with_placed_keyframes(&placed);
+        let gains = activity_gains(drawn.state(), Some(&a));
+        assert_eq!(gain(&gains, "nested_media"), 0.0, "hidden by c's keyframe");
+        let gains = activity_gains(graph.state(), Some(&a));
+        assert_eq!(gain(&gains, "nested_media"), 1.0, "c's own values");
+        // On program itself, c draws its own values: a placed keyframe is where it's placed.
+        let c = SceneId::new("c");
+        let gains = activity_gains(drawn.state(), Some(&c));
+        assert_eq!(gain(&gains, "nested_media"), 1.0);
+        // a's keyframe showing the child wins over c's placed keyframe.
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetRole {
+                    scene_id: SceneId::new("c"),
+                    role: jstream_protocol::SceneRole::Group,
+                },
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("k"),
+                    variant_of: SceneId::new("a"),
+                    name: "K".into(),
+                },
+                Edit::ItemSetVisible {
+                    item_id: ItemId::new("c1"),
+                    scene_id: Some(SceneId::new("k")),
+                    visible: true,
+                },
+            ],
+        );
+        let drawn = graph.with_placed_keyframes(&placed);
+        let k = SceneId::new("k");
+        let gains = activity_gains(drawn.state(), Some(&k));
+        assert_eq!(gain(&gains, "nested_media"), 1.0, "a's keyframe wins");
     }
 
     #[test]

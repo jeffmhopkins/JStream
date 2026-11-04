@@ -90,3 +90,13 @@ pub struct DroppedOverride {
     #[serde(flatten)]
     pub dropped: ItemOverride,
 }
+
+/// A scene drawn through one of its keyframe scenes wherever another scene places it
+/// (keyframe tracks, ADR-0116, since 0.88), as `studio.get` reports it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct PlacedKeyframe {
+    /// The placed scene.
+    pub scene_id: SceneId,
+    /// The keyframe scene its placements draw it through.
+    pub keyframe_id: SceneId,
+}

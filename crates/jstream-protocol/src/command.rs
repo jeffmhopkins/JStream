@@ -1618,6 +1618,32 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         modifier_id: Option<String>,
     },
+    /// Sets the keyframe a scene is drawn through wherever another scene places it
+    /// (ADR-0116, since 0.88): keyframe tracks. A scene with keyframe scenes then switches
+    /// between them on its own, independently of the scene placing it and of every other
+    /// placed scene, so independent states (a background, a panel layout, an effect)
+    /// don't multiply into one keyframe each combination. Where the placing scene is
+    /// drawn through a keyframe of its own that overrides an item in this scene's tree,
+    /// that keyframe draws it instead. What each placed scene draws through is studio
+    /// state like the program scene: it changes no `rev`, is never undone or saved, and
+    /// `studio.get` reports it. When program draws the scene, the change plays as a
+    /// transition preset's Move from what is on screen, pairing each item with itself,
+    /// as `item.show` does. Emits `scene.keyframe_changed`. Fails with `not_found` for a
+    /// scene, keyframe or preset the collection doesn't have, and with
+    /// `invalid_argument` when `scene_id` is itself a keyframe scene or `keyframe_id`
+    /// isn't one of its keyframe scenes.
+    #[serde(rename = "scene.set_keyframe")]
+    SceneSetKeyframe {
+        /// The scene whose placements switch: not a keyframe scene.
+        scene_id: SceneId,
+        /// One of its keyframe scenes. Omitted for the scene's own values.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keyframe_id: Option<SceneId>,
+        /// The preset whose timing the Move takes. Omitted for the default preset; one
+        /// with no length (a cut) switches at once.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<TransitionPresetId>,
+    },
     /// Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if
     /// it is playing. Its cues fire at their times on the animation clock (ADR-0099
     /// decision 2), on every pass of a loop, until it ends or is stopped. Playing is
@@ -1851,6 +1877,7 @@ impl Action {
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::SceneSetKeyframe { .. } => "scene.set_keyframe",
             Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::TimelinePlay { .. } => "timeline.play",
             Action::TimelineStop { .. } => "timeline.stop",
@@ -1906,6 +1933,20 @@ impl Action {
             }
             Action::ItemTriggerMotion { item_id, .. } => {
                 vec![(EntityKind::Item, item_id.as_str())]
+            }
+            Action::SceneSetKeyframe {
+                scene_id,
+                keyframe_id,
+                preset_id,
+            } => {
+                let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
+                if let Some(keyframe_id) = keyframe_id {
+                    named.push((EntityKind::Scene, keyframe_id.as_str()));
+                }
+                if let Some(preset_id) = preset_id {
+                    named.push((EntityKind::Transition, preset_id.as_str()));
+                }
+                named
             }
             Action::TimelinePlay { timeline_id }
             | Action::TimelineStop { timeline_id }
@@ -2011,6 +2052,7 @@ impl Action {
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
+            | Action::SceneSetKeyframe { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::TimelinePlay { .. }
             | Action::TimelineStop { .. }
@@ -2041,14 +2083,16 @@ impl Action {
 impl Action {
     /// Why this action can't be a timeline cue, as the field within the action and the
     /// reason, or `None` if it can (ADR-0099 decision 4, ADR-0115). A cue runs one of a
-    /// closed set: `scene.switch`, `item.show`, `item.hide`, `item.toggle`,
-    /// `item.trigger_motion`, `values.set`, `source.restart`, and `timeline.play`,
+    /// closed set: `scene.switch`, `scene.set_keyframe` (ADR-0116), `item.show`,
+    /// `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
+    /// `source.restart`, and `timeline.play`,
     /// `timeline.stop` and `timeline.seek`. Each is an action a hotkey can run too, and
     /// none is an edit, so playing a timeline adds nothing to an undo history. The
     /// `values.set` checks are `bind_problem`'s.
     pub fn cue_problem(&self) -> Option<(&'static str, &'static str)> {
         match self {
             Action::SceneSwitch { .. }
+            | Action::SceneSetKeyframe { .. }
             | Action::ItemShow { .. }
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
@@ -2060,8 +2104,8 @@ impl Action {
             Action::ValuesSet { .. } => self.bind_problem(),
             _ => Some((
                 "type",
-                "a cue runs scene.switch, item.show, item.hide, item.toggle, \
-                 item.trigger_motion, values.set, source.restart, timeline.play, \
+                "a cue runs scene.switch, scene.set_keyframe, item.show, item.hide, \
+                 item.toggle, item.trigger_motion, values.set, source.restart, timeline.play, \
                  timeline.stop or timeline.seek",
             )),
         }
@@ -2069,12 +2113,14 @@ impl Action {
 
     /// What a cue running this action sets, for `timeline.seek`, or `None` for an
     /// event: seeking runs only the last cue before the seek for each key (ADR-0099
-    /// decision 4). The program scene, one placement's visibility (an item in the scene
-    /// a show or hide names), and one shared value are states; a toggle, a fired motion,
+    /// decision 4). The program scene, the keyframe one scene's placements draw through,
+    /// one placement's visibility (an item in the scene a show or hide names), and one
+    /// shared value are states; a toggle, a fired motion,
     /// a restart and a timeline's play, stop or seek are events.
     pub fn cue_state(&self) -> Option<String> {
         match self {
             Action::SceneSwitch { .. } => Some("program".into()),
+            Action::SceneSetKeyframe { scene_id, .. } => Some(format!("keyframe of {scene_id}")),
             Action::ItemShow { item_id, scene_id } | Action::ItemHide { item_id, scene_id } => {
                 Some(format!(
                     "item {item_id} in {}",

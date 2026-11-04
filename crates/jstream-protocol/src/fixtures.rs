@@ -6,6 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::ActivityEntry;
+use crate::PlacedKeyframe;
 use crate::SceneOptions;
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ChainCost, ClientId,
@@ -1295,6 +1296,16 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
+        Action::SceneSetKeyframe {
+            scene_id: SceneId::new("scn_panels"),
+            keyframe_id: Some(SceneId::new("scn_panels_wide")),
+            preset_id: Some(TransitionPresetId::new("tr_move")),
+        },
+        Action::SceneSetKeyframe {
+            scene_id: SceneId::new("scn_panels"),
+            keyframe_id: None,
+            preset_id: None,
+        },
         Action::PairingStart,
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
@@ -2344,11 +2355,16 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 position_ms: 2100,
                 pass: 1,
             }],
+            keyframes: vec![PlacedKeyframe {
+                scene_id: SceneId::new("scn_panels"),
+                keyframe_id: SceneId::new("scn_panels_wide"),
+            }],
         },
         QueryResult::StudioGet {
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),
+            keyframes: Vec::new(),
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
@@ -2651,6 +2667,18 @@ pub(crate) fn events() -> Vec<Event> {
         }),
         client_id: ClientId::new("cli_7"),
         request_id: Some(RequestId::new("r2")),
+    });
+    events.push(Event::SceneKeyframeChanged {
+        scene_id: SceneId::new("scn_panels"),
+        keyframe_id: Some(SceneId::new("scn_panels_wide")),
+        client_id: ClientId::new("cli_8"),
+        request_id: Some(RequestId::new("req_9")),
+    });
+    events.push(Event::SceneKeyframeChanged {
+        scene_id: SceneId::new("scn_panels"),
+        keyframe_id: None,
+        client_id: ClientId::new("cli_8"),
+        request_id: None,
     });
     events.push(Event::StudioChanged {
         program_scene: None,

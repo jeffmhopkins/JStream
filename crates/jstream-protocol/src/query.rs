@@ -15,7 +15,7 @@ use crate::id::{
     BusId, DeviceId, FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
     TransitionPresetId,
 };
-use crate::keyframe::ItemOverride;
+use crate::keyframe::{ItemOverride, PlacedKeyframe};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
@@ -547,6 +547,10 @@ pub enum QueryResult {
         /// it is now. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         timelines: Vec<PlayingTimeline>,
+        /// The scenes drawn through one of their keyframe scenes where they are placed
+        /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        keyframes: Vec<PlacedKeyframe>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

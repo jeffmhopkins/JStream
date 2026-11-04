@@ -217,6 +217,18 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::SourceRestart { source_id } => {
             format!("Restarted {}", source(state, source_id))
         }
+        Action::SceneSetKeyframe {
+            scene_id,
+            keyframe_id,
+            ..
+        } => match keyframe_id {
+            Some(keyframe_id) => format!(
+                "Switched {} to {}",
+                scene(state, scene_id),
+                scene(state, keyframe_id)
+            ),
+            None => format!("Switched {} to its own values", scene(state, scene_id)),
+        },
         other => capitalize(&humanize(other.name())),
     }
 }

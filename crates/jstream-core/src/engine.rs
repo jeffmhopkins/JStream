@@ -3160,6 +3160,10 @@ struct State {
     /// While a timeline's cue runs, its exact time on the animation clock, which a
     /// transition or a fire it starts takes as its start (ADR-0099 decision 4).
     cue_at: Option<jstream_media::MediaTime>,
+    /// The keyframe scene each placed scene is drawn through (keyframe tracks,
+    /// ADR-0116): studio state, like the program scene, which the drawn copy of the
+    /// collection ([`shown`](Self::shown)) carries.
+    placed_keyframes: BTreeMap<SceneId, SceneId>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3461,6 +3465,7 @@ impl State {
     ) {
         self.outputs.sync(self.graph.state());
         self.reconcile_timelines(wake);
+        self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
         {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
@@ -3820,6 +3825,158 @@ impl State {
         }
     }
 
+    /// Lets go of each placed scene's keyframe the collection no longer holds, after a
+    /// batch, undo or redo deleted the scene or the keyframe scene (ADR-0116), with
+    /// `scene.keyframe_changed` for it.
+    fn reconcile_keyframes(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        wake: &mut Vec<Waker>,
+    ) {
+        let state = self.graph.state();
+        let gone: Vec<SceneId> = self
+            .placed_keyframes
+            .iter()
+            .filter(|(scene_id, keyframe_id)| {
+                state
+                    .scene(keyframe_id)
+                    .is_none_or(|keyframe| keyframe.variant_of() != Some(*scene_id))
+            })
+            .map(|(scene_id, _)| scene_id.clone())
+            .collect();
+        for scene_id in gone {
+            self.placed_keyframes.remove(&scene_id);
+            self.subscribers.emit(
+                &Event::SceneKeyframeChanged {
+                    scene_id,
+                    keyframe_id: None,
+                    client_id: client_id.clone(),
+                    request_id: Some(request_id.clone()),
+                },
+                wake,
+            );
+        }
+    }
+
+    /// `scene.set_keyframe` (ADR-0116): draws scene `scene_id` through `keyframe_id`
+    /// wherever another scene places it. When program draws it, the change plays as a
+    /// Move of preset `preset_id` (the default when `None`) from what is on screen to
+    /// program as now drawn, pairing each item with itself, as `item.show` plays an
+    /// item's effect; a transition in flight is retargeted from where it is.
+    fn set_keyframe(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene_id: SceneId,
+        keyframe_id: Option<SceneId>,
+        preset_id: Option<jstream_protocol::TransitionPresetId>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(&scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.to_string(),
+            })?;
+        if scene.variant_of().is_some() {
+            return Err(ProtocolError::invalid_argument(
+                "scene_id",
+                "is a keyframe scene: name the scene it is a keyframe of",
+            ));
+        }
+        if let Some(keyframe_id) = &keyframe_id {
+            let keyframe = state
+                .scene(keyframe_id)
+                .ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Scene,
+                    id: keyframe_id.to_string(),
+                })?;
+            if keyframe.variant_of() != Some(&scene_id) {
+                return Err(ProtocolError::invalid_argument(
+                    "keyframe_id",
+                    "is not a keyframe scene of scene_id",
+                ));
+            }
+        }
+        let preset_id = match preset_id {
+            Some(preset_id) => preset_id,
+            None => state.default_preset().clone(),
+        };
+        let Some(preset) = state.preset(&preset_id) else {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Transition,
+                id: preset_id.to_string(),
+            });
+        };
+        // Only a Move or a Fade animates a switch within the scene; any other kind (a
+        // cut, a stinger, a pack's) switches at once.
+        let animates = matches!(
+            preset.kind(),
+            jstream_protocol::FADE | jstream_protocol::MOVE
+        );
+        let run = animates
+            .then(|| preset_run(&self.graph, &preset_id))
+            .flatten();
+        if self.placed_keyframes.get(&scene_id) == keyframe_id.as_ref() {
+            return Ok(());
+        }
+        let now = self.action_now();
+        // A scene program doesn't draw changes nothing on screen, so it starts no run,
+        // and a transition in flight keeps its own.
+        let program = self
+            .studio
+            .program()
+            .filter(|program| **program != scene_id && self.graph.state().draws(program, &scene_id))
+            .cloned();
+        let started = match (program, run) {
+            (Some(program), Some(run)) => {
+                Some((self.screen_now(&program, &run, now), program, run))
+            }
+            _ => None,
+        };
+        match &keyframe_id {
+            Some(keyframe_id) => {
+                self.placed_keyframes
+                    .insert(scene_id.clone(), keyframe_id.clone());
+            }
+            None => {
+                self.placed_keyframes.remove(&scene_id);
+            }
+        }
+        self.refresh_shown();
+        if let Some(((from, shared), program, mut run)) = started {
+            let to_camera = transition::camera_of(&self.graph, &program);
+            let from_camera = shared.unwrap_or(None);
+            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                run.pairs = false;
+            }
+            self.studio.switch(
+                program.clone(),
+                Some(transition::Running {
+                    from,
+                    to: program,
+                    start: now,
+                    run,
+                    by_item: true,
+                    from_camera,
+                }),
+            );
+        }
+        self.redraw();
+        self.subscribers.emit(
+            &Event::SceneKeyframeChanged {
+                scene_id,
+                keyframe_id,
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            wake,
+        );
+        Ok(())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -3911,6 +4068,21 @@ impl State {
                 self.timeline_stop(&timeline_id, wake)?;
                 return Ok(CallResult::action());
             }
+            Action::SceneSetKeyframe {
+                scene_id,
+                keyframe_id,
+                preset_id,
+            } => {
+                self.set_keyframe(
+                    client_id,
+                    request_id,
+                    scene_id,
+                    keyframe_id,
+                    preset_id,
+                    wake,
+                )?;
+                return Ok(CallResult::action());
+            }
             Action::SourceRestart { source_id } => {
                 if self.graph.state().source(&source_id).is_none() {
                     return Err(ProtocolError::NotFound {
@@ -4000,6 +4172,14 @@ impl State {
                             let (_, info) = self.graph.state().timeline(id)?;
                             Some(crate::timelines::schedule(info))
                         }),
+                    keyframes: self
+                        .placed_keyframes
+                        .iter()
+                        .map(|(scene_id, keyframe_id)| jstream_protocol::PlacedKeyframe {
+                            scene_id: scene_id.clone(),
+                            keyframe_id: keyframe_id.clone(),
+                        })
+                        .collect(),
                 },
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
@@ -4261,12 +4441,15 @@ impl State {
         };
         let Self {
             graph,
+            shown,
             frames,
             frame_versions,
             live,
             studio,
             ..
         } = self;
+        // As it is drawn: with its live settings and its placed keyframes (ADR-0116).
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
         let running = studio.running().unwrap_or(&probe);
         let assets = live.filter_assets();
         // Not a plan of the program: what it looks at is not reached, so a source the
@@ -4624,7 +4807,16 @@ impl State {
     fn refresh_shown(&mut self) -> bool {
         let settings = self.gestures.settings();
         let had = self.shown.is_some();
-        self.shown = (!settings.is_empty()).then(|| self.graph.with_values(&settings));
+        self.shown = match (settings.is_empty(), self.placed_keyframes.is_empty()) {
+            (true, true) => None,
+            (false, true) => Some(self.graph.with_values(&settings)),
+            (true, false) => Some(self.graph.with_placed_keyframes(&self.placed_keyframes)),
+            (false, false) => Some(
+                self.graph
+                    .with_values(&settings)
+                    .with_placed_keyframes(&self.placed_keyframes),
+            ),
+        };
         had || self.shown.is_some()
     }
 
@@ -5067,8 +5259,16 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
 /// `inherit` takes the preset's `unmatched`, or no animation when its kind has none (a
 /// `cut`, a `stinger`, a pack's). `None` when the preset lasts no time.
 fn item_run(graph: &Graph) -> Option<transition::Run> {
+    preset_run(graph, graph.state().default_preset())
+}
+
+/// [`item_run`] with preset `preset_id`: `None` for one with no length, or none.
+fn preset_run(
+    graph: &Graph,
+    preset_id: &jstream_protocol::TransitionPresetId,
+) -> Option<transition::Run> {
     let state = graph.state();
-    let preset_id = state.default_preset().clone();
+    let preset_id = preset_id.clone();
     let preset = state.preset(&preset_id)?;
     if preset.duration_ms() == 0 {
         return None;
