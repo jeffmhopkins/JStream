@@ -1201,7 +1201,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
-  no arguments and changes nothing.
+  no arguments and changes nothing. On a machine with no graphics adapter, hardware or
+  software, it fails with `action_failed`, and on Linux the reason says which driver to
+  install.
   **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
   which PNG can't compress, can be as large as its raw pixels: the image is the
   canvas, scaled down so its longest side is at most 1280. The default 1920×1080

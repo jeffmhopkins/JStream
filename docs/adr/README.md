@@ -118,4 +118,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
 | [ADR-0108](0108-camera-depth-of-field.md) | Depth of field for scene cameras | accepted | agent |  |
+| [ADR-0109](0109-review-pass-carries-across-base-merges.md) | A review pass carries across merges of the base branch | accepted | maintainer |  |
 <!-- @generated end adr-index -->
