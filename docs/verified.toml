@@ -1955,9 +1955,6 @@ stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note =
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
 stamp = { hash = "b3:8e5020facb0ec9ff", by = "agent:claude-3d-cameras", note = "merge: Re-read after merging main: #1111 added snapshot.rs's canvas-space layer for an item whose effects_space is canvas, described here; this branch's camera dof in the placement is unaffected. | kept from the merged side: merge: #1144 (from main) made Snapshots its own section; it carries this branch's canvas-space layer paragraph (ADR-0106), re-read against snapshot.rs and chain.rs | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
-["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/values.rs"]
-stamp = { hash = "b3:6bf2838486194986", by = "agent:claude", note = "The merge put this PR's Shared values paragraph (values.rs, SharedValues) here, after Packs written over the protocol; added values.rs to covers. The paragraph matches values.rs and engine.rs." }
-
 ["CRATE-jstream-core#undo"."body"]
 stamp = { hash = "b3:0910378ef6f41c9a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#undo, matching what it relies on" }
 
