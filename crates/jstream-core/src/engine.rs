@@ -3686,7 +3686,14 @@ impl State {
         let outer = self
             .cue_at
             .replace(crate::timelines::media_time(fire.at_ns));
-        let result = self.action(&by.0, &by.1, c.action.0.clone(), wake);
+        // `timeline.set` stores only actions this version knows, so a stored cue has one.
+        let result = match c.action.0.clone() {
+            Some(action) => self.action(&by.0, &by.1, action, wake),
+            None => Err(ProtocolError::invalid_argument(
+                "action",
+                "is not an action this version knows",
+            )),
+        };
         self.cue_at = outer;
         self.subscribers.emit(
             &Event::TimelineCueFired {

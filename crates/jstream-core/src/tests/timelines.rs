@@ -52,7 +52,7 @@ fn act(control: &dyn Control, action: Action) -> Result<(), &'static str> {
 }
 
 fn cue(at_ms: u32, action: Action) -> TimelineCue {
-    TimelineCue { at_ms, action }
+    TimelineCue::new(at_ms, &action)
 }
 
 fn switch(scene: &str) -> Action {

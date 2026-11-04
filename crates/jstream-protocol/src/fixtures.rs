@@ -1431,12 +1431,14 @@ pub(crate) fn actions() -> Vec<Action> {
 
 /// A timeline that runs a sequence of cues and loops a range of it (ADR-0114).
 fn volley() -> TimelineInfo {
-    let show = |at_ms: u32, item: &str| TimelineCue {
-        at_ms,
-        action: Action::ItemShow {
-            item_id: ItemId::new(item),
-            scene_id: None,
-        },
+    let show = |at_ms: u32, item: &str| {
+        TimelineCue::new(
+            at_ms,
+            &Action::ItemShow {
+                item_id: ItemId::new(item),
+                scene_id: None,
+            },
+        )
     };
     TimelineInfo {
         timeline_id: TimelineId::new("tl_volley"),
@@ -1447,40 +1449,40 @@ fn volley() -> TimelineInfo {
             to_ms: 3300,
         },
         cues: vec![
-            TimelineCue {
-                at_ms: 0,
-                action: Action::SceneSwitch {
+            TimelineCue::new(
+                0,
+                &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_2"),
                     preset_id: None,
                 },
-            },
+            ),
             show(1500, "itm_1"),
-            TimelineCue {
-                at_ms: 1950,
-                action: Action::ItemTriggerMotion {
+            TimelineCue::new(
+                1950,
+                &Action::ItemTriggerMotion {
                     item_id: ItemId::new("itm_1"),
                     modifier_id: None,
                 },
-            },
-            TimelineCue {
-                at_ms: 2400,
-                action: Action::SourceRestart {
+            ),
+            TimelineCue::new(
+                2400,
+                &Action::SourceRestart {
                     source_id: SourceId::new("src_1"),
                 },
-            },
-            TimelineCue {
-                at_ms: 2850,
-                action: Action::ValuesSet {
+            ),
+            TimelineCue::new(
+                2850,
+                &Action::ValuesSet {
                     name: "status.text".into(),
                     value: Some(json!("Fire")),
                 },
-            },
-            TimelineCue {
-                at_ms: 3000,
-                action: Action::TimelinePlay {
+            ),
+            TimelineCue::new(
+                3000,
+                &Action::TimelinePlay {
                     timeline_id: TimelineId::new("tl_other"),
                 },
-            },
+            ),
         ],
     }
 }
@@ -1496,19 +1498,19 @@ fn pulse(looping: TimelineLoop) -> TimelineInfo {
         duration_ms: 500,
         looping,
         cues: vec![
-            TimelineCue {
-                at_ms: 0,
-                action: Action::ItemToggle {
+            TimelineCue::new(
+                0,
+                &Action::ItemToggle {
                     item_id: ItemId::new("itm_1"),
                     scene_id: None,
                 },
-            },
-            TimelineCue {
-                at_ms: 250,
-                action: Action::TimelineStop {
+            ),
+            TimelineCue::new(
+                250,
+                &Action::TimelineStop {
                     timeline_id: TimelineId::new("tl_volley"),
                 },
-            },
+            ),
         ],
     }
 }

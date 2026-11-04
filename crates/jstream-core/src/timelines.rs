@@ -27,12 +27,12 @@ const NS_PER_MS: i64 = 1_000_000;
 /// A cue's action, for the schedule: what a seek keeps the last of
 /// ([`Action::cue_state`]).
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CueAct(pub(crate) Action);
+pub(crate) struct CueAct(pub(crate) Option<Action>);
 
 impl CueAction for CueAct {
     type Key = String;
     fn state_key(&self) -> Option<String> {
-        self.0.cue_state()
+        self.0.as_ref().and_then(Action::cue_state)
     }
 }
 
@@ -50,7 +50,7 @@ pub(crate) fn schedule(info: &TimelineInfo) -> Timeline<CueAct> {
             .iter()
             .map(|cue| Cue {
                 at_ms: cue.at_ms,
-                action: CueAct(cue.action.clone()),
+                action: CueAct(cue.action()),
             })
             .collect(),
     }
@@ -252,12 +252,14 @@ mod tests {
             looping,
             cues: at
                 .iter()
-                .map(|&at_ms| TimelineCue {
-                    at_ms,
-                    action: Action::ItemToggle {
-                        item_id: ItemId::new("i"),
-                        scene_id: None,
-                    },
+                .map(|&at_ms| {
+                    TimelineCue::new(
+                        at_ms,
+                        &Action::ItemToggle {
+                            item_id: ItemId::new("i"),
+                            scene_id: None,
+                        },
+                    )
                 })
                 .collect(),
         }

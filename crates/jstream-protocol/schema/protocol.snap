@@ -11885,7 +11885,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "properties": {
         "action": {
           "$ref": "#/$defs/Action",
-          "description": "What it does: one of the actions [`Action::cue_problem`] allows."
+          "description": "What it does: one of the actions [`Action::cue_problem`] allows. Read as plain\nJSON, as a hotkey's action is, so a client older than an action a later cue may\nrun still reads the collection. [`TimelineCue::action`] parses it."
         },
         "at_ms": {
           "description": "When it fires, in milliseconds from the timeline's start.",

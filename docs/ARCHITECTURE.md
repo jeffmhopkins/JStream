@@ -179,7 +179,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_motion[], camera_follow?, filters { video[] }, items[] }   flat display order
+│                          camera?, camera_motion[], camera_follow?, timelines[], filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -737,6 +737,19 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Timelines** (protocol 0.87, a placeholder,
+  [ADR-0114](adr/0114-timelines-on-the-wire.md), building ADR-0099's decision 4): a
+  scene holds timelines of timed cues, written whole by `timeline.set` and removed by
+  `timeline.delete`. A timeline's ID is unique across the collection, so
+  `timeline.play`, `timeline.stop` and `timeline.seek`, a hotkey and a cue name it alone.
+  What is playing is studio state, like the program scene: no `rev`, never undone or
+  saved, read by `studio.get`. The engine fires each cue on the animation clock as its
+  action's call, at the cue's exact time; a cue runs only `scene.switch`, `item.show`,
+  `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, `source.restart` or
+  a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
+  cue inert and its firing reports the error in `timeline.cue_fired`;
+  `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
+  `source.restart` reloads a page or plays a file from its start.
 - **Item visibility from an action** (protocol 0.80,
   [ADR-0101](adr/0101-item-show-hide-actions.md)): `item.show`, `item.hide` and
   `item.toggle` change one placement's visibility as `item.set_visible` does, with a
@@ -976,7 +989,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1356,7 +1369,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
-  (version 5, ADR-0113) bumped it instead, each with a
+  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0114) bumped it
+  instead, each with a
   migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

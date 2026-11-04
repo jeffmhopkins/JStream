@@ -123,7 +123,10 @@ shared value that a page may send off the machine.
 
 **7. Compatibility.** Every change here is an addition and lands as a minor protocol
 release. The collection gains `scenes[].timelines` at `schema_version` 6, with a migration
-and the version 5 fixture. `TimelineChange` parses an unknown value as `unknown`.
+and the version 5 fixture. `TimelineChange` parses an unknown value as `unknown`. A
+cue's action is plain JSON on the wire, as a hotkey binding's is, so a client that
+doesn't know an action a later version adds to the cue set still reads the collection;
+a server refuses a cue whose action it doesn't know.
 
 <a id="consequences"></a>
 ## Consequences

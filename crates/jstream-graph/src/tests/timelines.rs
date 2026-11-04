@@ -14,13 +14,13 @@ fn info(id: &str, duration_ms: u32) -> TimelineInfo {
         name: String::new(),
         duration_ms,
         looping: TimelineLoop::Once,
-        cues: vec![TimelineCue {
-            at_ms: 0,
-            action: Action::ItemShow {
+        cues: vec![TimelineCue::new(
+            0,
+            &Action::ItemShow {
                 item_id: ItemId::new("gone"),
                 scene_id: None,
             },
-        }],
+        )],
     }
 }
 
@@ -99,9 +99,12 @@ fn a_timeline_is_checked() {
     let (field, _) = invalid_reason(apply_err(&mut graph, vec![set("a", bad)]));
     assert_eq!(field, "edits.0.timeline.cues.0.at_ms");
     let mut bad = info("t", 1000);
-    bad.cues[0].action = Action::OutputStop {
-        output_id: jstream_protocol::OutputId::new("o"),
-    };
+    bad.cues[0] = TimelineCue::new(
+        0,
+        &Action::OutputStop {
+            output_id: jstream_protocol::OutputId::new("o"),
+        },
+    );
     let (field, _) = invalid_reason(apply_err(&mut graph, vec![set("a", bad)]));
     assert_eq!(field, "edits.0.timeline.cues.0.action.type");
 
@@ -156,10 +159,13 @@ fn deleting_a_timeline_takes_its_hotkeys_and_undo_restores_them() {
 fn removing_a_cues_item_leaves_the_timeline_as_it_is() {
     let mut graph = fixture();
     let mut shows = info("t", 1000);
-    shows.cues[0].action = Action::ItemShow {
-        item_id: ItemId::new("i"),
-        scene_id: None,
-    };
+    shows.cues[0] = TimelineCue::new(
+        0,
+        &Action::ItemShow {
+            item_id: ItemId::new("i"),
+            scene_id: None,
+        },
+    );
     apply_ok(
         &mut graph,
         vec![add("a", "i", "cam"), set("a", shows.clone())],

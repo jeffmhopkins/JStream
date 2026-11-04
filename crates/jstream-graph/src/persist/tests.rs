@@ -332,20 +332,20 @@ fn v6_graph() -> Graph {
                         to_ms: 3000,
                     },
                     cues: vec![
-                        TimelineCue {
-                            at_ms: 0,
-                            action: Action::SceneSwitch {
+                        TimelineCue::new(
+                            0,
+                            &Action::SceneSwitch {
                                 scene_id: SceneId::new("b"),
                                 preset_id: None,
                             },
-                        },
-                        TimelineCue {
-                            at_ms: 1500,
-                            action: Action::ItemShow {
+                        ),
+                        TimelineCue::new(
+                            1500,
+                            &Action::ItemShow {
                                 item_id: ItemId::new("i_screen"),
                                 scene_id: None,
                             },
-                        },
+                        ),
                     ],
                 },
             },

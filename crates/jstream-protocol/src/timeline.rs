@@ -71,8 +71,27 @@ pub enum TimelineLoop {
 pub struct TimelineCue {
     /// When it fires, in milliseconds from the timeline's start.
     pub at_ms: u32,
-    /// What it does: one of the actions [`Action::cue_problem`] allows.
-    pub action: Action,
+    /// What it does: one of the actions [`Action::cue_problem`] allows. Read as plain
+    /// JSON, as a hotkey's action is, so a client older than an action a later cue may
+    /// run still reads the collection. [`TimelineCue::action`] parses it.
+    #[schemars(with = "Action")]
+    pub action: serde_json::Value,
+}
+
+impl TimelineCue {
+    /// A cue at `at_ms` running `action`.
+    pub fn new(at_ms: u32, action: &Action) -> Self {
+        TimelineCue {
+            at_ms,
+            // An action is plain data (IDs and strings), which always serializes.
+            action: serde_json::to_value(action).expect("invariant: an Action serializes to JSON"),
+        }
+    }
+
+    /// The cue's action, or `None` when it is one this version doesn't know.
+    pub fn action(&self) -> Option<Action> {
+        serde_json::from_value(self.action.clone()).ok()
+    }
 }
 
 /// A timeline that is playing, as `studio.get` reports it.
@@ -187,7 +206,13 @@ impl TimelineInfo {
                     },
                 );
             }
-            if let Some((field, reason)) = cue.action.cue_problem() {
+            let Some(action) = cue.action() else {
+                return problem(
+                    &format!("cues.{at}.action"),
+                    "is not an action this version knows",
+                );
+            };
+            if let Some((field, reason)) = action.cue_problem() {
                 return Some((format!("cues.{at}.action.{field}"), reason.to_owned()));
             }
         }
@@ -201,13 +226,13 @@ mod tests {
     use crate::id::ItemId;
 
     fn show(at_ms: u32) -> TimelineCue {
-        TimelineCue {
+        TimelineCue::new(
             at_ms,
-            action: Action::ItemShow {
+            &Action::ItemShow {
                 item_id: ItemId::new("i"),
                 scene_id: None,
             },
-        }
+        )
     }
 
     fn timeline(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
@@ -272,13 +297,15 @@ mod tests {
     #[test]
     fn a_cue_runs_only_an_allowed_action() {
         let mut t = timeline(1000, TimelineLoop::Once, &[]);
-        t.cues.push(TimelineCue {
-            at_ms: 0,
-            action: Action::OutputStart {
+        t.cues.push(TimelineCue::new(
+            0,
+            &Action::OutputStart {
                 output_id: crate::id::OutputId::new("o"),
             },
-        });
+        ));
         assert_eq!(field(&t).as_deref(), Some("cues.0.action.type"));
+        t.cues[0].action = serde_json::json!({"type": "a.later_action"});
+        assert_eq!(field(&t).as_deref(), Some("cues.0.action"));
     }
 
     #[test]

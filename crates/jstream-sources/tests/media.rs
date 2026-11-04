@@ -199,6 +199,21 @@ fn showing_it_again_restarts_it_when_asked() {
     assert_eq!(shown(&mut keeps, 300), 7, "it plays on");
 }
 
+/// `source.restart` (ADR-0114) plays the file from its start whatever `restart_on_show`.
+#[test]
+fn a_restart_plays_it_from_the_start() {
+    let (dir, fake) = setup("restart-call", clip());
+    let mut source = create(
+        &ctx(&dir, &fake),
+        &settings(Some("clip.mp4"), true, 1.0, false),
+    )
+    .expect("a source");
+    assert_eq!(shown(&mut source, 200), 5);
+    source.restart(ms(300));
+    assert_eq!(shown(&mut source, 300), 0, "it plays from the start");
+    assert_eq!(shown(&mut source, 340), 1);
+}
+
 #[test]
 fn turning_loop_on_after_the_end_plays_on() {
     let (dir, fake) = setup("loop-on", clip());

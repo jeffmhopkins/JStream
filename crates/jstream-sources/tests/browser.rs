@@ -256,6 +256,16 @@ fn restart_on_show_reloads_the_page_when_shown() {
     assert_eq!(pages[1].reloads(), 2);
 }
 
+/// `source.restart` (ADR-0114) loads the page again whatever `restart_on_show`.
+#[test]
+fn a_restart_reloads_the_page() {
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let mut source = create(&ctx, &settings(&[("html", json!("<p>a</p>"))])).expect("a page");
+    source.restart(MediaTime::zero(Timebase::MILLIS));
+    assert_eq!(browser.pages()[0].reloads(), 1);
+}
+
 /// #347: the source's opt-in lets a page from the internet reach a local app.
 #[test]
 fn local_network_opts_a_page_in() {

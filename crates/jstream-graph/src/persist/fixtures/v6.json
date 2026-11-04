@@ -129,15 +129,15 @@
             {
               "at_ms": 0,
               "action": {
-                "type": "scene.switch",
-                "scene_id": "b"
+                "scene_id": "b",
+                "type": "scene.switch"
               }
             },
             {
               "at_ms": 1500,
               "action": {
-                "type": "item.show",
-                "item_id": "i_screen"
+                "item_id": "i_screen",
+                "type": "item.show"
               }
             }
           ]
