@@ -154,8 +154,8 @@ pub struct CameraFollow {
     /// Default 20.
     #[serde(default = "default_yaw")]
     pub yaw_deg: Finite32,
-    /// The resting angle above the item's normal, in degrees, within ±60 (negative looks
-    /// up at it from below). Default −10.
+    /// The resting angle below the item's normal, in degrees, within ±60: positive looks
+    /// up at it from below, negative down from above. Default −10.
     #[serde(default = "default_pitch")]
     pub pitch_deg: Finite32,
     /// How far the camera leans with the pointer's speed, in degrees, from 0 (off) to 30.
@@ -270,8 +270,11 @@ mod tests {
             .collect();
         assert_eq!(field_of(&nine).as_deref(), Some("motion"));
         assert_eq!(
-            field_of(&[drift("a", CameraProperty::Fov), drift("a", CameraProperty::Fov)])
-                .as_deref(),
+            field_of(&[
+                drift("a", CameraProperty::Fov),
+                drift("a", CameraProperty::Fov)
+            ])
+            .as_deref(),
             Some("motion.1.modifier_id")
         );
         let newer: CameraMotionModifier = serde_json::from_value(serde_json::json!({
@@ -290,12 +293,48 @@ mod tests {
         assert!(parsed.check().is_ok());
         let f = |v: f32| Finite32::new(v).expect("finite");
         let cases = [
-            ("zoom", CameraFollow { zoom: f(0.5), ..parsed.clone() }),
-            ("zoom", CameraFollow { zoom: f(4.5), ..parsed.clone() }),
-            ("yaw_deg", CameraFollow { yaw_deg: f(-61.0), ..parsed.clone() }),
-            ("pitch_deg", CameraFollow { pitch_deg: f(61.0), ..parsed.clone() }),
-            ("lean_deg", CameraFollow { lean_deg: f(-1.0), ..parsed.clone() }),
-            ("smooth_ms", CameraFollow { smooth_ms: 49, ..parsed.clone() }),
+            (
+                "zoom",
+                CameraFollow {
+                    zoom: f(0.5),
+                    ..parsed.clone()
+                },
+            ),
+            (
+                "zoom",
+                CameraFollow {
+                    zoom: f(4.5),
+                    ..parsed.clone()
+                },
+            ),
+            (
+                "yaw_deg",
+                CameraFollow {
+                    yaw_deg: f(-61.0),
+                    ..parsed.clone()
+                },
+            ),
+            (
+                "pitch_deg",
+                CameraFollow {
+                    pitch_deg: f(61.0),
+                    ..parsed.clone()
+                },
+            ),
+            (
+                "lean_deg",
+                CameraFollow {
+                    lean_deg: f(-1.0),
+                    ..parsed.clone()
+                },
+            ),
+            (
+                "smooth_ms",
+                CameraFollow {
+                    smooth_ms: 49,
+                    ..parsed.clone()
+                },
+            ),
         ];
         for (field, follow) in cases {
             let problem = follow.check().expect_err(field);

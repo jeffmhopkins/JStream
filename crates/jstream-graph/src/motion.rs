@@ -10,8 +10,8 @@
 use crate::apply::invalid;
 use jstream_anim::{Clock, Kind, Modifier, Property, Shape};
 use jstream_protocol::{
-    MotionClock, MotionKind, MotionModifier, MotionProperty, MotionShape, ProtocolError,
-    check_motion,
+    CameraMotionModifier, CameraProperty, MotionClock, MotionKind, MotionModifier, MotionProperty,
+    MotionShape, ProtocolError, check_motion,
 };
 
 /// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
@@ -26,6 +26,26 @@ pub(crate) fn check(motion: &[MotionModifier], at: usize) -> Result<(), Protocol
 /// one) is left out, so the item stays still for it.
 pub fn anim_modifiers(motion: &[MotionModifier]) -> Vec<Modifier> {
     motion.iter().filter_map(modifier).collect()
+}
+
+/// A scene camera's motion (ADR-0113) as `jstream-anim` evaluates it: each modifier with
+/// the camera property it adds to, the modifier itself adding to `x`, so evaluating it
+/// alone gives its value. One with a value this version doesn't know is left out.
+pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProperty, Modifier)> {
+    motion
+        .iter()
+        .filter(|m| m.property != CameraProperty::Unknown)
+        .filter_map(|m| {
+            let as_item = MotionModifier {
+                modifier_id: m.modifier_id.clone(),
+                property: MotionProperty::X,
+                kind: m.kind,
+                clock: m.clock,
+                enabled: m.enabled,
+            };
+            Some((m.property, modifier(&as_item)?))
+        })
+        .collect()
 }
 
 fn modifier(m: &MotionModifier) -> Option<Modifier> {

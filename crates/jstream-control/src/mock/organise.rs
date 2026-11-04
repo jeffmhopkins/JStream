@@ -382,7 +382,11 @@ impl Collection {
                 format!(
                     "keyframe scene `{scene_id}` draws its parent `{parent}`'s camera {}; set it \
                      on `{parent}`",
-                    if field == "motion" { "motion" } else { "follow" }
+                    if field == "motion" {
+                        "motion"
+                    } else {
+                        "follow"
+                    }
                 ),
             ));
         }

@@ -14,7 +14,7 @@ tier = "agent"
 
 Extends [ADR-0094](0094-scene-cameras.md) (scene cameras) with
 [ADR-0099](0099-native-motion-modifiers-and-timelines.md)'s motion modifiers, and adds the
-follow mode whose zoom input [ADR-0112](0112-assignable-camera-zoom-bindings.md) decides.
+follow mode whose zoom input ADR-0112 (assignable camera zoom bindings, on `main`) decides.
 
 <a id="context"></a>
 ## Context
@@ -72,8 +72,9 @@ It ran 27 s with no frame showing past the screen's edge.
      - `item_id`: an item of the scene whose source is a display or window capture.
      - `zoom`: the resting zoom, from 1 to 4, default 1. At zoom 1 the frame shows two
        thirds of the item's height, and zoom `z` shows `1/z` of that.
-     - `yaw_deg` and `pitch_deg`: the resting angle off the item's normal, defaults 20°
-       and −10°, each within ±60°.
+     - `yaw_deg` and `pitch_deg`: the resting angle off the item's normal, to its right
+       and below it, defaults 20° and −10° (a little to the right, looking down), each
+       within ±60°.
      - `lean_deg`: how far the camera leans with the pointer's velocity, default 9°, from
        0 (off) to 30.
      - `smooth_ms`: the time constant of the two springs, default 450, from 50 to 5000.
@@ -85,8 +86,12 @@ It ran 27 s with no frame showing past the screen's edge.
      wiggle adds a handheld sway to it.
    - **The algorithm:** the mock's, on the item's box at its depth. The pointer is mapped
      from capture pixels through the item's crop to its box. The frame never shows past
-     the box's edges where the zoom and the angle allow it. A rotated, tilted or turned
-     item is followed as its unrotated box: that is approximate, and documented.
+     the box's edges where the zoom and the angle allow it. At an angle the frame's
+     footprint on the box is a skewed quad, so near an edge the frame stays on the box
+     first and the pointer can sit just outside the frame. A rotated, tilted or turned
+     item is followed as its unrotated box at its committed geometry, so a live drag of
+     the item moves the camera once it is committed: that is approximate, and
+     documented.
    - **Without a pointer:** where the capture gives no position (Linux for now, a macOS
      window, before the first frame, or a source that isn't a capture), the camera holds
      its last aim, or rests at the box's centre.
@@ -107,7 +112,9 @@ It ran 27 s with no frame showing past the screen's edge.
    stored, and it starts again at `follow.zoom` when the camera's `follow` changes or the
    engine restarts. It takes one step, so a wheel chord can bind it (ADR-0112 decision 3).
    It is `not_found` for a scene that doesn't exist and `action_failed` for one
-   without a follow camera.
+   without a follow camera. The engine counts the steps asked for each family and hands
+   the count to the render thread on the live-value channel; a follow camera takes the
+   steps asked for since it started.
 5. **Wire and files.** These are additive fields and one new action, shipped as one minor
    protocol version from the alpha.4 release queue. In collection files, `motion` and
    `follow` are omitted when empty, with the schema-version bump, migration and fixture

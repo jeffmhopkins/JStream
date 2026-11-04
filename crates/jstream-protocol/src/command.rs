@@ -2283,6 +2283,11 @@ impl SceneRole {
     }
 }
 
+/// `scene.zoom_camera`'s default: one step in.
+fn one_step() -> i32 {
+    1
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Action, Batch, BlendMode, Command, CommandClass, Edit, SceneRole};
@@ -2398,9 +2403,4 @@ mod tests {
         );
         assert!(parsed.is_err());
     }
-}
-
-/// `scene.zoom_camera`'s default: one step in.
-fn one_step() -> i32 {
-    1
 }

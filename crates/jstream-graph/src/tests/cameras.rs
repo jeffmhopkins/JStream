@@ -5,8 +5,8 @@
 use super::{add, apply_err, apply_ok, fixture, invalid_reason};
 use crate::Graph;
 use jstream_protocol::{
-    CameraFollow, CameraMotionModifier, CameraProperty, Canvas, Edit, Finite32, ItemId, MotionClock,
-    MotionKind, MotionShape, SceneCamera, SceneId, Vec3,
+    CameraFollow, CameraMotionModifier, CameraProperty, Canvas, Edit, Finite32, ItemId,
+    MotionClock, MotionKind, MotionShape, SceneCamera, SceneId, Vec3,
 };
 
 fn framing() -> SceneCamera {
@@ -176,10 +176,7 @@ fn with_screen() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds);
     apply_ok(
         &mut graph,
-        vec![
-            super::scene_create("a"),
-            super::builtin("cam"),
-        ],
+        vec![super::scene_create("a"), super::builtin("cam")],
     );
     apply_ok(
         &mut graph,

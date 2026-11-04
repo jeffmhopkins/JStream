@@ -116,7 +116,11 @@ fn family_scene(
             format!(
                 "keyframe scene `{scene_id}` draws its parent `{parent}`'s camera {}; set it \
                  on `{parent}`",
-                if field == "motion" { "motion" } else { "follow" }
+                if field == "motion" {
+                    "motion"
+                } else {
+                    "follow"
+                }
             ),
         ));
     }
@@ -146,7 +150,9 @@ fn set_follow(
 ) -> Result<Vec<Edit>, ProtocolError> {
     let si = family_scene(state, scene_id, at, "follow")?;
     if let Some(follow) = follow {
-        follow.check().map_err(|p| invalid(at, &p.field, p.reason))?;
+        follow
+            .check()
+            .map_err(|p| invalid(at, &p.field, p.reason))?;
         let item = state.scenes[si]
             .items
             .iter()

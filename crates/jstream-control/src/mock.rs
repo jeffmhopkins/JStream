@@ -1057,7 +1057,9 @@ impl State {
                 });
                 if scenes[family].camera_follow.is_none() {
                     return Err(ProtocolError::ActionFailed {
-                        reason: format!("scene `{scene_id}` has no camera that follows the pointer"),
+                        reason: format!(
+                            "scene `{scene_id}` has no camera that follows the pointer"
+                        ),
                     });
                 }
                 return Ok(CallResult::action());
