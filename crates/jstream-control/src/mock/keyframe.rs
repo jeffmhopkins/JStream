@@ -598,6 +598,18 @@ impl Collection {
         }
     }
 
+    /// Whether the placement of `item_id` that `scene_id` names is visible: a keyframe
+    /// scene's override if it has one, else the item's own, as the graph's `visible_in`
+    /// reads it (ADR-0101). `None` for an item the collection doesn't have.
+    pub(super) fn visible_in(&self, item_id: &ItemId, scene_id: Option<&SceneId>) -> Option<bool> {
+        let own = self.items.get(item_id)?.visible;
+        let overridden = scene_id
+            .and_then(|id| self.scene_index(id))
+            .and_then(|si| self.scenes[si].overrides.get(item_id))
+            .and_then(|o| o.visible);
+        Some(overridden.unwrap_or(own))
+    }
+
     /// Whether `scene_id` names a keyframe scene.
     pub(super) fn is_variant(&self, scene_id: &SceneId) -> bool {
         self.scene_index(scene_id)

@@ -3,14 +3,14 @@
 //! deleted, and the program mix shows its frames, advancing animations on the clock, or
 //! what the pipeline captures for it.
 
-use super::{add, batch, connected, create, drain, edits};
+use super::{add, batch, block_on, connected, create, drain, edits};
 use crate::Engine;
 use jstream_control::Control;
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{
-    AssetRoot, Batch, Edit, Event, ItemId, PixelSize, Reference, SceneId, Settings, SourceId,
-    SourceKind,
+    Action, AssetRoot, Batch, Call, Edit, Event, ItemId, PixelSize, Reference, SceneId, Settings,
+    SourceId, SourceKind,
 };
 use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
@@ -794,6 +794,84 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     assert!(plays(&engine, 0), "shown again, it plays from the start");
     clock.advance(100);
     assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #1057: a source shown again by `item.show` restarts as on a scene switch (ADR-0101),
+/// here after a hide that faded the item out with a default `fade` preset: once the
+/// fade has ended, no plan reaches the clip, so the show plays it from the start.
+#[test]
+fn a_media_file_shown_again_by_item_show_restarts() {
+    let dir = temp_dir("media-item-show");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::TransitionCreate {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 200,
+                easing: jstream_protocol::Easing::Linear,
+                settings: Settings::default(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+            },
+        ]),
+    )
+    .expect("created");
+    assert!(plays(&engine, 0), "the first frame");
+    clock.advance(250);
+    assert!(plays(&engine, 2), "frame 2 at 250 ms");
+    let item = |action| {
+        block_on(control.call(Call::Action { action })).expect("accepted");
+    };
+    item(Action::ItemHide {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+    });
+    clock.advance(300);
+    // The plan that finds the fade over still draws it; the next one doesn't reach it.
+    engine.replan();
+    engine.replan();
+    assert_eq!(shown(&engine, "video"), None, "faded out");
+    item(Action::ItemShow {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+    });
+    assert!(plays(&engine, 0), "shown again, it plays from the start");
     let _ = fs::remove_dir_all(dir);
 }
 

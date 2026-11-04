@@ -732,7 +732,22 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
-  `values.set` (see [Shared values](#shared-values)).
+  `values.set` (see [Shared values](#shared-values)), and `item.show`, `item.hide` and
+  `item.toggle`
+  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
+  `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
+  `State::visible_in`): a `rev`, `state.changed` and an entry in the undo-conflict log,
+  but no undo step (`History::record_batch` with no inverse). When the program scene's
+  tree holds the item, the item's effect isn't an instant one with no delay, and
+  program's own placement of the item is the one that changed (its `visible_in` for the
+  program scene differs after the edit), the engine reads what is on screen first (`snapshot::on_screen`, looking at sources
+  quietly so the probe reaches none) and puts a Move toward the program scene on the
+  studio, by item, with the default preset's duration and easing and its `unmatched`
+  (none for a `cut`): every other item pairs with itself and holds still, and only the
+  changed one appears or disappears with its effect. A transition in flight is
+  continued from what is on screen; a press program doesn't see (another keyframe's
+  placement) leaves it as it is. A source the next plan reaches again restarts as on a
+  switch (`restart_on_show`).
   `live.list` is a query answered from the gesture table, and `values.list` from the
   shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and

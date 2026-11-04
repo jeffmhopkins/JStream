@@ -283,7 +283,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   holds up to its parent, or takes the label off its sources and scenes. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
-  decision. Deleting the scene, source, output or transition preset a binding's action
+  decision. `item.show`, `item.hide` and `item.toggle` are the actions that show and hide
+  one item with its own effects: they change its visibility as `item.set_visible` does,
+  with a `rev` and no undo step ([ADR-0101](adr/0101-item-show-hide-actions.md)).
+  Deleting the scene, source, output, transition preset or item a binding's action
   names also removes
   that binding, in the same undoable edit, and undo restores both; `delete.plan` lists
   the bindings it will remove, and a binding is never a delete blocker
@@ -718,6 +721,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Item visibility from an action** (protocol 0.80,
+  [ADR-0101](adr/0101-item-show-hide-actions.md)): `item.show`, `item.hide` and
+  `item.toggle` change one placement's visibility as `item.set_visible` does, with a
+  `rev` and `state.changed` but no undo step, so a hotkey can show or hide an item. On
+  program the engine plays the item's own appear or disappear effect as a Move that
+  pairs every other item with itself.
 - **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own;

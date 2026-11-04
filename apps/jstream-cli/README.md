@@ -90,6 +90,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
+| `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
 | `output list` | query `output.list` |
 | `output status <id>` | query `output.status` |
 | `video snapshot` | query `video.snapshot` |

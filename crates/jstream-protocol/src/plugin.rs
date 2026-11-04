@@ -207,6 +207,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
+    // An item's visibility, as `item.set_visible` changes it (ADR-0101).
+    ("item.show", Class(E)),
+    ("item.hide", Class(E)),
+    ("item.toggle", Class(E)),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).

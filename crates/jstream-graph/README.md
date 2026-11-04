@@ -388,8 +388,14 @@ with no inverse. The engine draws open gestures' source settings through it
   `action.value`), and the objects the action names
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
-  transition preset (a `scene.switch` may name one) removes the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
-  and the delete's inverse ends with a `hotkey.set` for each, after the object is back.
+  transition preset (a `scene.switch` may name one) removes the bindings that name it, and
+  any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names
+  removes those bindings too (`remove_missing_items`,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), so none dangles: the result's `removed_hotkeys` lists them,
+  and the edit's inverse ends with a `hotkey.set` for each, after the object is back.
+  `delete.plan` lists the bindings by applying its plan to a copy.
+  `State::visible_in` reads a placement's visibility as `item.set_visible` with that
+  `scene_id` would change it, for `item.toggle`.
   The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its

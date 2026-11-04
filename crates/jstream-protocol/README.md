@@ -69,7 +69,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `privacy.set` (deprecated),
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `item.show`,
+  `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -257,7 +258,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.79 because a master or output filter may name a file (an
+`PROTOCOL_VERSION` is 0.80 because of the
+`item.show`, `item.hide` and `item.toggle` actions
+([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)); 0.79 because a master or output filter may name a file (an
 asset reference, so Apply LUT grades the program or one output; no wire change:
 earlier minors refused it with `invalid_argument` on the parameter); 0.78 because of
 the shared values `values.set`, `values.list`
@@ -1002,15 +1005,21 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
   `plugin.*` actions (a person installs and grants plugins): each is
-  `invalid_argument` on `action.type`. A scene, output or preset the action names must
-  exist, else `not_found`.
+  `invalid_argument` on `action.type`. A scene, output, preset or item the action names
+  must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.80,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) are the actions that show
+  and hide one item: they change its placement's visibility as `item.set_visible` would,
+  moving `rev` on with no undo step, and the engine plays the item's own `appear` or
+  `disappear` effect on program over the default preset's duration.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
   inverse is `hotkey.set` with the action.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs and the preset a `scene.switch`
-  names), and their inverses restore the
+  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
+  names and the item an `item.*` action names), and any edit that takes an item away
+  (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
+  the item (ADR-0101). Their inverses restore the
   bindings after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`

@@ -122,8 +122,9 @@ disk that undo never reaches), `pairing`, `ui_settings` and `values` (whose valu
 browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
-`live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
-shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+`live.cancel`, `audio.reset_loudness`, the `preview` actions and `item.show`, `item.hide`
+and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
+opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the

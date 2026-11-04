@@ -130,6 +130,8 @@ impl Graph {
                     &mut removed,
                 ));
             }
+            // So does any edit that takes an item away (ADR-0101).
+            inverse.extend(crate::hotkey::remove_missing_items(&mut work, &mut removed));
             removed_hotkeys.append(&mut removed);
             undo.push(inverse);
         }
