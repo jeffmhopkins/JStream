@@ -65,6 +65,8 @@ pub(crate) struct ReloadHold {
     armed: u64,
     /// Paints that went to the engine.
     paints: u64,
+    /// Held since the page opened, with no reload since: there is no old document.
+    opening: bool,
 }
 
 impl ReloadHold {
@@ -74,12 +76,14 @@ impl ReloadHold {
     pub(crate) fn opening() -> Self {
         let mut hold = Self::default();
         hold.reload();
+        hold.opening = true;
         hold
     }
 
     /// The page is reloading: its paints are held from now on.
     pub(crate) fn reload(&mut self) {
         self.held = true;
+        self.opening = false;
         self.started = false;
         self.finished = false;
         self.skipped = false;
@@ -111,10 +115,16 @@ impl ReloadHold {
     }
 
     /// The main frame's load ended or failed. Returns the release if that ended the hold:
-    /// it does once the first paint since the load start was skipped.
+    /// it does once the first paint since the load start was skipped, or at once when a
+    /// new page's first load fails before its document commits (no load start): then no
+    /// paint is coming to wait for. After a reload, a load end with no start since can be
+    /// the old document's, so it doesn't count there.
     pub(crate) fn load_finished(&mut self) -> Option<Released> {
         if !self.held {
             return None;
+        }
+        if self.opening && !self.started {
+            return self.release();
         }
         self.finished = true;
         if self.skipped { self.release() } else { None }
@@ -170,6 +180,19 @@ mod tests {
         assert_eq!(hold.paint(), Paint::Send);
         assert_eq!(hold.deadline(token), None, "a stale deadline does nothing");
         assert_eq!(hold.paint(), Paint::Send);
+    }
+
+    /// A first load that fails before its document commits (`OnLoadError` with no
+    /// `OnLoadStart`) ends the hold, so the page isn't left transparent.
+    #[test]
+    fn a_load_that_fails_before_it_starts_ends_the_hold() {
+        let mut hold = ReloadHold::opening();
+        assert!(hold.load_finished().is_some());
+        assert_eq!(hold.paint(), Paint::Send);
+        // After a reload, a load end with no start since may be the old document's.
+        let mut hold = ReloadHold::opening();
+        hold.reload();
+        assert_eq!(hold.load_finished(), None);
     }
 
     #[test]
