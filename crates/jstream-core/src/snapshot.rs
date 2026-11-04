@@ -507,8 +507,9 @@ struct ItemBox {
     placement: Placement,
     crop: Crop,
     boxed: Boxed,
-    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, the rest
-    /// moves the box where it is placed.
+    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, and the rest
+    /// moves the box where it is placed, except over the canvas (ADR-0106), where they
+    /// move the item inside its layer ([`Boxed::moved_inside`]).
     motion: motion::Motion,
 }
 
@@ -761,12 +762,16 @@ impl Shot {
     /// Whether `image` is the layer of an item whose effects run over the canvas
     /// (ADR-0106).
     fn is_canvas_box(&self, image: &GpuKey) -> bool {
-        let GpuKey::ItemBox(scene, item) = image else {
-            return false;
+        // A track or layer draws a box through its chain's output, `Filtered`; its
+        // `ItemBox` is the layer the item is drawn into first (#1125 review N16).
+        let owner = match image {
+            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
+            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
+            _ => return false,
         };
-        self.boxes.iter().any(|(owner, boxed)| {
-            boxed.boxed.canvas && matches!(owner, ChainOwner::Item(s, i) if s == scene && i == item)
-        })
+        self.boxes
+            .get(&owner)
+            .is_some_and(|boxed| boxed.boxed.canvas)
     }
 
     /// Whether an item this shot draws has a motion modifier: in a pass, a chain
@@ -1009,11 +1014,11 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, _, moved)| {
+                .map(|(key, track, _, moved)| {
                     let by = moved.offsets(track, elapsed_ms, at, |item| self.shown_at(item));
                     track
                         .sample(elapsed_ms, canvas)
-                        .map(|end| motion::apply_endpoint(&by, end))
+                        .map(|end| moved_track(self.is_canvas_box(key), &by, end))
                 })
                 .collect()
         })
