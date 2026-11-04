@@ -156,7 +156,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) and, on Linux, its executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)) | no |
@@ -181,7 +181,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          camera?, filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (video filters), transition, locked }
+│                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -230,7 +230,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
   order breaking ties. A keyframe scene's variant follows its parent's camera unless it
-  overrides it, and only a parent with a camera allows overrides. `crop` is in source pixels. A source's current size is runtime state,
+  overrides it, and only a parent with a camera allows overrides. `motion` is the item's
+  ordered list of at most 8 motion modifiers
+  ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), which the engine
+  evaluates per frame on top of the stored values and never writes back. `crop` is in source pixels. A source's current size is runtime state,
   not part of the collection. Until 1.0 an item may instead hold a **legacy placement**,
   protocol 0.3's transform as written, which the compositor evaluates against the
   source's current size every frame. Only an explicit `item.set_geometry` turns it into
@@ -253,9 +256,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     of `scene.create`, `source.create`, `item.add` and `item.move`.
   - A **keyframe scene** (variant) is a real scene with `variant_of` naming its parent,
     which is not itself a variant. It has no items of its own: it shows the parent's
-    items with per-item `overrides` of placement, crop, visibility, opacity and effects
-    (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md); an
-    absent field follows the parent); everything else, including the background and its
+    items with per-item `overrides` of placement, crop, visibility, opacity, effects
+    (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)) and
+    motion (the whole list, ADR-0099); an absent field follows the parent; everything else, including the background and its
     scene filters, follows the parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
@@ -655,7 +658,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1). Since 0.63,
   `item.set_effects` writes a keyframe's override of an item's effects whole, and the
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
-  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
+  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
+  `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
+  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -1036,7 +1041,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, layering light, masks and reflections, 3D sets through a scene camera, and
+  scenes, continuous motion with `item.set_motion`, layering light, masks and reflections, 3D sets through a scene camera, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
@@ -1329,7 +1334,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
-  keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
+  keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
+  `motion` (version 4, ADR-0099) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

@@ -2986,6 +2986,9 @@ struct State {
     /// The copy of the collection each previewed source is planned on, kept while the
     /// collection's revision holds (#969 N2).
     source_copies: snapshot::SourceCopies,
+    /// When each item the program mix draws was first drawn: the origin of its motion
+    /// modifiers' `shown` clock (ADR-0099).
+    shown_since: crate::motion::ShownSince,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3855,6 +3858,7 @@ impl State {
             scene_shots,
             source_shots,
             source_copies,
+            shown_since,
             shared,
             ..
         } = self;
@@ -3864,7 +3868,7 @@ impl State {
         let now = live.now();
         live.begin_plan();
         let assets = live.filter_assets();
-        let planning = snapshot::plan_with(
+        let mut planning = snapshot::plan_with(
             graph,
             studio.program(),
             studio.running().map(|running| (running, now)),
@@ -3882,6 +3886,8 @@ impl State {
         if planning.finished {
             studio.finish();
         }
+        let shown = shown_since.update(&planning.shot.drawn_items(), now);
+        planning.shot.set_shown(shown);
         render.publish(planning.shot);
         // Each previewed scene, after the program mix's plan has ended, so it reaches
         // no source: a preview never makes a source shown or heard (ADR-0028).

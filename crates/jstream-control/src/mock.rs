@@ -642,6 +642,8 @@ struct Item {
     effects: jstream_protocol::FilterChains,
     /// Whether its canvas box is locked (ADR-0096).
     locked: bool,
+    /// Its motion modifiers (ADR-0099).
+    motion: Vec<jstream_protocol::MotionModifier>,
     /// Where its effects run (ADR-0106).
     effects_space: jstream_protocol::EffectsSpace,
 }
@@ -1740,6 +1742,7 @@ impl Collection {
                         blend,
                         effects: Default::default(),
                         locked: false,
+                        motion: Vec::new(),
                         effects_space: jstream_protocol::EffectsSpace::Box,
                     },
                 );
@@ -1866,6 +1869,20 @@ impl Collection {
                 vec![Edit::ItemSetBlend {
                     item_id,
                     blend: old,
+                }]
+            }
+            Edit::ItemSetMotion {
+                item_id,
+                scene_id,
+                motion,
+            } => {
+                check_motion_list(&motion, at)?;
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                let old = std::mem::replace(&mut item.motion, motion);
+                vec![Edit::ItemSetMotion {
+                    item_id,
+                    scene_id,
+                    motion: old,
                 }]
             }
             Edit::ItemSetLocked { item_id, locked } => {
@@ -2604,6 +2621,7 @@ impl Collection {
                     blend: item.blend,
                     transition: ItemTransition::default(),
                     locked: item.locked,
+                    motion: item.motion.clone(),
                     effects_space: item.effects_space,
                 })
             })
@@ -2888,6 +2906,13 @@ fn restore_item(
             locked: true,
         });
     }
+    if !item.motion.is_empty() {
+        edits.push(Edit::ItemSetMotion {
+            item_id: item_id.clone(),
+            scene_id: None,
+            motion: item.motion.clone(),
+        });
+    }
     if !item.effects_space.is_box() {
         edits.push(Edit::ItemSetEffectsSpace {
             item_id: item_id.clone(),
@@ -2899,6 +2924,15 @@ fn restore_item(
     };
     edits.extend(filter::restore_all(&owner, item.effects.clone()));
     Ok(edits)
+}
+
+/// Rejects a motion list the wire's check refuses, as `jstream-graph` does (ADR-0099).
+fn check_motion_list(
+    motion: &[jstream_protocol::MotionModifier],
+    at: usize,
+) -> Result<(), ProtocolError> {
+    jstream_protocol::check_motion(motion)
+        .map_err(|problem| invalid(at, &problem.field, problem.reason))
 }
 
 /// Rejects an opacity outside [0, 1], as `jstream-graph` does.

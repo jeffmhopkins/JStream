@@ -1043,6 +1043,7 @@ mod tests {
 
     fn collection() -> Collection {
         let item = |id: &str, source: &str, visible: bool| ItemInfo {
+            motion: Default::default(),
             item_id: id.into(),
             source_id: source.into(),
             placement: PlacementForm::Legacy,

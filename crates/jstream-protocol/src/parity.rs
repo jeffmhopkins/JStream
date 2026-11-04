@@ -2409,6 +2409,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
         locked: false,
+        motion: Vec::new(),
         effects_space: crate::EffectsSpace::Box,
     };
     vec![
@@ -2425,6 +2426,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
             locked: false,
+            motion: Vec::new(),
             effects_space: crate::EffectsSpace::Box,
         },
         plain("i1", "cam_copy"),
@@ -2447,6 +2449,7 @@ fn items_of_b() -> Vec<ItemInfo> {
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
         locked: false,
+        motion: Vec::new(),
         effects_space: crate::EffectsSpace::Box,
     }]
 }

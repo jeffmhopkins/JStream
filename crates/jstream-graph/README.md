@@ -115,8 +115,8 @@ with no inverse. The engine draws open gestures' source settings through it
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
-  `item.set_crop`, `item.set_visible`, `item.set_transition`, `item.set_locked` and
-  `item.set_effects_space` only where the item
+  `item.set_crop`, `item.set_visible`, `item.set_transition`, `item.set_locked`,
+  `item.set_motion` and `item.set_effects_space` only where the item
   differed from what `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
   group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
@@ -177,7 +177,9 @@ with no inverse. The engine draws open gestures' source settings through it
   perspective and finite corners, each failure naming its field
   (`edits.N.geometry.size`). Any tilt, turn, depth and perspective the compositor can
   draw is accepted from protocol 0.34 (ADR-0050; `ItemGeometry::check_drawable`, else
-  `edits.N.geometry`); before, a non-neutral one was `invalid_argument`.
+  `edits.N.geometry`); before, a non-neutral one was `invalid_argument`. A legacy
+  transform isn't checked beyond being finite: it keeps its 0.3 meaning (ADR-0022),
+  and the compositor draws one it can't place as nothing (#1130).
   A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
   persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
@@ -320,6 +322,15 @@ with no inverse. The engine draws open gestures' source settings through it
   keyframe scene whose tree holds the item (its scene's, or one whose parent reaches
   the item's group through groups it places, at any depth) writes its override, any
   other scene is `invalid_argument`, and the inverse keeps the addressing.
+- **Motion** (`motion.rs`,
+  [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
+  `item.set_motion` checks the whole list with the protocol's `check_motion` (at most 8
+  modifiers, well-formed unique IDs, every parameter in range; `invalid_argument` names
+  the field) and stores it in wire form (`MotionList`), undone by the old list. It is a
+  placement edit, so addressed to a keyframe scene it writes that keyframe's `motion`
+  override. `anim_modifiers` turns a stored list into `jstream-anim`'s modifiers for the
+  engine to evaluate. The graph never evaluates motion: an item's values are what was
+  set.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` appends a variant of a scene that isn't one, undone by
@@ -445,12 +456,13 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 2), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 4), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
 and `visible`, its `opacity` and `blend` only when they differ from 1 and
-`normal`, and its `effects`, a list of filters, omitted while empty), sources ordered by ID (with `kind_version`, the descriptor version a
+`normal`, its `effects`, a list of filters, omitted while empty, and its `motion`
+modifiers, omitted while empty), sources ordered by ID (with `kind_version`, the descriptor version a
 `builtin` source's settings follow, ADR-0025, `duplicated_from` as stored, even
 when it names a deleted source, and `filters`, omitted while both chains are empty: each
 filter with its `kind_version` and settings, and `enabled` only when false), outputs ordered by ID (each with its
@@ -476,7 +488,9 @@ they have their default, so a collection without them saves as it did before the
 existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needed no schema
 bump either. An override's `effects` (ADR-0088), written with each filter's
-`kind_version` and omitted while the keyframe follows the item, is `schema_version` 3. Loading creates the folders top level first, then
+`kind_version` and omitted while the keyframe follows the item, is `schema_version` 3,
+and an item's or an override's `motion` (ADR-0099), each omitted while absent, is
+`schema_version` 4. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -486,8 +500,9 @@ the engine's; this crate does no I/O.
   `schema_version` it has no path from (missing, 0, or newer), runs the forward
   migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`: 1 to
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
-  changes nothing and refuses a version 1 file that holds either, and 2 to 3 adds a
-  keyframe override's `effects` the same way),
+  changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
+  keyframe override's `effects` the same way, and 3 to 4 an item's and an override's
+  `motion`),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -499,9 +514,10 @@ the engine's; this crate does no I/O.
   the buses (the master renamed or faded as saved) and their monitors,
   which a source's settings may refer to, then sources (each after the sources its
   settings refer to, then its labels and favourite), then every source's filters, then
-  items in their placement form with their crop and visibility, opacity, blend and
-  transition settings, then the keyframe scenes' overrides as placement edits addressed
-  to them (and `item.set_effects` for their effects, keeping a filter of an unknown
+  items in their placement form with their crop and visibility, opacity, blend,
+  transition settings and motion, then the keyframe scenes' overrides as placement edits
+  addressed to them (then `item.set_motion` for their motion and `item.set_effects` for
+  their effects, keeping a filter of an unknown
   kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
   initial `cut` is updated in place when the file has it, and deleted when it doesn't),
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes

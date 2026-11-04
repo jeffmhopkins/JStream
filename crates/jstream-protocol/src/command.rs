@@ -22,6 +22,7 @@ use crate::id::{
 };
 use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
+use crate::motion::MotionModifier;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
@@ -110,6 +111,26 @@ pub enum Edit {
         /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
         /// `effects`.
         effects: Vec<FilterInfo>,
+    },
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which
+    /// move it on the engine's animation clock as each frame is drawn. Without
+    /// `scene_id`, or with its own scene's, it writes the item's own list; with a
+    /// keyframe scene whose tree holds the item, it writes that keyframe's override.
+    /// Any other scene is `invalid_argument` on `scene_id`. The list holds at most
+    /// [`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on
+    /// `motion`; each ID is unique and well formed, and each parameter in its range,
+    /// else `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion
+    /// (in a keyframe, an override with none). Inverse: `item.set_motion` with the old
+    /// list, or `item.clear_override` of `motion` when the keyframe didn't override it.
+    #[serde(rename = "item.set_motion")]
+    ItemSetMotion {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The modifiers, first first.
+        motion: Vec<MotionModifier>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -1097,6 +1118,7 @@ impl Edit {
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
+            Edit::ItemSetMotion { .. } => "item.set_motion",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1994,7 +2016,30 @@ impl ItemTransform {
         },
         rotation_deg: Finite32::ZERO,
     };
+
+    /// Checks that it is within bounds where any source draws it (#1130): each position
+    /// coordinate within [`MAX_DRAWN_PX`](crate::MAX_DRAWN_PX), and each scale within
+    /// ±[`MAX_LEGACY_SCALE`]. A source is at most `u32::MAX` pixels a side, so every
+    /// corner then stays far inside f32's range. The bound is enough, not needed: a
+    /// transform past it may still draw, and `item.set_transform` and `item.add` don't
+    /// check it (ADR-0022 keeps their 0.3 meaning). Motion keeps a moved transform within
+    /// it. Returns what is wrong if it isn't.
+    pub fn check_drawable(&self) -> Result<(), &'static str> {
+        let near = |v: Finite32| v.get().abs() <= crate::MAX_DRAWN_PX;
+        if !(near(self.position.x) && near(self.position.y)) {
+            return Err("its position must be within 1e15 pixels of the origin");
+        }
+        let scale = |v: Finite32| v.get().abs() <= MAX_LEGACY_SCALE;
+        if !(scale(self.scale.x) && scale(self.scale.y)) {
+            return Err("its scale must be within -100000..=100000");
+        }
+        Ok(())
+    }
 }
+
+/// The largest scale, either way, within [`ItemTransform::check_drawable`]'s bounds. No
+/// edit checks it: `item.set_transform` stores any finite scale (ADR-0022).
+pub const MAX_LEGACY_SCALE: f32 = 100_000.0;
 
 impl Default for ItemTransform {
     fn default() -> Self {

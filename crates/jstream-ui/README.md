@@ -124,7 +124,9 @@ Contents ([Design](#design) explains the choices):
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
-  field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  pure list helpers, adding with a free ID, each kind's fields and switching kind, tested
+  natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
@@ -414,7 +416,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
+  the parent's), Motion (folded, with the modifier count as its hint: a row per motion
+  modifier with what it moves, how (wiggle, oscillate with its shape, or drift), that
+  kind's fields, when its time starts (in step, or when shown), an On check and Remove,
+  and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
+  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
   scene, as a scene's Hotkey row is,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the

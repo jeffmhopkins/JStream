@@ -223,6 +223,7 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
         }],
     );
     let o = ItemOverride {
+        motion: Default::default(),
         transform: None,
         item_id: ItemId::new("a1"),
         geometry: None,
@@ -1072,4 +1073,182 @@ fn a_filtered_group_source_runs_over_each_view_and_keeps_it_on_a_retarget() {
         "k's view, leaving"
     );
     assert_eq!(input(&g), Some(GpuKey::Layer(g, 1)), "a, arriving");
+}
+
+// Motion modifiers (ADR-0099): drawn each frame on top of an item's values, a keyframe
+// scene's override in place of the item's own, blended across a Move.
+
+fn secs(s: f64) -> jstream_media::MediaTime {
+    jstream_media::MediaTime::new((s * 1e6) as i64, jstream_media::Timebase::MICROS)
+}
+
+/// `item`'s motion: one drift along x at `rate` pixels a second, on `clock`.
+fn drift_x(
+    item: &str,
+    scene: Option<&str>,
+    rate: f32,
+    clock: jstream_protocol::MotionClock,
+) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "drift".into(),
+            property: jstream_protocol::MotionProperty::X,
+            kind: jstream_protocol::MotionKind::Drift {
+                rate_per_s: Finite32::new(rate).expect("finite"),
+                wrap: None,
+            },
+            clock,
+            enabled: true,
+        }],
+    }
+}
+
+/// Each item's x as the program pass of `scene` draws it at `at`, with its motion.
+fn moved_x(engine: &Engine, scene: &str, at: jstream_media::MediaTime) -> Vec<(String, f32)> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .moved_at(&SceneId::new(scene), at)
+        .expect("the program draws the scene")
+        .iter()
+        .map(|(item, placement, _, _)| (item.to_string(), x(placement)))
+        .collect()
+}
+
+#[test]
+fn an_items_motion_moves_it_each_frame_and_a_keyframe_overrides_it() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    assert!(!engine.render_hub().load().shot().changes_with_time());
+    apply(&control, vec![drift_x("a1", None, 100.0, Clock)]);
+    let shot = engine.render_hub().load();
+    assert!(shot.shot().changes_with_time(), "a moving item redraws");
+    // The animation time, not the edit's: two seconds in, 200 px along.
+    assert_eq!(
+        moved_x(&engine, "a", secs(2.0)),
+        [("a1".into(), 300.0), ("a2".into(), 500.0)]
+    );
+    // The keyframe's own motion replaces the item's there, and only there.
+    apply(&control, vec![drift_x("a1", Some("k"), -50.0, Clock)]);
+    switch(&control, "k", None);
+    assert_eq!(
+        moved_x(&engine, "k", secs(2.0)),
+        [("a1".into(), 0.0), ("a2".into(), 500.0)]
+    );
+}
+
+#[test]
+fn a_move_blends_both_sides_motion_by_its_progress() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            drift_x("a1", None, 100.0, Clock),
+            drift_x("a1", Some("k"), 300.0, Clock),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let shot = engine.render_hub().load();
+    let x_of = |elapsed_ms: f32| {
+        shot.shot()
+            .tracks_moved_at(elapsed_ms, secs(1.0))
+            .expect("a transition runs")
+            .iter()
+            .map(|end| end.map(|end| end.geometry.center.x.get()))
+            .collect::<Vec<_>>()
+    };
+    // a1 moves 100 px a second on `a` and 300 on `k`: halfway, it adds 200.
+    assert_eq!(x_of(0.0), [Some(200.0), Some(500.0)]);
+    assert_eq!(x_of(200.0), [Some(300.0), Some(500.0)]);
+    assert_eq!(x_of(400.0), [Some(400.0), Some(500.0)]);
+}
+
+#[test]
+fn the_shown_clock_starts_when_the_item_is_first_drawn() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![drift_x(
+            "a1",
+            None,
+            100.0,
+            jstream_protocol::MotionClock::Shown,
+        )],
+    );
+    switch(&control, "a", None);
+    let shown = *engine
+        .render_hub()
+        .load()
+        .shot()
+        .shown()
+        .get(&ItemId::new("a1"))
+        .expect("a1 is drawn");
+    let one_second_later = secs(shown.as_secs_f64() + 1.0);
+    // The clock is the engine's, so the time a second after `shown` is only as exact
+    // as that sum in seconds.
+    let (item, x) = moved_x(&engine, "a", one_second_later)[0].clone();
+    assert_eq!(item, "a1");
+    assert!((x - 200.0).abs() < 0.01, "{x}");
+}
+
+/// An item whose effects run over the canvas (ADR-0106) moves inside its layer, which
+/// stays flat over the canvas: in a switch its tracks, which carry that layer, don't
+/// drift with its motion (#1125 review B8, N16).
+#[test]
+fn a_canvas_space_items_motion_leaves_its_layer_over_the_canvas() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("sharp"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("a1"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            drift_x("a1", None, 100.0, Clock),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let shot = engine.render_hub().load();
+    let xs = |at: f64| {
+        shot.shot()
+            .tracks_moved_at(200.0, secs(at))
+            .expect("a transition runs")
+            .iter()
+            .map(|end| end.map(|end| end.geometry.center.x.get()))
+            .collect::<Vec<_>>()
+    };
+    assert!(xs(1.0).iter().any(Option::is_some), "{:?}", xs(1.0));
+    assert_eq!(xs(1.0), xs(3.0), "the canvas layers stay where they are");
 }

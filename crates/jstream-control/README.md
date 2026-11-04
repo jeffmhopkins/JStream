@@ -219,7 +219,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), through
   `item.set_effects` (checking only the list's length and its IDs) and the `filter.*`
   edits on the `keyframe` owner, which copy the item's own effects first where the
-  keyframe follows them, with the graph's inverses;
+  keyframe follows them, with the graph's inverses, and an item's motion
+  ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), through
+  `item.set_motion` addressed to it (the whole list, checked with the protocol's
+  `check_motion` as the item's own is);
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -227,7 +230,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
-  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
   the hotkey bindings (in `state.get`, ordered by chord).
