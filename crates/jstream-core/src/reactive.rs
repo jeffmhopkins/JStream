@@ -177,7 +177,11 @@ struct Meter {
     /// The scope's address. The follower never holds the scope itself: the shot's
     /// bindings do, and the shot is reclaimed off the render thread, so no scope's last
     /// reference is ever dropped there (R-RT-003). While a binding names it, no other
-    /// scope can have its address.
+    /// scope can have its address. A meter goes only on a tick that follows, so across
+    /// ticks that don't (no mix exists, or none is due) a scope reclaimed and another
+    /// made at its address would inherit its meter: that costs one tick's reading (the
+    /// meter's ring position and onset average), never memory safety, since the
+    /// address is only compared.
     scope: usize,
     /// Whether a `band` binding hears it, so that its spectrum is worth measuring
     /// (ADR-0100 decision 4).
