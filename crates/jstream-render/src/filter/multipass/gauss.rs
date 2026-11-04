@@ -2,11 +2,14 @@
 //! downsample that blur and pixelate share.
 //!
 //! A blur of radius `r` px spans `r` on each side (sigma `r / 3`). It runs at a working
-//! scale of 1, 2, 4 or 8 (the smallest that keeps `r / scale` within [`MAX_TAPS`]):
+//! scale of 1, 2, 4, 8 or 16 (the smallest that keeps `r / scale` within [`MAX_TAPS`]):
 //! a box downsample to that scale, then a horizontal and a vertical pass of at most
 //! `2 * MAX_TAPS + 1` taps each, read back bilinear at full size. So every radius up
-//! to [`MAX_RADIUS`] costs at most 64 loads per downsampled texel and 33 per blur pass,
-//! and three scratch layers.
+//! to [`MAX_RADIUS`] costs at most 64 loads per downsampled texel and 17 per blur pass,
+//! and three scratch layers. The tap bound is low because a software rasterizer pays
+//! for every load (#1070): above 8 px, a blur at half scale or less costs a fraction of
+//! one at full scale, and its gaussian is still several texels wide, so the bilinear
+//! read back stays smooth.
 
 use crate::error::RenderError;
 use crate::filter::params::Uniforms;
@@ -14,9 +17,9 @@ use crate::filter::{Blend, Ctx, Draw, Shader};
 use crate::image::Image;
 
 /// Taps on each side of a blur pass at the working scale.
-pub(super) const MAX_TAPS: u32 = 16;
+pub(super) const MAX_TAPS: u32 = 8;
 /// The coarsest working scale.
-pub(super) const MAX_SCALE: u32 = 8;
+pub(super) const MAX_SCALE: u32 = 16;
 /// The largest radius, px, the bound covers; larger radii are clamped to it.
 pub(super) const MAX_RADIUS: f32 = (MAX_TAPS * MAX_SCALE) as f32;
 /// Samples on each axis of a downsampled block: blocks up to this size are averaged
@@ -56,7 +59,7 @@ impl Edge {
 /// How a blur of some radius runs.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Plan {
-    /// Full-size pixels per working texel: 1, 2, 4 or 8.
+    /// Full-size pixels per working texel: 1, 2, 4, 8 or 16.
     pub scale: u32,
     /// Taps on each side of each pass, at most [`MAX_TAPS`]; 0 is no blur.
     pub taps: u32,
@@ -154,10 +157,44 @@ pub(super) fn blur(
         placed => placed,
     };
     let source = placed.as_ref().unwrap_or(input);
-    let (w, h) = (source.width(), source.height());
-    let across = ctx.scratch(w, h)?;
-    let both = ctx.scratch(w, h)?;
-    for ((dx, dy), from, to) in [((1, 0), source, &across), ((0, 1), &across, &both)] {
+    let both = ctx.scratch(source.width(), source.height())?;
+    passes(ctx, source, plan, edge, &both)?;
+    Ok(Blurred {
+        image: both,
+        scale: plan.scale,
+    })
+}
+
+/// Blurs the whole of `input` by `radius` px straight into `output`, of the same size,
+/// when the blur runs at full scale: then the vertical pass is the result, and drawing
+/// it into a scratch layer to copy it out would cost a full-size pass more (#1070).
+/// Returns `false`, having drawn nothing, when the blur works at a coarser scale or is
+/// no blur, so the caller reads [`blur`]'s result back instead.
+pub(super) fn blur_whole_into(
+    ctx: &mut Ctx<'_>,
+    input: &Image,
+    radius: f32,
+    output: &Image,
+) -> Result<bool, RenderError> {
+    let plan = plan(radius);
+    let same = (input.width(), input.height()) == (output.width(), output.height());
+    if plan.scale != 1 || plan.taps == 0 || !same {
+        return Ok(false);
+    }
+    passes(ctx, input, plan, Edge::Clamp, output)?;
+    Ok(true)
+}
+
+/// The horizontal pass of `plan` over `source`, then the vertical one into `to`.
+fn passes(
+    ctx: &mut Ctx<'_>,
+    source: &Image,
+    plan: Plan,
+    edge: Edge,
+    to: &Image,
+) -> Result<(), RenderError> {
+    let across = ctx.scratch(source.width(), source.height())?;
+    for ((dx, dy), from, target) in [((1, 0), source, &across), ((0, 1), &across, to)] {
         let params = Uniforms::new()
             .i32(dx)
             .i32(dy)
@@ -170,13 +207,10 @@ pub(super) fn blur(
             input: from,
             aux: None,
             params: &params,
-            target: to,
+            target,
         })?;
     }
-    Ok(Blurred {
-        image: both,
-        scale: plan.scale,
-    })
+    Ok(())
 }
 
 #[cfg(test)]
@@ -188,15 +222,19 @@ mod tests {
         assert_eq!(plan(0.0).taps, 0);
         assert_eq!((plan(0.0).scale, plan(-3.0).taps), (1, 0));
         assert_eq!((plan(4.0).scale, plan(4.0).taps), (1, 4));
-        assert_eq!((plan(16.0).scale, plan(16.0).taps), (1, 16));
-        assert_eq!((plan(16.5).scale, plan(16.5).taps), (2, 9));
-        assert_eq!((plan(100.0).scale, plan(100.0).taps), (8, 13));
+        assert_eq!((plan(8.0).scale, plan(8.0).taps), (1, 8));
+        assert_eq!((plan(8.5).scale, plan(8.5).taps), (2, 5));
+        assert_eq!((plan(12.0).scale, plan(12.0).taps), (2, 6));
+        assert_eq!((plan(100.0).scale, plan(100.0).taps), (16, 7));
         assert_eq!(plan(1000.0), plan(MAX_RADIUS));
         assert_eq!(plan(f32::NAN).taps, 0);
         let mut r = 0.0;
         while r <= 200.0 {
             let p = plan(r);
-            assert!(p.taps <= MAX_TAPS && [1, 2, 4, 8].contains(&p.scale), "{r}");
+            assert!(
+                p.taps <= MAX_TAPS && [1, 2, 4, 8, 16].contains(&p.scale),
+                "{r}"
+            );
             r += 0.25;
         }
     }

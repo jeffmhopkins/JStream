@@ -40,6 +40,7 @@ use crate::snapshot::{
 };
 use crate::studio::{self, Studio};
 use crate::transition;
+use crate::values::SharedValues;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
@@ -3023,6 +3024,9 @@ struct State {
     stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
+    /// The shared values (ADR-0102 decision 7). Runtime state, like `studio`: never
+    /// saved and not part of `rev`.
+    values: SharedValues,
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
@@ -3382,6 +3386,20 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::ValuesSet { name, value } => {
+                if self.values.set(&name, value.clone())? {
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name,
+                            value,
+                            client_id: client_id.clone(),
+                            request_id: Some(request_id.clone()),
+                        },
+                        wake,
+                    );
+                }
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }) => {
@@ -3469,6 +3487,9 @@ impl State {
                     entries: self.activity.list(*after_seq, *limit),
                 },
                 Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
+                Query::ValuesList { prefix } => QueryResult::ValuesList {
+                    values: self.values.list(prefix.as_deref()),
+                },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self
                         .graph
@@ -3771,7 +3792,8 @@ impl State {
         if !same {
             *source_shots = Arc::new(shots);
         }
-        live.end_looks();
+        // Every mix and preview has looked at what it draws: the rest can rest.
+        live.rest_undrawn();
         live.wake_at(wake);
         live.meters().planned(started.elapsed());
         planning.end_ms

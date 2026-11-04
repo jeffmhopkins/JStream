@@ -63,7 +63,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -74,7 +74,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`), with
+  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -137,7 +137,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
-  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
@@ -182,8 +182,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
-  `gpu.device_lost`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
+  `gpu.device_lost` and `values.changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -233,7 +233,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   a geometry ([Item geometry](#geometry)). `geometry/camera.rs` holds the scene camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
-  and `CameraView`, the camera seen on one canvas. `drawn_polygon_seen`, `unplace_seen`,
+  and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
+  depth-of-field blur at a distance along its view
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
@@ -255,7 +257,16 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.75 because of the
+`PROTOCOL_VERSION` is 0.79 because a master or output filter may name a file (an
+asset reference, so Apply LUT grades the program or one output; no wire change:
+earlier minors refused it with `invalid_argument` on the parameter); 0.78 because of
+the shared values `values.set`, `values.list`
+and `values.changed` (`values.rs`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); 0.77 because of
+`SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
+([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)); 0.76
+because of `item.set_effects_space` and `ItemInfo.effects_space`
+([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)); 0.75 because of the
 `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
 `output.set_path` (#1072); 0.73 because of the `profile.get` query
 ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -842,9 +853,11 @@ from its next start (`output.status` reports it `dedicated`); a virtual camera h
 video chain only, and with a filter gets a render pass of its own but no encoder
 session. An audio filter on an output that carries no audio (a `virtual_cam`) is
 `invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
-`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
-`invalid_argument` on the parameter), since the delete checks follow only a source's
-references. `output.delete`'s
+`output`. Their filters can't hold a scene, source or bus reference yet
+(`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. From 0.79 they may name a file (an asset reference), which is no edge:
+the engine loads it as it does a source's filter's, so `apply_lut` or `image_mask`
+grades the program or one output. Before 0.79 an asset was refused there too. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
 
@@ -1040,11 +1053,16 @@ fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
 `position` and `target` (`Vec3`, scene pixels, x right, y down, z toward the viewer),
-`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0) and `depth_sort`
-(default `true`, not written while true). A camera omitted removes it. The edit refuses a
-field of view out of range (`edits.N.camera.fov_deg`), a coordinate past the drawable
-limit (`edits.N.camera`) and a position closer than 0.001 px to the target
-(`edits.N.camera.target`). On a keyframe scene it sets the variant's override, refused
+`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0), `depth_sort`
+(default `true`, not written while true), and since 0.77 a depth of field: `focus_px`,
+the distance along the view of the plane in focus (absent, everything is in focus), and
+`blur_px`, the blur radius of a point infinitely far behind it, 0 to 64 (default 0, not
+written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). A camera
+omitted removes it. The edit refuses a field of view out of range
+(`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
+position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
+not above 0 or past the drawable limit (`edits.N.camera.focus_px`) and a blur outside 0
+to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, refused
 while its parent has no camera; removing the parent's camera drops its variants'
 overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
@@ -1119,6 +1137,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
   not dragging the box; the engine still applies every edit to a locked item. It
   belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
+- `item.set_effects_space {item_id, space}` sets where an item's effects run
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md), 0.76): `box`, the
+  default, over its cropped, fitted box before it is placed, or `canvas`, over a
+  canvas-sized layer it is drawn into where it is placed, which then covers the canvas
+  with the item's opacity and blend. So a canvas-sized mask lines up with the canvas
+  however the item is moved, scaled, turned or flipped. Reported as
+  `ItemInfo.effects_space`, omitted while `box`. Like a lock it belongs to the item:
+  no `scene_id`, and a keyframe doesn't override it. A canvas-space item never glides
+  in a Move.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1377,7 +1404,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
-`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
+`item.set_transition`, `item.set_locked` and `item.set_effects_space` the removed item
+needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1843,6 +1871,33 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
 
+<a id="shared-values"></a>
+## Shared values
+<!-- @section
+covers = ["crates/jstream-protocol/src/values.rs"]
+-->
+
+Since 0.78 a client can keep **shared values**: named JSON values the engine holds for
+browser source pages and agents to read
+([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7, `values.rs`).
+They are not collection state: never saved, no `rev`, no undo step. They are not
+ADR-0032's live values either, which are a gesture's uncommitted edits.
+- **`values.set {name, value?}`** is an action. It sets `name` to `value`, or removes it
+  when `value` is `null` or left out; inside a value `null` is ordinary JSON. A name is
+  dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes (`check_value_name`); a
+  value is at most 16 KiB as compact JSON (`check_value_size`, `MAX_VALUE_BYTES`); the
+  store holds at most 256 names (`MAX_VALUES`). Each limit is `invalid_argument` on
+  `name` or `value`, and nothing changes.
+- **`values.changed {name, value?}`** goes to every client when a set changes something,
+  with no `value` for a removal. Setting the value a name already has sends nothing.
+- **`values.list {prefix?}`** answers `SharedValue`s ordered by name: all, or the name
+  `prefix` and those below it (`prefix_covers`: `status` covers `status.text`, not
+  `statusbar`).
+- A hotkey may bind `values.set`, checked at bind time as the call is: a binding with a
+  bad name or an oversized value is refused (`bind_problem`), so a saved binding never
+  fails every press. Its value is then saved with the binding. A plugin may call
+  `values.list` (class `read`), never `values.set`, which no class names yet.
+
 <a id="errors"></a>
 ## Errors
 <!-- @section
@@ -1964,10 +2019,12 @@ function in this crate so the compositor and the UI share one implementation.
   `perspective_px` ignored. `project_seen`, `drawn_polygon_seen` and `unplace_seen`
   take the camera's `CameraView` and build ADR-0050's homogeneous map with `w = D / f`
   (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
-  plane and the polygon clipping are the same. The picture's up is −y, or −z within
-  0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
-  neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way for an
-  editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
+  plane and the polygon clipping are the same. The picture's up is −y, or within
+  0.01° of the pole −z looking straight down and +z looking straight up, so a camera
+  facing −z keeps its picture upright as it tilts to either pole
+  ([ADR-0111](../../docs/adr/0111-camera-up-at-the-poles.md), #1047). Through `SceneCamera::framing` an item
+  with neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way
+  for an editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
   drags an item to.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio

@@ -175,11 +175,13 @@ struct Running {
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
     planned: u64,
-    /// The last plan any mix looked at it in, the program's or a preview's, so the
-    /// thread paints only sources something draws.
-    seen: u64,
-    /// Whether the thread paints it before each re-plan: while the latest plans looked
-    /// at it ([`LiveSources::end_looks`]). Shared with the thread's [`Painted`] entry.
+    /// The last plan any mix looked at it in (the program's, a video mix's or a
+    /// preview's), or the plan current when it was built.
+    looked: u64,
+    /// Whether it was told no mix draws it ([`Source::set_drawn`], #1071).
+    resting: bool,
+    /// `!resting`, shared with the thread's [`Painted`] entry: the thread paints a
+    /// painter only while some mix draws it.
     drawn: Arc<AtomicBool>,
     /// The texture it showed last, for a source that paints on the GPU.
     shown_gpu: Option<(GpuFrame, Frame)>,
@@ -479,8 +481,13 @@ impl LiveSources {
     /// ones no filter reads any more and returns a load for each new one. Every filter
     /// counts, enabled or not, so enabling one shows its asset at once.
     fn sync_assets(&mut self, state: &jstream_graph::State) -> Vec<AssetJob> {
-        // Every video chain that can read an asset: each source's, each scene's and
-        // each item's effects (ADR-0065).
+        // Every video chain that can read an asset: each source's, each scene's, each
+        // item's effects (ADR-0065), the master stage's and each output's (ADR-0080).
+        let stage = state.master().chain(FilterChain::Video).iter().chain(
+            state
+                .outputs()
+                .flat_map(|output| output.filters().chain(FilterChain::Video).iter()),
+        );
         let sources = state
             .sources()
             .flat_map(|source| source.filters().chain(FilterChain::Video).iter());
@@ -494,6 +501,7 @@ impl LiveSources {
         });
         let wanted: HashSet<AssetKey> = sources
             .chain(scenes)
+            .chain(stage)
             .filter_map(|filter| filter_assets::wanted(filter.kind(), filter.settings()))
             .collect();
         let before = self.assets.len();
@@ -618,7 +626,8 @@ impl LiveSources {
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
                 planned: plan,
-                seen: plan,
+                looked: plan,
+                resting: false,
                 drawn: Arc::new(AtomicBool::new(true)),
                 shown_gpu: None,
                 extent: built.extent,
@@ -814,22 +823,23 @@ impl LiveSources {
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
         let at = since(now, running.start);
-        running.seen = plan;
-        if !running.drawn.load(Ordering::Relaxed)
-            && let Some(painter) = running.source.painter()
-        {
-            // Not painted while nothing drew it: painted for now before it is shown,
-            // so it never shows the frame it had when it was last drawn.
-            let started = Instant::now();
-            painter.paint(at);
-            self.meters.painted(source_id, started.elapsed());
-            running.drawn.store(true, Ordering::Relaxed);
-        }
         if reach {
             if running.planned + 1 < plan {
                 running.source.show(at);
             }
             running.planned = plan;
+        }
+        running.looked = plan;
+        if std::mem::take(&mut running.resting) {
+            running.source.set_drawn(true);
+            running.drawn.store(true, Ordering::Relaxed);
+            if let Some(painter) = running.source.painter() {
+                // Not painted while it rested: painted for now before it is shown, so
+                // it never shows the frame it had when it was last drawn.
+                let started = Instant::now();
+                painter.paint(at);
+                self.meters.painted(source_id, started.elapsed());
+            }
         }
         if let Some(context) = &self.context {
             let next = next_program_frame(now);
@@ -892,6 +902,23 @@ impl LiveSources {
         Some((frame, next))
     }
 
+    /// After a plan of the program mix and every mix and preview drawn with it: tells
+    /// each source none of them looked at that nothing draws it, so a kind that costs
+    /// something while drawn (a `browser` page) can rest (#1071), and the thread stops
+    /// painting a scope, timer or chat source no mix draws. A source looked at again is
+    /// told it is drawn, and a painter painted for now, as it is looked at
+    /// ([`Self::look`]).
+    pub(crate) fn rest_undrawn(&mut self) {
+        let plan = self.plan;
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            if running.looked != plan && !running.resting {
+                running.resting = true;
+                running.drawn.store(false, Ordering::Relaxed);
+                running.source.set_drawn(false);
+            }
+        }
+    }
+
     /// Ends a plan of the program mix: a source's sound is heard while the plan reached
     /// it.
     pub(crate) fn end_plan(&self) {
@@ -900,17 +927,6 @@ impl LiveSources {
             if let Some(audio) = &running.audio {
                 audio.set_audible(running.planned == plan);
             }
-        }
-    }
-
-    /// Ends a round of plans, the program mix's and every preview's: the thread paints
-    /// only the sources one of them looked at, so a scope, timer or chat source no mix
-    /// draws costs nothing while something else animates. A source looked at again is
-    /// painted then ([`Self::look`]).
-    pub(crate) fn end_looks(&self) {
-        let plan = self.plan;
-        for running in self.entries.values().filter_map(|e| e.running.as_ref()) {
-            running.drawn.store(running.seen == plan, Ordering::Relaxed);
         }
     }
 

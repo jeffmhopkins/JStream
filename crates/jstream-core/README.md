@@ -732,8 +732,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
-  or not the mixer runs, and `live.set` and `live.cancel` (see *Live values* below).
-  `live.list` is a query answered from the gesture table.
+  or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
+  `values.set` (see [Shared values](#shared-values)).
+  `live.list` is a query answered from the gesture table, and `values.list` from the
+  shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** always reads off (see *No privacy screen* below).
 - **`source.sizes`** reads each source's size, and every plan sends a
@@ -991,7 +993,8 @@ variant's override, and a variant's parent's) as `Pass.camera`, and live
 parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
 (`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
 between two 3D scenes interpolates the camera with the Move's own timing
-(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+(`lerp_camera`, its focus and blur too, a side with no focus taken as focused where the
+other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and draws both sides' tracks through it. A Move between a 3D scene and
 a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
 keeps each side's own camera on its items. A stinger's items are seen through their
 own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
@@ -1186,6 +1189,7 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+
 **Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
 and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
 runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as
@@ -1284,7 +1288,11 @@ with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
 before its opacity and blend. So a live resize draws the same layer, scaled, until
-the plan is made again. A layer that can't be made or drawn (too large for the
+the plan is made again. An item whose `effects_space` is `canvas`
+([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
+layer instead, with no outset, scaled down the same way: the item is drawn into it
+where it is placed, turned, flipped and tilted as it is (a live resize redraws it
+there), and the layer covers the canvas flat. Its transition visual never glides. A layer that can't be made or drawn (too large for the
 adapter) blanks only its item that frame, logged once until a frame draws it, as a
 failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or
@@ -1339,13 +1347,15 @@ place. A frame without either chain draws as before, with no extra layer. The ed
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
 stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
-of its mix in order. Their filters hold no references (the graph refuses one), so none
-reads a scene or an asset.
+of its mix in order. Their filters hold no scene, source or bus reference (the graph
+refuses one), so none reads a scene, but one may read a file: the asset sync below
+lists the master's and outputs' video filters with the rest, and `plan_stages` hands
+each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1363,7 +1373,11 @@ pass after the chains of the sources it places and the scenes it nests, so a cha
 that masks with a scene of filtered sources sees them filtered this frame. The scene is
 drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
 canvas size), and those passes run once per frame with the chains, before any mix
-draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+draws; `claim_layers` keeps their layers too. That layer is the one a mix nesting the
+same scene at depth 1 draws into, so a mix pass whose layer the chains already drew
+this frame reads it as it is instead of drawing it again (`Chains::reuse`, #1070): a
+group shown both as itself and through a `scene` source's chain, as a reflection is,
+costs one pass. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
 scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
 a failed nested pass does, and the chains after it don't run that tick. The graph
@@ -1650,7 +1664,7 @@ is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
 zeros. The thread paints only the painters the latest round of plans looked at, the
-program's or a preview's (`LiveSources::end_looks`), so one no mix draws costs nothing
+program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
 while something else re-plans every frame; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
@@ -1659,7 +1673,11 @@ calls under the lock never draw or decode. Each plan is numbered (`begin_plan`),
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown. Sources run on the media clock of the backends the host
+the first time it is shown. Each source also remembers the last plan any mix looked at
+it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
+same re-plan): after that re-plan, one none of them looked at is told nothing draws it
+(`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
+its frame is taken. A `browser` page rests while nothing draws it (#1071). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `media` sources play through the injected
@@ -1705,6 +1723,21 @@ The collection lock is not held across the GPU wait
 call's future waits for the snapshot thread, so an async host's worker thread is
 free while the GPU renders, reads back and the PNG is encoded. This query is
 control-plane work, not the render thread.
+
+<a id="shared-values"></a>
+## Shared values
+<!-- @section
+covers = ["crates/jstream-core/src/values.rs"]
+-->
+
+The engine holds the shared values (`values.rs`, `SharedValues`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7) in its state
+beside the studio, under the collection lock: never saved, never `rev`, never an undo
+step. `values.set` checks the name and size with the protocol's
+shared checks and the 256-name limit, changes nothing on a refusal, and emits
+`values.changed` only when the value really changed. It is not in the activity or audit
+log, as `live.set` isn't: it carries data and may come many times a second.
+`values.list` reads them by name.
 
 <a id="preview-streams"></a>
 ## Preview streams
@@ -2803,6 +2836,10 @@ request's `request_id`, or `live.ended` with no `request_id` when it expired wit
 session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
 setters it held a value for, one per parameter, without the values. Its `rev` before
 and after are the same.
+
+`values.set` gets no entry either, nor an `activity.list` line: a shared value is data
+for pages, not a change to the studio, and may be set many times a second (ADR-0102
+decision 7, [Shared values](#shared-values)).
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection

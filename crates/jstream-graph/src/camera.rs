@@ -25,6 +25,8 @@ pub(crate) fn camera_problem(error: GeometryError) -> (&'static str, String) {
     let field = match error {
         GeometryError::FieldOfView => "camera.fov_deg",
         GeometryError::CameraAtTarget => "camera.target",
+        GeometryError::FocusDistance => "camera.focus_px",
+        GeometryError::Blur => "camera.blur_px",
         _ => "camera",
     };
     (field, error.to_string())

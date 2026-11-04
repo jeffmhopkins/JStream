@@ -946,8 +946,8 @@ id = "3D2"
 milestone = "M3"
 title = "3D scenes with a camera"
 status = "done"
-prs = [1038, 1044, 1053, 1110]
-note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110)"
+prs = [1038, 1044, 1053, 1110, 1122]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110); depth of field, a focus distance and blur on the camera (ADR-0108, protocol 0.77, #1122)"
 
 [[item]]
 id = "3D3"
