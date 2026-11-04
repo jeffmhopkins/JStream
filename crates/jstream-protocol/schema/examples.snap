@@ -34,24 +34,26 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r35","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
 {"type":"request","id":"r36","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
 {"type":"request","id":"r37","call":{"kind":"action","action":{"type":"effect.enable","kind_id":"fx/blur"}}}
-{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
-{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
-{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
-{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
-{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
-{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
-{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
-{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
-{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
-{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
-{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
-{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
-{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
-{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
-{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
-{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
+{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"codec.download","download_id":"openh264"}}}
+{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"codec.delete","download_id":"openh264"}}}
+{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
+{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
+{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
+{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
+{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
+{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
+{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
+{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
+{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
+{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
+{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
+{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
+{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
+{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
+{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -92,9 +94,10 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r57","call":{"kind":"query","query":{"type":"activity.list","after_seq":41,"limit":20}}}
 {"type":"request","id":"r58","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
 {"type":"request","id":"r59","call":{"kind":"query","query":{"type":"plugin.list"}}}
-{"type":"request","id":"r60","call":{"kind":"query","query":{"type":"youtube.stats"}}}
-{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"source.sizes"}}}
-{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
+{"type":"request","id":"r60","call":{"kind":"query","query":{"type":"codec.downloads"}}}
+{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"youtube.stats"}}}
+{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"source.sizes"}}}
+{"type":"request","id":"r63","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
 {"type":"request","id":"r30","call":{"kind":"history","op":{"type":"history.undo"}}}
 {"type":"request","id":"r31","call":{"kind":"history","op":{"type":"history.redo"},"expected_rev":15,"idempotency_key":"k-2"}}
 # server -> client
@@ -147,6 +150,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"activity.list","now_ms":1790000120000,"entries":[{"seq":42,"time_ms":1790000000042,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”"},{"seq":41,"time_ms":1790000000041,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”","error":"rev_conflict"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"ui_settings.get","key":"workspace.dock","value":{"current":"Live","version":1}}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"plugin.list","plugins":[{"plugin_id":"chat_switcher","state":"enabled","remote_name":"Chat switcher","path":"/home/me/plugins/chat-switcher","request":{"classes":["live"],"hosts":["https://api.example.com:443"]},"grant":{"classes":["live"]}},{"plugin_id":"scene_timer","state":"disabled","reason":"needs_grant","path":"/home/me/plugins/scene-timer","request":{"classes":["edit","live"],"folders":true},"grant":{}}]}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"codec.downloads","downloads":[{"download_id":"openh264","name":"Cisco's OpenH264 (software H.264)","codec":"h264","version":"2.6.0","notice":"OpenH264 Video Codec provided by Cisco Systems, Inc.","license_url":"https://www.openh264.org/BINARY_LICENSE.txt","license_text":"About The Cisco-Provided Binary of OpenH264 Video Codec…","installed":false,"hardware_encoder":false}]}}}
 {"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":87},"message":"protocol version 9.0 is not supported; this server speaks 0.87"}}
 {"type":"error","id":"r1","error":{"code":"handshake_required","message":"send `hello` before any request"}}
 {"type":"error","id":"r1","error":{"code":"malformed","reason":"missing field `id`","message":"malformed message: missing field `id`"}}
