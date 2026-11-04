@@ -21,6 +21,9 @@
 //!   after, and shows a failure, such as a download that didn't match JStream's pin, in
 //!   the section. Agents can't make these calls (no MCP tool carries them), so the offer
 //!   is only ever acted on by a person.
+//! - **In About.** Once installed, the About dialog lists it with the same notice, link
+//!   and terms (`InstalledCodecs`), since About is where JStream presents its licensing
+//!   information (condition 4, #1119).
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0061-source-types-and-decoding-scope-v2.md
 
@@ -127,7 +130,8 @@ pub async fn list(control: &dyn Control) -> Result<Vec<CodecDownloadInfo>, Strin
 }
 
 /// The section's shared state: the list, the download in progress and the last
-/// failure. The Outputs panel's Encoders section and the encoder form read it.
+/// failure. The Outputs panel's Encoders section, the encoder form and the About
+/// dialog's `InstalledCodecs` read it.
 #[derive(Clone, Copy)]
 pub struct CodecDownloads {
     /// What `codec.downloads` last listed.
@@ -250,8 +254,8 @@ pub fn installed(downloads: &[CodecDownloadInfo]) -> Vec<CodecDownloadInfo> {
 
 /// The About dialog's list of the installed codec downloads (#1119): each one's name and
 /// version, Cisco's notice with the link to its licence, and the licence's full text,
-/// since Cisco's conditions 3 and 4 ask for them wherever the app presents licensing
-/// information. Nothing while none is installed, or from an engine that offers none or
+/// since Cisco's condition 4 asks for the whole licence text, notice included, wherever
+/// the app presents licensing information. Nothing while none is installed, or from an engine that offers none or
 /// is older than 0.69.
 #[component]
 pub(crate) fn InstalledCodecs() -> impl IntoView {

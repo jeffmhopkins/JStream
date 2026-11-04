@@ -25,6 +25,7 @@ async function fakeCodecs(page, { hardware }) {
     hardware_encoder: hardware,
   };
   const sent = [];
+  const queries = { count: 0 };
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result });
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
@@ -37,6 +38,7 @@ async function fakeCodecs(page, { hardware }) {
       }
       const call = parsed?.call;
       if (call?.kind === 'query' && call.query?.type === 'codec.downloads') {
+        queries.count += 1;
         ws.send(answer(parsed.id, { kind: 'query', result: { type: 'codec.downloads', downloads: [download] } }));
         return;
       }
@@ -51,7 +53,7 @@ async function fakeCodecs(page, { hardware }) {
     });
     server.onMessage((message) => ws.send(message));
   });
-  return { sent };
+  return { sent, queries };
 }
 
 function encoders(page) {
@@ -59,7 +61,7 @@ function encoders(page) {
 }
 
 test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing downloads until asked', async ({ page, daemon }) => {
-  const { sent } = await fakeCodecs(page, { hardware: false });
+  const { sent, queries } = await fakeCodecs(page, { hardware: false });
   await connect(page, daemon);
   await showPanel(page, 'Outputs');
 
@@ -100,10 +102,12 @@ test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing
   await expect(offer).toBeVisible();
   expect(sent[1]).toEqual({ type: 'codec.delete', download_id: 'openh264' });
 
-  // Deleted, it leaves About.
+  // Deleted, it leaves About: once About has asked again, the list has none installed.
+  const asked = queries.count;
   await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
   await page.getByRole('menuitem', { name: 'About JStream' }).click();
   await expect(about).toBeVisible();
+  await expect.poll(() => queries.count).toBeGreaterThan(asked);
   await expect(about.locator('.about-codecs')).toHaveCount(0);
 });
 

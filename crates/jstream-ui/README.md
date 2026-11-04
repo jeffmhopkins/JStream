@@ -129,7 +129,8 @@ Contents ([Design](#design) explains the choices):
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
   video mix lists and forms, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
-  form, whose wording and when it shows are tested natively; and the calls and
+  form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
+  About dialog's list of the installed ones; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
