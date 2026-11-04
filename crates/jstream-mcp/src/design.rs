@@ -56,7 +56,8 @@ A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in se
 and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
 optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
 shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
-and changing `mode` or `duration` restarts it. \
+and changing `mode` or `duration` restarts it. To run it again from the start at the same \
+length, change `restart` to any other number. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \

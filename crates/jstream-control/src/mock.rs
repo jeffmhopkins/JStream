@@ -631,6 +631,8 @@ struct Item {
     effects: jstream_protocol::FilterChains,
     /// Whether its canvas box is locked (ADR-0096).
     locked: bool,
+    /// Where its effects run (ADR-0106).
+    effects_space: jstream_protocol::EffectsSpace,
 }
 
 impl State {
@@ -1625,6 +1627,7 @@ impl Collection {
                         blend,
                         effects: Default::default(),
                         locked: false,
+                        effects_space: jstream_protocol::EffectsSpace::Box,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1758,6 +1761,14 @@ impl Collection {
                 vec![Edit::ItemSetLocked {
                     item_id,
                     locked: old,
+                }]
+            }
+            Edit::ItemSetEffectsSpace { item_id, space } => {
+                let item = self.existing_item(&item_id)?;
+                let old = std::mem::replace(&mut item.effects_space, space);
+                vec![Edit::ItemSetEffectsSpace {
+                    item_id,
+                    space: old,
                 }]
             }
             Edit::SourceCreate {
@@ -2456,6 +2467,7 @@ impl Collection {
                     blend: item.blend,
                     transition: ItemTransition::default(),
                     locked: item.locked,
+                    effects_space: item.effects_space,
                 })
             })
             .collect()
@@ -2717,6 +2729,12 @@ fn restore_item(
         edits.push(Edit::ItemSetLocked {
             item_id: item_id.clone(),
             locked: true,
+        });
+    }
+    if !item.effects_space.is_box() {
+        edits.push(Edit::ItemSetEffectsSpace {
+            item_id: item_id.clone(),
+            space: item.effects_space,
         });
     }
     let owner = jstream_protocol::FilterOwner::Item {

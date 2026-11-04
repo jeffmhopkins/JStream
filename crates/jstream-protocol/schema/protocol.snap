@@ -2335,7 +2335,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -3961,6 +3961,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to change."
+            },
+            "space": {
+              "$ref": "#/$defs/EffectsSpace",
+              "description": "Where its effects run."
+            },
+            "type": {
+              "const": "item.set_effects_space",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "space"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
           "properties": {
             "enabled": {
@@ -4193,6 +4216,21 @@ source: crates/jstream-protocol/src/fixtures.rs
             "bus_id"
           ],
           "type": "object"
+        }
+      ]
+    },
+    "EffectsSpace": {
+      "description": "Where an item's effects run (ADR-0106, since 0.76).",
+      "oneOf": [
+        {
+          "const": "box",
+          "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+          "type": "string"
+        },
+        {
+          "const": "canvas",
+          "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+          "type": "string"
         }
       ]
     },
@@ -5625,6 +5663,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             "$ref": "#/$defs/FilterInfo"
           },
           "type": "array"
+        },
+        "effects_space": {
+          "$ref": "#/$defs/EffectsSpace",
+          "description": "Where its effects run (ADR-0106, since 0.76): see\n[`Edit::ItemSetEffectsSpace`](crate::Edit::ItemSetEffectsSpace). Omitted while\n`box`, so missing (also from an older server) parses as `box`."
         },
         "geometry": {
           "anyOf": [

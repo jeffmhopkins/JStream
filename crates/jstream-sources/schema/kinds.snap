@@ -1050,6 +1050,16 @@ source: crates/jstream-sources/tests/kinds.rs
         "live": false
       },
       {
+        "id": "restart",
+        "type": "int",
+        "min": 0,
+        "step": 1,
+        "default": 0,
+        "label": "Restart",
+        "description": "A counter: any change to it starts the count again from its start, keeping Mode and Duration. Its value means nothing else.",
+        "live": false
+      },
+      {
         "id": "format",
         "type": "enum",
         "options": [
