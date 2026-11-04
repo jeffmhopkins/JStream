@@ -16,7 +16,7 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EffectsSpace,
+    Action, BlendMode, CameraFollow, CameraMotionModifier, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EffectsSpace,
     EncoderProfile, EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32,
     FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId,
     MotionModifier, OutputId, OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta,
@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 4;
+pub const SCHEMA_VERSION: u32 = 5;
 
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
@@ -49,7 +49,8 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2, v2_to_v3, v3_to_v4];
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] =
+    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -114,6 +115,19 @@ fn v3_to_v4(value: &mut Value) -> Result<(), String> {
             .any(|i| i.get("motion").is_some())
         {
             return Err("a version 3 item has no `motion`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 5 adds a scene's camera motion and follow camera (`scenes[].camera_motion`
+/// and `scenes[].camera_follow`, ADR-0113). A version 4 file has neither, so it upgrades
+/// unchanged; one there is refused, as version 4 refused it.
+fn v4_to_v5(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        if scene.get("camera_motion").is_some() || scene.get("camera_follow").is_some() {
+            return Err("a version 4 scene has no `camera_motion` or `camera_follow`".into());
         }
     }
     Ok(())
@@ -299,6 +313,14 @@ struct FileScene {
     /// for none, so a file without cameras is unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     camera: Option<SceneCamera>,
+    /// Its camera motion (ADR-0113, schema_version 5); omitted when empty, and always
+    /// for a keyframe scene.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    camera_motion: Vec<CameraMotionModifier>,
+    /// Its follow camera (ADR-0113, schema_version 5); omitted for none, and for one
+    /// whose item has left the scene, which is inert.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    camera_follow: Option<CameraFollow>,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -599,6 +621,11 @@ impl Graph {
                     include_audio: scene.options.include_audio,
                     background: scene.options.background.clone(),
                     camera: scene.camera,
+                    camera_motion: scene.camera_motion.clone(),
+                    camera_follow: scene
+                        .camera_follow
+                        .clone()
+                        .filter(|f| scene.items.iter().any(|item| item.id == f.item_id)),
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -1286,6 +1313,28 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 Edit::OutputSetAudioBuses {
                     output_id: output.id.clone(),
                     audio_buses: vec![bus_id.clone()],
+                },
+            ));
+        }
+    }
+    // Once every item exists, which a follow camera names.
+    for scene in &file.scenes {
+        let object = format!("scene `{}`", scene.id);
+        if !scene.camera_motion.is_empty() {
+            edits.push((
+                object.clone(),
+                Edit::SceneSetCameraMotion {
+                    scene_id: scene.id.clone(),
+                    motion: scene.camera_motion.clone(),
+                },
+            ));
+        }
+        if scene.camera_follow.is_some() {
+            edits.push((
+                object,
+                Edit::SceneSetCameraFollow {
+                    scene_id: scene.id.clone(),
+                    follow: scene.camera_follow.clone(),
                 },
             ));
         }

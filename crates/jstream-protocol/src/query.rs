@@ -1,5 +1,6 @@
 //! Queries: reads with no effect on state, and their results.
 
+use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
@@ -930,6 +931,16 @@ pub struct SceneInfo {
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
+    /// Its camera motion (ADR-0113): the modifiers that change its camera as it is drawn.
+    /// It belongs to the family, so a keyframe scene reports none and draws its parent's.
+    /// Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub camera_motion: Vec<CameraMotionModifier>,
+    /// Its follow camera (ADR-0113), which glides after the pointer over a capture. It
+    /// belongs to the family, so a keyframe scene reports none and draws its parent's.
+    /// Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_follow: Option<CameraFollow>,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,

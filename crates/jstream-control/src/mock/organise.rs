@@ -58,6 +58,12 @@ impl Collection {
             Edit::SceneSetCamera { scene_id, camera } => {
                 self.set_scene_camera(scene_id, camera.as_ref(), at)
             }
+            Edit::SceneSetCameraMotion { scene_id, motion } => {
+                self.set_camera_motion(scene_id, motion, at)
+            }
+            Edit::SceneSetCameraFollow { scene_id, follow } => {
+                self.set_camera_follow(scene_id, follow.as_ref(), at)
+            }
             Edit::LabelCreate {
                 label_id,
                 name,
@@ -358,6 +364,92 @@ impl Collection {
             }
         }
         Ok(inverse)
+    }
+
+    /// The index of `scene_id` when it isn't a keyframe scene: camera motion and the
+    /// follow camera belong to the family (ADR-0113).
+    fn family_scene(
+        &self,
+        scene_id: &SceneId,
+        at: usize,
+        field: &str,
+    ) -> Result<usize, ProtocolError> {
+        let si = self.existing_scene(scene_id)?;
+        if let Some(parent) = &self.scenes[si].variant_of {
+            return Err(invalid(
+                at,
+                field,
+                format!(
+                    "keyframe scene `{scene_id}` draws its parent `{parent}`'s camera {}; set it \
+                     on `{parent}`",
+                    if field == "motion" { "motion" } else { "follow" }
+                ),
+            ));
+        }
+        Ok(si)
+    }
+
+    /// `scene.set_camera_motion` (ADR-0113), as the engine applies it.
+    fn set_camera_motion(
+        &mut self,
+        scene_id: &SceneId,
+        motion: &[jstream_protocol::CameraMotionModifier],
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let si = self.family_scene(scene_id, at, "motion")?;
+        jstream_protocol::check_camera_motion(motion)
+            .map_err(|p| invalid(at, &p.field, p.reason))?;
+        let old = std::mem::replace(&mut self.scenes[si].camera_motion, motion.to_vec());
+        Ok(vec![Edit::SceneSetCameraMotion {
+            scene_id: scene_id.clone(),
+            motion: old,
+        }])
+    }
+
+    /// `scene.set_camera_follow` (ADR-0113), as the engine applies it: the item must be
+    /// in the scene and show a display or window capture.
+    fn set_camera_follow(
+        &mut self,
+        scene_id: &SceneId,
+        follow: Option<&jstream_protocol::CameraFollow>,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let si = self.family_scene(scene_id, at, "follow")?;
+        if let Some(follow) = follow {
+            follow
+                .check()
+                .map_err(|p| invalid(at, &p.field, p.reason))?;
+            if !self.scenes[si].items.contains(&follow.item_id) {
+                return Err(invalid(
+                    at,
+                    "follow.item_id",
+                    format!("item `{}` is not in scene `{scene_id}`", follow.item_id),
+                ));
+            }
+            let followable = self
+                .items
+                .get(&follow.item_id)
+                .and_then(|item| self.sources.get(&item.source_id))
+                .is_some_and(|source| {
+                    matches!(&source.kind, jstream_protocol::SourceKind::Builtin { kind } if kind == "display" || kind == "window")
+                });
+            if !followable {
+                return Err(invalid(
+                    at,
+                    "follow.item_id",
+                    format!(
+                        "item `{}` doesn't show a display or window capture, so there is no \
+                         pointer to follow",
+                        follow.item_id
+                    ),
+                ));
+            }
+        }
+        let old = std::mem::replace(&mut self.scenes[si].camera_follow, follow.cloned());
+        Ok(vec![Edit::SceneSetCameraFollow {
+            scene_id: scene_id.clone(),
+            follow: old,
+        }])
     }
 
     fn set_scene_meta(

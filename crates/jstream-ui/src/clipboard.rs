@@ -599,6 +599,8 @@ mod tests {
             items,
             filters: Default::default(),
             camera: None,
+            camera_motion: Vec::new(),
+            camera_follow: None,
         }
     }
 

@@ -23,10 +23,15 @@ const V2: &str = include_str!("fixtures/v2.json");
 /// overrides an item's effects (ADR-0088). It must keep loading as version 1 must.
 const V3: &str = include_str!("fixtures/v3.json");
 
-/// A collection file at schema version 4, the current one: version 3 with an item's
-/// motion modifiers and a keyframe scene's override of them (ADR-0099). The same rule
-/// applies once version 5 exists.
+/// A collection file at schema version 4: version 3 with an item's motion modifiers and
+/// a keyframe scene's override of them (ADR-0099). It must keep loading as version 1
+/// must.
 const V4: &str = include_str!("fixtures/v4.json");
+
+/// A collection file at schema version 5, the current one: version 4 with a camera on
+/// scene `a`, its camera motion and a follow camera on a display capture (ADR-0113). The
+/// same rule applies once version 6 exists.
+const V5: &str = include_str!("fixtures/v5.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -248,6 +253,61 @@ fn v4_graph() -> Graph {
     graph
 }
 
+/// The v4 fixture's collection, plus display capture `screen` placed in scene `a` as
+/// item `i_screen`, a framing camera on `a`, a handheld sway on that camera and a follow
+/// camera on `i_screen` (ADR-0113), in one more batch: rev 6.
+fn v5_graph() -> Graph {
+    use jstream_protocol::{
+        CameraFollow, CameraMotionModifier, CameraProperty, Finite32, MotionClock, MotionKind,
+        SceneCamera,
+    };
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let mut graph = v4_graph();
+    let canvas = graph.state().canvas();
+    let applied = graph.apply(
+        &[
+            Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: ItemId::new("i_screen"),
+                source_id: SourceId::new("screen"),
+                transform: None,
+                geometry: None,
+                opacity: None,
+                blend: None,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("a"),
+                camera: Some(SceneCamera::framing(canvas)),
+            },
+            Edit::SceneSetCameraMotion {
+                scene_id: SceneId::new("a"),
+                motion: vec![CameraMotionModifier {
+                    modifier_id: "handheld".into(),
+                    property: CameraProperty::PositionX,
+                    kind: MotionKind::Wiggle {
+                        amplitude: f(4.0),
+                        frequency_hz: f(0.3),
+                        seed: 7,
+                        octaves: 2,
+                    },
+                    clock: MotionClock::Engine,
+                    enabled: true,
+                }],
+            },
+            Edit::SceneSetCameraFollow {
+                scene_id: SceneId::new("a"),
+                follow: Some(CameraFollow {
+                    zoom: f(1.5),
+                    ..CameraFollow::of(ItemId::new("i_screen"))
+                }),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -311,15 +371,52 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v4_graph().to_collection_json(), V4);
+    assert_eq!(v5_graph().to_collection_json(), V5);
 }
 
 #[test]
-fn the_v4_fixture_loads_exactly() {
+fn the_v5_fixture_loads_exactly() {
+    let expected = v5_graph();
+    let loaded = load(V5);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(6)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 4 upgrades unchanged: it has no camera motion or follow camera, and one there
+/// is refused.
+#[test]
+fn the_v4_fixture_loads_and_refuses_camera_motion() {
     let expected = v4_graph();
     let loaded = load(V4);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(5)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+    let mut value: Value = serde_json::from_str(V4).unwrap_or_default();
+    value["scenes"][0]["camera_motion"] = json!([]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 4, .. })
+    ));
+}
+
+/// A follow camera whose item has left the scene is inert, and isn't saved.
+#[test]
+fn an_inert_follow_camera_is_not_saved() {
+    let mut graph = v5_graph();
+    let applied = graph.apply(
+        &[Edit::ItemRemove {
+            item_id: ItemId::new("i_screen"),
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let saved: Value = serde_json::from_str(&graph.to_collection_json()).unwrap_or_default();
+    let a = saved["scenes"]
+        .as_array()
+        .and_then(|s| s.iter().find(|s| s["id"] == "a"))
+        .cloned()
+        .unwrap_or_default();
+    assert!(a.get("camera_follow").is_none(), "{a}");
+    assert!(a.get("camera_motion").is_some(), "{a}");
 }
 
 /// Version 3 upgrades unchanged: it has no motion.

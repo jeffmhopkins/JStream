@@ -429,6 +429,8 @@ fn apply_edit(
                 meta: SceneMeta::default(),
                 options: SceneOptions::default(),
                 camera: None,
+                camera_motion: Vec::new(),
+                camera_follow: None,
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
@@ -532,6 +534,8 @@ fn apply_edit(
             for (item_id, o) in scene.overrides.iter() {
                 inverse.extend(keyframe::write_edits(&scene.id, item_id, o));
             }
+            // After its items, which a follow camera names.
+            inverse.extend(crate::camera::restore(&scene));
             Ok(inverse)
         }
         Edit::SceneReorder { scene_id, index } => {

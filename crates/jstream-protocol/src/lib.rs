@@ -9,6 +9,7 @@
 
 mod activity;
 mod audio;
+mod camera_motion;
 mod command;
 mod encoder;
 mod envelope;
@@ -46,6 +47,10 @@ pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
+};
+pub use camera_motion::{
+    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
+    check_camera_motion,
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
