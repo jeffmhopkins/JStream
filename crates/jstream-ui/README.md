@@ -37,7 +37,8 @@ Contents ([Design](#design) explains the choices):
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
-  the UI was built as, the engine's protocol, the licence and links), and `Link`, the
+  the UI was built as, the engine's protocol, the licence and links, and each installed
+  third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
@@ -128,7 +129,8 @@ Contents ([Design](#design) explains the choices):
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
   video mix lists and forms, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
-  form, whose wording and when it shows are tested natively; and the calls and
+  form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
+  About dialog's list of the installed ones; and the calls and
   logic behind it and the header's Go Live, tested natively against `MockEngine`; and `mixer.rs`: `Mixer`, the
   audio mixer (the master card with its loudness and true peak, the channels folded
   under it with their meters, faders, dB fields, mutes and routing, the same as
@@ -694,7 +696,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   system browser), then About JStream. The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
-  protocol the session's `welcome`. The brand mark, the favicon and the dialog show the
+  protocol the session's `welcome`. Below the licence it lists each codec
+  `codec.downloads` reports installed, Cisco's OpenH264 on Linux, with its name and
+  version, Cisco's notice and licence link, and the licence's full text, folded, since
+  Cisco's licence asks for them wherever the app presents licensing information (#1119);
+  it reads the list each time it opens, and shows nothing while none is installed or
+  from an engine older than 0.69. The brand mark, the favicon and the dialog show the
   bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and

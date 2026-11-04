@@ -76,7 +76,7 @@ on (#349). The `gpu.device_lost` event that reports the loss does reach agents. 
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
-The `pack` tool does (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
+The `pack` tool, by contrast, reaches agents (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
 [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
 WGSL of an effect pack, which loads at once, and `pack.list` names the client that
 last wrote each pack, so a person can see that an agent installed GPU code.

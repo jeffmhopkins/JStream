@@ -1,7 +1,8 @@
 // The offer to download Cisco's OpenH264 in the Outputs panel's Encoders section and in
-// the encoder form (LNX2, ADR-0061): it names Cisco, shows Cisco's notice with a link to
-// its licence, and sends `codec.download` only when the person presses Download. The mock
-// engine has no codec backend, so the page's WebSocket is routed: `codec.downloads`,
+// the encoder form (LNX2, ADR-0061), and the installed codec in the About dialog (#1119):
+// it names Cisco, shows Cisco's notice with a link to its licence, and sends
+// `codec.download` only when the person presses Download. The mock engine has no codec
+// backend, so the page's WebSocket is routed: `codec.downloads`,
 // `codec.download` and `codec.delete` are answered here from a download the test keeps,
 // and every other message goes on to the mock daemon.
 import { test, expect, connect, showPanel } from '../fixtures.js';
@@ -24,6 +25,7 @@ async function fakeCodecs(page, { hardware }) {
     hardware_encoder: hardware,
   };
   const sent = [];
+  const queries = { count: 0 };
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result });
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
@@ -36,6 +38,7 @@ async function fakeCodecs(page, { hardware }) {
       }
       const call = parsed?.call;
       if (call?.kind === 'query' && call.query?.type === 'codec.downloads') {
+        queries.count += 1;
         ws.send(answer(parsed.id, { kind: 'query', result: { type: 'codec.downloads', downloads: [download] } }));
         return;
       }
@@ -50,7 +53,7 @@ async function fakeCodecs(page, { hardware }) {
     });
     server.onMessage((message) => ws.send(message));
   });
-  return { sent };
+  return { sent, queries };
 }
 
 function encoders(page) {
@@ -58,7 +61,7 @@ function encoders(page) {
 }
 
 test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing downloads until asked', async ({ page, daemon }) => {
-  const { sent } = await fakeCodecs(page, { hardware: false });
+  const { sent, queries } = await fakeCodecs(page, { hardware: false });
   await connect(page, daemon);
   await showPanel(page, 'Outputs');
 
@@ -81,9 +84,31 @@ test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing
   await expect(offer).toHaveCount(0);
   expect(sent).toEqual([{ type: 'codec.download', download_id: 'openh264' }]);
 
+  // About lists the installed codec with Cisco's notice and licence too (#1119).
+  const header = page.locator('header.app-header');
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await page.getByRole('menuitem', { name: 'About JStream' }).click();
+  const about = page.getByRole('dialog', { name: 'About JStream' });
+  const codecs = about.getByRole('region', { name: 'Third-party codecs' });
+  await expect(codecs).toContainText("Cisco's OpenH264 (software H.264) 2.6.0");
+  await expect(codecs).toContainText(NOTICE);
+  await expect(codecs.getByRole('link', { name: "Cisco's licence" })).toHaveAttribute('href', LICENCE);
+  await codecs.getByText('Licence terms').click();
+  await expect(codecs.locator('.codec-terms pre')).toHaveText(TERMS);
+  await page.keyboard.press('Escape');
+  await expect(about).toHaveCount(0);
+
   await installed.getByRole('button', { name: "Delete Cisco's OpenH264 (software H.264)" }).click();
   await expect(offer).toBeVisible();
   expect(sent[1]).toEqual({ type: 'codec.delete', download_id: 'openh264' });
+
+  // Deleted, it leaves About: once About has asked again, the list has none installed.
+  const asked = queries.count;
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await page.getByRole('menuitem', { name: 'About JStream' }).click();
+  await expect(about).toBeVisible();
+  await expect.poll(() => queries.count).toBeGreaterThan(asked);
+  await expect(about.locator('.about-codecs')).toHaveCount(0);
 });
 
 test('with hardware H.264 the offer waits for a software H.264 profile', async ({ page, daemon }) => {

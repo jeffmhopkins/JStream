@@ -21,6 +21,9 @@
 //!   after, and shows a failure, such as a download that didn't match JStream's pin, in
 //!   the section. Agents can't make these calls (no MCP tool carries them), so the offer
 //!   is only ever acted on by a person.
+//! - **In About.** Once installed, the About dialog lists it with the same notice, link
+//!   and terms (`InstalledCodecs`), since About is where JStream presents its licensing
+//!   information (condition 4, #1119).
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0061-source-types-and-decoding-scope-v2.md
 
@@ -127,7 +130,8 @@ pub async fn list(control: &dyn Control) -> Result<Vec<CodecDownloadInfo>, Strin
 }
 
 /// The section's shared state: the list, the download in progress and the last
-/// failure. The Outputs panel's Encoders section and the encoder form read it.
+/// failure. The Outputs panel's Encoders section, the encoder form and the About
+/// dialog's `InstalledCodecs` read it.
 #[derive(Clone, Copy)]
 pub struct CodecDownloads {
     /// What `codec.downloads` last listed.
@@ -243,6 +247,46 @@ fn Terms(download: CodecDownloadInfo) -> impl IntoView {
     }
 }
 
+/// The installed downloads in `downloads`, which the About dialog lists.
+pub fn installed(downloads: &[CodecDownloadInfo]) -> Vec<CodecDownloadInfo> {
+    downloads.iter().filter(|d| d.installed).cloned().collect()
+}
+
+/// The About dialog's list of the installed codec downloads (#1119): each one's name and
+/// version, Cisco's notice with the link to its licence, and the licence's full text,
+/// since Cisco's condition 4 asks for the whole licence text, notice included, wherever
+/// the app presents licensing information. Nothing while none is installed, or from an engine that offers none or
+/// is older than 0.69.
+#[component]
+pub(crate) fn InstalledCodecs() -> impl IntoView {
+    let state = CodecDownloads::load();
+    view! {
+        <Show when=move || state.downloads.with(|d| d.iter().any(|d| d.installed))>
+            <section class="about-codecs" aria-label="Third-party codecs">
+                <h3 class="about-codecs-title">"Third-party codecs"</h3>
+                {move || {
+                    state
+                        .downloads
+                        .with(|d| installed(d))
+                        .into_iter()
+                        .map(|download| {
+                            view! {
+                                <div class="about-codec">
+                                    <p class="about-codec-name">
+                                        {format!("{} {}", download.name, download.version)}
+                                    </p>
+                                    <Notice download=download.clone() />
+                                    <Terms download=download />
+                                </div>
+                            }
+                        })
+                        .collect_view()
+                }}
+            </section>
+        </Show>
+    }
+}
+
 /// The offer for `download`: what it is, why, Cisco's notice, and its Download button.
 #[component]
 pub(crate) fn Offer(
@@ -342,7 +386,7 @@ pub(crate) fn Downloads(
 
 #[cfg(test)]
 mod tests {
-    use super::{download_label, needed_by_draft, offer_reason};
+    use super::{download_label, installed, needed_by_draft, offer_reason};
     use jstream_control::protocol::{
         CodecDownloadInfo, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
         HardwarePreference, VideoCodec,
@@ -459,5 +503,13 @@ mod tests {
             download_label(&openh264(false, false)),
             "Download Cisco's OpenH264 2.6.0"
         );
+    }
+
+    #[test]
+    fn about_lists_only_installed_downloads() {
+        assert!(installed(&[openh264(false, false)]).is_empty());
+        let listed = installed(&[openh264(true, false)]);
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].download_id, "openh264");
     }
 }
