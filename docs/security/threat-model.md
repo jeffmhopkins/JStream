@@ -276,6 +276,16 @@ enforces them in the pinned CEF's windowless pages is not yet confirmed on a Win
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
+**Accepted** (#1143): a Linux tester install, where the kernel restricts unprivileged user
+namespaces, makes `chrome-sandbox` setuid root inside a folder the user owns
+([linux-testing › The script](../runbooks/linux-testing.md#script), step 8). Code
+already running as the user can put its own binary there, or swap one in after the
+install's checks and before its `chmod`, and have it made setuid root during the one
+`sudo` the tester approves. That is the risk of Chromium's setuid sandbox installed per
+user, accepted for tester builds. Revisit it when Linux gets a package
+([ADR-0060](../adr/0060-linux-platform-support.md) decision 9): a root-owned install
+location removes it.
+
 **Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
 source may opt its page in to a read-only `window.jstream` with the engine animation clock
 and the page's own visibility, and, per further setting, the program and preview scenes,
