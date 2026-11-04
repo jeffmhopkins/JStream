@@ -1149,6 +1149,7 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+
 **Shared values** (`values.rs`, `SharedValues`,
 [ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7). The engine
 holds them in its state beside the studio, under the collection lock: never saved, never

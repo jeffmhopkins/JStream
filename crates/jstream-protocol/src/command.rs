@@ -1709,8 +1709,24 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
-            | Action::PrivacySet { .. }
-            | Action::ValuesSet { .. } => None,
+            | Action::PrivacySet { .. } => None,
+            // Bindable, but checked as the call would be, so a saved binding never fails
+            // every press on its name or size.
+            Action::ValuesSet { name, value } => {
+                if crate::check_value_name(name, "name").is_err() {
+                    Some((
+                        "name",
+                        "a value's name is dotted segments of a-z, 0-9 and `_`, at most 64 bytes",
+                    ))
+                } else if value
+                    .as_ref()
+                    .is_some_and(|value| crate::check_value_size(value, "value").is_err())
+                {
+                    Some(("value", "a value is at most 16 KiB as JSON"))
+                } else {
+                    None
+                }
+            }
         }
     }
 }

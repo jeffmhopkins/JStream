@@ -90,6 +90,17 @@ fn a_set_is_listed_and_announced_once() {
         [("status.text".to_owned(), None)]
     );
     assert_eq!(list(&control, Some("status")), []);
+    // Nor an audited change: the activity log stays empty.
+    match query(
+        &control,
+        Query::ActivityList {
+            after_seq: None,
+            limit: None,
+        },
+    ) {
+        Ok(QueryResult::ActivityList { entries, .. }) => assert_eq!(entries, []),
+        other => panic!("not an activity list: {other:?}"),
+    }
 }
 
 #[test]

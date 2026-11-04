@@ -1,9 +1,9 @@
 //! Shared values (0.78,
 //! [ADR-0102](../../../docs/adr/0102-page-api-for-browser-sources.md) decision 7): named
 //! JSON values a client sets with `values.set` and reads with `values.list`, which
-//! browser source pages granted them read through `window.jstream`. They are held by the
-//! engine, never saved, never `rev` and never an undo step, so they are not collection
-//! state. They are not ADR-0032's live values, which are a gesture's uncommitted edits.
+//! browser source pages granted them will read through `window.jstream` (ADR-0102 part
+//! 2). They are held by the engine, never saved, never `rev` and never an undo step, so
+//! they are not collection state. They are not ADR-0032's live values, which are a gesture's uncommitted edits.
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

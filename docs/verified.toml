@@ -459,7 +459,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:ae9f19209bed63a2", by = "agent:claude", note = "Re-read and edited: the values group tool joins the noun list and the destructiveHint list, as tools.rs and server.rs now say" }
+stamp = { hash = "b3:c3d43d022b092a52", by = "agent:claude", note = "Re-read after the MCP README's values sentence became future tense (pages will read values, ADR-0102 part 2) and its example changed to a counter; the noun list and destructiveHint list here still match tools.rs." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
 stamp = { hash = "b3:812669dd88aa5feb", by = "agent:claude", note = "Re-read and edited: the values group tool joins the noun list and the destructiveHint list, as tools.rs and server.rs now say" }
@@ -573,7 +573,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:706c7f685e00c3b2", by = "agent:obs-ui-thread", note = "Body adds font.list (0.68, ADR-0092) to the queries; checked against query.rs, plugin.rs, fixtures.rs, version.rs, the snapshots, the protocol README and the mock (lib.rs, mock.rs)." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:ff6649aca6a73d6e", by = "agent:claude", note = "Re-read after the mock's values store changed from bare JSON values to SharedValue entries keyed by name (so the lib needs no serde_json without the ws feature): the mock still mirrors values.set's checks, 256-name limit and change-only values.changed, and values.list's prefix filter, as described." }
+stamp = { hash = "b3:bce955d0cd5f3ff8", by = "agent:claude", note = "Re-read after review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, and values.rs's doc says pages will read values in part 2; the paragraph's action, query, event, 0.78 and never-saved-or-undone sentence still hold. The mock gained a values test only." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "output.set_audio_buses (protocol 0.59): one bus per track, one track so far, blocks its bus's delete, delete.plan moves the output to master, refused while it runs; checked against command.rs, output.rs, version.rs, fixtures and plugin.rs, the graph and mock (mock.rs, mock/audio.rs, control README), and the snapshots" }
@@ -600,7 +600,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:7b1e34adc5bd9026" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/README.md"]
-stamp = { hash = "b3:6e4720ea875f16a1", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine" }
+stamp = { hash = "b3:837fff47fd96cb39", by = "agent:claude", note = "Re-read after review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, and values.rs's doc says pages will read values in part 2; the paragraph's action, query, event, 0.78 and never-saved-or-undone sentence still hold. The mock gained a values test only." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
 stamp = { hash = "b3:d2e4f624842e77f2", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine" }
@@ -615,7 +615,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Con
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: edit list adds bus.set_monitor (a bus's monitor, protocol 0.42); re-read the rest against the mock's set_monitor and the snapshots." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:4e31ecfe5f477ef5", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine" }
+stamp = { hash = "b3:80db1af1711b1556", by = "agent:claude", note = "Re-read after review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, and values.rs's doc says pages will read values in part 2; the paragraph's action, query, event, 0.78 and never-saved-or-undone sentence still hold. The mock gained a values test only." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -714,7 +714,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "Re-read against protocol transition.rs and lib.rs: a new built-in transition kind is descriptor data (ADR-0037), no op, wire type or version change; the section's lists of presets now name stinger." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/values.rs"]
-stamp = { hash = "b3:bc5c4fc8e93d2631", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine" }
+stamp = { hash = "b3:7bf1ce1ea1c4a840", by = "agent:claude", note = "Re-read after review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, and values.rs's doc says pages will read values in part 2; the paragraph's action, query, event, 0.78 and never-saved-or-undone sentence still hold. The mock gained a values test only." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:1b97d4234d3d0075", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine" }
@@ -1383,7 +1383,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:706c7f685e00c3b2", by = "agent:obs-ui-thread", note = "Added the font.list bullet (MOCK_FONTS, two made-up Mock Sans fonts whose files don't exist) for mock.rs and lib.rs. ARCH#protocol changed by 0.68's font.list." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:ff6649aca6a73d6e", by = "agent:claude", note = "Re-read after the mock's values store changed from bare JSON values to SharedValue entries keyed by name (so the lib needs no serde_json without the ws feature): the mock still mirrors values.set's checks, 256-name limit and change-only values.changed, and values.list's prefix filter, as described." }
+stamp = { hash = "b3:bce955d0cd5f3ff8", by = "agent:claude", note = "Re-read after adding the mock test shared_values_follow_the_engine (change-only values.changed, prefix filter, 256 cap with replace and remove, refusals): the mock bullet's description of values.set and values.list still holds." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "Added the output-bus bullet to the mock's checks: output.set_audio_buses's errors and bus.delete's output blocker, matching mock.rs and mock/audio.rs; ARCH#protocol's new output.set_audio_buses paragraph agrees" }
@@ -1422,7 +1422,7 @@ stamp = { hash = "b3:50448c966c4de2f0" }
 stamp = { hash = "b3:706c7f685e00c3b2", by = "agent:obs-ui-thread", note = "lib.rs re-exports MOCK_FONTS; mock.rs answers font.list with it. Purpose doesn't list queries, so it holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock.rs"]
-stamp = { hash = "b3:ff6649aca6a73d6e", by = "agent:claude", note = "Re-read after the mock's values store changed from bare JSON values to SharedValue entries keyed by name (so the lib needs no serde_json without the ws feature): the mock still mirrors values.set's checks, 256-name limit and change-only values.changed, and values.list's prefix filter, as described." }
+stamp = { hash = "b3:bce955d0cd5f3ff8", by = "agent:claude", note = "Re-read after adding the mock's shared values test only; the purpose is unchanged." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/audio.rs"]
 stamp = { hash = "b3:672d54388c96b2bc", by = "agent:bus-outputs", note = "The mock now handles output.set_audio_buses (ghost output, not one bus, a virtual camera, ghost bus), lists audio_buses in output.list and blocks bus.delete for an output carrying the bus with the graph's reason; the purpose still holds" }
@@ -1446,13 +1446,13 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): ws_web.rs gains main's error handler; State::close still takes the binary queue, so the binary stream ends on error as on close; contents text holds" }
 
 ["CRATE-jstream-core#design"."body"]
-stamp = { hash = "b3:04b499ed6459f78e", by = "agent:claude", note = "Re-read and edited: a Shared values paragraph for values.rs SharedValues held in State beside studio, values.set via the protocol checks and 256 limit, values.changed only on a real change, excluded from the audit and activity log in audit.rs records() like live.set, values.list by name; tests/values.rs covers it through InProcessControl" }
+stamp = { hash = "b3:e832038e16b54c6a", by = "agent:claude", note = "Re-read after adding the missing blank line before the Shared values paragraph (it now renders as its own paragraph) and the values test's activity.list assertion; the paragraph's in-memory, never-saved, change-only and audit-exclusion claims hold, and the protocol README's new bind-time sentence agrees with it." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:80a1c5684851104d", by = "agent:claude", note = "Re-read and edited: a Shared values paragraph for values.rs SharedValues held in State beside studio, values.set via the protocol checks and 256 limit, values.changed only on a real change, excluded from the audit and activity log in audit.rs records() like live.set, values.list by name; tests/values.rs covers it through InProcessControl" }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:27f4778ef2800d4e", by = "agent:claude", note = "Re-read and edited: a Shared values paragraph for values.rs SharedValues held in State beside studio, values.set via the protocol checks and 256 limit, values.changed only on a real change, excluded from the audit and activity log in audit.rs records() like live.set, values.list by name; tests/values.rs covers it through InProcessControl" }
+stamp = { hash = "b3:8ef95743d4fc9ff4", by = "agent:claude", note = "Re-read after adding the missing blank line before the Shared values paragraph (it now renders as its own paragraph) and the values test's activity.list assertion; the paragraph's in-memory, never-saved, change-only and audit-exclusion claims hold, and the protocol README's new bind-time sentence agrees with it." }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:dfba2c26e51ac3e0", by = "agent:claude", note = "Re-read and edited: a Shared values paragraph for values.rs SharedValues held in State beside studio, values.set via the protocol checks and 256 limit, values.changed only on a real change, excluded from the audit and activity log in audit.rs records() like live.set, values.list by name; tests/values.rs covers it through InProcessControl" }
@@ -1662,7 +1662,7 @@ stamp = { hash = "b3:639174704efcdb98", by = "agent:timer", note = "#1027: Live 
 stamp = { hash = "b3:ae61a1c75e1f08a1", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094): Transitions › Cameras covers the pass cameras with live values resolved as committed ones (removed override falls back to the parent, removed parent camera makes variants 2D), from_camera, lerp_camera with the Move's timing, a 3D-to-2D Move as a Fade, a Fade keeping each side's camera, a stinger's items through their own scene's camera in a depth run one past every held one (TrackCameras.overlay_run), and a switch cutting a transition short holding each item's camera and run (Seen::Held), moving one camera for every track only when the screen had one (shared_camera), else fading. Checked against snapshot.rs, transition.rs, engine.rs and the tests (a_pass_draws_through..., a_move_moves_the_camera..., a_switch_mid_fade_keeps_each_leaving_items_camera, a_stingers_items_keep_their_scenes_camera incl. a stinger cutting one short, moves_cut_short_keep_moving_one_camera). The body also holds main's stinger paragraph and, from #1048, the Shader sources paragraph, which touches chains and live sources, not cameras. | kept from the merged side: Transitions paragraph: stinger runs like fade and move, and a new paragraph says how: cut_under at cut_ms with no effect, the stinger scene's items as Track::Through by their own effects and delays plus stagger, the whole duration, a missing scene cutting at the cut point, and sources shown when it starts (browser restart_on_show). Checked against transition.rs, snapshot.rs and a_stinger_plays_its_scene_over_the_cut / a_snapshot_shows_the_stinger_cover_the_cut, which ran on this machine's GPU adapter." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/values.rs"]
-stamp = { hash = "b3:5c49fe3df8b8d61b", by = "agent:claude", note = "Re-read and edited: a Shared values paragraph for values.rs SharedValues held in State beside studio, values.set via the protocol checks and 256 limit, values.changed only on a real change, excluded from the audit and activity log in audit.rs records() like live.set, values.list by name; tests/values.rs covers it through InProcessControl" }
+stamp = { hash = "b3:7bd71026afc70549", by = "agent:claude", note = "Re-read after adding the missing blank line before the Shared values paragraph (it now renders as its own paragraph) and the values test's activity.list assertion; the paragraph's in-memory, never-saved, change-only and audit-exclusion claims hold, and the protocol README's new bind-time sentence agrees with it." }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
 stamp = { hash = "b3:de380460fc684c42", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Preview streams paragraph now says the GPU view shares devices and a preview join moves a GPU-path device to the CPU path in place (devices.rs); capture spec text unchanged and true" }
@@ -1881,7 +1881,7 @@ stamp = { hash = "b3:639174704efcdb98", by = "agent:timer", note = "#1027: live.
 stamp = { hash = "b3:ae61a1c75e1f08a1", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094): the Snapshot bullet says a 3D scene's pass carries its camera (own and parent cameras, live values resolved through them) to every item, and a Move between 3D scenes moves the camera. Checked against snapshot.rs (Planner::camera, PassCamera, LiveParams::camera, TrackCameras with depth_run and overlay_run, fill_tracks), transition.rs (Seen, shared_camera, camera_of, the 3D/2D Move check beside FADE | STINGER), engine.rs's switch and tests/transitions.rs's camera tests. Merged main with #1048 (shader sources run in the engine, ADR-0093 part 2): the body gains shader source kinds among the hot-reloaded packs; engine.rs passes update.sources to set_effects and snapshot.rs passes the shown frame version to Chain::of, away from the camera code. The module descriptions hold. | kept from the merged side: Re-read against transition.rs (Run.stinger, cut_under, through), snapshot.rs (the stinger scene drawn over a transition) and the new transitions tests; the purpose's description of the core holds." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/values.rs"]
-stamp = { hash = "b3:5c49fe3df8b8d61b", by = "agent:claude", note = "Re-read: the crate's purpose is unchanged; the shared-value store is engine runtime state like the studio, covered in design" }
+stamp = { hash = "b3:7bd71026afc70549", by = "agent:claude", note = "Re-read after the values test gained an assertion that activity.list stays empty after a set; the purpose is unchanged." }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
 stamp = { hash = "b3:de380460fc684c42", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Runtime bullet and test list re-read against the VideoDevices::on_context plumbing: captures.rs, devices.rs and gpu_capture.rs tests named; preview sharing still holds" }
@@ -1965,7 +1965,7 @@ stamp = { hash = "b3:adbde39f9545f9a4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:da72708122d6f7b0", by = "agent:profile-builder", note = "Engine load bullet: serve.rs hands WindowsThreadCpu/LinuxThreadCpu to the engine for profile.get's threads, none on macOS; dep on core design (Locking's profile locks, and #1049's png preview codec) leaves it holding" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#design"]
-stamp = { hash = "b3:04b499ed6459f78e", by = "agent:claude", note = "Re-read against core design's new shared-values paragraph: the daemon hosts the engine unchanged; values live in engine memory and the daemon saves nothing new" }
+stamp = { hash = "b3:e832038e16b54c6a", by = "agent:claude", note = "Re-read after the core README's Shared values paragraph got its blank line (formatting only); the daemon does nothing with shared values and nothing here changes." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
 stamp = { hash = "b3:26b12e32717aed1a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: the server README's new Message size bullet (4 MiB request limit, too_large read through envelope.rs with at most a 256-byte id echoed, 16 MiB frame limit closing with 1009) and MCP table rows (-32000 too_large, 413 over 16 MiB) don't change how the daemon builds and runs the server; the daemon configures no limit." }
@@ -2346,10 +2346,10 @@ stamp = { hash = "b3:0f0f40966c64dd97", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:f68b05acca19fd29", by = "agent:claude", note = "#1072 output.set_path: Outputs bullet says set_path replaces a recording's path, checked like create, invalid on other outputs, undone by the previous path, touching the target prop" }
+stamp = { hash = "b3:c3b131a3ce46f8fc", by = "agent:claude", note = "Re-read after hotkey.set started refusing a values.set with a bad name or oversized value via bind_problem (test a_bound_value_set_is_checked_at_bind_time) and the hotkeys bullet listing it; the purpose still holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#design"]
-stamp = { hash = "b3:27f4778ef2800d4e", by = "agent:claude", note = "Re-read against protocol design's shared values: they are engine runtime state, not collection state, so the graph holds none and Graph::query returns None for values.list as for other runtime reads" }
+stamp = { hash = "b3:8ef95743d4fc9ff4", by = "agent:claude", note = "Re-read after hotkey.set started refusing a values.set with a bad name or oversized value via bind_problem (test a_bound_value_set_is_checked_at_bind_time) and the hotkeys bullet listing it; the purpose still holds." }
 
 ["CRATE-jstream-graph#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-graph"]
 stamp = { hash = "b3:95dbeb7275d807fb" }
@@ -2418,7 +2418,7 @@ stamp = { hash = "b3:a07e1dea874fcafa", by = "agent:obs-ui-thread", note = "The 
 stamp = { hash = "b3:8960b4b274aed818", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Edited the Outputs bullet to list the DOS device file-name refusal (#503: NUL, CON, PRN, AUX, COM0-9/COM1-3 superscripts, LPT likewise, CONIN$/CONOUT$, any case, any extension), matching target.rs's new is_dos_device_name mirror of check_asset_path's rule; dep on protocol Design re-read, consistent" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests.rs"]
-stamp = { hash = "b3:9fb734220a616e6c", by = "agent:obs-ui-thread", note = "The graph applies item.set_locked (undoable, restored by item.remove's undo), reports and persists locked without a schema bump; ARCH data-model's Item.locked matches. The purpose holds. | merge: the merge brought #1044 (3D scenes: scene.set_camera, SceneInfo.camera, protocol 0.70) and #1053 (3D scenes on the canvas and in scene Properties): the graph applies scene.set_camera and saves a scene's camera; tests.rs's conflict (this PR's lock test beside main's new mod cameras) kept both. This PR's item.set_locked and saved locked hold. | kept from the merged side: Review B2: deps::blockers now lists transition presets whose settings refer to the target (entity transition, settings.<param>), and delete.plan sets them to null with one transition.update per preset; the reference-rule and delete.plan paragraphs now say so. The new graph test covers the refusal, the plan and its undo. | kept from the merged side: Purpose unchanged: one test's expected reason updated to the new wording" }
+stamp = { hash = "b3:10fce3380f83f22c", by = "agent:claude", note = "Re-read after hotkey.set started refusing a values.set with a bad name or oversized value via bind_problem (test a_bound_value_set_is_checked_at_bind_time) and the hotkeys bullet listing it; the purpose still holds." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/cameras.rs"]
 stamp = { hash = "b3:3eeaa8919daa0401", by = "agent:claude-3d-cameras", note = "Scene model gains camera; scene.set_camera paragraph checked against camera.rs (validate, variant refused without a parent camera, removal drops overrides with inverse, effective_camera, delete inverse) and the persisted omitted-by-default fields list. | merge: Merged main with #1030 (stinger transitions, HTML browser pages, restart on show) and #1037 (backdrop cap, keyframe effects Cancel): the body gains main's transition preset blockers and delete.plan's transition.update; tests.rs gains stinger tests next to this branch's camera tests; the scene.set_camera paragraph still holds." }
@@ -2436,7 +2436,7 @@ stamp = { hash = "b3:b53faf62bb51d5b8", by = "agent:claude", note = "#1072 outpu
 stamp = { hash = "b3:83974a87d69a2b5b", by = "agent:claude", note = "True at this head (#626 review B3). Its dependency ARCH data-model changed here only in the Not-yet line, which no longer names scene_mask (this PR), and in the wave's flips, privacy and output-keyed session passages. This PR changes no jstream-graph file; its body, deps and files are as on the base and hold." }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:b3f98512e82603f8", by = "agent:claude", note = "Re-read and edited: the destructive tools now list values with the reason; tools.rs test, server instructions and tool snapshot match (35 tools)" }
+stamp = { hash = "b3:afd491c2eda58814", by = "agent:claude", note = "Re-read after the values sentence became future tense (pages will read them, ADR-0102 part 2) with a counter as the example; the 35 tools, values ops and destructive reason still hold." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:7fb6d18b667e96dd", by = "agent:claude", note = "Re-read and edited: the destructive tools now list values with the reason; tools.rs test, server instructions and tool snapshot match (35 tools)" }
@@ -3417,7 +3417,7 @@ stamp = { hash = "b3:5fb43febc7970009", by = "agent:ab9c156e", note = """#486 ro
 stamp = { hash = "b3:fc19c48180f9c975", by = "agent:builder-core", note = "#843: limits.rs's Caps limiter makes a growth past the memory or table cap a trap (CapReached, Error::MemoryLimit in error.rs), a memory starting above the cap fails the load the same way, and a growth past the module's own maximum still answers -1; the limits paragraph, the tests list and Not here (core now saves plugins and holds grants to the manifest; the data folder and file imports aren't anywhere) say so" }
 
 ["CRATE-jstream-protocol#design"."body"]
-stamp = { hash = "b3:27f4778ef2800d4e", by = "agent:claude", note = "Re-read and edited: PROTOCOL_VERSION is 0.78 for values.set/values.list/values.changed (0.75-0.77 claimed by open PRs); new shared-values paragraph matches values.rs (name and 16 KiB checks, 256 names, prefix_covers, value omitted or null removes, nested null ordinary), plugin scope values.list read and values.set never, hotkeys may bind values.set; fixtures and snapshots gain the new messages, round-trip null check exempts value like settings" }
+stamp = { hash = "b3:8ef95743d4fc9ff4", by = "agent:claude", note = "Re-read after bind_problem gained a ValuesSet arm (name and size checked at bind time, at action.name and action.value) and the values paragraph's hotkey bullet now says so and that the value is saved with the binding; values.rs's module doc now says pages will read values in part 2. The rest of the paragraph holds." }
 
 ["CRATE-jstream-protocol#design"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63" }
@@ -3447,7 +3447,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Des
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: new Monitors paragraph (bus.set_monitor, BusMonitor fields, taps, device never looked up, unknown tap refused on monitor.tap, the engine not playing them yet); bus.delete's undo and the touched-property and 0.19 EntityKind paragraphs name bus.set_monitor; snapshots carry the edit, the field and the types." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:4e31ecfe5f477ef5", by = "agent:claude", note = "Re-read and edited: PROTOCOL_VERSION is 0.78 for values.set/values.list/values.changed (0.75-0.77 claimed by open PRs); new shared-values paragraph matches values.rs (name and 16 KiB checks, 256 names, prefix_covers, value omitted or null removes, nested null ordinary), plugin scope values.list read and values.set never, hotkeys may bind values.set; fixtures and snapshots gain the new messages, round-trip null check exempts value like settings" }
+stamp = { hash = "b3:80db1af1711b1556", by = "agent:claude", note = "Re-read after bind_problem gained a ValuesSet arm (name and size checked at bind time, at action.name and action.value) and the values paragraph's hotkey bullet now says so and that the value is saved with the binding; values.rs's module doc now says pages will read values in part 2. The rest of the paragraph holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -3546,7 +3546,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "The presets paragraph now lists stinger among kind.list's transition kinds and gives its settings: scene (a scene reference or null to cut), cut_ms (default 500, at most the duration) and stagger_ms. Checked against transition.rs's descriptor; no op, wire type or version change." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/values.rs"]
-stamp = { hash = "b3:bc5c4fc8e93d2631", by = "agent:claude", note = "Re-read and edited: PROTOCOL_VERSION is 0.78 for values.set/values.list/values.changed (0.75-0.77 claimed by open PRs); new shared-values paragraph matches values.rs (name and 16 KiB checks, 256 names, prefix_covers, value omitted or null removes, nested null ordinary), plugin scope values.list read and values.set never, hotkeys may bind values.set; fixtures and snapshots gain the new messages, round-trip null check exempts value like settings" }
+stamp = { hash = "b3:7bf1ce1ea1c4a840", by = "agent:claude", note = "Re-read after bind_problem gained a ValuesSet arm (name and size checked at bind time, at action.name and action.value) and the values paragraph's hotkey bullet now says so and that the value is saved with the binding; values.rs's module doc now says pages will read values in part 2. The rest of the paragraph holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:1b97d4234d3d0075", by = "agent:claude", note = "Re-read and edited: PROTOCOL_VERSION is 0.78 for values.set/values.list/values.changed (0.75-0.77 claimed by open PRs); new shared-values paragraph matches values.rs (name and 16 KiB checks, 256 names, prefix_covers, value omitted or null removes, nested null ordinary), plugin scope values.list read and values.set never, hotkeys may bind values.set; fixtures and snapshots gain the new messages, round-trip null check exempts value like settings" }
@@ -3567,7 +3567,7 @@ stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Pur
 stamp = { hash = "b3:d61ec77f35ffdcfa", by = "agent:builder-b8rnvf", note = "D9 0.42: audio.rs gains BusMonitor {device, tap}, MonitorTap (pre_filters, post_filters, unknown skipped in the schema), BusMonitor::problem and MAX_MONITOR_DEVICE_LEN; BusInfo.monitor; Edit::BusSetMonitor named and classified (plugin.rs); edit list and Audio bullet updated; version paragraph says 0.42 for bus monitors; fixtures and parity cover set, change, removal, a deleted bus's monitor and three refusals." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:4e31ecfe5f477ef5", by = "agent:claude", note = "Re-read: lists values.set among the actions, values.list among the queries and values.changed among the events, from values.rs; PROTOCOL_VERSION 0.78 noted in design" }
+stamp = { hash = "b3:80db1af1711b1556", by = "agent:claude", note = "Re-read after bind_problem began checking a bound values.set and values.rs's doc moved to future tense; the purpose and lists are unchanged." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:b449d4b836765cf9", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "#973, whole PR: encoder.rs's dedicated doc says it is omitted when false, for an output whose video chain was empty when it started; a stream or recording with a video filter is dedicated, a virtual camera never (it opens no session). Protocol minor 0.60 (renumbered from 0.61 in the queue), no wire change." }
@@ -3666,7 +3666,7 @@ stamp = { hash = "b3:12085313843efe02", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:985b1fcce3e92b97", by = "agent:claude", note = "transition.rs gains the stinger kind (STINGER, exported from lib.rs) with scene, cut_ms and stagger_ms; the Transitions bullet now lists it. Re-read against builtin_kinds and the kinds test." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/values.rs"]
-stamp = { hash = "b3:bc5c4fc8e93d2631", by = "agent:claude", note = "Re-read: lists values.set among the actions, values.list among the queries and values.changed among the events, from values.rs; PROTOCOL_VERSION 0.78 noted in design" }
+stamp = { hash = "b3:7bf1ce1ea1c4a840", by = "agent:claude", note = "Re-read after bind_problem began checking a bound values.set and values.rs's doc moved to future tense; the purpose and lists are unchanged." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
 stamp = { hash = "b3:1b97d4234d3d0075", by = "agent:claude", note = "Re-read: lists values.set among the actions, values.list among the queries and values.changed among the events, from values.rs; PROTOCOL_VERSION 0.78 noted in design" }

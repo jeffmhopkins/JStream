@@ -3187,6 +3187,94 @@ mod tests {
         assert!(drain(&mut events).is_empty());
     }
 
+    /// Shared values (ADR-0102 decision 7) as the engine runs them: change-only
+    /// `values.changed`, the prefix filter, the 256-name cap with replace and remove, and
+    /// refusals that change nothing.
+    #[test]
+    fn shared_values_follow_the_engine() {
+        use jstream_protocol::{MAX_VALUE_BYTES, MAX_VALUES, SharedValue};
+        use serde_json::{Value, json};
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let mut events = control.events();
+        let set = |name: &str, value: Option<Value>| {
+            block_on(control.call(Call::Action {
+                action: Action::ValuesSet {
+                    name: name.into(),
+                    value,
+                },
+            }))
+            .map(|_| ())
+            .map_err(|error| code(&error))
+        };
+        let list = |prefix: Option<&str>| -> Vec<SharedValue> {
+            let call = Call::Query {
+                query: Query::ValuesList {
+                    prefix: prefix.map(Into::into),
+                },
+            };
+            match block_on(control.call(call)).expect("values.list").result {
+                CallResult::Query {
+                    result: QueryResult::ValuesList { values },
+                } => values,
+                other => panic!("not a values list: {other:?}"),
+            }
+        };
+        let changes = |events: Vec<Event>| -> Vec<(String, Option<Value>)> {
+            events
+                .into_iter()
+                .filter_map(|event| match event {
+                    Event::ValuesChanged { name, value, .. } => Some((name, value)),
+                    _ => None,
+                })
+                .collect()
+        };
+
+        set("status.text", Some(json!("On air"))).expect("set");
+        set("status.text", Some(json!("On air"))).expect("same again");
+        set("statusbar", Some(json!(1))).expect("set");
+        assert_eq!(
+            changes(drain(&mut events)),
+            [
+                ("status.text".to_owned(), Some(json!("On air"))),
+                ("statusbar".to_owned(), Some(json!(1))),
+            ]
+        );
+        assert_eq!(
+            list(Some("status")),
+            [SharedValue {
+                name: "status.text".into(),
+                value: json!("On air"),
+            }]
+        );
+        set("status.text", None).expect("remove");
+        set("status.text", None).expect("remove again");
+        assert_eq!(
+            changes(drain(&mut events)),
+            [("status.text".to_owned(), None)]
+        );
+
+        // Refusals change nothing and send nothing.
+        assert_eq!(set("Status", Some(json!(1))), Err(Some("invalid_argument")));
+        let big = json!("x".repeat(MAX_VALUE_BYTES));
+        assert_eq!(set("statusbar", Some(big)), Err(Some("invalid_argument")));
+        assert_eq!(list(None)[0].value, json!(1));
+
+        // The cap: a new name past 256 is refused; a replace still works, and a removal
+        // makes room.
+        for n in 1..MAX_VALUES {
+            set(&format!("v{n}"), Some(json!(n))).expect("fill");
+        }
+        assert_eq!(
+            set("one_more", Some(json!(0))),
+            Err(Some("invalid_argument"))
+        );
+        set("statusbar", Some(json!(2))).expect("replace on a full store");
+        set("statusbar", None).expect("remove");
+        set("one_more", Some(json!(0))).expect("room again");
+        assert_eq!(list(None).len(), MAX_VALUES);
+    }
+
     #[test]
     fn control_is_dyn_compatible_and_thread_safe() {
         fn send_sync<T: Send + Sync + ?Sized>() {}

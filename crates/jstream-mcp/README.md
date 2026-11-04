@@ -78,7 +78,8 @@ WGSL of an effect pack, which loads at once, and `pack.list` names the client th
 last wrote each pack, so a person can see that an agent installed GPU code.
 The `values` tool does (`values.set`, `values.list`,
 [ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)): an agent sets the
-shared values browser source pages read, such as a score or a status line.
+shared values that browser source pages will read (ADR-0102 part 2), such as a counter
+or a status line.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
