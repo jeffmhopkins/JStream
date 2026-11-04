@@ -252,7 +252,7 @@ impl Touched {
             Edit::OutputCreate { output_id, .. } | Edit::OutputDelete { output_id } => {
                 self.exists.insert(Object::Output(output_id.clone()));
             }
-            Edit::OutputSetTarget { output_id, .. } => {
+            Edit::OutputSetTarget { output_id, .. } | Edit::OutputSetPath { output_id, .. } => {
                 self.prop(Object::Output(output_id.clone()), Prop::Target);
             }
             Edit::OutputSetEncoder {

@@ -131,7 +131,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-aac` | JStream's AAC-LC encoder, Linux's AAC path ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), within [ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)'s limits): MPEG-2 AAC LC tools only, encode only; `f32` samples in, raw access units and the `AudioSpecificConfig` out. `jstream-platform-linux` puts it behind `AudioEncoder` | no |
-| 0 | `jstream-anim` | Keyframe-scene model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md)): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies | no |
+| 0 | `jstream-anim` | Keyframe-scene and motion model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md), [ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)): a variant's overrides and their inverses, effective values over the live parent, the switch plan between keyframes, motion modifiers and timelines; generic over geometry, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
@@ -305,7 +305,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output that carries audio an audio chain, and their filters can't hold a reference
   (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
-  [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
+  [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
+  browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -650,7 +651,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
-  0.9, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
+  0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
@@ -735,7 +736,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a plugin enabled or disabled, with why the engine disabled it. Likewise
   `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
   engine quarantined because a GPU device loss was blamed on it, which the event
-  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). A plugin calls the API
+  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). The effect packs
+  themselves are not for a person only: the actions `pack.write` and `pack.delete` and
+  the queries `pack.list` and `pack.read` (0.72,
+  [ADR-0097](adr/0097-agents-write-effect-packs.md)) write, remove, list and read a pack
+  in the engine's packs folder, so an agent can author a shader over MCP. A write is
+  checked, staged in `.staging/<pack>`, loaded there, and swapped in with two renames
+  while the pack watcher is held, so it loads at once and a failed one keeps the old
+  version; `pack.list` names who last wrote each pack, and every write and delete is in
+  the activity log. Plugins get `pack.list` and `pack.read` (class `read`), never the
+  writes. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -816,6 +826,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
+  `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
+  where the frame time went over the last few seconds: each drawing thread's frame time
+  against the budget, the costliest units (a source's upload, a capture, a chain, a
+  scene pass, the composite), each source's paints, looks and builds, the planner, and
+  each named thread's CPU;
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
@@ -924,7 +939,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -933,7 +948,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
   quarantined after a GPU device loss
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
-  `gpu.device_lost` event that reports it reaches agents.
+  `gpu.device_lost` event that reports it reaches agents. The `pack.*` ops are not
+  held back: an agent may write, read and delete an effect pack's WGSL
+  ([ADR-0097](adr/0097-agents-write-effect-packs.md)), and `pack.list` shows a person
+  which client last wrote each.
 - **Events** reach agents through the `events` tool, which returns the engine's events
   after a cursor from a bounded buffer and reports any it dropped
   ([ADR-0036](adr/0036-mcp-events-polling-tool.md)). The high-rate `stats.tick` is kept
@@ -954,13 +972,17 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
   [jstream-mcp › Design](../crates/jstream-mcp/README.md#design).
+- **Profiling:** the `profile` tool's `profile.get` tells an agent where a frame's time
+  goes, by thread, scene, item, chain and source, so it can find what makes a scene slow,
+  change it, and measure again
+  ([ADR-0103](adr/0103-per-item-performance-profile.md)).
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pairing` and `ui_settings`;
+  `pack`, `pairing` and `ui_settings`;
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets
@@ -1054,10 +1076,19 @@ centre, stacking order breaking ties; there is still no depth buffer. In a Fade 
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had.
+A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
+per placement into a canvas-sized layer, through the scene's camera or the item's own
+viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
+under a studio rig fixed to the camera, or unlit; the layer is then placed flat
+(`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
+model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
+jitter, and the GPU's own near clip is ADR-0050's near plane.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
-src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
-target under the item, and overlay, difference and exclusion mix sRGB-encoded values. The composite pass writes premultiplied linear light into `Rgba16Float`; a
+src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
+target under the item, and overlay, difference, exclusion, `normal_srgb` and
+`additive_srgb` mix sRGB-encoded values, the last two to match a browser
+([ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter

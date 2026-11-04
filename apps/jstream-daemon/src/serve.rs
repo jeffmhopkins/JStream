@@ -140,6 +140,11 @@ pub fn engine(
     engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     engine.set_process_cpu(Arc::new(jstream_platform_linux::LinuxProcessCpu));
+    // `profile.get`'s threads (ADR-0103); macOS lists none yet.
+    #[cfg(windows)]
+    engine.set_thread_cpu(Arc::new(jstream_platform_windows::WindowsThreadCpu));
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    engine.set_thread_cpu(Arc::new(jstream_platform_linux::LinuxThreadCpu));
     engine.start_stats_heartbeat();
     Ok(engine)
 }

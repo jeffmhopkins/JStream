@@ -4,7 +4,7 @@
 //! Layer 2: no `unsafe`. The scene graph is the same layer, so the engine builds the
 //! [`Scene`] snapshot and calls in.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, crates/jstream-render/README.md#purpose, crates/jstream-render/README.md#design, crates/jstream-render/README.md#filters, crates/jstream-render/README.md#testing, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0107-3d-models.md
 
 #![forbid(unsafe_code)]
 
@@ -18,6 +18,7 @@ mod filter;
 mod gpu;
 mod image;
 mod mips;
+mod model;
 mod place;
 mod scene;
 pub mod transition;
@@ -35,6 +36,7 @@ pub use filter::{
 pub use gpu::{OpenOptions, adapter_available};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
+pub use model::{GpuModel, Lighting, ModelDraw};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]

@@ -8,12 +8,14 @@ use crate::error::RenderError;
 
 /// The modes whose shader reads the backdrop, in the order of their pipelines and
 /// fragment entry points.
-const BACKDROP_MODES: [(BlendMode, &str); 5] = [
+const BACKDROP_MODES: [(BlendMode, &str); 7] = [
     (BlendMode::Darken, "fs_darken"),
     (BlendMode::Lighten, "fs_lighten"),
     (BlendMode::Overlay, "fs_overlay"),
     (BlendMode::Difference, "fs_difference"),
     (BlendMode::Exclusion, "fs_exclusion"),
+    (BlendMode::NormalSrgb, "fs_normal_srgb"),
+    (BlendMode::AdditiveSrgb, "fs_additive_srgb"),
 ];
 
 /// One pipeline per way of drawing an item.
