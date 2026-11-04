@@ -67,7 +67,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`), with
+  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -116,7 +116,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
-  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
@@ -161,8 +161,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
-  `gpu.device_lost`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
+  `gpu.device_lost` and `values.changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -212,7 +212,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.74 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.78 because of the
+  shared values `values.set`, `values.list` and `values.changed` (`values.rs`,
+  [ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)), with 0.75 to 0.77 left
+  to changes that claimed them first; 0.74 because of
   `output.set_path` (#1072); 0.73 because of the
   `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -1699,6 +1702,25 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
   over that read by `path` is `too_large`), and with `path` an image's `base64`.
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
+
+Since 0.78 a client can keep **shared values**: named JSON values the engine holds for
+browser source pages and agents to read
+([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7, `values.rs`).
+They are not collection state: never saved, no `rev`, no undo step. They are not
+ADR-0032's live values either, which are a gesture's uncommitted edits.
+- **`values.set {name, value?}`** is an action. It sets `name` to `value`, or removes it
+  when `value` is `null` or left out; inside a value `null` is ordinary JSON. A name is
+  dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes (`check_value_name`); a
+  value is at most 16 KiB as compact JSON (`check_value_size`, `MAX_VALUE_BYTES`); the
+  store holds at most 256 names (`MAX_VALUES`). Each limit is `invalid_argument` on
+  `name` or `value`, and nothing changes.
+- **`values.changed {name, value?}`** goes to every client when a set changes something,
+  with no `value` for a removal. Setting the value a name already has sends nothing.
+- **`values.list {prefix?}`** answers `SharedValue`s ordered by name: all, or the name
+  `prefix` and those below it (`prefix_covers`: `status` covers `status.text`, not
+  `statusbar`).
+- A hotkey may bind `values.set`. A plugin may call `values.list` (class `read`), never
+  `values.set`, which no class names yet.
 
 ### Errors
 

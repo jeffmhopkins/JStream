@@ -54,6 +54,7 @@ mod studio;
 #[cfg(test)]
 mod tests;
 mod transition;
+mod values;
 mod youtube;
 
 /// The threads whose panics the engine catches and reports itself, for an app's crash

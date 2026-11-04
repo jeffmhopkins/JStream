@@ -44,12 +44,13 @@ use jstream_protocol::{
     EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
     GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
     IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome,
-    MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, OutputId, OutputInfo, OutputKind, OutputState,
-    PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer,
-    Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary,
-    SecretString, Settings, SourceAudio, SourceId, SourceInfo, SourceKind, SourceSize,
-    TransitionPresetId, TransitionStarted, TransitionsInfo, VideoMix, VideoMixId, VideoMixInfo,
-    Welcome, is_live_adjustable,
+    MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo, OutputKind,
+    OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult,
+    RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
+    SourceInfo, SourceKind, SourceSize, TransitionPresetId, TransitionStarted, TransitionsInfo,
+    VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
+    is_live_adjustable, prefix_covers,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::future;
@@ -289,6 +290,9 @@ struct State {
     program: Option<SceneId>,
     /// The scene on preview, which follows the same rules.
     preview: Option<SceneId>,
+    /// The shared values `values.set` set (ADR-0102 decision 7), by name: runtime state,
+    /// like the studio, and checked by the engine's rules.
+    values: BTreeMap<String, SharedValue>,
     /// Every client's open gestures, with the value of each parameter each holds.
     gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
     /// Which gesture holds each parameter: at most one.
@@ -871,6 +875,45 @@ impl State {
         }
     }
 
+    /// `values.set`, as the engine does it: the same checks, the same 256-name limit,
+    /// and `values.changed` only when something changed. `set` carries `name` and the
+    /// new value, or is `None` for a removal.
+    fn values_set(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        name: String,
+        set: Option<SharedValue>,
+    ) -> Result<CallResult, ProtocolError> {
+        check_value_name(&name, "name")?;
+        let changed = match &set {
+            None => self.values.remove(&name).is_some(),
+            Some(set) => {
+                check_value_size(&set.value, "value")?;
+                if self.values.get(&name) == Some(set) {
+                    false
+                } else if !self.values.contains_key(&name) && self.values.len() >= MAX_VALUES {
+                    return Err(ProtocolError::invalid_argument(
+                        "name",
+                        "the engine holds at most 256 shared values; remove one first",
+                    ));
+                } else {
+                    self.values.insert(name.clone(), set.clone());
+                    true
+                }
+            }
+        };
+        if changed {
+            self.emit(Event::ValuesChanged {
+                name,
+                value: set.map(|set| set.value),
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            });
+        }
+        Ok(CallResult::action())
+    }
+
     fn emit_studio(
         &mut self,
         client_id: &ClientId,
@@ -945,6 +988,13 @@ impl State {
                     self.emit_studio(client_id, request_id, None);
                 }
                 return Ok(CallResult::action());
+            }
+            Action::ValuesSet { name, value } => {
+                let set = value.map(|value| SharedValue {
+                    name: name.clone(),
+                    value,
+                });
+                return self.values_set(client_id, request_id, name, set);
             }
             // Deprecated: JStream has no privacy screen (ADR-0080 §4).
             Action::PrivacySet { .. } => {
@@ -1143,6 +1193,14 @@ impl State {
                 outputs: self.collection.output_infos(),
             },
             Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
+            Query::ValuesList { prefix } => QueryResult::ValuesList {
+                values: self
+                    .values
+                    .values()
+                    .filter(|set| prefix_covers(prefix.as_deref(), &set.name))
+                    .cloned()
+                    .collect(),
+            },
             Query::StudioGet => QueryResult::StudioGet {
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),

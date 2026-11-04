@@ -36,6 +36,7 @@ mod query;
 mod schema;
 mod settings;
 mod transition;
+mod values;
 mod version;
 mod youtube;
 
@@ -121,6 +122,10 @@ pub use transition::{
     MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
     TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
     check_preset_timing, initial_preset,
+};
+pub use values::{
+    MAX_VALUE_BYTES, MAX_VALUE_NAME_BYTES, MAX_VALUES, SharedValue, check_value_name,
+    check_value_size, prefix_covers,
 };
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{

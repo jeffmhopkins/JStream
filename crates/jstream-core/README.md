@@ -1149,6 +1149,15 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+**Shared values** (`values.rs`, `SharedValues`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7). The engine
+holds them in its state beside the studio, under the collection lock: never saved, never
+`rev`, never an undo step. `values.set` checks the name and size with the protocol's
+shared checks and the 256-name limit, changes nothing on a refusal, and emits
+`values.changed` only when the value really changed. It is not in the activity or audit
+log, as `live.set` isn't: it carries data and may come many times a second.
+`values.list` reads them by name.
+
 **Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
 and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
 runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as

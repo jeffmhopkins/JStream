@@ -1536,6 +1536,24 @@ pub enum Action {
         /// The pack ID.
         pack: String,
     },
+    /// Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is
+    /// `null` or left out. Shared values are named JSON values the engine holds for pages and agents
+    /// to read: never saved, never `rev`, and not an edit, so a value that changes often
+    /// fills no undo history. Every client gets `values.changed` when it changes; setting
+    /// the value a name already has, or removing a name that has none, changes nothing
+    /// and sends nothing. Fails with `invalid_argument` at `name` for a name outside the
+    /// rules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`
+    /// for a value over 16 KiB as compact JSON, and at `name` when the store already
+    /// holds 256 names and this is a new one.
+    #[serde(rename = "values.set")]
+    ValuesSet {
+        /// The value's name, such as `status.text`.
+        name: String,
+        /// The value. `null`, or leaving it out, removes the value. Inside a value, `null`
+        /// is an ordinary JSON value.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1575,6 +1593,7 @@ impl Action {
             Action::EffectEnable { .. } => "effect.enable",
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
+            Action::ValuesSet { .. } => "values.set",
         }
     }
 
@@ -1622,7 +1641,8 @@ impl Action {
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }
             | Action::PackWrite { .. }
-            | Action::PackDelete { .. } => vec![],
+            | Action::PackDelete { .. }
+            | Action::ValuesSet { .. } => vec![],
         }
     }
 
@@ -1689,7 +1709,8 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
-            | Action::PrivacySet { .. } => None,
+            | Action::PrivacySet { .. }
+            | Action::ValuesSet { .. } => None,
         }
     }
 }
