@@ -1045,11 +1045,16 @@ fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
 `position` and `target` (`Vec3`, scene pixels, x right, y down, z toward the viewer),
-`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0) and `depth_sort`
-(default `true`, not written while true). A camera omitted removes it. The edit refuses a
-field of view out of range (`edits.N.camera.fov_deg`), a coordinate past the drawable
-limit (`edits.N.camera`) and a position closer than 0.001 px to the target
-(`edits.N.camera.target`). On a keyframe scene it sets the variant's override, refused
+`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0), `depth_sort`
+(default `true`, not written while true), and since 0.77 a depth of field: `focus_px`,
+the distance along the view of the plane in focus (absent, everything is in focus), and
+`blur_px`, the blur radius of a point infinitely far behind it, 0 to 64 (default 0, not
+written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). A camera
+omitted removes it. The edit refuses a field of view out of range
+(`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
+position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
+not above 0 or past the drawable limit (`edits.N.camera.focus_px`) and a blur outside 0
+to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, refused
 while its parent has no camera; removing the parent's camera drops its variants'
 overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
