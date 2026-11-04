@@ -66,7 +66,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
-  `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
+  `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
+  `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
@@ -77,9 +78,12 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
   `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
-  `item.trigger_motion`), with
+  `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
+  `source.restart`), with
   `Action::named_objects` and `Action::bind_problem`,
-  which every implementation uses to check and follow a hotkey's action; `Batch`, whose
+  which every implementation uses to check and follow a hotkey's action, and
+  `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
+  and say what state it sets ([Timelines](#timelines)); `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
 
@@ -151,7 +155,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
-  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent)
+  and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
+  the timelines playing (`PlayingTimeline`), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -214,7 +220,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `gpu.device_lost` and `values.changed`.
+  `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
+  and `timeline.cue_fired` (0.87).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -242,7 +249,7 @@ covers = ["crates/jstream-protocol/src/error.rs", "crates/jstream-protocol/src/i
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
 - **IDs and versions** (`id.rs`, `version.rs`): opaque string IDs (`BusId::master()` is
-  the one fixed ID, `master`; a `GestureId` is chosen by the client), `Rev`, and
+  the one fixed ID, `master`; a `GestureId` and a `TimelineId` are chosen by the client), `Rev`, and
   `PROTOCOL_VERSION`.
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
@@ -292,7 +299,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.86 because of the `audio` motion kind and its `MotionMeasure`
+`PROTOCOL_VERSION` is 0.87 because of timelines: `timeline.set`, `timeline.delete`,
+`timeline.play`, `timeline.stop`, `timeline.seek`, `source.restart`,
+`SceneInfo.timelines`, `studio.get`'s `timelines`, the `timeline.changed` and
+`timeline.cue_fired` events and the `timeline` entity kind
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md), a placeholder number the
+release queue sets); 0.86 because of the `audio` motion kind and its `MotionMeasure`
 and `MotionCurve` ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md));
 0.85 because of
 `scene.set_camera_motion`, `scene.set_camera_follow`, the action `scene.zoom_camera`,
@@ -1300,7 +1312,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   (`preview_scene`, 0.30), each omitted only while the collection has no scene. Runtime
   state, not collection state
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), so no `rev`.
-  Added in 0.16.
+  Added in 0.16. Since 0.87 `timelines` lists the timelines playing, each with its
+  scene, its `position_ms` and its `pass` ([Timelines](#timelines)), omitted while none
+  plays.
 - `capture.targets`: the displays and windows the engine can capture now, displays
   first, each with its `kind` (`display` or `window`, the source kind that captures
   it), its `target` (the value for that source's `target` setting), a `name` to show
@@ -1762,6 +1776,9 @@ After `welcome`, the server pushes every event to every client.
   under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
   [Effect quarantine](#quarantine).
+- `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
+  `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
+  under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
 
 <a id="youtube"></a>
 ## YouTube
@@ -1834,13 +1851,15 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   edits, among them a scene's folder, metadata and transitions, a source's metadata, an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
   a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
-  the plugin's own session), `live` (`scene.switch`, and `scene.zoom_camera`, which
-  changes what is on air with no undo step, ADR-0113) and `outputs` (`output.start`, `output.stop`). Everything else is
+  the plugin's own session), `live` (`scene.switch`, `scene.zoom_camera`, which
+  changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
-  `privacy.set`, `youtube.*`, pairing and devices, and `plugin.*` itself.
+  `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
+  `timeline.*` edits and actions, whose cues run actions the `edit` class can't
+  (ADR-0115).
   `PLUGIN_SCOPES` places every command; a command it doesn't name is "never".
   `every_command_has_a_plugin_scope` fails until a new command is placed, so a new
   command can't reach plugins unreviewed.
@@ -2082,7 +2101,10 @@ after 1.0:
   kind, so a client older than 0.30 can't parse `kind.list` from a 0.30 server. From
   0.30 `KindCategory` parses an unknown value as `Unknown`, so a later category won't
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
-  `EntityKind` for theirs. The encoder enums (`VideoCodec`,
+  `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
+  answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
+  0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
+  binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
@@ -2175,6 +2197,53 @@ class. Its `named_objects` is the item, so a hotkey binding to it goes with the 
 During a scene switch a moving item keeps moving: a matched pair blends its two sides'
 motion by the transition's progress, an appearing item moves as its new scene says and a
 disappearing one as its old scene said.
+
+<a id="timelines"></a>
+## Timelines
+<!-- @section
+covers = ["crates/jstream-protocol/src/timeline.rs"]
+depends_on = ["docs/adr/0115-timelines-on-the-wire.md"]
+-->
+
+Since 0.87 a scene holds timelines
+([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md) decision 4,
+[ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md), `timeline.rs`):
+`SceneInfo.timelines`, ordered by ID, each a `TimelineInfo` of timed cues.
+- **Shape:** a `timeline_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`,
+  unique across the collection, so an action names it alone), a `name`, a
+  `duration_ms` (at most one hour), a `loop` (`once`, `loop`, or
+  `{"range": {"from_ms", "to_ms"}}` for an intro then a loop; a repeat is at least
+  100 ms, `MIN_LOOP_MS`) and at most 256 `cues`,
+  each `{at_ms, action}`, in time order. A cue's `action` is read as plain JSON, as a
+  hotkey binding's is (`TimelineCue::action` parses it), so a client older than an
+  action a later cue runs still reads `state.get`; `timeline.set` refuses an action
+  it doesn't know at `cues.N.action`. A scene holds at most 32. A cue a loop would
+  never reach (at or past where it jumps back, or past a `once` timeline's end) is
+  refused. `TimelineInfo::problem` is the check every implementation shares.
+- **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
+  `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
+  `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an
+  edit, so playing a timeline adds nothing to an undo history.
+- **Edits:** `timeline.set {scene_id, timeline}` stores one whole, new or in place of
+  the scene's own, and is undone by `timeline.delete` or by `timeline.set` with the old
+  one. An ID another scene holds is `already_exists`. `timeline.delete {timeline_id}`
+  removes one, with the hotkeys bound to it (`removed_hotkeys`). The objects a cue names
+  are not checked: a cue naming a deleted object stays, inert, and fails when it fires.
+  Plugins may not use either edit (`never`), since cues run actions the edit class
+  can't.
+- **Playing** is studio state, like the program scene. `timeline.play {timeline_id}`
+  plays from the start, `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
+  once the last cue before it for each state it sets (`Action::cue_state`: the program
+  scene, one placement's visibility, one shared value), and `timeline.stop` stops it
+  where it is. A cue runs as its call would, credited to the client that started the
+  timeline, at the cue's exact time on the animation clock. `studio.get` lists the
+  timelines playing (`PlayingTimeline`: where each is, and its pass).
+  `timeline.changed` reports a start, a seek, a loop, an end, a stop or a removal
+  (`TimelineChange`, which parses an unknown value as `unknown`), and
+  `timeline.cue_fired` each cue, with the error its action got.
+- **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
+  effect pack's shader source from its beginning, whatever its `restart_on_show`; other
+  kinds have nothing to restart. Plugins need the `live` class for it.
 
 <a id="geometry"></a>
 ## Item geometry

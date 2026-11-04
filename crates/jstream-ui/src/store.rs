@@ -752,6 +752,7 @@ impl Studio {
         if let Ok(QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            ..
         }) = query(session, Query::StudioGet).await
         {
             self.take_studio(asked, program_scene, preview_scene);
@@ -1243,6 +1244,7 @@ mod tests {
         let other = QueryResult::StudioGet {
             program_scene: None,
             preview_scene: None,
+            timelines: Vec::new(),
         };
         assert_eq!(Collection::from_result(other), None);
     }

@@ -1627,6 +1627,7 @@ mod tests {
                 overrides: Vec::new(),
                 camera_motion: Vec::new(),
                 camera_follow: None,
+                timelines: Vec::new(),
                 items,
                 filters: Default::default(),
                 camera: None,

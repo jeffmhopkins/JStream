@@ -20,7 +20,8 @@ use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
     BusId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey, ItemId,
-    LabelId, OutputId, PluginId, Rev, SceneId, SourceId, TransitionPresetId, VideoMixId,
+    LabelId, OutputId, PluginId, Rev, SceneId, SourceId, TimelineId, TransitionPresetId,
+    VideoMixId,
 };
 use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
@@ -31,6 +32,7 @@ use crate::plugin::PluginGrant;
 use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::query::SceneOptions;
 use crate::settings::Settings;
+use crate::timeline::TimelineInfo;
 use crate::transition::{Easing, ItemTransition};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
@@ -923,6 +925,36 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
+    /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
+    /// one the scene already holds, in its place. A timeline is timed cues, each running
+    /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
+    /// exist; with `already_exists` (entity `timeline`) for an ID another scene's timeline
+    /// has; and with `invalid_argument` at `timeline.<field>` for what
+    /// [`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order
+    /// or past where they can fire, an action a cue can't run) and for a 33rd timeline in
+    /// the scene. The objects a cue names are not checked, and deleting one leaves the cue
+    /// in place, inert, like a follow camera's item: when it fires its action fails as the
+    /// call would, and its `timeline.cue_fired` carries the error. Changing a timeline
+    /// while it plays keeps its start, so its cues fire at their new times from then on.
+    /// Inverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.
+    #[serde(rename = "timeline.set")]
+    TimelineSet {
+        /// The scene that holds it.
+        scene_id: SceneId,
+        /// The timeline, whole.
+        timeline: TimelineInfo,
+    },
+    /// Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a
+    /// `timeline.changed` `removed`. Hotkey bindings whose action names it are removed
+    /// with it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other
+    /// timelines that name it stay, inert. Rejected with `not_found` (entity
+    /// `timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`
+    /// with it, then `hotkey.set` for each removed binding.
+    #[serde(rename = "timeline.delete")]
+    TimelineDelete {
+        /// The timeline to delete.
+        timeline_id: TimelineId,
+    },
     /// Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.
     #[serde(rename = "transition.create")]
     TransitionCreate {
@@ -1221,6 +1253,8 @@ impl Edit {
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::TimelineSet { .. } => "timeline.set",
+            Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
             Edit::TransitionUpdate { .. } => "transition.update",
             Edit::TransitionDelete { .. } => "transition.delete",
@@ -1584,6 +1618,57 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         modifier_id: Option<String>,
     },
+    /// Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if
+    /// it is playing. Its cues fire at their times on the animation clock (ADR-0099
+    /// decision 2), on every pass of a loop, until it ends or is stopped. Playing is
+    /// studio state like the program scene: it changes no `rev`, is never undone, and
+    /// emits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue
+    /// runs its action as the call would run, with the effects that call has (a
+    /// `scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the
+    /// client that started the timeline. A transition a cue starts takes the cue's exact
+    /// time as its start, so a late tick doesn't delay what is seen. It plays whatever
+    /// scene is on program, since each cue names its own target. Fails with `not_found`
+    /// for a timeline the collection doesn't hold.
+    #[serde(rename = "timeline.play")]
+    TimelinePlay {
+        /// The timeline to play.
+        timeline_id: TimelineId,
+    },
+    /// Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did
+    /// stays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing
+    /// succeeds and emits nothing. Fails with `not_found` for a timeline the collection
+    /// doesn't hold.
+    #[serde(rename = "timeline.stop")]
+    TimelineStop {
+        /// The timeline to stop.
+        timeline_id: TimelineId,
+    },
+    /// Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or
+    /// not it was playing, so the scene shows what it would if the timeline had played
+    /// there: first the cues before `at_ms` that set a state run at once, only the last
+    /// one for each thing they set (the program scene, an item's visibility, a shared
+    /// value), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a
+    /// restart, a fired motion, another timeline's play, stop or seek) don't run again.
+    /// Emits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the
+    /// collection doesn't hold, and with `invalid_argument` on `at_ms` past its
+    /// `duration_ms`, or for a timeline that repeats, at or past where it jumps back.
+    #[serde(rename = "timeline.seek")]
+    TimelineSeek {
+        /// The timeline.
+        timeline_id: TimelineId,
+        /// Where to play it from, in milliseconds from its start.
+        at_ms: u32,
+    },
+    /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
+    /// loads again, and a `media` file plays from its start. Other kinds have nothing to
+    /// restart, so for them it succeeds and does nothing, as it does for a source no mix
+    /// shows yet. Runtime state like a scene switch's restart: it changes no `rev` and is
+    /// never undone. Fails with `not_found` for a source the collection doesn't hold.
+    #[serde(rename = "source.restart")]
+    SourceRestart {
+        /// The source to restart.
+        source_id: SourceId,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -1793,6 +1878,10 @@ impl Action {
             Action::ItemToggle { .. } => "item.toggle",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
             Action::ItemTriggerMotion { .. } => "item.trigger_motion",
+            Action::TimelinePlay { .. } => "timeline.play",
+            Action::TimelineStop { .. } => "timeline.stop",
+            Action::TimelineSeek { .. } => "timeline.seek",
+            Action::SourceRestart { .. } => "source.restart",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1846,6 +1935,12 @@ impl Action {
             Action::ItemTriggerMotion { item_id, .. } => {
                 vec![(EntityKind::Item, item_id.as_str())]
             }
+            Action::TimelinePlay { timeline_id }
+            | Action::TimelineStop { timeline_id }
+            | Action::TimelineSeek { timeline_id, .. } => {
+                vec![(EntityKind::Timeline, timeline_id.as_str())]
+            }
+            Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
             Action::AudioResetLoudness {}
@@ -1952,6 +2047,10 @@ impl Action {
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
             | Action::ItemTriggerMotion { .. }
+            | Action::TimelinePlay { .. }
+            | Action::TimelineStop { .. }
+            | Action::TimelineSeek { .. }
+            | Action::SourceRestart { .. }
             | Action::PrivacySet { .. } => None,
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.
@@ -1970,6 +2069,55 @@ impl Action {
                     None
                 }
             }
+        }
+    }
+}
+
+impl Action {
+    /// Why this action can't be a timeline cue, as the field within the action and the
+    /// reason, or `None` if it can (ADR-0099 decision 4, ADR-0115). A cue runs one of a
+    /// closed set: `scene.switch`, `item.show`, `item.hide`, `item.toggle`,
+    /// `item.trigger_motion`, `values.set`, `source.restart`, and `timeline.play`,
+    /// `timeline.stop` and `timeline.seek`. Each is an action a hotkey can run too, and
+    /// none is an edit, so playing a timeline adds nothing to an undo history. The
+    /// `values.set` checks are `bind_problem`'s.
+    pub fn cue_problem(&self) -> Option<(&'static str, &'static str)> {
+        match self {
+            Action::SceneSwitch { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
+            | Action::ItemTriggerMotion { .. }
+            | Action::SourceRestart { .. }
+            | Action::TimelinePlay { .. }
+            | Action::TimelineStop { .. }
+            | Action::TimelineSeek { .. } => None,
+            Action::ValuesSet { .. } => self.bind_problem(),
+            _ => Some((
+                "type",
+                "a cue runs scene.switch, item.show, item.hide, item.toggle, \
+                 item.trigger_motion, values.set, source.restart, timeline.play, \
+                 timeline.stop or timeline.seek",
+            )),
+        }
+    }
+
+    /// What a cue running this action sets, for `timeline.seek`, or `None` for an
+    /// event: seeking runs only the last cue before the seek for each key (ADR-0099
+    /// decision 4). The program scene, one placement's visibility (an item in the scene
+    /// a show or hide names), and one shared value are states; a toggle, a fired motion,
+    /// a restart and a timeline's play, stop or seek are events.
+    pub fn cue_state(&self) -> Option<String> {
+        match self {
+            Action::SceneSwitch { .. } => Some("program".into()),
+            Action::ItemShow { item_id, scene_id } | Action::ItemHide { item_id, scene_id } => {
+                Some(format!(
+                    "item {item_id} in {}",
+                    scene_id.as_ref().map_or("", SceneId::as_str)
+                ))
+            }
+            Action::ValuesSet { name, .. } => Some(format!("value {name}")),
+            _ => None,
         }
     }
 }

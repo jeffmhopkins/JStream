@@ -29,7 +29,7 @@ use jstream_protocol::{
     KindCategory, OverrideField, ProtocolError, Reference, SceneId, SceneMeta, SceneOptions,
     SceneRole,
 };
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// The value a keyframe scene stores for one field.
 pub(crate) type FieldValue = Value<Placement, Crop, Chains, MotionList>;
@@ -268,6 +268,7 @@ fn create(
         camera: None,
         camera_motion: Vec::new(),
         camera_follow: None,
+        timelines: BTreeMap::new(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),

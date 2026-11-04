@@ -543,6 +543,7 @@ mod tests {
             options: Default::default(),
             camera_motion: Vec::new(),
             camera_follow: None,
+            timelines: Vec::new(),
             items: Vec::new(),
             transition_in: None,
             transition_out: None,

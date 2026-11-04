@@ -209,6 +209,20 @@ fn describe_action(action: &Action, state: &State) -> String {
             Some(id) => format!("Fired motion {} of {}", quote(id), item(state, item_id)),
             None => format!("Fired the motion of {}", item(state, item_id)),
         },
+        Action::TimelinePlay { timeline_id } => {
+            format!("Played timeline {}", timeline(state, timeline_id))
+        }
+        Action::TimelineSeek { timeline_id, at_ms } => format!(
+            "Played timeline {} from {:.1} s",
+            timeline(state, timeline_id),
+            f64::from(*at_ms) / 1000.0
+        ),
+        Action::TimelineStop { timeline_id } => {
+            format!("Stopped timeline {}", timeline(state, timeline_id))
+        }
+        Action::SourceRestart { source_id } => {
+            format!("Restarted {}", source(state, source_id))
+        }
         other => capitalize(&humanize(other.name())),
     }
 }
@@ -509,6 +523,22 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
             format!("Bound {} to {}", chord.as_str(), humanize(action.name()))
         }
         Edit::HotkeyClear { chord } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::TimelineSet {
+            scene_id,
+            timeline: info,
+        } => format!(
+            "{} timeline {} of scene {}",
+            if state.timeline(&info.timeline_id).is_some() {
+                "Changed"
+            } else {
+                "Created"
+            },
+            quote(timeline_name(info)),
+            scene(state, scene_id)
+        ),
+        Edit::TimelineDelete { timeline_id } => {
+            format!("Deleted timeline {}", timeline(state, timeline_id))
+        }
         Edit::TransitionCreate { name, .. } => format!("Created transition {}", quote(name)),
         Edit::TransitionUpdate { preset_id, .. } => format!(
             "Changed transition {}",
@@ -643,6 +673,23 @@ fn source_plain(state: &State, source_id: &SourceId) -> String {
     state
         .source(source_id)
         .map_or_else(|| source_id.as_str().to_owned(), |s| s.name().to_owned())
+}
+
+/// A timeline, by its name, or its ID when it has none or isn't known.
+fn timeline(state: &State, timeline_id: &jstream_protocol::TimelineId) -> String {
+    match state.timeline(timeline_id) {
+        Some((_, info)) => quote(timeline_name(info)),
+        None => quote(timeline_id.as_str()),
+    }
+}
+
+/// A timeline's name, or its ID when it has none.
+fn timeline_name(info: &jstream_protocol::TimelineInfo) -> &str {
+    if info.name.is_empty() {
+        info.timeline_id.as_str()
+    } else {
+        &info.name
+    }
 }
 
 /// An item, by the name of the source it shows.

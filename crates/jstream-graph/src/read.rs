@@ -328,6 +328,7 @@ impl Scene {
             camera: self.camera,
             camera_motion: self.camera_motion.clone(),
             camera_follow: self.camera_follow.clone(),
+            timelines: self.timelines.values().cloned().collect(),
         }
     }
 }

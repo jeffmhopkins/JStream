@@ -73,8 +73,8 @@ use jstream_protocol::{
     Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
     OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
-    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
@@ -760,6 +760,8 @@ pub struct Scene {
     /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
     /// item no longer in the scene, which leaves it inert.
     pub(crate) camera_follow: Option<CameraFollow>,
+    /// Its timelines (ADR-0115), by ID.
+    pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -828,6 +830,11 @@ impl Scene {
     /// item no longer in the scene, which leaves it inert.
     pub fn camera_follow(&self) -> Option<&CameraFollow> {
         self.camera_follow.as_ref()
+    }
+
+    /// Its timelines (ADR-0115), ordered by ID.
+    pub fn timelines(&self) -> &BTreeMap<TimelineId, TimelineInfo> {
+        &self.timelines
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene

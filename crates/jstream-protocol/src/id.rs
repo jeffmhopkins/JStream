@@ -56,6 +56,11 @@ opaque_id!(
     SceneId
 );
 opaque_id!(
+    /// A timeline a scene holds (ADR-0115). Unique across the collection, so an action
+    /// names it alone.
+    TimelineId
+);
+opaque_id!(
     /// A scene item: one placement of a source inside a scene. Unique across scenes.
     ItemId
 );

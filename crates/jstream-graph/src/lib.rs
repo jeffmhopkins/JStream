@@ -26,6 +26,7 @@ mod persist;
 mod plan;
 mod read;
 mod target;
+mod timeline;
 mod touched;
 mod transition;
 
