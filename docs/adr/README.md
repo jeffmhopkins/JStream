@@ -119,4 +119,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
 | [ADR-0109](0109-review-pass-carries-across-base-merges.md) | A review pass carries across merges of the base branch | accepted | maintainer |  |
+| [ADR-0110](0110-mcp-values-tool-naming.md) | Shared values reach MCP through one values tool | accepted | agent |  |
 <!-- @generated end adr-index -->
