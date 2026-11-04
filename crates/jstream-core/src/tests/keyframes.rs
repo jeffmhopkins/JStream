@@ -1207,3 +1207,101 @@ fn the_shown_clock_starts_when_the_item_is_first_drawn() {
     assert_eq!(item, "a1");
     assert!((x - 200.0).abs() < 0.01, "{x}");
 }
+
+// Audio-reactive motion modifiers (ADR-0100): an item's opacity follows the program
+// mix's level through the render thread's follower.
+
+/// `item`'s motion: its opacity follows the program mix's level, dark at silence and
+/// full at -6 dBFS, with no attack.
+fn pulse(item: &str, scene: Option<&str>) -> Edit {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "pulse".into(),
+            property: jstream_protocol::MotionProperty::Opacity,
+            kind: jstream_protocol::MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: jstream_protocol::MotionMeasure::Level,
+                low_hz: None,
+                high_hz: None,
+                floor_db: f(-60.0),
+                ceiling_db: f(-6.0),
+                attack_ms: 0,
+                release_ms: 200,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(-1.0),
+                to: Finite32::ZERO,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }],
+    }
+}
+
+/// Each item's opacity as the program pass of `scene` draws it at `at`.
+fn moved_opacity(engine: &Engine, scene: &str, at: jstream_media::MediaTime) -> Vec<f32> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .moved_at(&SceneId::new(scene), at)
+        .expect("the program draws the scene")
+        .iter()
+        .map(|(_, _, _, opacity)| *opacity)
+        .collect()
+}
+
+#[test]
+fn an_audio_modifier_follows_the_program_mix_and_reads_silence_until_heard() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![pulse("a1", None)]);
+    let snapshot = engine.render_hub().load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "an audio modifier redraws");
+    let a1 = ItemId::new("a1");
+    assert_eq!(
+        shot.audio().level(&a1, "pulse"),
+        Some(0.0),
+        "bound to the program mix"
+    );
+    // Before any tick follows it, it reads silence: its `from`, dark.
+    assert_eq!(moved_opacity(&engine, "a", secs(1.0)), [0.0, 1.0]);
+
+    // A full-scale sine on the program mix: an RMS of -3 dBFS, over the ceiling.
+    let samples: Vec<f32> = (0..2048)
+        .flat_map(|n| {
+            let s = (std::f32::consts::TAU * 440.0 * n as f32 / 48_000.0).sin();
+            [s, s]
+        })
+        .collect();
+    engine.audio_scope().push(48_000, &samples);
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(shot.audio(), secs(1.0));
+    follower.follow(shot.audio(), secs(1.016));
+    assert_eq!(
+        moved_opacity(&engine, "a", secs(1.016)),
+        [1.0, 1.0],
+        "full on"
+    );
+
+    // The keyframe's motion overrides the item's, and binds the same way.
+    apply(&control, vec![pulse("a2", Some("k"))]);
+    switch(&control, "k", None);
+    let snapshot = engine.render_hub().load();
+    assert!(
+        snapshot
+            .shot()
+            .audio()
+            .level(&ItemId::new("a2"), "pulse")
+            .is_some()
+    );
+    assert!(
+        snapshot.shot().audio().level(&a1, "pulse").is_some(),
+        "k shows a1's own"
+    );
+}

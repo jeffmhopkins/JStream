@@ -63,14 +63,20 @@ impl ShownSince {
 }
 
 /// What `motion` adds to an item at `at`, which was first shown at `shown`, if it is.
-/// Allocates nothing.
-pub(crate) fn offsets(motion: &[Modifier], at: MediaTime, shown: Option<MediaTime>) -> Offsets {
+/// `heard` gives an audio modifier's level for the tick, by modifier ID (ADR-0100,
+/// [`crate::reactive`]); one it has none for reads as silence. Allocates nothing.
+pub(crate) fn offsets(
+    motion: &[Modifier],
+    at: MediaTime,
+    shown: Option<MediaTime>,
+    heard: impl Fn(&str) -> Option<f32>,
+) -> Offsets {
     if motion.is_empty() {
         return Offsets::IDENTITY;
     }
     let engine_s = at.as_secs_f64();
     let shown_s = shown.map(|since| (engine_s - since.as_secs_f64()).max(0.0));
-    jstream_anim::evaluate(motion, engine_s, shown_s)
+    jstream_anim::evaluate_with(motion, engine_s, shown_s, |_| None, heard)
 }
 
 /// `placement`, `crop` and `opacity` moved by `by`. A legacy transform moves and turns
@@ -195,11 +201,14 @@ impl TrackMotion {
         elapsed_ms: f32,
         at: MediaTime,
         shown: impl Fn(&ItemId) -> Option<MediaTime>,
+        heard: impl Fn(&ItemId, &str) -> Option<f32>,
     ) -> Offsets {
         if self.is_still() {
             return Offsets::IDENTITY;
         }
-        let side = |(item, motion): &(ItemId, Motion)| offsets(motion, at, shown(item));
+        let side = |(item, motion): &(ItemId, Motion)| {
+            offsets(motion, at, shown(item), |id| heard(item, id))
+        };
         match track {
             Track::Pair { timing, .. } => {
                 let k = timing.progress(elapsed_ms).clamp(0.0, 1.0);
@@ -272,6 +281,11 @@ mod tests {
             clock,
             enabled: true,
         }
+    }
+
+    /// [`super::offsets`] with nothing heard.
+    fn offsets(motion: &[Modifier], at: MediaTime, shown: Option<MediaTime>) -> Offsets {
+        super::offsets(motion, at, shown, |_| None)
     }
 
     fn at(secs: f64) -> MediaTime {
@@ -479,7 +493,11 @@ mod tests {
                 Arc::from([drift(Property::X, 30.0, Clock::Engine)]),
             ),
         };
-        let x = |elapsed| motion.offsets(&pair, elapsed, at(1.0), |_| None).x;
+        let x = |elapsed| {
+            motion
+                .offsets(&pair, elapsed, at(1.0), |_| None, |_, _| None)
+                .x
+        };
         assert_eq!(x(0.0), 10.0);
         assert_eq!(x(500.0), 20.0);
         assert_eq!(x(1000.0), 30.0);
@@ -488,7 +506,12 @@ mod tests {
             effect: jstream_render::transition::Effect::Fade,
             timing,
         };
-        assert_eq!(motion.offsets(&appear, 0.0, at(1.0), |_| None).x, 30.0);
+        assert_eq!(
+            motion
+                .offsets(&appear, 0.0, at(1.0), |_| None, |_, _| None)
+                .x,
+            30.0
+        );
         assert!(TrackMotion::same(ItemId::new("i"), Arc::from([])).is_still());
     }
 

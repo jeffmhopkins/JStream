@@ -505,6 +505,9 @@ pub(crate) struct Shot {
     /// (ADR-0099), as the engine set it ([`Shot::set_shown`]). An item missing here is
     /// at its start.
     shown: BTreeMap<ItemId, MediaTime>,
+    /// Its items' audio modifiers (ADR-0100), with the level the render thread's
+    /// follower stores for each tick ([`crate::reactive`]).
+    audio: crate::reactive::Bindings,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -626,6 +629,7 @@ impl Default for Shot {
             stages: BTreeMap::new(),
             moves: false,
             shown: BTreeMap::new(),
+            audio: crate::reactive::Bindings::default(),
         }
     }
 }
@@ -742,6 +746,17 @@ impl Shot {
     /// When `item` was first drawn, if this shot knows.
     fn shown_at(&self, item: &ItemId) -> Option<MediaTime> {
         self.shown.get(item).copied()
+    }
+
+    /// Its items' audio modifiers, whose levels the render thread's follower sets once a
+    /// tick (ADR-0100).
+    pub(crate) fn audio(&self) -> &crate::reactive::Bindings {
+        &self.audio
+    }
+
+    /// The level of `item`'s audio modifier `modifier` this tick.
+    fn heard(&self, item: &ItemId, modifier: &str) -> Option<f32> {
+        self.audio.level(item, modifier)
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -911,7 +926,9 @@ impl Shot {
                 .iter()
                 .map(|layer| {
                     let (item, modifiers) = &layer.motion.to;
-                    let by = motion::offsets(modifiers, at, self.shown_at(item));
+                    let by = motion::offsets(modifiers, at, self.shown_at(item), |id| {
+                        self.heard(item, id)
+                    });
                     let (placement, crop, opacity) =
                         motion::apply(&by, layer.placement, layer.crop, layer.opacity);
                     (layer.item.clone(), placement, crop, opacity)
@@ -933,7 +950,13 @@ impl Shot {
             t.tracks
                 .iter()
                 .map(|(_, track, _, moved)| {
-                    let by = moved.offsets(track, elapsed_ms, at, |item| self.shown_at(item));
+                    let by = moved.offsets(
+                        track,
+                        elapsed_ms,
+                        at,
+                        |item| self.shown_at(item),
+                        |item, id| self.heard(item, id),
+                    );
                     track
                         .sample(elapsed_ms, canvas)
                         .map(|end| motion::apply_endpoint(&by, end))
@@ -988,6 +1011,7 @@ impl PartialEq for Shot {
             && self.stages == other.stages
             && self.moves == other.moves
             && self.shown == other.shown
+            && self.audio == other.audio
     }
 }
 
@@ -2064,6 +2088,8 @@ impl<'a> Planner<'a, '_> {
                 motion: motion::of(item),
             },
         );
+        out.audio
+            .record(item.id(), item.motion(), self.assets.motion_heard());
         self.add_chain(owner, chain, out);
         Some(boxed)
     }
@@ -2193,6 +2219,8 @@ impl<'a> Planner<'a, '_> {
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
             });
+            out.audio
+                .record(item.id(), item.motion(), self.assets.motion_heard());
         }
         path.remove(id);
     }
@@ -2238,6 +2266,8 @@ impl<'a> Planner<'a, '_> {
                     moving: None,
                     motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 });
+                out.audio
+                    .record(item.id(), item.motion(), self.assets.motion_heard());
             }
         }
         out.scenes.insert(id.clone(), placed);
@@ -4189,7 +4219,9 @@ fn draw_box(
         boxed.crop,
     );
     // Its motion's crop is cut here; the rest moves the box where it is placed.
-    let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item));
+    let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item), |id| {
+        shot.heard(&boxed.item, id)
+    });
     let (_, crop, _) = motion::apply(&by, placement, crop, OPAQUE);
     let inside = boxed
         .boxed
@@ -4314,9 +4346,13 @@ fn fill_items<'a>(
         }
         if let Some((start, track)) = &layer.moving {
             let elapsed = transition::elapsed_ms(*start, at);
-            let by = layer
-                .motion
-                .offsets(track, elapsed, at, |item| shot.shown_at(item));
+            let by = layer.motion.offsets(
+                track,
+                elapsed,
+                at,
+                |item| shot.shown_at(item),
+                |item, id| shot.heard(item, id),
+            );
             let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
             return Some(Item {
                 image: cache.get(&layer.image)?,
@@ -4332,7 +4368,9 @@ fn fill_items<'a>(
         let (placement, crop) = live.apply(layer);
         // Its motion moves it on top of its live values (ADR-0099).
         let (item, modifiers) = &layer.motion.to;
-        let by = motion::offsets(modifiers, at, shot.shown_at(item));
+        let by = motion::offsets(modifiers, at, shot.shown_at(item), |id| {
+            shot.heard(item, id)
+        });
         let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
         let (placement, crop) = match &layer.boxed {
             Some(boxed) => {
@@ -4374,7 +4412,13 @@ fn fill_tracks<'a>(
                 if chains.failed(key) {
                     return None;
                 }
-                let by = moved.offsets(track, elapsed, at, |item| shot.shown_at(item));
+                let by = moved.offsets(
+                    track,
+                    elapsed,
+                    at,
+                    |item| shot.shown_at(item),
+                    |item, id| shot.heard(item, id),
+                );
                 let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
                 Some(Item {
                     image: cache.get(key)?,
