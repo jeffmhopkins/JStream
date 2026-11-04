@@ -197,6 +197,11 @@ pub struct State {
     pub(crate) folders: Vec<Folder>,
     /// In label order.
     pub(crate) labels: Vec<Label>,
+    /// The keyframe scene each placed scene is drawn through (keyframe tracks,
+    /// ADR-0116): studio state, which only a drawn copy holds
+    /// ([`Graph::with_placed_keyframes`](crate::Graph::with_placed_keyframes)). Empty in
+    /// the collection, never saved and never undone.
+    pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
 }
 
 impl Default for State {
@@ -218,6 +223,7 @@ impl Default for State {
             hotkeys: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
+            placed_keyframes: BTreeMap::new(),
         }
     }
 }
@@ -435,6 +441,41 @@ impl State {
                 }
             })
             .collect()
+    }
+
+    /// The keyframe scene that scene `scene_id` is drawn through where another scene
+    /// places it (ADR-0116), if a drawn copy sets one and it is still one of its
+    /// keyframe scenes.
+    pub fn placed_keyframe(&self, scene_id: &SceneId) -> Option<&Scene> {
+        let keyframe = self.scene(self.placed_keyframes.get(scene_id)?)?;
+        (keyframe.variant_of.as_ref() == Some(scene_id)).then_some(keyframe)
+    }
+
+    /// Whether scene `root` draws scene `scene_id`: it is `root`, or a scene source an
+    /// item of `root` places draws it, at any depth. A keyframe scene draws what its
+    /// parent's items place.
+    pub fn draws(&self, root: &SceneId, scene_id: &SceneId) -> bool {
+        let mut seen = BTreeSet::new();
+        let mut todo = vec![self.family_of(root).clone()];
+        while let Some(id) = todo.pop() {
+            if &id == scene_id {
+                return true;
+            }
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            let Some(scene) = self.scene(&id) else {
+                continue;
+            };
+            for item in &scene.items {
+                if let Some(SourceKind::Scene { scene_id }) =
+                    self.source(&item.source_id).map(Source::kind)
+                {
+                    todo.push(scene_id.clone());
+                }
+            }
+        }
+        false
     }
 
     /// The groups `scene` places directly, through `scene` sources: the scenes with

@@ -23,7 +23,8 @@
 //! session. It does no persistence or real output work, and knows no transition preset
 //! but the initial `cut` (ADR-0029): every switch cuts, and the `transition.*` edits are
 //! not mocked. Neither are timelines (ADR-0115): the `timeline.*` edits and actions and
-//! `source.restart`, so `studio.get` never lists a timeline playing.
+//! `source.restart`, so `studio.get` never lists a timeline playing, nor keyframe tracks
+//! (ADR-0116): `scene.set_keyframe`, so `studio.get` lists no placed keyframe.
 //!
 //! The mock has no render thread, so a gesture's values are released the moment it ends,
 //! and it sends one `live.changed` per `live.set` instead of coalescing them: the engine
@@ -1357,6 +1358,7 @@ impl State {
                 program_scene: self.program.clone(),
                 preview_scene: self.preview.clone(),
                 timelines: Vec::new(),
+                keyframes: Vec::new(),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,

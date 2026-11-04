@@ -1245,6 +1245,7 @@ mod tests {
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),
+            keyframes: Vec::new(),
         };
         assert_eq!(Collection::from_result(other), None);
     }

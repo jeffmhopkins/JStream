@@ -593,6 +593,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets the keyframe a scene is drawn through wherever another scene places it\n(ADR-0116, since 0.88): keyframe tracks. A scene with keyframe scenes then switches\nbetween them on its own, independently of the scene placing it and of every other\nplaced scene, so independent states (a background, a panel layout, an effect)\ndon't multiply into one keyframe each combination. Where the placing scene is\ndrawn through a keyframe of its own that overrides an item in this scene's tree,\nthat keyframe draws it instead. What each placed scene draws through is studio\nstate like the program scene: it changes no `rev`, is never undone or saved, and\n`studio.get` reports it. When program draws the scene and the preset is a `move`\nor `fade`, the change plays as its Move from what is on screen, pairing each item\nwith itself, as `item.show` does; any other kind switches at once. Emits `scene.keyframe_changed`. Fails with `not_found` for a\nscene, keyframe or preset the collection doesn't have, and with\n`invalid_argument` when `scene_id` is itself a keyframe scene or `keyframe_id`\nisn't one of its keyframe scenes.",
+          "properties": {
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One of its keyframe scenes. Omitted for the scene's own values."
+            },
+            "preset_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset whose timing the Move takes. Omitted for the default preset; one\nwith no length (a cut) switches at once."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose placements switch: not a keyframe scene."
+            },
+            "type": {
+              "const": "scene.set_keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
           "properties": {
             "timeline_id": {
@@ -5588,6 +5628,51 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The keyframe a scene's placements draw it through changed (ADR-0116, since 0.88):\na `scene.set_keyframe` set it, or a batch, undo or redo deleted the scene or the\nkeyframe scene (`keyframe_id` omitted). Studio state, so it carries no `rev`.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The keyframe scene it is now drawn through. Omitted for its own values."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The placed scene."
+            },
+            "type": {
+              "const": "scene.keyframe_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "client_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A shared value changed (0.78, ADR-0102 decision 7): a `values.set` gave it a new\nvalue, or removed it. Not collection state, so it carries no `rev`.",
           "properties": {
             "client_id": {
@@ -8465,6 +8550,24 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PlacedKeyframe": {
+      "description": "A scene drawn through one of its keyframe scenes wherever another scene places it\n(keyframe tracks, ADR-0116, since 0.88), as `studio.get` reports it.",
+      "properties": {
+        "keyframe_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The keyframe scene its placements draw it through."
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The placed scene."
+        }
+      },
+      "required": [
+        "scene_id",
+        "keyframe_id"
+      ],
+      "type": "object"
+    },
     "PlacementForm": {
       "description": "Which of the two forms an item's stored placement has (ADR-0022 decision 5).\n\nThe two values are the complete set until 1.0, which removes `legacy`.",
       "oneOf": [
@@ -10330,6 +10433,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
           "properties": {
+            "keyframes": {
+              "description": "The scenes drawn through one of their keyframe scenes where they are placed\n(ADR-0116, since 0.88), ordered by scene. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/PlacedKeyframe"
+              },
+              "type": "array"
+            },
             "preview_scene": {
               "anyOf": [
                 {
@@ -12865,5 +12975,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.87"
+  "title": "JStream protocol 0.88"
 }

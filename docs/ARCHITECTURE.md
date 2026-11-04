@@ -273,6 +273,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
+  - **A placed scene can switch its own keyframe** as studio state
+    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
+    Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
@@ -750,6 +753,16 @@ The wire format, versioning, error codes and compatibility policy are designed i
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
   `source.restart` reloads a page or plays a file from its start.
+- **Keyframe tracks** (protocol 0.88, a placeholder,
+  [ADR-0116](adr/0116-keyframe-tracks.md), building ADR-0099's keyframe tracks):
+  `scene.set_keyframe` switches the keyframe scene a scene is drawn through wherever
+  another scene places it, independently of the placing scene and of other placed
+  scenes. It is studio state: no `rev`, never undone or saved, read by `studio.get`'s
+  `keyframes` and reported by `scene.keyframe_changed`. The planners draw it as the
+  same view a keyframe of the placing scene draws a group through (ADR-0040 §2), which
+  still wins where it overrides the group's tree. On program a `move` or `fade` preset
+  plays the switch as a Move from what is on screen. Hotkeys, timeline cues, MCP and
+  plugins (`live`) can run it.
 - **Item visibility from an action** (protocol 0.80,
   [ADR-0101](adr/0101-item-show-hide-actions.md)): `item.show`, `item.hide` and
   `item.toggle` change one placement's visibility as `item.set_visible` does, with a
