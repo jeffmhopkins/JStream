@@ -700,7 +700,9 @@ It also generates one block from data rather than from docs:
   the project's goals, and each milestone's items, all from `docs/progress.toml`. That
   file lists the releases (a `version`, a `goal`, and the git `tag` once one has
   shipped; tagged releases come first), the milestones, and each roadmap item's
-  milestone, the `release` it first ships in when one is gathering it, title, `status` (`done`, `hardware` for merged work still waiting on a run
+  milestone, the `release` it first ships in when one is gathering it (with `gate = true`
+  when that release waits for it; the next release's row counts its gate items), title,
+  `status` (`done`, `hardware` for merged work still waiting on a run
   on Windows hardware, named by a `note`, `review`, or `planned`) and the PRs that
   deliver it. An item not yet `done` lists in `needs` the steps it still needs, in order
   (`build`, `wave`, `hardware` or `maintainer`; a `hardware` item without it needs its

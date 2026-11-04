@@ -18,6 +18,7 @@
 # release: the `[[release]]` an item first ships in. A shipped release (one with a `tag`)
 #         holds only merged items; an item that is merged but not yet tagged belongs to
 #         the next release. Items no release is gathering yet leave it out.
+# gate:   true when the release waits for the item; set only with `release`.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[release]]
@@ -1199,16 +1200,36 @@ milestone = "M3"
 title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
 status = "hardware"
 release = "alpha.4"
+gate = true
 prs = [1034, 1048, 1050, 1052, 1064, 1085]
 note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
 
 [[item]]
 id = "AG1"
 milestone = "M3"
-title = "Agents reach the desktop app: --mcp with a token file, Connect an agent docs, and MCP prompts only for what undo can't take back"
+title = "MCP prompts only for what undo can't take back (destructiveHint)"
 status = "done"
 release = "alpha.4"
-prs = [1055,  1079,  1091]
+gate = true
+prs = [1055]
+
+[[item]]
+id = "AG2"
+milestone = "M3"
+title = "Agents reach the desktop app: jstream.exe --mcp with a token file, and Connect an agent docs"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1091]
+
+[[item]]
+id = "AG3"
+milestone = "M3"
+title = "Layering and reflection guidance for agents in MCP"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1079]
 
 [[item]]
 id = "TM1"
@@ -1216,44 +1237,67 @@ milestone = "M3"
 title = "Timer source that keeps counting through edits, with a restart counter"
 status = "done"
 release = "alpha.4"
+gate = true
 prs = [1039,  1117]
 
 [[item]]
-id = "PF1"
+id = "BR1"
 milestone = "M3"
-title = "Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103)"
+title = "A reloading browser page stays transparent until its new document paints"
 status = "done"
 release = "alpha.4"
-prs = [1087]
+gate = true
+prs = [1095]
 
 [[item]]
 id = "MO1"
 milestone = "M3"
-title = "Native motion: ADR-0099's model and keyframe tracks, then continuous modifiers on items drawn each frame (item.set_motion)"
-status = "review"
+title = "Native motion: ADR-0099's model and keyframe tracks"
+status = "done"
 release = "alpha.4"
-prs = [1074,  1125]
-note = "The model and keyframe tracks merged (#1074); item.set_motion (#1125, protocol 0.81) passed review and waits its turn in the protocol queue"
-needs = ["build"]
+gate = true
+prs = [1074]
 
 [[item]]
 id = "MO2"
 milestone = "M3"
-title = "A one-shot shake that a hotkey fires and that decays"
-status = "planned"
+title = "Native motion: continuous wiggle, oscillate and drift on items, drawn each frame (item.set_motion)"
+status = "review"
 release = "alpha.4"
-prs = []
-note = "Built on MO1's motion and HK1's hotkeys; pushes after both merge"
+gate = true
+prs = [1125]
+note = "Passed review (protocol 0.81); waits its turn in the protocol queue"
 needs = ["build"]
 
 [[item]]
 id = "MO3"
 milestone = "M3"
-title = "Audio-reactive motion bindings that follow a bus or a source (ADR-0100)"
+title = "A one-shot shake that a hotkey fires and that decays"
+status = "planned"
+release = "alpha.4"
+gate = true
+prs = []
+note = "Built on MO2's motion and HK1's hotkeys; pushes after both merge"
+needs = ["build"]
+
+[[item]]
+id = "MO4"
+milestone = "M3"
+title = "Audio-reactive bindings: ADR-0100 and its model"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1076]
+
+[[item]]
+id = "MO5"
+milestone = "M3"
+title = "Audio-reactive motion modifiers drawn from the render loop"
 status = "review"
 release = "alpha.4"
-prs = [1076,  1149]
-note = "ADR-0100 and its model merged (#1076); the bindings drawn from the render loop are #1149, a draft stacked on MO1"
+gate = true
+prs = [1149]
+note = "A draft stacked on MO2"
 needs = ["build"]
 
 [[item]]
@@ -1262,6 +1306,7 @@ milestone = "M3"
 title = "Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101)"
 status = "review"
 release = "alpha.4"
+gate = true
 prs = [1082]
 note = "Passed review (protocol 0.80); waits its turn in the protocol queue"
 needs = ["build"]
@@ -1272,6 +1317,7 @@ milestone = "M3"
 title = "Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch)"
 status = "review"
 release = "alpha.4"
+gate = true
 prs = [1080]
 note = "Protocol 0.82; back in review after its protocol renumber"
 needs = ["build"]
@@ -1279,31 +1325,78 @@ needs = ["build"]
 [[item]]
 id = "PA1"
 milestone = "M3"
-title = "Page API: browser source pages read the engine through window.jstream (ADR-0102)"
+title = "Page API part 1: ADR-0102 and shared values (values.set, values.list)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1077,  1127]
+
+[[item]]
+id = "PA2"
+milestone = "M3"
+title = "Page API part 2: window.jstream with clock, visibility, scenes and values"
 status = "review"
 release = "alpha.4"
-prs = [1077,  1127,  1146]
-note = "ADR-0102 (#1077) and shared values, part 1 (#1127, protocol 0.78), merged; part 2, window.jstream with clock, visibility, scenes and values, is #1146"
+gate = true
+prs = [1146]
+needs = ["build"]
+
+[[item]]
+id = "PF1"
+milestone = "M3"
+title = "Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1087]
+
+[[item]]
+id = "PS1"
+milestone = "M3"
+title = "A hidden browser page rests while no mix draws it"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1100]
+
+[[item]]
+id = "PS2"
+milestone = "M3"
+title = "Software compositing: a nested scene drawn once a frame, and blur taps bounded lower"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1106]
+note = "Passed review; waits to merge"
 needs = ["build"]
 
 [[item]]
 id = "CB1"
 milestone = "M3"
-title = "Compositing that matches a browser: sRGB-encoded blend modes, item effects over the canvas, and opacity above 1 as a gain"
-status = "review"
+title = "Blend in sRGB-encoded space, so HTML overlays match a browser (normal_srgb, additive_srgb)"
+status = "done"
 release = "alpha.4"
-prs = [1109,  1111,  1104]
-note = "normal_srgb and additive_srgb (#1109, protocol 0.75) and canvas-space item effects (#1111, protocol 0.76) merged; opacity as a gain (#1104, protocol 0.83) is back in review after its renumber"
-needs = ["build"]
+gate = true
+prs = [1109]
 
 [[item]]
-id = "PS1"
+id = "CB2"
 milestone = "M3"
-title = "Software compositing and idle sources cost less: a hidden browser page rests, a nested scene is drawn once a frame, and blur taps are bounded"
+title = "Item effects after placement, over the canvas"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1111]
+
+[[item]]
+id = "CB3"
+milestone = "M3"
+title = "Opacity above 1 as a gain, so additive items can add more than their source"
 status = "review"
 release = "alpha.4"
-prs = [1100,  1106]
-note = "#1100 merged; #1106 passed review and waits to merge"
+gate = true
+prs = [1104]
+note = "Protocol 0.83; back in review after its renumber"
 needs = ["build"]
 
 [[item]]
@@ -1312,8 +1405,9 @@ milestone = "M3"
 title = "File filters such as Apply LUT on the program and output chains"
 status = "review"
 release = "alpha.4"
+gate = true
 prs = [1134]
-note = "Protocol 0.79"
+note = "Passed review (protocol 0.79); waits to merge"
 needs = ["build"]
 
 [[item]]
@@ -1322,6 +1416,7 @@ milestone = "M3"
 title = "A local web browser source's first load passes on Linux"
 status = "review"
 release = "alpha.4"
+gate = true
 prs = [1094]
 needs = ["build"]
 
@@ -1331,6 +1426,7 @@ milestone = "M3"
 title = "Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows"
 status = "planned"
 release = "alpha.4"
+gate = true
 prs = []
-note = "Cut once every other alpha.4 item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile"
+note = "Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile"
 needs = ["build",  "hardware"]

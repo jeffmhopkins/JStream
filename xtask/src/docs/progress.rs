@@ -70,6 +70,8 @@ struct Item {
     note: Option<String>,
     /// The release it first ships in, when that is known.
     release: Option<String>,
+    /// Its release waits for it.
+    gate: bool,
     /// The steps still to do before it is `done`, in order (`NEEDS`).
     needs: Vec<String>,
 }
@@ -210,6 +212,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 "note",
                 "needs",
                 "release",
+                "gate",
             ],
             &what,
             &mut errs,
@@ -275,6 +278,18 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
                 }
             },
         };
+        let gate = match t.get("gate") {
+            None => false,
+            Some(v) => v.as_bool().unwrap_or_else(|| {
+                errs.push(format!("{what}: `gate` must be true or false"));
+                false
+            }),
+        };
+        if gate && release.is_none() {
+            errs.push(format!(
+                "{what}: `gate` needs the `release` that waits for it"
+            ));
+        }
         let item = Item {
             milestone: string(t, "milestone", &what, &mut errs),
             title: string(t, "title", &what, &mut errs),
@@ -282,6 +297,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
             prs,
             note,
             release,
+            gate,
             needs,
             id,
         };
@@ -408,7 +424,8 @@ fn releases(p: &Progress, out: &mut String) {
     let next = p.releases.iter().position(|r| r.tag.is_none());
     out.push_str(
         "### By release\n\n\
-         An item counts toward the release it first ships in.\n\n\
+         An item counts toward the release it first ships in. A release's gate items are \
+         the ones it waits for; the others are merged work it carries.\n\n\
          | Release | Goal | Status | Progress | Merged | In review | Planned |\n\
          |---|---|---|---|---|---|---|\n",
     );
@@ -421,7 +438,18 @@ fn releases(p: &Progress, out: &mut String) {
     for (n, r) in p.releases.iter().enumerate() {
         let status = match (&r.tag, next) {
             (Some(tag), _) => format!("📦 released as `{}`", escape(tag)),
-            (None, Some(k)) if k == n => "🔨 next".to_owned(),
+            (None, Some(k)) if k == n => {
+                let gate: Vec<&Item> = of(Some(&r.id)).into_iter().filter(|i| i.gate).collect();
+                if gate.is_empty() {
+                    "🔨 next".to_owned()
+                } else {
+                    format!(
+                        "🔨 next: waits on {} gate items, {} merged",
+                        gate.len(),
+                        gate.iter().filter(|i| i.merged()).count()
+                    )
+                }
+            }
             (None, _) => "⏳ later".to_owned(),
         };
         let _ = writeln!(
@@ -447,22 +475,23 @@ fn releases(p: &Progress, out: &mut String) {
         }
         // Unfinished work first, so what the release still waits on leads.
         let rank = |i: &Item| STATUSES.iter().rev().position(|(s, _)| *s == i.status);
-        items.sort_by_key(|i| rank(i));
+        items.sort_by_key(|i| (rank(i), !i.gate));
         let merged = items.iter().filter(|i| i.merged()).count();
         let open = if next == Some(n) { " open" } else { "" };
         let _ = write!(
             out,
             "\n<details{open}>\n<summary><b>{}</b>: {merged} of {} merged</summary>\n\n\
-             | ID | Item | Milestone | Status | PRs |\n|---|---|---|---|---|\n",
+             | ID | Item | Gate | Milestone | Status | PRs |\n|---|---|---|---|---|---|\n",
             escape(&r.version),
             items.len()
         );
         for i in items {
             let _ = writeln!(
                 out,
-                "| {} | {} | {} | {} | {} |",
+                "| {} | {} | {} | {} | {} | {} |",
                 escape(&i.id),
                 escape(&i.title),
+                if i.gate { "🚧" } else { "" },
                 escape(&i.milestone),
                 label(i),
                 prs(i)
@@ -1018,6 +1047,7 @@ status = "review"
 prs = [12]
 needs = ["build"]
 release = "a2"
+gate = true
 
 [[item]]
 id = "A4"
@@ -1038,7 +1068,7 @@ needs = ["build"]
         );
         assert!(
             r.contains(
-                "| `0.1.0-alpha.2` | Agents \\| scenes | 🔨 next | `█████░░░░░` 50% | 1 | 1 | 0 |\n"
+                "| `0.1.0-alpha.2` | Agents \\| scenes | 🔨 next: waits on 1 gate items, 0 merged | `█████░░░░░` 50% | 1 | 1 | 0 |\n"
             ),
             "{r}"
         );
@@ -1051,7 +1081,9 @@ needs = ["build"]
         let next = r
             .find("<details open>\n<summary><b>0.1.0-alpha.2</b>: 1 of 2 merged</summary>")
             .expect("next release open");
-        let gating = r[next..].find("| A3 | Gating |").expect("A3 listed");
+        let gating = r[next..]
+            .find("| A3 | Gating | 🚧 | M1 |")
+            .expect("A3 listed");
         let landed = r[next..].find("| A2 | Landed since |").expect("A2 listed");
         assert!(gating < landed, "{r}");
         assert!(
@@ -1097,6 +1129,14 @@ title = "y"
 status = "done"
 prs = [2]
 release = "a9"
+
+[[item]]
+id = "A3"
+milestone = "M1"
+title = "z"
+status = "done"
+prs = [3]
+gate = true
 "#;
         let errs = parse(bad).expect_err("invariant: invalid");
         let all = errs.join("\n");
@@ -1104,6 +1144,7 @@ release = "a9"
             "release `a1`: a tagged release must come before every untagged one",
             "item `A1`: release `a1` has shipped, so the item must be merged",
             "item `A2`: unknown release `a9`",
+            "item `A3`: `gate` needs the `release`",
         ] {
             assert!(all.contains(needle), "missing {needle:?} in:\n{all}");
         }
