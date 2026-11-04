@@ -114,6 +114,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_meta", Class(E)),
     ("scene.set_options", Class(E)),
     ("scene.set_camera", Class(E)),
+    ("scene.set_camera_motion", Class(E)),
+    ("scene.set_camera_follow", Class(E)),
     ("scene.set_transitions", Class(E)),
     ("scene.create_variant", Class(E)),
     ("item.add", Class(E)),
@@ -194,6 +196,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // It switches as `scene.switch` does, but answers with pictures of the program mix,
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
+    ("scene.zoom_camera", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
     ("output.set_key", N),

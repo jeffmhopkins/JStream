@@ -179,7 +179,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, filters { video[] }, items[] }   flat display order
+│                          camera?, camera_motion[], camera_follow?, filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -713,6 +713,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
+  `scene.set_camera_motion` gives the camera motion modifiers, and
+  `scene.set_camera_follow` a camera that glides after the pointer over a display or
+  window capture, each set on the family's scene; the action `scene.zoom_camera` steps
+  a follow camera's live zoom, with no `rev` change
+  ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -1050,7 +1055,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
   scenes, continuous motion with `item.set_motion` and one-shot jolts that
-  `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, and
+  `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
+  that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
@@ -1345,7 +1351,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
-  `motion` (version 4, ADR-0099) bumped it instead, each with a
+  `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
+  (version 5, ADR-0113) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

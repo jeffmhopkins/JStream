@@ -541,6 +541,8 @@ mod tests {
             folder: None,
             meta: Default::default(),
             options: Default::default(),
+            camera_motion: Vec::new(),
+            camera_follow: None,
             items: Vec::new(),
             transition_in: None,
             transition_out: None,

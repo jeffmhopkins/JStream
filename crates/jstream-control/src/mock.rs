@@ -617,6 +617,10 @@ struct Scene {
     options: jstream_protocol::SceneOptions,
     /// Its camera (ADR-0094), or a keyframe scene's override of its parent's.
     camera: Option<jstream_protocol::SceneCamera>,
+    /// Its camera motion (ADR-0113); empty for a keyframe scene.
+    camera_motion: Vec<jstream_protocol::CameraMotionModifier>,
+    /// Its follow camera (ADR-0113); `None` for a keyframe scene.
+    camera_follow: Option<jstream_protocol::CameraFollow>,
     /// Its filters (ADR-0065), settings as given: a video chain only.
     filters: jstream_protocol::FilterChains,
     /// The scene it is a keyframe scene of (ADR-0024 §2), whose items it shows.
@@ -1040,6 +1044,26 @@ impl State {
             Action::ItemToggle { item_id, scene_id } => {
                 return self.set_shown(client_id, request_id, item_id, scene_id, None);
             }
+            // The engine zooms its render thread's follow camera; the mock has none, so it
+            // only checks the call as the engine does (ADR-0113 §4).
+            Action::SceneZoomCamera { scene_id, steps } => {
+                let si = self.collection.existing_scene(&scene_id)?;
+                if !(-16..=16).contains(&steps) {
+                    return Err(invalid(0, "steps", "must be within -16..=16"));
+                }
+                let scenes = &self.collection.scenes;
+                let family = scenes[si].variant_of.as_ref().map_or(si, |parent| {
+                    scenes.iter().position(|s| &s.id == parent).unwrap_or(si)
+                });
+                if scenes[family].camera_follow.is_none() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "scene `{scene_id}` has no camera that follows the pointer"
+                        ),
+                    });
+                }
+                return Ok(CallResult::action());
+            }
             // The mock draws nothing, so a fire only checks its arguments (#1107).
             Action::ItemTriggerMotion {
                 item_id,
@@ -1235,6 +1259,8 @@ impl State {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
                         role: scene.role,
+                        camera_motion: scene.camera_motion.clone(),
+                        camera_follow: scene.camera_follow.clone(),
                         items: self.collection.item_infos(scene),
                         transition_in: None,
                         transition_out: None,
@@ -1569,6 +1595,8 @@ impl Collection {
                     meta: Default::default(),
                     options: Default::default(),
                     camera: None,
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
@@ -1698,6 +1726,19 @@ impl Collection {
                     }
                 }
                 inverse.extend(keyframe::restore_overrides(&scene.id, &scene.overrides));
+                // After its items, which a follow camera names.
+                if !scene.camera_motion.is_empty() {
+                    inverse.push(Edit::SceneSetCameraMotion {
+                        scene_id: scene.id.clone(),
+                        motion: scene.camera_motion.clone(),
+                    });
+                }
+                if scene.camera_follow.is_some() {
+                    inverse.push(Edit::SceneSetCameraFollow {
+                        scene_id: scene.id.clone(),
+                        follow: scene.camera_follow.clone(),
+                    });
+                }
                 inverse
             }
             Edit::SceneReorder { scene_id, index } => {

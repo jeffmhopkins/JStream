@@ -69,12 +69,13 @@
 #[cfg(doc)]
 use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, EncoderProfile,
-    EncoderProfileId, FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry,
-    ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind,
-    PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
-    SourceAudio, SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
-    VideoMix as MixSpec, VideoMixId, builtin_transition_kinds, initial_preset,
+    Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
+    Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
+    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
+    OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -753,6 +754,12 @@ pub struct Scene {
     /// Its camera (ADR-0094), which makes it a 3D scene. On a keyframe scene, its
     /// override of its parent's; [`State::effective_camera`] gives what it draws through.
     pub(crate) camera: Option<SceneCamera>,
+    /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
+    /// parent's.
+    pub(crate) camera_motion: Vec<CameraMotionModifier>,
+    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
+    /// item no longer in the scene, which leaves it inert.
+    pub(crate) camera_follow: Option<CameraFollow>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -809,6 +816,18 @@ impl Scene {
     /// draws through.
     pub fn camera(&self) -> Option<&SceneCamera> {
         self.camera.as_ref()
+    }
+
+    /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
+    /// parent's.
+    pub fn camera_motion(&self) -> &[CameraMotionModifier] {
+        &self.camera_motion
+    }
+
+    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
+    /// item no longer in the scene, which leaves it inert.
+    pub fn camera_follow(&self) -> Option<&CameraFollow> {
+        self.camera_follow.as_ref()
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene

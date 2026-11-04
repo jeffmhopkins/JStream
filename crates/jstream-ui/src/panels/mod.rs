@@ -11,6 +11,7 @@
 
 pub mod add_source;
 pub mod agent;
+pub mod camera_moves;
 mod confirm;
 pub mod device_preview;
 pub mod encoders;

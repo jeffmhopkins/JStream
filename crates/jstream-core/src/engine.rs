@@ -3152,6 +3152,10 @@ struct State {
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The zoom steps `scene.zoom_camera` asked for each scene family's follow camera
+    /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
+    /// take through the parameter channel. Never stored.
+    camera_zooms: BTreeMap<SceneId, i64>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
     /// while any is open.
@@ -3556,6 +3560,10 @@ impl State {
                 preset_id,
             } => {
                 self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::SceneZoomCamera { scene_id, steps } => {
+                self.zoom_camera(&scene_id, steps)?;
                 return Ok(CallResult::action());
             }
             Action::StudioSetPreview { scene_id } => {
@@ -4317,7 +4325,39 @@ impl State {
 
     /// Publishes the gestures' live values on the render parameter channel.
     fn publish_live(&self) {
-        self.render.publish_live(self.gestures.params());
+        self.render
+            .publish_live(self.gestures.params().with_zooms(self.camera_zooms.clone()));
+    }
+
+    /// `scene.zoom_camera` (ADR-0113 §4): `steps` zoom steps for the follow camera of
+    /// `scene_id`'s family, which the render thread takes on its next frame.
+    fn zoom_camera(&mut self, scene_id: &SceneId, steps: i32) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.as_str().to_owned(),
+            })?;
+        if !(-16..=16).contains(&steps) {
+            return Err(ProtocolError::invalid_argument(
+                "steps",
+                "must be within -16..=16",
+            ));
+        }
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        if state
+            .scene(&family)
+            .and_then(|family| family.camera_follow())
+            .is_none()
+        {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` has no camera that follows the pointer"),
+            });
+        }
+        *self.camera_zooms.entry(family).or_default() += i64::from(steps);
+        self.publish_live();
+        Ok(())
     }
 
     /// Sends the `live.changed` events due at `now` and releases the committed values

@@ -460,6 +460,26 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..SceneCamera::framing(CameraCanvas::DEFAULT)
             }),
         },
+        // A camera's motion, every property (ADR-0113), and a follow camera on and off.
+        Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("scn_1"),
+            motion: camera_motion(&crate::CameraProperty::ALL[..8]),
+        },
+        Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("scn_1"),
+            motion: camera_motion(&crate::CameraProperty::ALL[8..]),
+        },
+        Edit::SceneSetCameraFollow {
+            scene_id: SceneId::new("scn_1"),
+            follow: Some(crate::CameraFollow {
+                zoom: Finite32::new(1.5).expect("finite"),
+                ..crate::CameraFollow::of(ItemId::new("itm_1"))
+            }),
+        },
+        Edit::SceneSetCameraFollow {
+            scene_id: SceneId::new("scn_1"),
+            follow: None,
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
@@ -652,6 +672,26 @@ fn keyframe_edits() -> Vec<Edit> {
         }),
     );
     edits
+}
+
+/// A camera motion modifier on each of `properties`: a hand-held sway (ADR-0113).
+fn camera_motion(properties: &[crate::CameraProperty]) -> Vec<crate::CameraMotionModifier> {
+    properties
+        .iter()
+        .enumerate()
+        .map(|(n, property)| crate::CameraMotionModifier {
+            modifier_id: format!("cam-{n}"),
+            property: *property,
+            kind: MotionKind::Wiggle {
+                amplitude: Finite32::new(4.0).expect("finite"),
+                frequency_hz: Finite32::new(0.4).expect("finite"),
+                seed: 7,
+                octaves: 2,
+            },
+            clock: MotionClock::Engine,
+            enabled: n % 2 == 0,
+        })
+        .collect()
 }
 
 /// What the keyframe scene `scn_1_wide` overrides.
@@ -1174,6 +1214,10 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         Action::StudioSetPreview {
             scene_id: SceneId::new("scn_1"),
+        },
+        Action::SceneZoomCamera {
+            scene_id: SceneId::new("scn_1"),
+            steps: -2,
         },
         Action::PairingStart,
         Action::DeviceRevoke {
@@ -1984,6 +2028,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: item_infos(),
                     folder: Some(FolderId::new("fld_shows")),
                     meta: scene_meta(),
@@ -2002,6 +2048,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: None,
                     transition_out: None,
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
@@ -2017,6 +2065,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Group,
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: vec![],
                     folder: None,
                     meta: Default::default(),

@@ -93,7 +93,7 @@ enum Prop {
     Meta,
     /// A scene's options (ADR-0089).
     Options,
-    /// A scene's camera (ADR-0094).
+    /// A scene's camera (ADR-0094), its camera motion or its follow camera (ADR-0113).
     Camera,
     /// A label's colour and icon.
     Look,
@@ -352,7 +352,9 @@ impl Touched {
             Edit::SceneSetOptions { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Options);
             }
-            Edit::SceneSetCamera { scene_id, .. } => {
+            Edit::SceneSetCamera { scene_id, .. }
+            | Edit::SceneSetCameraMotion { scene_id, .. }
+            | Edit::SceneSetCameraFollow { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Camera);
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {

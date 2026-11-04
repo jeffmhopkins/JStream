@@ -266,6 +266,8 @@ fn create(
         meta: SceneMeta::default(),
         options: SceneOptions::default(),
         camera: None,
+        camera_motion: Vec::new(),
+        camera_follow: None,
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),

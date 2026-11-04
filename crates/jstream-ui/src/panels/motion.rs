@@ -82,6 +82,12 @@ pub fn default_kind(name: &str, property: MotionProperty) -> Option<MotionKind> 
         "×" => 0.05,
         _ => 3.0,
     };
+    sized_kind(name, size)
+}
+
+/// A new modifier of the kind named `name` whose amount is `size` (a drift's rate is
+/// ten times it a second).
+pub fn sized_kind(name: &str, size: f32) -> Option<MotionKind> {
     Some(match name {
         "Wiggle" => MotionKind::Wiggle {
             amplitude: finite(size),
@@ -178,7 +184,7 @@ impl Param {
     }
 
     /// Its label, step, decimals and range.
-    fn field(self) -> (&'static str, f64, usize, f64, f64) {
+    pub fn field(self) -> (&'static str, f64, usize, f64, f64) {
         match self {
             Param::Amplitude => ("Amount", 0.1, 2, 0.0, 100_000.0),
             Param::Frequency => ("Speed", 0.05, 2, 0.01, 60.0),

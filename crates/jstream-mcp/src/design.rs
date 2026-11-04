@@ -134,6 +134,15 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
+kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
+`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
+hand-held camera. To follow the pointer over a screen capture, `scene.set_camera_follow` \
+names an item of the scene showing a `display` or `window` source: the camera glides \
+after the pointer at an angle (`yaw_deg`, `pitch_deg`), keeps the capture filling the \
+frame and, with `blur_px` above 0, focuses where it looks. `zoom` (1-4) is its resting \
+zoom; `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+Both belong to the scene's family: set them on the parent, not a keyframe scene. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

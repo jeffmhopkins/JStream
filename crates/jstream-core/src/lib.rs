@@ -33,6 +33,7 @@ mod engine;
 mod events;
 mod filter_assets;
 mod filters;
+mod follow;
 mod forget;
 mod frames;
 mod gesture;

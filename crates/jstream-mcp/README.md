@@ -123,7 +123,9 @@ browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
-itself, #1107), the `preview` actions and `item.show`, `item.hide`
+itself, #1107), the `preview` actions, `scene.zoom_camera`
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
+puts back and nothing stores) and `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
 opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
@@ -183,7 +185,11 @@ blending is linear, 3D sets through
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
-[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), choosing between
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a camera that moves on its
+own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
+pointer over a screen capture (`scene.set_camera_follow`, its zoom stepped live by
+`scene.zoom_camera`, both set on the family's scene,
+[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in

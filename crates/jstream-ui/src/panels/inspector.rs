@@ -1388,11 +1388,15 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
     }
 }
 
-/// A Hotkey row: the chords bound to `action` (a scene's `scene.switch`, an item's
-/// `item.toggle`, `item.show` or `item.hide`), each with a button that unbinds it, and
-/// "Set key", which binds the next chord pressed (Escape cancels).
+/// A Hotkey row: the chords bound to `action` (a scene's `scene.switch` or
+/// `scene.zoom_camera`, an item's `item.toggle`, `item.show` or `item.hide`), each with a
+/// button that unbinds it, and "Set key", which binds the next chord pressed (Escape
+/// cancels). A binding is sent at once.
 #[component]
-fn HotkeyRow(label: &'static str, action: jstream_control::protocol::Action) -> impl IntoView {
+pub(crate) fn HotkeyRow(
+    label: &'static str,
+    action: jstream_control::protocol::Action,
+) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let id = StoredValue::new(action);

@@ -124,4 +124,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0109](0109-review-pass-carries-across-base-merges.md) | A review pass carries across merges of the base branch | accepted | maintainer |  |
 | [ADR-0110](0110-mcp-values-tool-naming.md) | Shared values reach MCP through one values tool | accepted | agent |  |
 | [ADR-0111](0111-camera-up-at-the-poles.md) | A scene camera's up at either pole | accepted | agent |  |
+| [ADR-0113](0113-camera-motion-and-follow-pointer.md) | Camera motion, and a scene camera that follows the pointer over a capture | accepted | agent |  |
 <!-- @generated end adr-index -->

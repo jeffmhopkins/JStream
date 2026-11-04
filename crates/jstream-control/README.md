@@ -203,7 +203,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
   graph's fields, an override on a keyframe scene refused while its parent has no
   camera, and removing a parent's camera dropping its keyframes' overrides, which the
-  inverse restores; `SceneInfo.camera` reports each scene's own;
+  inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
+  follow camera ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md):
+  `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
+  `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a
+  `display` or `window` source) belong to the family, refused on a keyframe scene, with
+  the graph's inverses, and undoing a scene's delete restores them;
+  `scene.zoom_camera` is `not_found` for a missing scene, `invalid_argument` for steps
+  outside -16 to 16 and `action_failed` without a follow camera, and otherwise changes
+  nothing the mock keeps;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,
