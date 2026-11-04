@@ -45,6 +45,14 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// Whether any mix draws the source now: the program, a video mix or a preview
+    /// (#1071). The engine says so when it changes. A kind that costs something to keep
+    /// drawing (a `browser` page) can rest while it isn't drawn; the default does
+    /// nothing. A source starts drawn.
+    fn set_drawn(&mut self, drawn: bool) {
+        let _ = drawn;
+    }
+
     /// The source's sound, for the engine to mix while the program shows the source: a
     /// `media` file's audio, decoded on the media clock. `None`, the default, for a kind
     /// without such sound. A kind whose audio plays whether or not it is shown (a
@@ -145,7 +153,8 @@ pub trait Source: Send {
 /// Drawing a frame can take milliseconds (a whole frame's pixels, an FFT), so a host
 /// that asks for frames under a lock calls `paint` before it takes that lock, when
 /// [`Source::next_change`] said the frame is due, and `frame` then hands the painted
-/// frame out at once. The `waveform` and `spectrum` painters allocate only while their
+/// frame out at once. A host that skipped painting a source nothing showed may also
+/// paint it once under its lock, to catch it up before it is shown again. The `waveform` and `spectrum` painters allocate only while their
 /// pool of frames grows, or when every frame in it is still held; `chat_message`'s
 /// allocates when it redraws for a newly featured message.
 pub trait Painter: Send + Sync {

@@ -2403,6 +2403,14 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many times the live sources painted `source_id` (ADR-0103's meters), for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn paints(&self, source_id: &str) -> u64 {
+        let meters = lock(&self.shared.state).live.meters();
+        meters.paints(&SourceId::new(source_id))
+    }
+
     /// Forgets every source's size without telling anyone, as if plans had taken new
     /// frames since the last `sync_sizes`, so a test sees which re-plan catches up.
     #[cfg(test)]
@@ -3791,6 +3799,8 @@ impl State {
         if !same {
             *source_shots = Arc::new(shots);
         }
+        // Every mix and preview has looked at what it draws: the rest can rest.
+        live.rest_undrawn();
         live.wake_at(wake);
         live.meters().planned(started.elapsed());
         planning.end_ms

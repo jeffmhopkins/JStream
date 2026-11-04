@@ -189,8 +189,9 @@ objc2-screen-capture-kit = { version = "0.3", default-features = false, features
 objc2-security = { version = "0.3", default-features = false, features = ["std", "SecBase", "SecItem"] }
 # Core Graphics for the Screen Recording permission (`CGPreflightScreenCaptureAccess` and
 # `CGRequestScreenCaptureAccess`), the main display's ID and the sRGB colour space the
-# capture asks for. The 0.3 line, which ScreenCaptureKit's crate already brings in.
-objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGWindow"] }
+# capture asks for, and the pointer's location over a captured display (`CGEventCreate`,
+# `CGEventGetLocation` and `CGDisplayBounds`). The 0.3 line, which ScreenCaptureKit's crate already brings in.
+objc2-core-graphics = { version = "0.3", default-features = false, features = ["std", "CGColorSpace", "CGDirectDisplay", "CGEvent", "CGEventTypes", "CGWindow"] }
 # The Objective-C runtime, blocks and dispatch queues that ScreenCaptureKit's API is made
 # of: a class for the stream's output and delegate (`objc2::define_class!`), completion
 # handler blocks (`block2`) and the serial queue frames arrive on (`dispatch2`). All three

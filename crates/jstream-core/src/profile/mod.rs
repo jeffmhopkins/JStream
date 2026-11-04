@@ -112,6 +112,14 @@ impl SourceMeters {
     fn read(&self) -> BTreeMap<SourceId, SourceTotals> {
         lock(&self.sources).clone()
     }
+
+    /// How many paints of `source` were counted, for tests.
+    #[cfg(test)]
+    pub(crate) fn paints(&self, source: &SourceId) -> u64 {
+        lock(&self.sources)
+            .get(source)
+            .map_or(0, |totals| totals.paints)
+    }
 }
 
 /// What planning the program mix cost, as running totals.

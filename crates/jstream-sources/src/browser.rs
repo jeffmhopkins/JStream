@@ -262,6 +262,7 @@ pub(crate) fn open(
         audio,
         every_ms: i64::from(1000_u32.div_ceil(fps)),
         feed: grant.map(|grant| Feed::new(grant, fps)),
+        hidden: false,
     }))
 }
 
@@ -321,6 +322,8 @@ struct BrowserSource {
     every_ms: i64,
     /// What a page granted the page API was sent (ADR-0102); `None` without a grant.
     feed: Option<Feed>,
+    /// Whether the page was told nothing draws it.
+    hidden: bool,
 }
 
 impl Source for BrowserSource {
@@ -358,6 +361,15 @@ impl Source for BrowserSource {
             .unwrap_or(false)
         {
             self.page.reload();
+        }
+    }
+
+    /// Hides the page while nothing draws it, so it stops painting (#1071), and shows it
+    /// again when something does.
+    fn set_drawn(&mut self, drawn: bool) {
+        if self.hidden == drawn {
+            self.hidden = !drawn;
+            self.page.set_hidden(!drawn);
         }
     }
 

@@ -42,6 +42,7 @@ use std::time::Duration;
 use ::cef::{BrowserSettings, CefString, ImplBrowser, ImplBrowserHost, ImplFrame, LogSeverity};
 
 use crate::page_api::{ApiHome, PageCache};
+use crate::reload_hold::{self, ReloadHold};
 use crate::wire::{self, ToEngine, ToHelper};
 use crate::{PageData, PageSpec, RequestPolicy, css_script};
 #[cfg(windows)]
@@ -313,6 +314,11 @@ impl Host {
                     page.page_data(&data);
                 }
             }
+            ToHelper::SetHidden { page, hidden } => {
+                if let Some(page) = self.pages().get(&page).cloned() {
+                    page.set_hidden(hidden);
+                }
+            }
             ToHelper::Close { page } => {
                 let page = self.pages().remove(&page);
                 if let Some(page) = page {
@@ -363,9 +369,10 @@ impl Host {
             css: Mutex::new(spec.css.clone()),
             browser: Mutex::new(None),
             closing: AtomicBool::new(false),
+            hidden: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
-            reloading: Mutex::new(false),
+            reloading: Mutex::new(ReloadHold::default()),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -473,14 +480,18 @@ pub(crate) struct PageShared {
     /// Set when the engine closes the page: a browser that arrives later is closed at
     /// once.
     closing: AtomicBool,
+    /// Whether the engine said nothing draws the page (#1071). A browser that arrives
+    /// later starts hidden.
+    hidden: AtomicBool,
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
-    /// Set from a reload until the reloaded document starts loading: the old document's
-    /// paints meanwhile are skipped, so the engine never shows them after the reload.
-    /// A paint holds it from its check until its frame is sent, and a reload holds it
-    /// until [`ToEngine::Reloading`] is sent, so no old frame follows that message.
-    reloading: Mutex<bool>,
+    /// Held from a reload until the reloaded document has loaded and its first paint was
+    /// skipped (`reload_hold.rs`): the old document's paints and the new one's first,
+    /// which can be opaque white (#1151), are skipped, so the engine shows neither. A paint holds the lock from its check until its frame is
+    /// sent, and a reload holds it until [`ToEngine::Reloading`] is sent, so no old frame
+    /// follows that message.
+    reloading: Mutex<ReloadHold>,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -497,7 +508,7 @@ struct SendBrowser(::cef::Browser);
 // SAFETY: CEF's browser object is reference counted with atomic counts, and the only
 // methods called through it (`host`, `main_frame`, then `close_browser`,
 // `execute_java_script`, `send_process_message` and `reload`) are documented as callable
-// on any thread of the browser process.
+// on any thread of the browser process. `was_hidden` is called only on CEF's UI thread.
 unsafe impl Send for SendBrowser {}
 
 impl PageShared {
@@ -507,6 +518,11 @@ impl PageShared {
         if self.closing.load(Ordering::Acquire) {
             close(&browser);
             return;
+        }
+        if self.hidden.load(Ordering::Acquire)
+            && let Some(host) = browser.host()
+        {
+            host.was_hidden(1);
         }
         // Taken before the browser is stored, as `page_data` takes it, so no update is
         // sent twice or missed between the two.
@@ -534,10 +550,53 @@ impl PageShared {
         self.host.browser_closed();
     }
 
-    /// The main frame started loading a document (`OnLoadStart`), or ended or failed
-    /// loading one: paints from here are the new document's, so a reload's hold ends.
-    pub(crate) fn load_started(&self) {
-        *lock(&self.reloading) = false;
+    /// The main frame started loading a document (`OnLoadStart`, UI thread): while a
+    /// reload holds the page's paints, [`reload_hold::DEADLINE`] from now counts as the
+    /// load's end, so a load that never ends still shows (#1151).
+    pub(crate) fn load_started(self: &Arc<Self>) {
+        let Some(token) = lock(&self.reloading).load_started() else {
+            return;
+        };
+        let page = Arc::clone(self);
+        ::cef::post_delayed_task(
+            ::cef::ThreadId::UI,
+            Some(&mut handlers::task(move || {
+                let released = lock(&page.reloading).deadline(token);
+                if let Some(released) = released {
+                    page.repaint_later(released);
+                }
+            })),
+            i64::try_from(reload_hold::DEADLINE.as_millis()).unwrap_or(i64::MAX),
+        );
+    }
+
+    /// The main frame ended or failed loading a document: a reload's hold ends if the new
+    /// document's first paint was already skipped, or else with that paint (#1151).
+    pub(crate) fn load_finished(self: &Arc<Self>) {
+        let released = lock(&self.reloading).load_finished();
+        if let Some(released) = released {
+            self.repaint_later(released);
+        }
+    }
+
+    /// A hold just ended, and the paints it skipped may have been the page's last, a
+    /// static page painting nothing more on its own: asks CEF to paint the whole view
+    /// again [`reload_hold::REPAINT_AFTER`] from now, unless a paint went through by then.
+    /// Asked for at once, Chromium paints the new document's blank, opaque white.
+    fn repaint_later(self: &Arc<Self>, released: reload_hold::Released) {
+        let page = Arc::clone(self);
+        ::cef::post_delayed_task(
+            ::cef::ThreadId::UI,
+            Some(&mut handlers::task(move || {
+                if !lock(&page.reloading).needs_repaint(released) {
+                    return;
+                }
+                if let Some(host) = lock(&page.browser).as_ref().and_then(|b| b.0.host()) {
+                    host.invalidate(::cef::PaintElementType::VIEW);
+                }
+            })),
+            i64::try_from(reload_hold::REPAINT_AFTER.as_millis()).unwrap_or(i64::MAX),
+        );
     }
 
     /// The main frame started loading a document (`OnLoadStart`): sends it everything the
@@ -555,8 +614,8 @@ impl PageShared {
     }
 
     /// The main frame finished loading: applies the custom CSS to the new document.
-    pub(crate) fn loaded(&self, frame: &::cef::Frame) {
-        self.load_started();
+    pub(crate) fn loaded(self: &Arc<Self>, frame: &::cef::Frame) {
+        self.load_finished();
         let css = lock(&self.css).clone();
         run_script(frame, &css_script(&css));
     }
@@ -571,11 +630,11 @@ impl PageShared {
     /// texture or the helper has no device; a failure is reported once until a paint
     /// succeeds.
     #[cfg(windows)]
-    pub(crate) fn paint(&self, handle: *mut c_void) {
+    pub(crate) fn paint(self: &Arc<Self>, handle: *mut c_void) {
         let reloading = lock(&self.reloading);
-        if *reloading {
+        let Some(reloading) = self.paint_through(reloading) else {
             return;
-        }
+        };
         let painted = {
             let gpu = lock(&self.host.gpu);
             let Some(gpu) = gpu.as_ref() else {
@@ -592,16 +651,34 @@ impl PageShared {
     /// Skipped while the engine holds every slot; a failure is reported once until a
     /// paint succeeds.
     #[cfg(target_os = "linux")]
-    pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
+    pub(crate) fn paint(self: &Arc<Self>, bgra: &[u8], width: u32, height: u32) {
         let reloading = lock(&self.reloading);
-        if *reloading {
+        let Some(reloading) = self.paint_through(reloading) else {
             return;
-        }
+        };
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
         self.painted(painted);
         drop(reloading);
+    }
+
+    /// Whether a paint goes to the engine, the reload hold deciding: `Some` with the lock
+    /// still held, so a reload waits for the paint's frame to be sent. A paint that ends
+    /// the hold is skipped, and a repaint asked for later.
+    fn paint_through<'a>(
+        self: &Arc<Self>,
+        mut reloading: MutexGuard<'a, ReloadHold>,
+    ) -> Option<MutexGuard<'a, ReloadHold>> {
+        match reloading.paint() {
+            reload_hold::Paint::Send => Some(reloading),
+            reload_hold::Paint::Skip => None,
+            reload_hold::Paint::SkipLast(released) => {
+                drop(reloading);
+                self.repaint_later(released);
+                None
+            }
+        }
     }
 
     fn painted(&self, painted: Result<Option<Painted>, String>) {
@@ -698,14 +775,34 @@ impl PageShared {
         let browser = lock(&self.browser);
         if let Some(browser) = browser.as_ref() {
             let mut reloading = lock(&self.reloading);
-            *reloading = true;
+            reloading.reload();
             self.host.send(&ToEngine::Reloading { page: self.id });
             drop(reloading);
+            // The reload's main-frame load, of the page's current URL, is the helper's
+            // own (#1069).
+            if let Some(frame) = browser.0.main_frame() {
+                self.policy
+                    .expect_own_load(&CefString::from(&frame.url()).to_string());
+            }
             browser.0.reload();
         } else {
             // No browser yet: its first load is the start the engine waits for.
             self.host.send(&ToEngine::Reloading { page: self.id });
         }
+    }
+
+    /// Hides or shows the page (`WasHidden`): hidden, it stops painting. On CEF's UI
+    /// thread, in order with the browser's arrival, which applies a hide sent before it.
+    fn set_hidden(self: &Arc<Self>, hidden: bool) {
+        let page = Arc::clone(self);
+        post(move || {
+            if page.hidden.swap(hidden, Ordering::AcqRel) == hidden {
+                return;
+            }
+            if let Some(host) = lock(&page.browser).as_ref().and_then(|b| b.0.host()) {
+                host.was_hidden(i32::from(hidden));
+            }
+        });
     }
 
     fn close(&self) {

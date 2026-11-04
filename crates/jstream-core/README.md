@@ -568,7 +568,8 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`) only
+  while a mix draws it (`a_waveform_no_mix_draws_is_not_painted`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
@@ -1368,13 +1369,15 @@ place. A frame without either chain draws as before, with no extra layer. The ed
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
 stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
-of its mix in order. Their filters hold no references (the graph refuses one), so none
-reads a scene or an asset.
+of its mix in order. Their filters hold no scene, source or bus reference (the graph
+refuses one), so none reads a scene, but one may read a file: the asset sync below
+lists the master's and outputs' video filters with the rest, and `plan_stages` hands
+each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1392,7 +1395,11 @@ pass after the chains of the sources it places and the scenes it nests, so a cha
 that masks with a scene of filtered sources sees them filtered this frame. The scene is
 drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
 canvas size), and those passes run once per frame with the chains, before any mix
-draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+draws; `claim_layers` keeps their layers too. That layer is the one a mix nesting the
+same scene at depth 1 draws into, so a mix pass whose layer the chains already drew
+this frame reads it as it is instead of drawing it again (`Chains::reuse`, #1070): a
+group shown both as itself and through a `scene` source's chain, as a reflection is,
+costs one pass. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
 scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
 a failed nested pass does, and the chains after it don't run that tick. The graph
@@ -1678,13 +1685,21 @@ FFT each 1/30 s, `chat_message`, which redraws when another message is featured,
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
-them ahead on a thread of its own, so the plan's `frame` calls under the lock never
-draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+zeros. The thread paints only the painters the latest round of plans looked at, the
+program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
+while something else re-plans every frame; a plan that reaches one again paints it for
+the current time first, under the lock, so it never shows the frame it had when it was
+last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
+them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
+calls under the lock never draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown. Sources run on the media clock of the backends the host
+the first time it is shown. Each source also remembers the last plan any mix looked at
+it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
+same re-plan): after that re-plan, one none of them looked at is told nothing draws it
+(`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
+its frame is taken. A `browser` page rests while nothing draws it (#1071). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `media` sources play through the injected
@@ -2736,7 +2751,8 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
-each live source for a frame it already has. The snapshot compositor belongs to the snapshot
+each live source for a frame it already has, apart from one catch-up paint of a painter
+a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while

@@ -4,7 +4,10 @@ use std::sync::Arc;
 
 use jstream_media::FrameSize;
 
-use crate::{CaptureCursor, CursorCapture, DeviceId, GpuContext, PlatformError, VideoSurface};
+use crate::{
+    CaptureCursor, CursorCapture, DeviceId, GpuContext, PlatformError, PointerPosition,
+    VideoSurface,
+};
 
 /// What to capture.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -152,6 +155,18 @@ pub trait CaptureStream: Send {
     /// Must not block, as `latest` (R-RT-002).
     fn cursor(&self) -> CaptureCursor {
         CaptureCursor::NotSent
+    }
+
+    /// Where the pointer is over the newest frame, read now, however the capture shows it
+    /// ([`CursorCapture`]): drawn in, sent beside the frames or left out. It lies outside
+    /// the frame while the pointer is off the target. `None` when the backend can't tell:
+    /// before the first frame, while the OS won't say (a secure desktop), or for a target
+    /// whose place on the screen it doesn't follow. The default is `None`.
+    ///
+    /// Must not block, as `latest` (R-RT-002): a backend reads the pointer and the
+    /// target's bounds with calls that return at once.
+    fn pointer(&self) -> Option<PointerPosition> {
+        None
     }
 }
 

@@ -145,7 +145,10 @@ It has:
   `SCStream` in BGRA, sRGB, with the cursor, at that size (`start_with` and
   `CursorCapture::Hidden` turn `showsCursor` off; `Metadata` draws the pointer in, as
   this backend doesn't send it apart yet); a resized window is scaled to
-  fit, keeping its aspect ratio. Frames arrive on the stream's serial dispatch queue,
+  fit, keeping its aspect ratio. For a display, `CaptureStream::pointer` reads where the
+  pointer is: a fresh `CGEvent`'s location and the display's `CGDisplayBounds`, both in
+  global points, scaled to the newest frame's pixels. A window's is `None` for now: the
+  stream doesn't follow where the window is on the screen. Frames arrive on the stream's serial dispatch queue,
   whose callbacks catch panics. Each complete frame (`SCStreamFrameInfoStatus`; idle,
   blank and suspended frames are skipped) is converted to NV12, BT.709 limited range,
   with `jstream_platform::nv12` (an odd size loses its last column or row), timed by its

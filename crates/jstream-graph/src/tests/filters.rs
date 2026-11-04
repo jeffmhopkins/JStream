@@ -617,7 +617,8 @@ fn the_master_and_outputs_have_video_chains() {
 }
 
 /// The master's and an output's video chain take video filter kinds, an output must
-/// exist, and their filters can't hold a reference yet.
+/// exist, and their filters can't hold a scene, source or bus reference yet, but may
+/// name a file.
 #[test]
 fn master_and_output_chains_are_validated() {
     let mut kinds = kinds();
@@ -634,6 +635,28 @@ fn master_and_output_chains_are_validated() {
             ty: ParamType::Source { media: None },
             default: Value::Null,
             label: "Key".into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: true,
+        }],
+    });
+    kinds.push(KindDescriptor {
+        kind_id: "look".into(),
+        category: KindCategory::VideoFilter,
+        name: "Look".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![ParamDescriptor {
+            id: "lut".into(),
+            ty: ParamType::Asset {
+                accept: vec!["cube".into()],
+            },
+            default: Value::Null,
+            label: "LUT".into(),
             description: None,
             group: None,
             advanced: false,
@@ -676,7 +699,10 @@ fn master_and_output_chains_are_validated() {
     };
     let (field, reason) = field_of(&mut g, duck(FilterOwner::Master));
     assert_eq!(field, "edits.0.settings.key");
-    assert!(reason.contains("can't hold a reference"), "{reason}");
+    assert!(
+        reason.contains("can't hold a scene, source or bus reference"),
+        "{reason}"
+    );
     // Without the reference it applies; setting one later is refused too.
     apply_ok(
         &mut g,
@@ -689,6 +715,19 @@ fn master_and_output_chains_are_validated() {
     };
     let (field, _) = field_of(&mut g, patch);
     assert_eq!(field, "edits.0.patch.key");
+
+    // A file is not an edge: the master's video chain may name one.
+    let lut = json!({"type": "asset", "root": "app", "path": "looks/warm.cube"});
+    apply_ok(
+        &mut g,
+        vec![with(
+            owned(FilterOwner::Master, FilterChain::Video, "l", "look"),
+            &[("lut", lut.clone())],
+            None,
+        )],
+    );
+    let saved = g.state().master().chain(FilterChain::Video);
+    assert_eq!(saved[0].settings().get("lut"), Some(&lut));
 }
 
 /// A filter whose kind the graph doesn't describe (a CLAP plugin before the scan, say)

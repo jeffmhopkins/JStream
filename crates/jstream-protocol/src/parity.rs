@@ -1440,7 +1440,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid(
                 "edits.0.settings.key",
-                "a master or output filter can't hold a reference yet",
+                "a master or output filter can't hold a scene, source or bus reference yet",
             ),
         ),
         (

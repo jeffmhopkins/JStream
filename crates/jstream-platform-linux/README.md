@@ -167,6 +167,8 @@ It has:
   buffer without one keeps the last picture, an empty one or an `id` of 0 hides the
   pointer, and every offset and size is checked against the metadata's own. A change
   goes into a second mailbox, which the stream's `cursor` reads as `CaptureCursor`.
+  The stream's `pointer` is the trait's `None` for now: a portal stream knows where the
+  pointer is only from that metadata, which the engine doesn't ask for yet.
   The callbacks catch panics (R-UNSAFE-005); a stream error is `DeviceLost`.
   The portal protocol's option values are here too: source types, cursor modes,
   `persist_mode`, request handle tokens and request object paths.

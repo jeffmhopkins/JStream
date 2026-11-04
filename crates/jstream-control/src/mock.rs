@@ -3577,6 +3577,75 @@ mod tests {
         }
     }
 
+    /// A master or output filter may name a file (an asset reference), as the graph
+    /// allows: Apply LUT on the program or one output.
+    #[test]
+    fn a_master_or_output_filter_may_name_a_file() {
+        use jstream_protocol::{
+            FilterChain, FilterId, FilterOwner, KindCategory, KindDescriptor, ParamDescriptor,
+            ParamType, RecordContainer,
+        };
+        let look = KindDescriptor {
+            kind_id: "look".into(),
+            category: KindCategory::VideoFilter,
+            name: "Look".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            max_outset_px: None,
+            params: vec![ParamDescriptor {
+                id: "lut".into(),
+                ty: ParamType::Asset {
+                    accept: vec!["cube".into()],
+                },
+                default: serde_json::Value::Null,
+                label: "LUT".into(),
+                description: None,
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: true,
+            }],
+        };
+        let engine = MockEngine::new().with_kinds([look]);
+        let control = connected(&engine);
+        let lut = serde_json::json!({"type": "asset", "root": "app", "path": "warm.cube"});
+        let grade = |owner: FilterOwner| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("grade"),
+            kind: "look".into(),
+            settings: [("lut".to_owned(), lut.clone())].into_iter().collect(),
+            enabled: None,
+            index: None,
+        };
+        let edits = vec![
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: "/home/me/show.mp4".into(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+            grade(FilterOwner::Master),
+            grade(FilterOwner::Output {
+                output_id: OutputId::new("rec"),
+            }),
+        ];
+        assert_eq!(
+            batch(
+                &*control,
+                Batch {
+                    edits,
+                    expected_rev: None,
+                    idempotency_key: None,
+                    ends_gesture: None,
+                }
+            ),
+            Ok(Rev(1))
+        );
+    }
+
     /// The shared parity collection (`jstream_protocol::parity`), which `jstream-graph`'s
     /// read tests build too. `jstream-graph` can't be called here: it is in the same
     /// layer (R-ARCH-002), even as a dev-dependency.
