@@ -113,6 +113,32 @@ pub struct VideoDecoderConfig {
     pub hardware: HardwarePreference,
 }
 
+/// A codec library the platform downloads on a person's request, from its maker's own
+/// server, because its patent licence covers only the maker's copy delivered that way:
+/// Cisco's OpenH264 on Linux (docs/adr/0061-source-types-and-decoding-scope-v2.md).
+/// The engine lists these, and downloads or deletes one only when a person asks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CodecDownload {
+    /// A stable ID for the download, such as `openh264`.
+    pub id: &'static str,
+    /// What it is, as the UI names it, such as "Cisco's OpenH264 (software H.264)".
+    pub name: &'static str,
+    /// The format it encodes.
+    pub codec: Codec,
+    /// The release the platform pins, such as `2.6.0`.
+    pub version: String,
+    /// The attribution to show wherever the download is offered and in the app's
+    /// licence information.
+    pub notice: &'static str,
+    /// The maker's licence for its binary, to link to beside `notice`.
+    pub license_url: &'static str,
+    /// That licence's full text, which the app reproduces where it presents licensing
+    /// information, as Cisco's condition 4 asks.
+    pub license_text: &'static str,
+    /// Whether it is downloaded and in place.
+    pub installed: bool,
+}
+
 /// The codec backend: lists the platform's codecs and opens sessions on them.
 ///
 /// Shared (`Arc<dyn Codecs>`) and called from the control thread, so it is
@@ -167,6 +193,39 @@ pub trait Codecs: Send + Sync {
     ) -> Result<Box<dyn CaptureDecoder>, PlatformError> {
         Err(PlatformError::Unsupported {
             what: format!("decoding {encoding:?} capture frames"),
+        })
+    }
+
+    /// The codec libraries this backend can download on a person's request
+    /// ([`CodecDownload`]). Empty, the default, for a platform whose codecs all come
+    /// with the OS.
+    fn downloads(&self) -> Vec<CodecDownload> {
+        Vec::new()
+    }
+
+    /// Downloads the library `id` names, checks it and puts it in place, so the next
+    /// encoder opened can use it. Call it only on a person's explicit request, after
+    /// showing the download's notice and licence link. Blocks for the download.
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`], the default, for an `id` this backend doesn't
+    /// download; otherwise [`PlatformError::Os`] when the download fails or doesn't
+    /// match what the platform pins (nothing is kept then).
+    fn download(&self, id: &str) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: format!("downloading the codec `{id}`"),
+        })
+    }
+
+    /// Deletes the downloaded library `id` names. Afterwards it is listed as not
+    /// installed. Deleting one that isn't there succeeds.
+    ///
+    /// # Errors
+    /// As for [`download`](Codecs::download), and [`PlatformError::Os`] when the file
+    /// can't be deleted.
+    fn delete_download(&self, id: &str) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported {
+            what: format!("deleting the codec `{id}`"),
         })
     }
 

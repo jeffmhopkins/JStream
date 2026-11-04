@@ -115,8 +115,10 @@ a stolen token, local denial of service.
 - The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
   [ADR-0104](../adr/0104-network-listener-over-tls.md) decides how that changes, and
   it is not built: an opt-in second listener for the network, TLS only with a
-  self-signed certificate clients pin by fingerprint, admitting device tokens and never
-  the control token.
+  self-signed certificate native clients pin by fingerprint, admitting device tokens and
+  never the control token. A browser keeps no pin, only an exception for that one
+  certificate, so a new warning on a paired host means stop
+  ([ADR-0114](../adr/0114-browsers-keep-no-certificate-pin.md)).
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the

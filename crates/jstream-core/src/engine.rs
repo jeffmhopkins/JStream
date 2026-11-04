@@ -47,8 +47,8 @@ use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
-    Backends, CaptureTarget, CaptureTargetInfo, GpuContext, PluginHosts, ProcessCpu, Secret,
-    StreamKeyStore, ThreadCpu,
+    Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
+    Secret, StreamKeyStore, ThreadCpu,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
@@ -1292,6 +1292,11 @@ impl Engine {
         } = &call
         {
             self.effect_enable(kind_id)
+        } else if let Some(result) = crate::codec_downloads::is_codec_call(&call)
+            .then(|| crate::codec_downloads::call(self.codecs(), &call))
+            .flatten()
+        {
+            result
         } else if let Some(result) = self.youtube_call(&call) {
             result
         } else if let Call::Action {
@@ -1840,6 +1845,15 @@ impl Engine {
         targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
+        })
+    }
+
+    /// The codec backend, when the engine has media backends.
+    fn codecs(&self) -> Option<Arc<dyn Codecs>> {
+        self.media.as_ref().and_then(|host| {
+            lock(&host.backends)
+                .as_ref()
+                .map(|backends| Arc::clone(&backends.codecs))
         })
     }
 

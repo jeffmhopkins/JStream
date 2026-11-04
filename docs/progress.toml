@@ -1153,9 +1153,9 @@ needs = ["build", "hardware"]
 id = "LNX2"
 milestone = "M3"
 title = "Linux OpenH264 download (ADR-0061)"
-status = "planned"
-prs = [536, 1015]
-note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); the pin's two SHA-256 values recorded from Cisco's server, and CI's e2e-stream job downloads OpenH264 and streams on it (#1015); the UI's download offer, with Cisco's notice re-read, is still to come"
+status = "done"
+prs = [536, 1015, 1041]
+note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); the pin's two SHA-256 values recorded from Cisco's server, and CI's e2e-stream job downloads OpenH264 and streams on it (#1015); the UI offers the download in Encoders, with Cisco's notice, licence link and full licence text, through protocol 0.69's codec.downloads, codec.download and codec.delete (#1041)"
 needs = ["build"]
 
 [[item]]
