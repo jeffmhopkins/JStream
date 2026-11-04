@@ -199,7 +199,7 @@ pub enum Edit {
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
     /// `item.set_transition` if its transition settings were not the default,
-    /// `item.set_locked` if it was locked (since 0.76), and the placement edits that
+    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
     /// write each dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
@@ -1400,7 +1400,7 @@ pub enum Action {
         preset_id: Option<TransitionPresetId>,
     },
     /// `scene.switch`, then a frame sheet of the program mix from the switch on (since
-    /// 0.76, #1061), as `video.frames` takes one: so an agent sees a transition, a
+    /// 0.78, #1061), as `video.frames` takes one: so an agent sees a transition, a
     /// stinger's cover or a keyframe move as it plays, from one call. The switch is made
     /// as `scene.switch` makes it, and emits what it emits; the answer comes once the
     /// last picture is drawn, as a `scene.switch_and_watch` result. Switching to the

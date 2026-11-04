@@ -1,4 +1,4 @@
-//! Frame sheets (since 0.76, #1061): pictures of the program mix or a scene taken at an
+//! Frame sheets (since 0.78, #1061): pictures of the program mix or a scene taken at an
 //! interval and tiled into one PNG, so an agent sees a transition, a stinger or a move
 //! in one call. `video.frames` takes one of what is on screen now; the
 //! `scene.switch_and_watch` action switches first and takes it from the switch on.

@@ -218,8 +218,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of the frame
-  sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.75 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.78 because of the frame
+  sheets, `video.frames` and `scene.switch_and_watch` (#1061), with 0.76 and 0.77 left to the changes that claimed them first; 0.75 because of the
   `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
   `output.set_path` (#1072); 0.73 because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -1204,7 +1204,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
   no arguments and changes nothing.
-- **Frame sheets** (since 0.76, #1061). One picture can't show motion, so `video.frames
+- **Frame sheets** (since 0.78, #1061). One picture can't show motion, so `video.frames
   {count, interval_ms, delay_ms?, scene_id?}` takes `count` pictures (2 to 16)
   `interval_ms` apart (at least 10), the first `delay_ms` after the call, of the
   program mix or of `scene_id`'s scene alone, and answers with one PNG: each picture

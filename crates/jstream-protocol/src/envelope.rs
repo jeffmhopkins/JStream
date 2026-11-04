@@ -251,7 +251,7 @@ pub enum ActionResult {
         broadcast: BroadcastInfo,
     },
     /// The answer to `scene.switch_and_watch`: the frame sheet of the program mix from
-    /// the switch on (since 0.76).
+    /// the switch on (since 0.78).
     #[serde(rename = "scene.switch_and_watch")]
     SceneSwitchAndWatch {
         /// The sheet.

@@ -814,7 +814,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
   (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
   JSON result, longest side at most 1280, with the layout `rev`; `video.frames` (protocol
-  0.76) → a frame sheet, several such pictures taken at an interval and tiled into one
+  0.78) → a frame sheet, several such pictures taken at an interval and tiled into one
   PNG, which the action `scene.switch_and_watch` also answers with, from a switch on; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the

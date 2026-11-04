@@ -390,7 +390,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.76, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+          "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.78, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
           "properties": {
             "count": {
               "description": "How many pictures, 2 to 16.",
@@ -778,7 +778,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The answer to `scene.switch_and_watch`: the frame sheet of the program mix from\nthe switch on (since 0.76).",
+          "description": "The answer to `scene.switch_and_watch`: the frame sheet of the program mix from\nthe switch on (since 0.78).",
           "properties": {
             "columns": {
               "description": "Tiles per row.",
@@ -2452,7 +2452,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.76), and the placement edits that\nwrite each dropped override back.",
+          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -7582,7 +7582,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A frame sheet (since 0.76, #1061): `count` pictures of the program mix, or of\n`scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be\nchecked in one call. The first is taken `delay_ms` after the call. The answer\ncomes once the last picture is drawn, so the call takes at least `delay_ms +\n(count - 1) × interval_ms`. Each picture is what that mix or scene shows at that\nmoment, as `video.snapshot` draws it: a running transition where it is then,\neach source's latest frame, and nothing for a display, window or camera capture.\nA scene off program shows what its preview stream would. Fails with\n`invalid_argument` past the [`FrameStrip`] limits, and `not_found` for a scene not\nin the collection, at the call or when a picture is due. To watch a switch from\nits start, use `scene.switch_and_watch`.",
+          "description": "A frame sheet (since 0.78, #1061): `count` pictures of the program mix, or of\n`scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be\nchecked in one call. The first is taken `delay_ms` after the call. The answer\ncomes once the last picture is drawn, so the call takes at least `delay_ms +\n(count - 1) × interval_ms`. Each picture is what that mix or scene shows at that\nmoment, as `video.snapshot` draws it: a running transition where it is then,\neach source's latest frame, and nothing for a display, window or camera capture.\nA scene off program shows what its preview stream would. Fails with\n`invalid_argument` past the [`FrameStrip`] limits, and `not_found` for a scene not\nin the collection, at the call or when a picture is due. To watch a switch from\nits start, use `scene.switch_and_watch`.",
           "properties": {
             "count": {
               "description": "How many pictures, 2 to 16.",
@@ -10745,5 +10745,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.76"
+  "title": "JStream protocol 0.78"
 }

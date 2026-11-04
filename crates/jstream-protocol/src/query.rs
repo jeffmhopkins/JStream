@@ -80,7 +80,7 @@ pub enum Query {
     /// runtime state and can change without a new `rev`.
     #[serde(rename = "video.snapshot")]
     VideoSnapshot,
-    /// A frame sheet (since 0.76, #1061): `count` pictures of the program mix, or of
+    /// A frame sheet (since 0.78, #1061): `count` pictures of the program mix, or of
     /// `scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be
     /// checked in one call. The first is taken `delay_ms` after the call. The answer
     /// comes once the last picture is drawn, so the call takes at least `delay_ms +
