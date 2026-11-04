@@ -1,6 +1,10 @@
 //! Motion modifiers ([ADR-0099](../../../docs/adr/0099-native-motion-modifiers-and-timelines.md)
 //! decision 3): continuous changes to an item's properties, evaluated as pure functions of
-//! the animation time, never stored.
+//! the animation time, never stored. An audio modifier
+//! ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md)) also reads an
+//! envelope level the evaluator hands in.
+
+use crate::audio::Audio;
 
 /// The most modifiers one item holds (ADR-0099 decision 5).
 pub const MAX_MODIFIERS: usize = 8;
@@ -111,8 +115,8 @@ impl Shape {
     }
 }
 
-/// What a modifier does, with its parameters. More kinds follow (an audio-driven one,
-/// #1060), so code outside this crate matches it with a wildcard arm.
+/// What a modifier does, with its parameters. More kinds may follow, so code outside this
+/// crate matches it with a wildcard arm.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Kind {
@@ -160,6 +164,10 @@ pub enum Kind {
         /// How long it lasts, in milliseconds.
         duration_ms: f64,
     },
+    /// Follows a measure of a bus or a source ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md)),
+    /// through an [`Envelope`](crate::Envelope) the evaluator keeps per item and
+    /// modifier. What it hears is named beside the modifier, outside this crate.
+    Audio(Audio),
 }
 
 /// Where a modifier's time starts (ADR-0099 decision 3).
@@ -259,6 +267,7 @@ impl Modifier {
                     None
                 }
             }
+            Kind::Audio(audio) => audio.problem(MAX_MAGNITUDE),
             Kind::Drift { rate_per_s, wrap } => {
                 if !(rate_per_s.is_finite() && rate_per_s.abs() <= MAX_MAGNITUDE) {
                     Some("rate_per_s")
@@ -296,8 +305,16 @@ impl Modifier {
     }
 
     /// Its value at `seconds` on its clock, before it is applied to the property. A
-    /// disabled modifier is 0.
+    /// disabled modifier is 0. An audio modifier reads as silence here: its `from`
+    /// ([`Modifier::value_heard`] takes its envelope).
     pub fn value_at(&self, seconds: f64) -> f64 {
+        self.value_heard(seconds, 0.0)
+    }
+
+    /// Its value at `seconds` on its clock, with `envelope` (`0..=1`) as an audio
+    /// modifier's envelope level. Every other kind ignores `envelope`. A disabled
+    /// modifier is 0.
+    pub fn value_heard(&self, seconds: f64, envelope: f32) -> f64 {
         if !self.enabled {
             return 0.0;
         }
@@ -346,6 +363,7 @@ impl Modifier {
                     * (std::f64::consts::TAU * frequency_hz * seconds).sin();
                 if v.is_finite() { v } else { 0.0 }
             }
+            Kind::Audio(audio) => audio.value(envelope),
         };
         if v.is_finite() { v } else { 0.0 }
     }
@@ -481,9 +499,10 @@ impl Offsets {
 }
 
 /// Evaluates an item's modifiers at one moment, in list order, with no
-/// [`Clock::Triggered`] modifier fired: see [`evaluate_with`].
+/// [`Clock::Triggered`] modifier fired and every audio modifier silent: see
+/// [`evaluate_with`].
 pub fn evaluate(modifiers: &[Modifier], engine_s: f64, shown_s: Option<f64>) -> Offsets {
-    evaluate_with(modifiers, engine_s, shown_s, |_| None)
+    evaluate_with(modifiers, engine_s, shown_s, |_| None, |_| None)
 }
 
 /// Evaluates an item's modifiers at one moment, in list order. The list should have
@@ -492,13 +511,17 @@ pub fn evaluate(modifiers: &[Modifier], engine_s: f64, shown_s: Option<f64>) -> 
 /// seconds; `shown_s` is the time since the item was last shown on program, `None` when
 /// it isn't shown, in which case [`Clock::Shown`] modifiers are at their start;
 /// `triggered` gives, by modifier ID, the time since a [`Clock::Triggered`] modifier was
-/// last fired, and a modifier never fired contributes nothing. Allocates nothing, so
-/// the render thread calls it per item per frame.
+/// last fired, and a modifier never fired contributes nothing; `heard` gives each audio
+/// modifier's envelope level (`0..=1`) by modifier ID: the evaluator's
+/// [`Envelope`](crate::Envelope) for that item and modifier, and an audio modifier
+/// `heard` has no level for reads as silence. Allocates nothing, so the render thread
+/// calls it per item per frame.
 pub fn evaluate_with(
     modifiers: &[Modifier],
     engine_s: f64,
     shown_s: Option<f64>,
     triggered: impl Fn(&str) -> Option<f64>,
+    heard: impl Fn(&str) -> Option<f32>,
 ) -> Offsets {
     let mut out = Offsets::IDENTITY;
     for m in modifiers {
@@ -510,7 +533,11 @@ pub fn evaluate_with(
                 None => continue,
             },
         };
-        out.add(m.property, m.value_at(t));
+        let envelope = match m.kind {
+            Kind::Audio(_) => heard(&m.id).unwrap_or(0.0),
+            _ => 0.0,
+        };
+        out.add(m.property, m.value_heard(t, envelope));
     }
     out
 }
@@ -744,7 +771,13 @@ mod tests {
         assert_eq!(shake.value_at(-0.1), 0.0, "nothing before it starts");
         let mods = [shake];
         assert_eq!(evaluate(&mods, 100.0, None).x, 0.0, "never fired: still");
-        let fired = evaluate_with(&mods, 100.0, None, |id| (id == "jolt").then_some(0.25));
+        let fired = evaluate_with(
+            &mods,
+            100.0,
+            None,
+            |id| (id == "jolt").then_some(0.25),
+            |_| None,
+        );
         assert!((f64::from(fired.x) - 10.0 * (-0.5f64).exp()).abs() < 1e-5);
         assert_eq!(
             check_list(&[Modifier {
@@ -864,6 +897,87 @@ mod tests {
         assert_eq!(out.opacity, 0.5);
         assert_eq!(out.opacity_of(0.8), 0.4);
         assert_eq!(evaluate(&[], 5.0, None), Offsets::IDENTITY);
+    }
+
+    #[test]
+    fn an_audio_modifier_reads_its_envelope_by_id() {
+        use crate::{Envelope, Measure};
+        let pulse = Audio {
+            from: -0.6,
+            to: 0.0,
+            ..Audio::default()
+        };
+        let push = Audio {
+            measure: Measure::Band {
+                low_hz: 40.0,
+                high_hz: 120.0,
+            },
+            from: 0.0,
+            to: 6.0,
+            ..Audio::default()
+        };
+        let mods = [
+            modifier("light", Property::Opacity, Kind::Audio(pulse)),
+            modifier("bass", Property::X, Kind::Audio(push)),
+            modifier("sway", Property::X, sine(2.0, 1000.0)),
+        ];
+        assert_eq!(check_list(&mods), Ok(()));
+        // Unheard, each reads as silence: its `from`.
+        let silent = evaluate(&mods, 0.25, None);
+        assert!((silent.opacity - 0.4).abs() < 1e-6);
+        assert!((silent.x - 2.0).abs() < 1e-6);
+        // Heard: full on the light, half on the bass, the sine added as before.
+        let out = evaluate_with(
+            &mods,
+            0.25,
+            None,
+            |_| None,
+            |id| match id {
+                "light" => Some(1.0),
+                "bass" => Some(0.5),
+                _ => None,
+            },
+        );
+        assert!((out.opacity - 1.0).abs() < 1e-6);
+        assert!((out.x - 5.0).abs() < 1e-6);
+        // An envelope fed full scale drives it to the top of its range.
+        let mut env = Envelope::default();
+        for _ in 0..60 {
+            env.advance(&pulse, 1.0, 1.0 / 60.0);
+        }
+        let lit = evaluate_with(&mods[..1], 0.0, None, |_| None, |_| Some(env.level()));
+        assert!((lit.opacity_of(1.0) - 1.0).abs() < 1e-4);
+        // A disabled audio modifier adds nothing, heard or not.
+        let off = Modifier {
+            enabled: false,
+            ..mods[1].clone()
+        };
+        assert_eq!(
+            evaluate_with(&[off], 0.0, None, |_| None, |_| Some(1.0)),
+            Offsets::IDENTITY
+        );
+    }
+
+    #[test]
+    fn a_bad_audio_parameter_is_refused_by_name() {
+        let bad = Audio {
+            attack_ms: f32::NAN,
+            ..Audio::default()
+        };
+        let m = modifier("a", Property::Opacity, Kind::Audio(bad));
+        assert_eq!(
+            check_list(std::slice::from_ref(&m)),
+            Err(InvalidModifier::Parameter {
+                id: "a".into(),
+                param: "attack_ms"
+            })
+        );
+        let huge = Audio {
+            to: 1e9,
+            ..Audio::default()
+        };
+        let m = modifier("b", Property::X, Kind::Audio(huge));
+        assert!(check_list(std::slice::from_ref(&m)).is_err());
     }
 
     #[test]
