@@ -127,6 +127,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_source", Class(E)),
     ("item.set_transition", Class(E)),
     ("item.set_locked", Class(E)),
+    ("item.set_effects_space", Class(E)),
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("item.set_motion", Class(E)),
@@ -207,6 +208,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
+    // An item's visibility, as `item.set_visible` changes it (ADR-0101).
+    ("item.show", Class(E)),
+    ("item.hide", Class(E)),
+    ("item.toggle", Class(E)),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).
@@ -219,6 +224,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("pack.delete", N),
     ("pack.list", Class(R)),
     ("pack.read", Class(R)),
+    // Not named in any class by ADR-0069, so "never" until a PR places it; reading the
+    // values is a read.
+    ("values.set", N),
+    ("values.list", Class(R)),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),

@@ -55,6 +55,11 @@ impl Pass for Blur {
         input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
+        if self.area.mode == area::Mode::Whole
+            && gauss::blur_whole_into(ctx, input, self.radius, output)?
+        {
+            return Ok(());
+        }
         let size = (input.width(), input.height());
         let blurred = gauss::blur(ctx, input, self.radius, size, (0, 0), Edge::Clamp)?;
         area::composite(

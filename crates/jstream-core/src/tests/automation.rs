@@ -1105,6 +1105,36 @@ fn a_manifest_name_reaches_clients_plain_and_capped() {
     assert_eq!(listed(&person)[1].remote_name, None);
 }
 
+/// #1123: a run disabled by a fault saves the plugins file before it reports the
+/// fault, so no save of that run lands after a client that saw the report has rewritten
+/// the file. The save waits 200 ms here: reported first, it would overwrite the edit.
+#[test]
+fn a_fault_is_saved_before_it_is_reported() {
+    let dir = plugin_dir("saved_before_reported");
+    let package_dir = package("saved_before_reported", TRAPS, None);
+    let engine = opened(&dir);
+    engine
+        .automation()
+        .disable_save_delay_ms
+        .store(200, Ordering::Relaxed);
+    let person = connected(&engine);
+    let mut events = person.events();
+    call(
+        &person,
+        install("plg_s", &package_dir, PluginGrant::default()),
+    )
+    .expect("installs");
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    call(&person, create_scene("a")).expect("applies");
+    assert_eq!(next_state(&mut events).1, PluginState::Disabled);
+    assert_eq!(saved(&dir)["plugins"][0]["disabled"], "trap");
+    let mut file = saved(&dir);
+    file["plugins"][0]["name"] = "edited".into();
+    fs::write(dir.join(PLUGINS_FILE), file.to_string()).expect("plugins file written");
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(saved(&dir)["plugins"][0]["name"], "edited");
+}
+
 /// #977: a name in an edited plugins file is made plain too, before the package is read
 /// again.
 #[test]

@@ -361,6 +361,7 @@ impl Item {
             transition: self.transition,
             locked: self.locked,
             motion: self.motion.clone(),
+            effects_space: self.effects_space,
         }
     }
 }

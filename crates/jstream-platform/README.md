@@ -84,7 +84,13 @@ Contents:
   `CursorCapture::Hidden` leaves the pointer out altogether (the stream's `cursor` stays
   `NotSent`); a backend that can't leave it out draws it in. `draw_cursor`
   (`cursor.rs`) blends a shown pointer into a `Bgra8` or `Rgba8` CPU frame, clipped to
-  it.
+  it. Apart from how it is shown, `CaptureStream::pointer` reads where the pointer's hot
+  spot is over the newest frame, now, as a `PointerPosition` in that frame's pixels
+  (sub-pixel, and outside the frame while the pointer is off the target), for a camera
+  that follows it. `None`, the default, is for a backend that can't tell, and before the
+  first frame. `PointerPosition::in_frame` places a point read in screen coordinates,
+  from the target's origin and bounds, scaled to the frame. Like `latest`, it must not
+  block.
 - **Video capture devices** (webcams and capture cards,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input

@@ -393,6 +393,11 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
         Action::SceneSwitch { scene_id, .. } | Action::StudioSetPreview { scene_id } => {
             writeln!(out, "{} accepted for {scene_id} ({id})", action.name())?;
         }
+        Action::ItemShow { item_id, .. }
+        | Action::ItemHide { item_id, .. }
+        | Action::ItemToggle { item_id, .. } => {
+            writeln!(out, "{} accepted for {item_id} ({id})", action.name())?;
+        }
         Action::DeviceRevoke { device_id } => {
             writeln!(out, "device {device_id} revoked ({id})")?;
         }

@@ -1440,7 +1440,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid(
                 "edits.0.settings.key",
-                "a master or output filter can't hold a reference yet",
+                "a master or output filter can't hold a scene, source or bus reference yet",
             ),
         ),
         (
@@ -2410,6 +2410,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         transition: ItemTransition::default(),
         locked: false,
         motion: Vec::new(),
+        effects_space: crate::EffectsSpace::Box,
     };
     vec![
         ItemInfo {
@@ -2426,6 +2427,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             transition: ItemTransition::default(),
             locked: false,
             motion: Vec::new(),
+            effects_space: crate::EffectsSpace::Box,
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -2448,5 +2450,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         transition: ItemTransition::default(),
         locked: false,
         motion: Vec::new(),
+        effects_space: crate::EffectsSpace::Box,
     }]
 }

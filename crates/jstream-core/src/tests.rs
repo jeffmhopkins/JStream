@@ -12,6 +12,7 @@ mod collection;
 mod fonts;
 mod gpu_capture;
 mod history;
+mod item_actions;
 mod keyframes;
 mod live_values;
 mod packs;
@@ -19,6 +20,7 @@ mod preview;
 mod source_sizes;
 mod sources;
 mod transitions;
+mod values;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 mod youtube;

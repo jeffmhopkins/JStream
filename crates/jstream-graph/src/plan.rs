@@ -358,6 +358,18 @@ impl Graph {
                 .map(|scene_id| Edit::SceneDelete { scene_id }),
         );
         edits.push(last);
+        // The bindings the batch would remove, as applying it says: those naming a
+        // deleted scene or source, and those naming an item it takes away (ADR-0101).
+        if let Ok(applied) = self.clone().apply(&edits, None) {
+            let mut hotkeys = applied.removed_hotkeys;
+            hotkeys.sort_by(|a, b| a.chord.cmp(&b.chord));
+            hotkeys.dedup_by(|a, b| a.chord == b.chord);
+            return Ok(QueryResult::DeletePlan {
+                rev: self.rev,
+                edits,
+                hotkeys,
+            });
+        }
         let hotkeys = state
             .hotkeys()
             .filter(|(_, action)| {

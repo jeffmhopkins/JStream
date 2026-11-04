@@ -12,8 +12,8 @@
 use crate::audit::AuditEntry;
 use jstream_graph::State;
 use jstream_protocol::{
-    Action, ActivityEntry, Call, Edit, FilterOwner, Finite32, HistoryOp, ItemId, LiveOutcome,
-    MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, SceneId, SourceId,
+    Action, ActivityEntry, Call, Edit, EffectsSpace, FilterOwner, Finite32, HistoryOp, ItemId,
+    LiveOutcome, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, SceneId, SourceId,
 };
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -146,6 +146,18 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::StudioSetPreview { scene_id } => {
             format!("Put {} on preview", scene(state, scene_id))
         }
+        Action::ItemShow { item_id, .. } => format!("Showed {}", item(state, item_id)),
+        Action::ItemHide { item_id, .. } => format!("Hid {}", item(state, item_id)),
+        // Described before it runs: it shows an item hidden there, and hides one shown.
+        Action::ItemToggle { item_id, scene_id } => format!(
+            "{} {}",
+            if state.visible_in(item_id, scene_id.as_ref()) == Some(false) {
+                "Showed"
+            } else {
+                "Hid"
+            },
+            item(state, item_id)
+        ),
         Action::OutputStart { output_id } => {
             format!("Started output {}", quote(output_id.as_str()))
         }
@@ -287,6 +299,14 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
             "{} {}",
             if *locked { "Locked" } else { "Unlocked" },
             item(state, item_id)
+        ),
+        Edit::ItemSetEffectsSpace { item_id, space } => format!(
+            "Made the effects of {} run over {}",
+            item(state, item_id),
+            match space {
+                EffectsSpace::Canvas => "the canvas",
+                _ => "its box",
+            }
         ),
         Edit::ItemSetTransition { item_id, .. } => {
             format!(

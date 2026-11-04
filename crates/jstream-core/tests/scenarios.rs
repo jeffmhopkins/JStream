@@ -12,8 +12,10 @@
 //! the output settling `failed`, and the engine keeps serving calls. The render thread
 //! composites on the CPU (`Engine::with_cpu_compositor`), so no wgpu adapter is needed.
 
-use std::sync::Arc;
+use std::io::Write as _;
+use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Once};
 use std::task::{Context, Poll, Waker};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -293,7 +295,7 @@ impl Capture for PanickingCapture {
 impl CaptureStream for PanickingStream {
     fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
         if self.armed.swap(false, Ordering::AcqRel) {
-            panic!("scenario: the render tick blew up");
+            panic!("{SCENARIO_PANIC}the render tick blew up");
         }
         self.inner.latest()
     }
@@ -318,7 +320,7 @@ impl MediaClock for PanickingMixerClock {
         if thread::current().name() == Some("jstream-mixer")
             && self.armed.swap(false, Ordering::AcqRel)
         {
-            panic!("scenario: the mixer blew up");
+            panic!("{SCENARIO_PANIC}the mixer blew up");
         }
         self.inner.now()
     }
@@ -368,6 +370,36 @@ fn pump_until_reported(
     steps
 }
 
+/// The prefix of the panics this file raises on purpose.
+const SCENARIO_PANIC: &str = "scenario: ";
+
+/// Keeps the default panic hook away from this file's own panics: they print one line,
+/// and every other panic still gets the default hook.
+///
+/// The hook runs on the panicking thread before the unwind reaches the engine's
+/// `catch_unwind`. With `RUST_BACKTRACE` set, the default hook first symbolises a
+/// backtrace, and the first one in a debug test binary this size reads its whole debug
+/// info: about half a second on an idle machine, and past `pump_until_reported`'s ten
+/// seconds on a loaded one, so the panic was reported too late (#885). The engine does
+/// report it; only the test's wait ran out.
+fn quiet_scenario_panics() {
+    static INSTALL: Once = Once::new();
+    INSTALL.call_once(|| {
+        let default = panic::take_hook();
+        panic::set_hook(Box::new(move |info| match info.payload_as_str() {
+            Some(message) if message.starts_with(SCENARIO_PANIC) => {
+                let thread = std::thread::current();
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "thread '{}' panicked on purpose: {message}",
+                    thread.name().unwrap_or("<unnamed>")
+                );
+            }
+            _ => default(info),
+        }));
+    });
+}
+
 /// R-RT-006: a panic inside a render tick, and then one on the mixer thread, are each
 /// caught at their thread's boundary instead of killing the thread silently. Both
 /// clients see the output settle `failed`, the error event the protocol has for a
@@ -379,6 +411,7 @@ fn pump_until_reported(
 /// a test can reach runs inside `Mixer::poll`'s body: its filters are jstream-audio's own.
 #[test]
 fn rt_panic_is_reported() {
+    quiet_scenario_panics();
     let clock = FakeClock::new(Timebase::MICROS);
     let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
     let render_armed = Arc::new(AtomicBool::new(false));

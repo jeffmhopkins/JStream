@@ -374,6 +374,14 @@ pub(crate) fn edits() -> Vec<Edit> {
             item_id: ItemId::new("itm_1"),
             locked: true,
         },
+        Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("itm_1"),
+            space: crate::EffectsSpace::Canvas,
+        },
+        Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("itm_2"),
+            space: crate::EffectsSpace::Box,
+        },
         Edit::VideoMixCreate {
             mix_id: VideoMixId::new("mix_cam"),
             name: "Camera".into(),
@@ -442,6 +450,14 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneSetCamera {
             scene_id: SceneId::new("scn_1"),
             camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
+        },
+        Edit::SceneSetCamera {
+            scene_id: SceneId::new("scn_1"),
+            camera: Some(SceneCamera {
+                focus_px: crate::Finite32::new(800.0),
+                blur_px: crate::Finite32::new(6.0).unwrap_or(crate::Finite32::ZERO),
+                ..SceneCamera::framing(CameraCanvas::DEFAULT)
+            }),
         },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
@@ -1167,6 +1183,14 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PackDelete {
             pack: "glow".into(),
         },
+        Action::ValuesSet {
+            name: "status.text".into(),
+            value: Some(json!({ "label": "On air", "count": 3, "note": null })),
+        },
+        Action::ValuesSet {
+            name: "counter.a".into(),
+            value: None,
+        },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
             channel: 2,
@@ -1203,6 +1227,18 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: None,
             source: None,
             source_id: Some(SourceId::new("src_cam")),
+        },
+        Action::ItemShow {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
+        Action::ItemHide {
+            item_id: ItemId::new("itm_1"),
+            scene_id: Some(SceneId::new("scn_1")),
+        },
+        Action::ItemToggle {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
         },
     ]
 }
@@ -1251,6 +1287,10 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::FontList,
+        Query::ValuesList { prefix: None },
+        Query::ValuesList {
+            prefix: Some("status".into()),
+        },
         Query::PackList,
         Query::PackRead {
             pack: "glow".into(),
@@ -1749,6 +1789,7 @@ fn item_infos() -> Vec<ItemInfo> {
             }],
             locked: false,
             motion: sway(),
+            effects_space: crate::EffectsSpace::Box,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1777,6 +1818,7 @@ fn item_infos() -> Vec<ItemInfo> {
             effects: Vec::new(),
             locked: false,
             motion: Vec::new(),
+            effects_space: crate::EffectsSpace::Box,
         },
     ]
 }
@@ -2057,6 +2099,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::PackList {
             packs: vec![pack_info()],
         },
+        QueryResult::ValuesList {
+            values: vec![
+                crate::SharedValue {
+                    name: "counter.a".into(),
+                    value: json!(2),
+                },
+                crate::SharedValue {
+                    name: "status.text".into(),
+                    value: json!("On air"),
+                },
+            ],
+        },
         QueryResult::PackRead {
             files: vec![
                 PackFileInfo {
@@ -2310,6 +2364,18 @@ pub(crate) fn events() -> Vec<Event> {
         on: true,
         client_id: ClientId::new("cli_7"),
         request_id: Some(RequestId::new("r3")),
+    });
+    events.push(Event::ValuesChanged {
+        name: "status.text".into(),
+        value: Some(json!("On air")),
+        client_id: ClientId::new("cli_2"),
+        request_id: Some(RequestId::new("r9")),
+    });
+    events.push(Event::ValuesChanged {
+        name: "counter.a".into(),
+        value: None,
+        client_id: ClientId::new("cli_2"),
+        request_id: None,
     });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
@@ -3035,7 +3101,7 @@ mod tests {
             Value::Object(map) => map.iter().any(|(key, v)| {
                 !matches!(
                     key.as_str(),
-                    "settings" | "patch" | "default" | "equals" | "settings_schema"
+                    "settings" | "patch" | "default" | "equals" | "settings_schema" | "value"
                 ) && has_stray_null(v)
             }),
             _ => false,
@@ -3046,7 +3112,7 @@ mod tests {
         let json = serde_json::to_string(value).expect("serializes");
         // No field is ever `null`: optional fields are omitted, and floats are finite.
         // Settings values are the exception: there `null` means no reference or the
-        // default.
+        // default. So are shared values (`value`), which are any JSON a client sends.
         let tree: Value = serde_json::from_str(&json).expect("parses as JSON");
         assert!(!has_stray_null(&tree), "serialized a null: {json}");
         let back: T = serde_json::from_str(&json).expect("parses back");
