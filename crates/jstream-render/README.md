@@ -488,8 +488,9 @@ coverage to `clamp(d / 2r + 0.5)`. `place` pushes every vertex out by the larger
 pixel and the largest blur radius of the shape's corners (`CameraView::blur_at`), the
 largest on a plane; past the edge `w` runs on beyond the corners', so the cap keeps the
 soft edge inside the push and it falls off whole.
-Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's layer (ADR-0107, below) is placed
-flat, so its `dof` is zero and depth of field doesn't blur it yet.
+Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's
+layer (ADR-0107, below) is placed flat, so its `dof` is zero and depth of field doesn't
+blur it yet.
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
