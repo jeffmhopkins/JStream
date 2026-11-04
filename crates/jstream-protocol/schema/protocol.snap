@@ -6211,7 +6211,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "MotionCurve": {
-      "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots.",
+      "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.82).",
       "oneOf": [
         {
           "const": "linear",
@@ -6236,7 +6236,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "MotionMeasure": {
-      "description": "What an `audio` modifier measures of what it hears.",
+      "description": "What an `audio` modifier measures of what it hears (since 0.82).",
       "oneOf": [
         {
           "const": "level",
@@ -6366,7 +6366,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Follows a measure of a bus or a source (ADR-0100): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+          "description": "Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
           "properties": {
             "attack_ms": {
               "default": 10,
@@ -10952,5 +10952,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.81"
+  "title": "JStream protocol 0.82"
 }
