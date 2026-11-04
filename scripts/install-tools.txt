@@ -1,0 +1,11 @@
+# The web UI's build tools the one-command installers download (scripts/mac/install.sh),
+# pinned to the releases ci.yml and after-review.yml use, with each download's SHA-256.
+# The wasm-bindgen CLI must match Cargo.lock. The mac-install workflow checks all three.
+# One line per tool and platform: tool, version, platform (as the release names it), sum.
+# Docs: docs/runbooks/mac-testing.md#script
+trunk         0.21.14  aarch64-apple-darwin  764e299dd50d89442a4e96a236349f57961984b701e74d3dbdb39cd1c9f5101e
+trunk         0.21.14  x86_64-apple-darwin   f1ba0e3bbe24e0ae219c6d22c33e24e2825c1608dd27c2556e323495110f1a95
+wasm-bindgen  0.2.129  aarch64-apple-darwin  81d4a23d56b3c3eb8187658329116d50e0b228a93b343825fb71f70179051cd1
+wasm-bindgen  0.2.129  x86_64-apple-darwin   7e028879a68ec53dae14048b55cc5215f6df75b17a9c1426fac8fa086d3202fd
+binaryen      132      arm64-macos           98aad827847af7ef990ed7098d885725c8e5b5aae75073403635617ae4e259aa
+binaryen      132      x86_64-macos          40c3de90bb3766bd0282a895e139a6f50253dba49b4f5bb89e66faca162d832e
