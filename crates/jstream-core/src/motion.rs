@@ -107,15 +107,19 @@ pub(crate) fn apply(
                     ..geometry
                 })
             })();
-            // A scale that shrinks it to nothing, or a value that isn't finite, leaves
-            // it where it is.
-            Placement::Geometry(moved.unwrap_or(geometry))
+            // A scale that shrinks it to nothing, a value that isn't finite, or a box the
+            // compositor couldn't draw (stacked scales past `MAX_DRAWN_PX`, as
+            // `item.set_geometry` refuses) leaves it where it is.
+            Placement::Geometry(moved.filter(|g| drawable(*g)).unwrap_or(geometry))
         }
         Placement::Legacy(mut transform) => {
             transform.position[0] += by.x;
             transform.position[1] += by.y;
-            transform.scale[0] = by.scale_of(transform.scale[0]);
-            transform.scale[1] = by.scale_of(transform.scale[1]);
+            // A legacy scale is signed, a negative one flipping its axis: motion scales
+            // the size and keeps the flip.
+            let scaled = |s: f32| s.signum() * by.scale_of(s.abs());
+            transform.scale[0] = scaled(transform.scale[0]);
+            transform.scale[1] = scaled(transform.scale[1]);
             transform.rotation_deg += by.rotation;
             Placement::Legacy(transform)
         }
@@ -202,6 +206,19 @@ impl TrackMotion {
             Track::Disappear { .. } => side(&self.from),
         }
     }
+}
+
+/// Whether a moved box is one `item.set_geometry` would take: every input within
+/// [`MAX_DRAWN_PX`](jstream_protocol::MAX_DRAWN_PX), whatever its 3D, and
+/// `check_drawable`'s own checks.
+fn drawable(g: jstream_protocol::ItemGeometry) -> bool {
+    let near = |v: f32| v.abs() <= jstream_protocol::MAX_DRAWN_PX;
+    near(g.center.x.get())
+        && near(g.center.y.get())
+        && near(g.size.width.get())
+        && near(g.size.height.get())
+        && near(g.depth_px.get())
+        && g.check_drawable().is_ok()
 }
 
 #[cfg(test)]
@@ -327,6 +344,53 @@ mod tests {
         assert_eq!(transform.position, [1.0, 0.0]);
         assert_eq!(transform.scale, [2.0, 2.0]);
         assert_eq!(transform.rotation_deg, 0.0);
+    }
+
+    /// #1125 review B1: a mirrored legacy item (a negative scale) under motion that
+    /// doesn't touch scale keeps its mirror, and a scale modifier scales its size.
+    #[test]
+    fn a_mirrored_legacy_item_keeps_its_flip() {
+        let mirrored = LegacyTransform {
+            scale: [-1.0, 1.0],
+            ..LegacyTransform::IDENTITY
+        };
+        let moved = |motion: &[Modifier]| {
+            let (placement, _, _) = apply(
+                &offsets(motion, at(1.0), None),
+                Placement::Legacy(mirrored),
+                Crop::NONE,
+                1.0,
+            );
+            let Placement::Legacy(transform) = placement else {
+                panic!("a legacy transform stays one");
+            };
+            transform.scale
+        };
+        assert_eq!(
+            moved(&[drift(Property::X, 1.0, Clock::Engine)]),
+            [-1.0, 1.0]
+        );
+        assert_eq!(
+            moved(&[drift(Property::Scale, 1.0, Clock::Engine)]),
+            [-2.0, 2.0]
+        );
+    }
+
+    /// #1125 review N5: stacked scale modifiers that would make a box too large to draw
+    /// leave it as it is.
+    #[test]
+    fn a_box_scaled_past_drawable_stays_as_it_is() {
+        let geometry = geometry();
+        let huge: Vec<_> = (0..8)
+            .map(|n| Modifier {
+                id: format!("s{n}"),
+                ..drift(Property::Scale, 100_000.0, Clock::Engine)
+            })
+            .collect();
+        let by = offsets(&huge, at(1.0), None);
+        assert!(by.scale > 1e30, "{}", by.scale);
+        let (placement, _, _) = apply(&by, Placement::Geometry(geometry), Crop::NONE, 1.0);
+        assert_eq!(placement, Placement::Geometry(geometry));
     }
 
     #[test]

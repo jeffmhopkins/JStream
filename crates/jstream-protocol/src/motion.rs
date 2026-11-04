@@ -24,6 +24,7 @@ pub const MAX_MOTION_ID_LEN: usize = 64;
     Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MotionProperty {
     /// Horizontal position of the box's centre, in canvas pixels: added.
     X,
@@ -50,6 +51,12 @@ pub enum MotionProperty {
     CropRight,
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
+    /// A property this version of the protocol doesn't know, from a newer server, so a
+    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// edit with `invalid_argument` and draws a stored one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 impl MotionProperty {
@@ -73,6 +80,7 @@ impl MotionProperty {
 /// The waveform of an `oscillate` modifier.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MotionShape {
     /// A sine: starts at 0, rising.
     #[default]
@@ -83,6 +91,12 @@ pub enum MotionShape {
     Square,
     /// A sawtooth: rises from -1 to 1 over each period, then jumps back.
     Saw,
+    /// A shape this version of the protocol doesn't know, from a newer server, so a
+    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// edit with `invalid_argument` and draws a stored one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 impl MotionShape {
@@ -98,6 +112,7 @@ impl MotionShape {
 /// What a modifier does, with its parameters, tagged by `kind`.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MotionKind {
     /// Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same
     /// motion on every machine; each extra octave adds detail at twice the frequency and
@@ -136,6 +151,12 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
+    /// A kind this version of the protocol doesn't know, from a newer server, so a
+    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// edit with `invalid_argument` and draws a stored one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 fn one_octave() -> u8 {
@@ -145,13 +166,21 @@ fn one_octave() -> u8 {
 /// Where a modifier's time starts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
+#[non_exhaustive]
 pub enum MotionClock {
     /// The engine's animation time: every item with the same parameters moves in step.
     #[default]
     Engine,
-    /// From when the item last became visible on program, so it starts fresh each
-    /// time it is shown. While it isn't shown, the modifier is at its start.
+    /// From when the engine last started drawing the item for program or a video mix,
+    /// so it starts fresh each time it is shown. While it isn't shown, and in a scene
+    /// or source preview, the modifier is at its start.
     Shown,
+    /// A clock this version of the protocol doesn't know, from a newer server, so a
+    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// edit with `invalid_argument` and draws a stored one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
 }
 
 /// One motion modifier on an item (ADR-0099 decision 3).
@@ -232,6 +261,13 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
                 reason: format!("modifier `{id}` is in the list twice"),
             });
         }
+        let unknown = "is not one this version of the protocol knows";
+        if m.property == MotionProperty::Unknown {
+            return Err(problem(field("property"), unknown));
+        }
+        if m.clock == MotionClock::Unknown {
+            return Err(problem(field("clock"), unknown));
+        }
         if let Some((param, reason)) = m.kind.problem() {
             return Err(problem(field(param), reason));
         }
@@ -262,15 +298,17 @@ impl MotionKind {
                 }
             }
             MotionKind::Oscillate {
+                shape,
                 amplitude,
                 period_ms,
                 phase,
-                ..
             } => {
                 if !magnitude(amplitude) {
                     Some(("amplitude", "must be within 0..=100000"))
                 } else if !(1..=MAX_PERIOD_MS).contains(&period_ms) {
                     Some(("period_ms", "must be within 1..=3600000"))
+                } else if shape == MotionShape::Unknown {
+                    Some(("shape", "is not one this version of the protocol knows"))
                 } else if !(0.0..1.0).contains(&phase.get()) {
                     Some(("phase", "must be at least 0 and below 1"))
                 } else {
@@ -286,6 +324,7 @@ impl MotionKind {
                     None
                 }
             }
+            MotionKind::Unknown => Some(("kind", "is not one this version of the protocol knows")),
         }
     }
 }
@@ -334,6 +373,40 @@ mod tests {
             field_of(&[wiggle("a", 1.0), wiggle("b", -1.0)]).as_deref(),
             Some("motion.1.amplitude")
         );
+    }
+
+    /// #1125 review N2: a value from a newer server parses as `Unknown`, so an older
+    /// client still reads `state.get`, and an edit carrying one is refused.
+    #[test]
+    fn a_newer_value_parses_as_unknown_and_is_refused() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("parses")
+        };
+        let base = serde_json::json!({
+            "modifier_id": "m", "property": "x", "kind": "drift", "rate_per_s": 1.0,
+            "clock": "engine"
+        });
+        let with = |key: &str, value: serde_json::Value| {
+            let mut json = base.clone();
+            json[key] = value;
+            json
+        };
+        let glow = parse(with("property", "glow".into()));
+        assert_eq!(glow.property, MotionProperty::Unknown);
+        assert_eq!(field_of(&[glow]).as_deref(), Some("motion.0.property"));
+        let beat = parse(with("clock", "beat".into()));
+        assert_eq!(beat.clock, MotionClock::Unknown);
+        assert_eq!(field_of(&[beat]).as_deref(), Some("motion.0.clock"));
+        let pulse = parse(serde_json::json!({
+            "modifier_id": "m", "property": "x", "kind": "pulse", "every_ms": 5
+        }));
+        assert_eq!(pulse.kind, MotionKind::Unknown);
+        assert_eq!(field_of(&[pulse]).as_deref(), Some("motion.0.kind"));
+        let blob = parse(serde_json::json!({
+            "modifier_id": "m", "property": "x", "kind": "oscillate", "shape": "blob",
+            "amplitude": 1.0, "period_ms": 100
+        }));
+        assert_eq!(field_of(&[blob]).as_deref(), Some("motion.0.shape"));
     }
 
     #[test]

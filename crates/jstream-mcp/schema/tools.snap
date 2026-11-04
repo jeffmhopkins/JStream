@@ -3603,7 +3603,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "shown",
-                "description": "From when the item last became visible on program, so it starts fresh each\ntime it is shown. While it isn't shown, the modifier is at its start.",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
               }
             ]
@@ -9619,7 +9619,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "shown",
-                "description": "From when the item last became visible on program, so it starts fresh each\ntime it is shown. While it isn't shown, the modifier is at its start.",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
               }
             ]
@@ -10874,7 +10874,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "shown",
-                "description": "From when the item last became visible on program, so it starts fresh each\ntime it is shown. While it isn't shown, the modifier is at its start.",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
               }
             ]
@@ -15513,7 +15513,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "shown",
-                "description": "From when the item last became visible on program, so it starts fresh each\ntime it is shown. While it isn't shown, the modifier is at its start.",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
               }
             ]

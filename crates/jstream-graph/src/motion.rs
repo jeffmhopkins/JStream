@@ -21,26 +21,29 @@ pub(crate) fn check(motion: &[MotionModifier], at: usize) -> Result<(), Protocol
     check_motion(motion).map_err(|problem| invalid(at, &problem.field, problem.reason))
 }
 
-/// `motion` as `jstream-anim` evaluates it.
+/// `motion` as `jstream-anim` evaluates it. A modifier with a value this version
+/// doesn't know (`check_motion` refuses one, so only a list built without it can hold
+/// one) is left out, so the item stays still for it.
 pub fn anim_modifiers(motion: &[MotionModifier]) -> Vec<Modifier> {
-    motion.iter().map(modifier).collect()
+    motion.iter().filter_map(modifier).collect()
 }
 
-fn modifier(m: &MotionModifier) -> Modifier {
-    Modifier {
+fn modifier(m: &MotionModifier) -> Option<Modifier> {
+    Some(Modifier {
         id: m.modifier_id.clone(),
-        property: property(m.property),
-        kind: kind(&m.kind),
+        property: property(m.property)?,
+        kind: kind(&m.kind)?,
         clock: match m.clock {
             MotionClock::Engine => Clock::Engine,
             MotionClock::Shown => Clock::Shown,
+            _ => return None,
         },
         enabled: m.enabled,
-    }
+    })
 }
 
-fn property(p: MotionProperty) -> Property {
-    match p {
+fn property(p: MotionProperty) -> Option<Property> {
+    Some(match p {
         MotionProperty::X => Property::X,
         MotionProperty::Y => Property::Y,
         MotionProperty::Scale => Property::Scale,
@@ -53,11 +56,12 @@ fn property(p: MotionProperty) -> Property {
         MotionProperty::CropTop => Property::CropTop,
         MotionProperty::CropRight => Property::CropRight,
         MotionProperty::CropBottom => Property::CropBottom,
-    }
+        _ => return None,
+    })
 }
 
-fn kind(k: &MotionKind) -> Kind {
-    match *k {
+fn kind(k: &MotionKind) -> Option<Kind> {
+    Some(match *k {
         MotionKind::Wiggle {
             amplitude,
             frequency_hz,
@@ -80,6 +84,7 @@ fn kind(k: &MotionKind) -> Kind {
                 MotionShape::Triangle => Shape::Triangle,
                 MotionShape::Square => Shape::Square,
                 MotionShape::Saw => Shape::Saw,
+                _ => return None,
             },
             amplitude: f64::from(amplitude.get()),
             period_ms: f64::from(period_ms),
@@ -89,7 +94,8 @@ fn kind(k: &MotionKind) -> Kind {
             rate_per_s: f64::from(rate_per_s.get()),
             wrap: wrap.map(|w| f64::from(w.get())),
         },
-    }
+        _ => return None,
+    })
 }
 
 #[cfg(test)]

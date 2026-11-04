@@ -32,6 +32,8 @@ pub fn property_name(property: MotionProperty) -> &'static str {
         MotionProperty::CropTop => "Crop top",
         MotionProperty::CropRight => "Crop right",
         MotionProperty::CropBottom => "Crop bottom",
+        // One from a newer engine: shown, but not offered.
+        _ => "Other",
     }
 }
 
@@ -62,6 +64,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Wiggle { .. } => "Wiggle",
         MotionKind::Oscillate { .. } => "Oscillate",
         MotionKind::Drift { .. } => "Drift",
+        _ => "Other",
     }
 }
 
@@ -151,6 +154,7 @@ impl Param {
             ],
             MotionKind::Oscillate { .. } => &[Param::Amplitude, Param::Period, Param::Phase],
             MotionKind::Drift { .. } => &[Param::Rate, Param::Wrap],
+            _ => &[],
         }
     }
 

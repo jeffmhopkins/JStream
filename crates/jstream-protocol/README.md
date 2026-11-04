@@ -1778,7 +1778,10 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
-  `Unknown` from the start.
+  `Unknown` from the start, and so do the motion enums (`MotionProperty`,
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.75): a later kind or
+  property won't break a 0.75 client's `state.get`. `check_motion` refuses an `Unknown`
+  in an edit, and the engine draws one as still.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -1806,14 +1809,18 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then clamped to 0 to 1. Two modifiers on one property add up.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
-  same settings move in step; `shown` starts at 0 each time the item starts being drawn.
+  same settings move in step; `shown` starts at 0 each time the engine starts drawing
+  the item for program or a video mix (in any of their passes). A scene or source
+  preview doesn't run it: there a `shown` modifier stays at its start.
 - **`item.set_motion {item_id, scene_id?, motion}`** writes the whole list, and is
   undone by the same edit with the old list. Addressed to a keyframe scene, it writes
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
   field `motion` removes. An empty override list stops the item's motion in that
   keyframe. A list that breaks the rules above is `invalid_argument` naming the field,
   and `check_motion` is the check every implementation shares. Plugins need the `edit`
-  class for it.
+  class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
+  previews as it drags): each change is one undo step. `depth` is a property beyond
+  ADR-0099's list, for 3D scenes.
 
 During a scene switch a moving item keeps moving: a matched pair blends its two sides'
 motion by the transition's progress, an appearing item moves as its new scene says and a

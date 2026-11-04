@@ -258,8 +258,11 @@ state machine. Contents:
   carries both sides' motion (`TrackMotion`): a matched pair blends their offsets by
   the eased progress, an appearing item moves by its new side's and a disappearing one
   by its old side's. The `shown` clock starts when an item starts being drawn in any
-  pass: the engine keeps when each drawn item appeared (`ShownSince`) and stamps it on
-  each shot it publishes (`Shot::set_shown`).
+  pass of the program shot, a video mix's included: the engine keeps when each drawn
+  item appeared (`ShownSince`) and stamps it on each program shot it publishes
+  (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
+  modifier stays at its start there. A legacy placement's signed scale keeps its flip,
+  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`) stays unmoved.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
