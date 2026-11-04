@@ -1380,3 +1380,98 @@ fn a_master_clap_filter_runs_one_host_per_bus_that_feeds_an_output() {
     block_on(control.call(output_call("yt", false))).expect("yt stop");
     std::fs::remove_dir_all(&dir).expect("cleaned up");
 }
+
+/// #989: a compressor keyed on another source (ADR-0028) is resolved where the program
+/// stage reconciles its inputs. A key source whose ID sorts after the keyed source's
+/// resolves in the same pass, since the chains run once every input is open; and when
+/// the key source reopens on a new mixer input, the compressor is rebuilt on that input.
+#[test]
+fn a_keyed_compressor_follows_its_key_sources_input() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let music = SourceId::new("a_music");
+    let voice = SourceId::new("z_voice");
+    batch(
+        &control,
+        edits(vec![
+            audio_source("a_music", "desktop_audio", None),
+            audio_source("z_voice", "audio_input", None),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Source {
+                    source_id: music.clone(),
+                },
+                chain: jstream_protocol::FilterChain::Audio,
+                filter_id: jstream_protocol::FilterId::new("duck"),
+                kind: "compressor".into(),
+                settings: Settings(
+                    [(
+                        "key".to_owned(),
+                        json!({"type": "source", "source_id": "z_voice"}),
+                    )]
+                    .into_iter()
+                    .collect(),
+                ),
+                enabled: None,
+                index: None,
+            },
+        ]),
+    )
+    .expect("the sources and the compressor");
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    assert!(eventually(|| {
+        engine.first_audio_keyed(&music).is_some() && engine.audio_keyed(&voice).is_some()
+    }));
+
+    // The first pass that recorded the music already keyed it on the voice's input.
+    let first = engine
+        .first_audio_keyed(&music)
+        .expect("the music's first pass");
+    let first_voice = engine
+        .first_audio_keyed(&voice)
+        .expect("the voice's first pass");
+    assert_eq!(first.filters.len(), 1, "{first:?}");
+    let (key, built) = first.filters[0];
+    assert_eq!(key, Some(first_voice.input), "keyed in the same pass");
+    assert!(built.is_some(), "the mixer took the compressor");
+    assert_ne!(first_voice.input, first.input);
+
+    // The voice reopens on another device: a new mixer input, and the compressor is
+    // rebuilt keyed on it while the music's own input stays.
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: voice.clone(),
+            patch: Settings(
+                [("device".to_owned(), json!(jstream_platform::fake::FAKE_MIC))]
+                    .into_iter()
+                    .collect(),
+            ),
+        }),
+    )
+    .expect("the voice's device");
+    assert!(
+        eventually(|| engine
+            .audio_keyed(&voice)
+            .is_some_and(|now| now.input != first_voice.input)),
+        "the voice reopens on a new input"
+    );
+    let reopened = engine.audio_keyed(&voice).expect("the voice records").input;
+    assert!(
+        eventually(|| engine
+            .audio_keyed(&music)
+            .is_some_and(|now| now.filters[0].0 == Some(reopened))),
+        "{:?}",
+        engine.audio_keyed(&music)
+    );
+    let now = engine.audio_keyed(&music).expect("the music records");
+    assert_eq!(now.input, first.input, "the music's input stays open");
+    assert!(
+        now.filters[0].1.is_some(),
+        "the mixer took the rebuilt compressor"
+    );
+    assert_ne!(now.filters[0].1, built, "rebuilt on the new key");
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
