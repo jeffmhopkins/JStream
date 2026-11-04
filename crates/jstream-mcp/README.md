@@ -122,7 +122,8 @@ disk that undo never reaches), `pairing`, `ui_settings` and `values` (whose valu
 browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
-`live.cancel`, `audio.reset_loudness`, the `preview` actions and `item.show`, `item.hide`
+`live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
+itself, #1107), the `preview` actions and `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
 opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
@@ -188,6 +189,8 @@ disappear effects), building what the built-in kinds can't draw as HTML in a `br
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
 kinds where no browser is available), continuous motion as `item.set_motion` on items
 rather than in pages (one engine clock, so items, masks and nested scenes move in step;
+a one-shot jolt as an `impulse` on the `triggered` clock that `item.trigger_motion`
+fires, rather than stepping the item call by call;
 a sway on a group's item moves the group as one; a keyframe scene's own list across a
 `move`; kept subtle, with streaks that move less per frame than their length,
 [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), and checking

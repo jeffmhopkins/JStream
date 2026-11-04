@@ -544,6 +544,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item whose modifiers it fires."
+            },
+            "modifier_id": {
+              "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "item.trigger_motion",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
           "properties": {
             "type": {
@@ -6511,6 +6536,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "shown",
           "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
           "type": "string"
+        },
+        {
+          "const": "triggered",
+          "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+          "type": "string"
         }
       ]
     },
@@ -6616,6 +6646,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "kind",
             "rate_per_s"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+          "properties": {
+            "amplitude": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Its size at the start, `0..=100000`."
+            },
+            "decay_per_s": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+            },
+            "duration_ms": {
+              "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "frequency_hz": {
+              "$ref": "#/$defs/Finite32",
+              "description": "How many times a second it swings, `0..=60` and not 0."
+            },
+            "kind": {
+              "const": "impulse",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "amplitude",
+            "frequency_hz",
+            "duration_ms"
           ],
           "type": "object"
         }
@@ -11310,5 +11375,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.83"
+  "title": "JStream protocol 0.84"
 }

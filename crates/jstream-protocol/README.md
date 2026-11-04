@@ -75,7 +75,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
+  `effect.enable`, `pack.write`, `pack.delete`, `values.set`, `item.trigger_motion`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -165,8 +165,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
-  `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
-  shares ([Motion](#motion)).
+  `MAX_MOTION_ID_LEN` (64), `check_motion`, the list check every implementation
+  shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
+  ([Motion](#motion)).
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -274,7 +275,8 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.83 because `item.set_opacity`,
+`PROTOCOL_VERSION` is 0.84 because of `item.trigger_motion`, the `impulse` motion kind
+and the `triggered` clock (#1107); 0.83 because `item.set_opacity`,
 `item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101);
 0.82 because of the frame
 sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.81 because of
@@ -2032,7 +2034,8 @@ after 1.0:
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
   property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
-  in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
+  in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
+  clock are such values: a 0.81 client reads them as `Unknown`. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
@@ -2062,16 +2065,21 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 `opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
-  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
-  `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
-  100 000, rates within ±100 000.
+  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`), `drift` (a steady
+  `rate_per_s`, wrapping back to 0 past `wrap` when it has one) and, since 0.84,
+  `impulse` (a one-shot decaying shake,
+  `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` until `duration_ms`, then
+  0: `frequency_hz` in `(0, 60]`, `decay_per_s` 0 to 1000, `duration_ms` 1 to
+  3 600 000). Amplitudes are 0 to 100 000, rates within ±100 000.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source
-  preview doesn't run it: there a `shown` modifier stays at its start.
+  preview doesn't run it: there a `shown` modifier stays at its start. `triggered`
+  (since 0.84) starts each time `item.trigger_motion` fires the modifier; until then,
+  and in a preview, it adds nothing.
 - **`item.set_motion {item_id, scene_id?, motion}`** writes the whole list, and is
   undone by the same edit with the old list. Addressed to a keyframe scene, it writes
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
@@ -2081,6 +2089,15 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
   previews as it drags): each change is one undo step. `depth` is a property beyond
   ADR-0099's list, for 3D scenes.
+
+**`item.trigger_motion {item_id, modifier_id?}`** (an action, since 0.84, #1107) fires
+the item's `triggered` modifiers from now: the one `modifier_id` names, or every one when
+it is omitted. Firing a running one restarts it. A fire is runtime state like the program
+scene: no `rev`, no undo, no event. A modifier on a group's item moves the whole group,
+masks included. Firing a modifier the item doesn't hold, or one on another clock, does
+nothing, since a keyframe scene can override the list; an item not in the collection is
+`not_found`, and a malformed `modifier_id` is `invalid_argument`. Plugins need the `edit`
+class. Its `named_objects` is the item, so a hotkey binding to it goes with the item.
 
 During a scene switch a moving item keeps moving: a matched pair blends its two sides'
 motion by the transition's progress, an appearing item moves as its new scene says and a

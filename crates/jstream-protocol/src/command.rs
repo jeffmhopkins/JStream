@@ -1519,6 +1519,23 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
+    /// Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),
+    /// since 0.84: the one `modifier_id` names, or every one on the item when it is
+    /// omitted. Each starts again from its beginning, so firing one while it runs
+    /// restarts it. The fire is runtime state like the program scene: it changes no
+    /// `rev`, is never undone and emits nothing; the item moves on every mix that draws
+    /// it. A modifier on a group's item moves the whole group. Firing a modifier the
+    /// item doesn't hold, or one on another clock, does nothing, since a keyframe scene
+    /// can override the list it fires. Fails with `not_found` for an item not in the
+    /// collection, and with `invalid_argument` for a malformed `modifier_id`.
+    #[serde(rename = "item.trigger_motion")]
+    ItemTriggerMotion {
+        /// The item whose modifiers it fires.
+        item_id: ItemId,
+        /// The modifier to fire. Omitted for every one on the `triggered` clock.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        modifier_id: Option<String>,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -1700,6 +1717,7 @@ impl Action {
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
+            Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1747,6 +1765,9 @@ impl Action {
                     named.push((EntityKind::Scene, scene_id.as_str()));
                 }
                 named
+            }
+            Action::ItemTriggerMotion { item_id, .. } => {
+                vec![(EntityKind::Item, item_id.as_str())]
             }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
@@ -1845,6 +1866,7 @@ impl Action {
             | Action::ItemShow { .. }
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
+            | Action::ItemTriggerMotion { .. }
             | Action::PrivacySet { .. } => None,
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.

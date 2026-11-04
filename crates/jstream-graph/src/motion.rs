@@ -36,6 +36,7 @@ fn modifier(m: &MotionModifier) -> Option<Modifier> {
         clock: match m.clock {
             MotionClock::Engine => Clock::Engine,
             MotionClock::Shown => Clock::Shown,
+            MotionClock::Triggered => Clock::Triggered,
             _ => return None,
         },
         enabled: m.enabled,
@@ -94,6 +95,17 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             rate_per_s: f64::from(rate_per_s.get()),
             wrap: wrap.map(|w| f64::from(w.get())),
         },
+        MotionKind::Impulse {
+            amplitude,
+            frequency_hz,
+            decay_per_s,
+            duration_ms,
+        } => Kind::Impulse {
+            amplitude: f64::from(amplitude.get()),
+            frequency_hz: f64::from(frequency_hz.get()),
+            decay_per_s: f64::from(decay_per_s.get()),
+            duration_ms: f64::from(duration_ms),
+        },
         _ => return None,
     })
 }
@@ -141,6 +153,18 @@ mod tests {
                 rate_per_s: f(100_000.0),
                 wrap: Some(f(f32::MIN_POSITIVE)),
             },
+            MotionKind::Impulse {
+                amplitude: f(100_000.0),
+                frequency_hz: f(60.0),
+                decay_per_s: f(1000.0),
+                duration_ms: 3_600_000,
+            },
+            MotionKind::Impulse {
+                amplitude: f(0.0),
+                frequency_hz: f(f32::MIN_POSITIVE),
+                decay_per_s: f(0.0),
+                duration_ms: 1,
+            },
         ];
         let motion: Vec<MotionModifier> = kinds
             .iter()
@@ -149,8 +173,8 @@ mod tests {
                 modifier_id: format!("m-{n}_{}", "x".repeat(50)),
                 property: MotionProperty::ALL[n],
                 kind: *kind,
-                clock: MotionClock::Shown,
-                enabled: n % 2 == 0,
+                clock: [MotionClock::Shown, MotionClock::Triggered][n % 2],
+                enabled: n % 3 == 0,
             })
             .collect();
         assert_eq!(check_motion(&motion), Ok(()));
