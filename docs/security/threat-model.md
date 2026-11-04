@@ -209,7 +209,7 @@ covers = [
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/runbooks/linux-testing.md#script"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
@@ -276,7 +276,7 @@ enforces them in the pinned CEF's windowless pages is not yet confirmed on a Win
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
-**Accepted** (#1143): a Linux tester install, where the kernel restricts unprivileged user
+**Accepted:** a Linux tester install, where the kernel restricts unprivileged user
 namespaces, makes `chrome-sandbox` setuid root inside a folder the user owns
 ([linux-testing › The script](../runbooks/linux-testing.md#script), step 8). Code
 already running as the user can put its own binary there, or swap one in after the
