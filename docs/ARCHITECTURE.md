@@ -1076,6 +1076,13 @@ centre, stacking order breaking ties; there is still no depth buffer. In a Fade 
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had.
+A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
+per placement into a canvas-sized layer, through the scene's camera or the item's own
+viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
+under a studio rig fixed to the camera, or unlit; the layer is then placed flat
+(`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
+model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
+jitter, and the GPU's own near clip is ADR-0050's near plane.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
