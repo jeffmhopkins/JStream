@@ -131,7 +131,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-aac` | JStream's AAC-LC encoder, Linux's AAC path ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), within [ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)'s limits): MPEG-2 AAC LC tools only, encode only; `f32` samples in, raw access units and the `AudioSpecificConfig` out. `jstream-platform-linux` puts it behind `AudioEncoder` | no |
-| 0 | `jstream-anim` | Keyframe-scene model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md)): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies | no |
+| 0 | `jstream-anim` | Keyframe-scene and motion model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md), [ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)): a variant's overrides and their inverses, effective values over the live parent, the switch plan between keyframes, motion modifiers and timelines; generic over geometry, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
@@ -305,7 +305,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output that carries audio an audio chain, and their filters can't hold a reference
   (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
-  [ADR-0082](adr/0082-blend-modes-drawn.md)). A scene's `filters` and a placement's `effects[]` are video filter
+  [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
+  browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -1087,8 +1088,10 @@ model-to-clip map is composed in `f64` relative to the camera, so a far camera d
 jitter, and the GPU's own near clip is ADR-0050's near plane.
 Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
-src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
-target under the item, and overlay, difference and exclusion mix sRGB-encoded values. The composite pass writes premultiplied linear light into `Rgba16Float`; a
+src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
+target under the item, and overlay, difference, exclusion, `normal_srgb` and
+`additive_srgb` mix sRGB-encoded values, the last two to match a browser
+([ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). The composite pass writes premultiplied linear light into `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
