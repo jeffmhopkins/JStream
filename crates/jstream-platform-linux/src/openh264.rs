@@ -206,9 +206,10 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library, and any stale temporary file a write left behind (see
-    /// [`sweep_parts`](Self::sweep_parts)), but not one a write may still be writing. Afterwards
-    /// software H.264 reports not installed. Removing what isn't there succeeds.
+    /// Deletes the library, and any stale temporary file a write left behind (untouched
+    /// for ten minutes, and its process gone or the file a day old), but not one a write
+    /// may still be writing. Afterwards software H.264 reports not installed. Removing
+    /// what isn't there succeeds.
     ///
     /// # Errors
     /// [`PlatformError::Os`] when the file exists but can't be deleted.
