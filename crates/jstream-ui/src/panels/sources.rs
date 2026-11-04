@@ -1043,6 +1043,7 @@ mod tests {
 
     fn collection() -> Collection {
         let item = |id: &str, source: &str, visible: bool| ItemInfo {
+            motion: Default::default(),
             item_id: id.into(),
             source_id: source.into(),
             placement: PlacementForm::Legacy,
@@ -1084,6 +1085,8 @@ mod tests {
                 folder: None,
                 meta: Default::default(),
                 options: Default::default(),
+                camera_motion: Vec::new(),
+                camera_follow: None,
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
                 transition_in: None,
                 transition_out: None,
@@ -1110,6 +1113,8 @@ mod tests {
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             scene_id: id.into(),
             name: id.into(),
+            camera_motion: Vec::new(),
+            camera_follow: None,
             items,
             ..c.scenes[0].clone()
         };

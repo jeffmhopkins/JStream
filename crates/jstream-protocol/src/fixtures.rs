@@ -12,11 +12,11 @@ use crate::{
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
     EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, MasterInfo, OutputHealth, OutputId, OutputInfo, OutputKind,
-    OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
-    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    ItemInfo, ItemTransform, MasterInfo, MotionCurve, MotionMeasure, OutputHealth, OutputId,
+    OutputInfo, OutputKind, OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm,
+    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -47,9 +47,11 @@ use crate::{
     VisibleIf,
 };
 use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
+use crate::{FrameSheet, FrameStrip, SheetFrame};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
+use crate::{MotionClock, MotionKind, MotionModifier, MotionProperty, MotionShape};
 use crate::{PackContent, PackFile, PackFileInfo, PackInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
@@ -458,6 +460,26 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..SceneCamera::framing(CameraCanvas::DEFAULT)
             }),
         },
+        // A camera's motion, every property (ADR-0113), and a follow camera on and off.
+        Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("scn_1"),
+            motion: camera_motion(&crate::CameraProperty::ALL[..8]),
+        },
+        Edit::SceneSetCameraMotion {
+            scene_id: SceneId::new("scn_1"),
+            motion: camera_motion(&crate::CameraProperty::ALL[8..]),
+        },
+        Edit::SceneSetCameraFollow {
+            scene_id: SceneId::new("scn_1"),
+            follow: Some(crate::CameraFollow {
+                zoom: Finite32::new(1.5).expect("finite"),
+                ..crate::CameraFollow::of(ItemId::new("itm_1"))
+            }),
+        },
+        Edit::SceneSetCameraFollow {
+            scene_id: SceneId::new("scn_1"),
+            follow: None,
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
@@ -590,7 +612,57 @@ fn keyframe_edits() -> Vec<Edit> {
             filter_id: FilterId::new("flt_frame"),
             enabled: false,
         },
+        // An item's motion modifiers, and a keyframe's own (ADR-0099).
+        Edit::ItemSetMotion {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+            motion: sway(),
+        },
+        Edit::ItemSetMotion {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1_wide")),
+            motion: keyframe_motion(),
+        },
     ];
+    // Every property and every shape, in lists of at most 8 (ADR-0099).
+    let every: Vec<MotionModifier> = MotionProperty::ALL
+        .into_iter()
+        .zip(MotionShape::ALL.into_iter().cycle())
+        .map(|(property, shape)| MotionModifier {
+            modifier_id: format!(
+                "every-{}",
+                serde_json::to_value(property)
+                    .expect("serialises")
+                    .as_str()
+                    .expect("a string")
+            ),
+            property,
+            kind: MotionKind::Oscillate {
+                shape,
+                amplitude: Finite32::new(1.0).expect("finite"),
+                period_ms: 2000,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        })
+        .collect();
+    edits.extend(
+        every
+            .chunks(crate::MAX_MOTION_MODIFIERS)
+            .map(|motion| Edit::ItemSetMotion {
+                item_id: ItemId::new("itm_3"),
+                scene_id: None,
+                motion: motion.to_vec(),
+            }),
+    );
+    // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
+    // source.
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: reactive(),
+    });
     // Every field, as "reset keyframe" clears them.
     edits.extend(
         [
@@ -598,6 +670,7 @@ fn keyframe_edits() -> Vec<Edit> {
             OverrideField::Crop,
             OverrideField::Visible,
             OverrideField::Effects,
+            OverrideField::Motion,
         ]
         .map(|field| Edit::ItemClearOverride {
             scene_id: SceneId::new("scn_1_wide"),
@@ -606,6 +679,26 @@ fn keyframe_edits() -> Vec<Edit> {
         }),
     );
     edits
+}
+
+/// A camera motion modifier on each of `properties`: a hand-held sway (ADR-0113).
+fn camera_motion(properties: &[crate::CameraProperty]) -> Vec<crate::CameraMotionModifier> {
+    properties
+        .iter()
+        .enumerate()
+        .map(|(n, property)| crate::CameraMotionModifier {
+            modifier_id: format!("cam-{n}"),
+            property: *property,
+            kind: MotionKind::Wiggle {
+                amplitude: Finite32::new(4.0).expect("finite"),
+                frequency_hz: Finite32::new(0.4).expect("finite"),
+                seed: 7,
+                octaves: 2,
+            },
+            clock: MotionClock::Engine,
+            enabled: n % 2 == 0,
+        })
+        .collect()
 }
 
 /// What the keyframe scene `scn_1_wide` overrides.
@@ -618,6 +711,136 @@ fn item_overrides() -> Vec<ItemOverride> {
         visible: Some(false),
         opacity: Some(Finite32::new(0.5).expect("finite")),
         effects: Some(keyframe_effects()),
+        motion: Some(keyframe_motion()),
+    }]
+}
+
+/// A gentle sway: every kind, every option, on the properties a sway moves (ADR-0099).
+fn sway() -> Vec<MotionModifier> {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    vec![
+        MotionModifier {
+            modifier_id: "sway-x".into(),
+            property: MotionProperty::X,
+            kind: MotionKind::Wiggle {
+                amplitude: f(3.0),
+                frequency_hz: f(0.4),
+                seed: 7,
+                octaves: 2,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        },
+        MotionModifier {
+            modifier_id: "sway-roll".into(),
+            property: MotionProperty::Rotation,
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Triangle,
+                amplitude: f(0.1),
+                period_ms: 5000,
+                phase: f(0.25),
+            },
+            clock: MotionClock::Shown,
+            enabled: true,
+        },
+        MotionModifier {
+            modifier_id: "scroll".into(),
+            property: MotionProperty::CropLeft,
+            kind: MotionKind::Drift {
+                rate_per_s: f(12.0),
+                wrap: Some(f(480.0)),
+            },
+            clock: MotionClock::Engine,
+            enabled: false,
+        },
+        MotionModifier {
+            modifier_id: "jolt".into(),
+            property: MotionProperty::Y,
+            kind: MotionKind::Impulse {
+                amplitude: f(18.0),
+                frequency_hz: f(1.5),
+                decay_per_s: f(4.0),
+                duration_ms: 700,
+            },
+            clock: MotionClock::Triggered,
+            enabled: true,
+        },
+    ]
+}
+
+/// Lights and a speaker that follow the mix (ADR-0100): every measure and every curve.
+fn reactive() -> Vec<MotionModifier> {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let audio = |audio, audio_source, measure, band: Option<(f32, f32)>, curve| MotionKind::Audio {
+        audio,
+        audio_source,
+        measure,
+        low_hz: band.map(|(low, _)| f(low)),
+        high_hz: band.map(|(_, high)| f(high)),
+        floor_db: f(-48.0),
+        ceiling_db: f(-6.0),
+        attack_ms: 5,
+        release_ms: 300,
+        curve,
+        from: f(-0.6),
+        to: Finite32::ZERO,
+    };
+    let modifier = |id: &str, property, kind| MotionModifier {
+        modifier_id: id.into(),
+        property,
+        kind,
+        clock: MotionClock::Engine,
+        enabled: true,
+    };
+    vec![
+        modifier(
+            "glow",
+            MotionProperty::Opacity,
+            audio(None, None, MotionMeasure::Level, None, MotionCurve::Linear),
+        ),
+        modifier(
+            "flash",
+            MotionProperty::Opacity,
+            audio(
+                Some(BusId::new("bus_vod")),
+                None,
+                MotionMeasure::Peak,
+                None,
+                MotionCurve::EaseIn,
+            ),
+        ),
+        modifier(
+            "kick",
+            MotionProperty::Y,
+            audio(None, None, MotionMeasure::Onset, None, MotionCurve::EaseOut),
+        ),
+        modifier(
+            "bass",
+            MotionProperty::Scale,
+            audio(
+                None,
+                Some(SourceId::new("src_cam")),
+                MotionMeasure::Band,
+                Some((40.0, 120.0)),
+                MotionCurve::EaseInOut,
+            ),
+        ),
+    ]
+}
+
+/// The keyframe scene `scn_1_wide`'s own motion for `itm_2`: a pulse, defaults omitted.
+fn keyframe_motion() -> Vec<MotionModifier> {
+    vec![MotionModifier {
+        modifier_id: "pulse".into(),
+        property: MotionProperty::Opacity,
+        kind: MotionKind::Oscillate {
+            shape: MotionShape::Sine,
+            amplitude: Finite32::new(0.2).expect("finite"),
+            period_ms: 1000,
+            phase: Finite32::ZERO,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
     }]
 }
 
@@ -837,6 +1060,31 @@ fn scene_meta() -> SceneMeta {
     }
 }
 
+/// A two-picture frame sheet of 1×1 tiles. The PNG is the 1×1 black one
+/// `video.snapshot`'s example carries, so the wire example stays small; a real sheet's
+/// size follows from its tiles.
+fn frame_sheet() -> FrameSheet {
+    FrameSheet {
+        width: 1,
+        height: 1,
+        columns: 2,
+        rows: 1,
+        tile_width: 1,
+        tile_height: 1,
+        frames: vec![
+            SheetFrame {
+                at_ms: 0,
+                rev: Rev(12),
+            },
+            SheetFrame {
+                at_ms: 101,
+                rev: Rev(12),
+            },
+        ],
+        png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
+    }
+}
+
 /// The bindings the fixtures report: a scene switch and an output start.
 fn hotkey_bindings() -> Vec<HotkeyBinding> {
     vec![
@@ -1034,6 +1282,10 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::StudioSetPreview {
             scene_id: SceneId::new("scn_1"),
         },
+        Action::SceneZoomCamera {
+            scene_id: SceneId::new("scn_1"),
+            steps: -2,
+        },
         Action::PairingStart,
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
@@ -1130,6 +1382,32 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: None,
             source: None,
             source_id: Some(SourceId::new("src_cam")),
+        },
+        Action::SceneSwitchAndWatch {
+            scene_id: SceneId::new("scn_1"),
+            preset_id: None,
+            strip: FrameStrip::new(7, 100),
+        },
+        Action::ItemShow {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
+        Action::ItemHide {
+            item_id: ItemId::new("itm_1"),
+            scene_id: Some(SceneId::new("scn_1")),
+        },
+        Action::ItemToggle {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
+        // Fires an item's triggered motion: one modifier, then all of them (#1107).
+        Action::ItemTriggerMotion {
+            item_id: ItemId::new("itm_1"),
+            modifier_id: Some("jolt".into()),
+        },
+        Action::ItemTriggerMotion {
+            item_id: ItemId::new("itm_1"),
+            modifier_id: None,
         },
     ]
 }
@@ -1266,6 +1544,14 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::CodecDownloads,
         Query::YoutubeStats,
         Query::SourceSizes,
+        Query::VideoFrames {
+            strip: FrameStrip {
+                count: 4,
+                interval_ms: 150,
+                delay_ms: 300,
+            },
+            scene_id: Some(SceneId::new("scn_1")),
+        },
     ]
 }
 
@@ -1680,6 +1966,7 @@ fn item_infos() -> Vec<ItemInfo> {
                 settings: vignette(),
             }],
             locked: false,
+            motion: sway(),
             effects_space: crate::EffectsSpace::Box,
         },
         ItemInfo {
@@ -1708,6 +1995,7 @@ fn item_infos() -> Vec<ItemInfo> {
             },
             effects: Vec::new(),
             locked: false,
+            motion: Vec::new(),
             effects_space: crate::EffectsSpace::Box,
         },
     ]
@@ -1814,6 +2102,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: item_infos(),
                     folder: Some(FolderId::new("fld_shows")),
                     meta: scene_meta(),
@@ -1832,6 +2122,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: None,
                     transition_out: None,
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
@@ -1847,6 +2139,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Group,
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
+                    camera_motion: Vec::new(),
+                    camera_follow: None,
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
@@ -1898,6 +2192,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             width: 1,
             height: 1,
             png: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=".into(),
+        },
+        QueryResult::VideoFrames {
+            sheet: frame_sheet(),
         },
         QueryResult::KindList {
             kinds: vec![
@@ -2678,6 +2975,14 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 result: Some(ActionResult::PairingStart {
                     code: SecretString::new("7K3M-9QXA"),
                     expires_in_secs: 120,
+                }),
+            },
+        }),
+        ServerMessage::Response(Response {
+            id: RequestId::new("r16"),
+            result: CallResult::Action {
+                result: Some(ActionResult::SceneSwitchAndWatch {
+                    sheet: frame_sheet(),
                 }),
             },
         }),

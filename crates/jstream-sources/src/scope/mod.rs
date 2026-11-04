@@ -15,7 +15,7 @@ mod meter;
 mod spectrum;
 mod waveform;
 
-pub use meter::{AudioMeter, METER_BANDS, Metered};
+pub use meter::{AudioMeter, METER_BANDS, Metered, RawMeasure};
 
 pub(crate) use spectrum::SpectrumKind;
 pub(crate) use waveform::WaveformKind;

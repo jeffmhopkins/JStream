@@ -516,6 +516,7 @@ mod tests {
         };
         let start = geometry(530.0, 270.0, 860.0, 540.0, 0.0);
         let child = ItemInfo {
+            motion: Default::default(),
             item_id: "x".into(),
             source_id: "cam".into(),
             placement: PlacementForm::Geometry,
@@ -540,6 +541,8 @@ mod tests {
             folder: None,
             meta: Default::default(),
             options: Default::default(),
+            camera_motion: Vec::new(),
+            camera_follow: None,
             items: Vec::new(),
             transition_in: None,
             transition_out: None,

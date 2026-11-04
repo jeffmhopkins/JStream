@@ -16,6 +16,7 @@ use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::effect_packs::Packs;
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::forget::ForgetSources;
+use crate::frames;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
@@ -52,15 +53,16 @@ use jstream_platform::{
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
     EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId,
-    OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query,
-    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
-    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
+    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
+    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
@@ -101,6 +103,8 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
+    sheets: AtomicUsize,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -185,6 +189,7 @@ impl Default for Engine {
                 Shared {
                     state: Mutex::new(state),
                     snapshots: SnapshotWorker::default(),
+                    sheets: AtomicUsize::new(0),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -1227,6 +1232,45 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if let Call::Query {
+            query: Query::VideoFrames { strip, scene_id },
+        } = call
+        {
+            drop(_entered);
+            let reply = self.frame_sheet(strip, scene_id, frames::query_answer);
+            return Executed::Pending(reply, span);
+        }
+        if let Call::Action {
+            action:
+                Action::SceneSwitchAndWatch {
+                    scene_id,
+                    preset_id,
+                    strip,
+                },
+        } = call
+        {
+            drop(_entered);
+            if let Err(error) = strip.check() {
+                return Executed::Ready(Box::new(Err(error)));
+            }
+            // The switch runs, is logged and audited as the `scene.switch` it is.
+            let switch = Call::Action {
+                action: Action::SceneSwitch {
+                    scene_id,
+                    preset_id,
+                },
+            };
+            return match self.execute(client_id, request_id, switch, previews) {
+                Executed::Ready(result) => match *result {
+                    Ok(_) => Executed::Pending(
+                        self.frame_sheet(strip, None, frames::action_answer),
+                        span,
+                    ),
+                    Err(error) => Executed::Ready(Box::new(Err(error))),
+                },
+                pending @ Executed::Pending(..) => pending,
+            };
         }
         let audit = Audit::records(&call).then(|| self.audit_context(client_id, &call));
         let output = match &call {
@@ -2323,6 +2367,64 @@ impl Engine {
         self.shared.snapshots.request(snapshot, live, rev, at)
     }
 
+    /// A frame sheet (#1061): `strip`'s pictures of the program mix, or of `scene_id`'s
+    /// scene alone, taken in real time from now by a `jstream-frames` thread and drawn
+    /// by the snapshot thread ([`frames`]). Its answer is `answer`'s wrapping of the
+    /// sheet, or the error that stopped it.
+    fn frame_sheet(
+        &self,
+        strip: FrameStrip,
+        scene_id: Option<SceneId>,
+        answer: fn(FrameSheet) -> CallResult,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        if let Err(error) = strip.check() {
+            reply.send(Err(error));
+            return waiting;
+        }
+        let begin = Instant::now();
+        let start = match self.shared.sample(scene_id.as_ref()) {
+            Ok(sample) => sample.at,
+            Err(error) => {
+                reply.send(Err(error));
+                return waiting;
+            }
+        };
+        let taken = self.shared.sheets.fetch_add(1, Ordering::AcqRel);
+        if taken >= frames::MAX_SHEETS {
+            self.shared.sheets.fetch_sub(1, Ordering::AcqRel);
+            reply.send(Err(frames::busy()));
+            return waiting;
+        }
+        let shared = Arc::downgrade(&self.shared);
+        // The thread owns the reply: if it can't start, dropping it answers `internal`.
+        let spawned = thread::Builder::new()
+            .name("jstream-frames".into())
+            .spawn(move || {
+                let samples = take_samples(&shared, &strip, scene_id.as_ref(), begin);
+                let Some(shared) = shared.upgrade() else {
+                    return;
+                };
+                shared.sheets.fetch_sub(1, Ordering::AcqRel);
+                match samples {
+                    Ok(samples) => shared.snapshots.request_sheet(
+                        frames::Sheet {
+                            samples,
+                            start,
+                            answer,
+                        },
+                        reply,
+                    ),
+                    Err(error) => reply.send(Err(error)),
+                }
+            });
+        if let Err(err) = spawned {
+            self.shared.sheets.fetch_sub(1, Ordering::AcqRel);
+            tracing::error!(error = %err, "starting a frame sheet thread failed");
+        }
+        waiting
+    }
+
     /// The render hub the pipeline's render thread reads, for tests.
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
@@ -2469,11 +2571,64 @@ impl Engine {
     }
 }
 
+/// A frame sheet's samples, each read when it is due (`begin` plus its offset). Stops
+/// with `internal` if the engine ends, and with the read's error (a scene deleted
+/// meanwhile) if one fails.
+fn take_samples(
+    shared: &Weak<Shared>,
+    strip: &FrameStrip,
+    scene_id: Option<&SceneId>,
+    begin: Instant,
+) -> Result<Vec<frames::Sample>, ProtocolError> {
+    let mut samples = Vec::with_capacity(strip.count as usize);
+    for index in 0..strip.count {
+        let due = begin + Duration::from_millis(strip.offset_ms(index));
+        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+            thread::sleep(wait);
+        }
+        let shared = shared.upgrade().ok_or_else(|| ProtocolError::Internal {
+            reason: "the engine ended while taking the frame sheet".into(),
+        })?;
+        samples.push(shared.sample(scene_id)?);
+    }
+    Ok(samples)
+}
+
+impl Shared {
+    /// What `video.snapshot` would draw now, for a frame sheet: the program mix's
+    /// published render snapshot, or `scene_id`'s scene planned alone as its preview
+    /// stream plans it, with the live values, `rev` and the media clock's time, all
+    /// read under the collection lock. `not_found` for a scene not in the collection.
+    fn sample(&self, scene_id: Option<&SceneId>) -> Result<frames::Sample, ProtocolError> {
+        let mut state = lock(&self.state);
+        let snapshot = match scene_id {
+            None => state.render.load(),
+            Some(scene_id) => {
+                let shot =
+                    state
+                        .plan_scene_alone(scene_id)
+                        .ok_or_else(|| ProtocolError::NotFound {
+                            entity: EntityKind::Scene,
+                            id: scene_id.to_string(),
+                        })?;
+                RenderSnapshot::following(None, shot)
+            }
+        };
+        Ok(frames::Sample {
+            snapshot,
+            live: state.render.load_live(),
+            rev: state.graph.rev(),
+            at: state.live.now(),
+        })
+    }
+}
+
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
 pub(crate) enum Executed {
     /// Boxed: a `state.get` result is large, and the snapshot case is small.
     Ready(Box<Result<CallResult, ProtocolError>>),
-    /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
+    /// `video.snapshot`, `video.frames` or `scene.switch_and_watch`, answered by the
+    /// snapshot thread, and the call's `command` span.
     Pending(SnapshotReply, tracing::Span),
 }
 
@@ -3008,11 +3163,21 @@ struct State {
     /// The copy of the collection each previewed source is planned on, kept while the
     /// collection's revision holds (#969 N2).
     source_copies: snapshot::SourceCopies,
+    /// When each item the program mix draws was first drawn: the origin of its motion
+    /// modifiers' `shown` clock (ADR-0099).
+    shown_since: crate::motion::ShownSince,
+    /// When each item's `triggered` motion modifiers were last fired, by
+    /// `item.trigger_motion` (#1107): the origin of their clock.
+    fired: crate::motion::Fired,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The zoom steps `scene.zoom_camera` asked for each scene family's follow camera
+    /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
+    /// take through the parameter channel. Never stored.
+    camera_zooms: BTreeMap<SceneId, i64>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
     /// while any is open.
@@ -3358,6 +3523,31 @@ impl State {
         self.sync_sizes(wake);
     }
 
+    /// Fires `item_id`'s `triggered` motion modifiers (#1107): the one `modifier_id`
+    /// names, or all of them, from now. The program shot is planned again, so the render
+    /// thread draws the fire from its next frame.
+    fn trigger_motion(
+        &mut self,
+        item_id: &jstream_protocol::ItemId,
+        modifier_id: Option<&str>,
+    ) -> Result<(), ProtocolError> {
+        if let Some(id) = modifier_id
+            && let Err(reason) = jstream_protocol::check_motion_id(id)
+        {
+            return Err(ProtocolError::invalid_argument("modifier_id", reason));
+        }
+        if self.graph.state().item(item_id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            });
+        }
+        let now = self.live.now();
+        self.fired.fire(item_id, modifier_id, now);
+        self.publish_render();
+        Ok(())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -3394,10 +3584,26 @@ impl State {
                 self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
                 return Ok(CallResult::action());
             }
+            Action::SceneZoomCamera { scene_id, steps } => {
+                self.zoom_camera(&scene_id, steps)?;
+                return Ok(CallResult::action());
+            }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
                     self.emit_studio(client_id, request_id, None, wake);
                 }
+                return Ok(CallResult::action());
+            }
+            Action::ItemShow { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, Some(true), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ItemHide { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, Some(false), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ItemToggle { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, None, wake)?;
                 return Ok(CallResult::action());
             }
             Action::ValuesSet { name, value } => {
@@ -3412,6 +3618,13 @@ impl State {
                         wake,
                     );
                 }
+                return Ok(CallResult::action());
+            }
+            Action::ItemTriggerMotion {
+                item_id,
+                modifier_id,
+            } => {
+                self.trigger_motion(&item_id, modifier_id.as_deref())?;
                 return Ok(CallResult::action());
             }
             other @ (Action::PairingStart
@@ -3610,6 +3823,168 @@ impl State {
         Ok(())
     }
 
+    /// `item.show`, `item.hide` and `item.toggle` (ADR-0101): sets the placement's
+    /// visibility to `visible`, or to the opposite of what it is for `None`, as
+    /// `item.set_visible` would. The change moves `rev` on and is logged for undo
+    /// conflicts, but makes no undo step: an action is never undone (ADR-0024 §5). When
+    /// the program scene's tree holds the item, the change plays as a Move from what is
+    /// on screen to the program scene, pairing every item with itself, so only this
+    /// item moves: it appears or disappears with its own effect, over the default
+    /// preset's duration and easing ([`item_run`]). Showing a shown item, or hiding a
+    /// hidden one, changes nothing.
+    fn set_shown(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        item_id: jstream_protocol::ItemId,
+        scene_id: Option<SceneId>,
+        visible: Option<bool>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let current = state
+            .visible_in(&item_id, scene_id.as_ref())
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            })?;
+        let visible = visible.unwrap_or(!current);
+        let edits = vec![Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id,
+            visible,
+        }];
+        let running = self.outputs.running();
+        if visible == current {
+            // Nothing to change, but a scene the edit would refuse is refused here too.
+            self.graph
+                .clone()
+                .apply_with_running(&edits, None, &running)
+                .map_err(action_field)?;
+            return Ok(());
+        }
+        let now = self.live.now();
+        let program = self
+            .studio
+            .program()
+            .filter(|program| {
+                let state = self.graph.state();
+                state
+                    .tree_items(state.family_of(program))
+                    .contains(&item_id)
+            })
+            .cloned();
+        // An item that would show or go at once, with no delay, needs no run.
+        let settings = self
+            .graph
+            .state()
+            .item(&item_id)
+            .map(|(_, item)| *item.transition())
+            .unwrap_or_default();
+        let effect = if visible {
+            settings.appear
+        } else {
+            settings.disappear
+        };
+        let run = program.as_ref().and_then(|program| {
+            let run = item_run(&self.graph).filter(|run| {
+                settings.delay_ms > 0
+                    || effect.resolve(run.unmatched) != jstream_protocol::TransitionEffect::None
+            })?;
+            Some((program.clone(), run))
+        });
+        // What is on screen before the change, which the item's effect starts from, and
+        // whether program showed the item then.
+        let from = run.as_ref().map(|(program, run)| {
+            let shown = self.graph.state().visible_in(&item_id, Some(program));
+            (self.screen_now(program, run, now), shown)
+        });
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        self.history
+            .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        // A placement program doesn't draw (another keyframe's, or the item's own under
+        // a program keyframe that overrides it) changes nothing there, so it starts no
+        // run, and a transition in flight keeps its own.
+        let from = from.and_then(|(from, shown)| {
+            let program = &run.as_ref()?.0;
+            (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
+        });
+        if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
+            let to_camera = transition::camera_of(&self.graph, &program);
+            let from_camera = shared.unwrap_or(None);
+            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                run.pairs = false;
+            }
+            self.studio.switch(
+                program.clone(),
+                Some(transition::Running {
+                    from,
+                    to: program,
+                    start: now,
+                    run,
+                    by_item: true,
+                    from_camera,
+                }),
+            );
+        }
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
+        Ok(())
+    }
+
+    /// What is on screen at `now` with `program` on program, as a transition that
+    /// starts then would start from it, and the one camera it was all seen through
+    /// (`Err` when there are several): the running transition's items, or the program
+    /// scene's, taken as a Move within its family holds them (`run` only gives the
+    /// probe its timing).
+    fn screen_now(
+        &mut self,
+        program: &SceneId,
+        run: &transition::Run,
+        now: jstream_media::MediaTime,
+    ) -> (
+        transition::From,
+        Result<Option<jstream_protocol::SceneCamera>, ()>,
+    ) {
+        let probe = transition::Running {
+            from: transition::From::Scene(program.clone()),
+            to: program.clone(),
+            start: now,
+            run: transition::Run {
+                pairs: true,
+                ..run.clone()
+            },
+            by_item: true,
+            from_camera: transition::camera_of(&self.graph, program),
+        };
+        let Self {
+            graph,
+            frames,
+            frame_versions,
+            live,
+            studio,
+            ..
+        } = self;
+        let running = studio.running().unwrap_or(&probe);
+        let assets = live.filter_assets();
+        // Not a plan of the program: what it looks at is not reached, so a source the
+        // next plan shows again still restarts.
+        let visuals = snapshot::on_screen(
+            graph,
+            running,
+            now,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        );
+        let shared = transition::shared_camera(&visuals);
+        (transition::From::OnScreen(visuals.into()), shared)
+    }
+
     /// `studio.changed` with the scenes now on program and preview, caused by
     /// `request_id`, and the transition a switch started.
     fn emit_studio(
@@ -3681,6 +4056,35 @@ impl State {
         }
     }
 
+    /// `scene_id`'s scene planned alone now, as its preview stream plans it, with the open
+    /// gestures' source settings: what a frame sheet of that scene draws. It reaches no
+    /// source, so it never makes one shown or heard (ADR-0028). `None` for a scene not
+    /// in the collection.
+    fn plan_scene_alone(&mut self, scene_id: &SceneId) -> Option<snapshot::Shot> {
+        let Self {
+            graph,
+            shown,
+            frames,
+            frame_versions,
+            live,
+            ..
+        } = self;
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
+        graph.state().scene(scene_id)?;
+        let now = live.now();
+        let assets = live.filter_assets();
+        let planning = snapshot::plan_scene(
+            graph,
+            scene_id,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        );
+        Some(planning.shot)
+    }
+
     /// Re-plans the program mix and the scene each video mix shows at the current time,
     /// and publishes them if they draw something new. A source's stored frame wins over
     /// its live one. The live sources are told when the plan's next frame change is due,
@@ -3703,6 +4107,8 @@ impl State {
             scene_shots,
             source_shots,
             source_copies,
+            shown_since,
+            fired,
             shared,
             ..
         } = self;
@@ -3712,7 +4118,7 @@ impl State {
         let now = live.now();
         live.begin_plan();
         let assets = live.filter_assets();
-        let planning = snapshot::plan_with(
+        let mut planning = snapshot::plan_with(
             graph,
             studio.program(),
             studio.running().map(|running| (running, now)),
@@ -3730,6 +4136,9 @@ impl State {
         if planning.finished {
             studio.finish();
         }
+        let shown = shown_since.update(&planning.shot.drawn_items(), now);
+        planning.shot.set_shown(shown);
+        planning.shot.set_fired(fired.clone());
         render.publish(planning.shot);
         // Each previewed scene, after the program mix's plan has ended, so it reaches
         // no source: a preview never makes a source shown or heard (ADR-0028).
@@ -3938,7 +4347,39 @@ impl State {
 
     /// Publishes the gestures' live values on the render parameter channel.
     fn publish_live(&self) {
-        self.render.publish_live(self.gestures.params());
+        self.render
+            .publish_live(self.gestures.params().with_zooms(self.camera_zooms.clone()));
+    }
+
+    /// `scene.zoom_camera` (ADR-0113 §4): `steps` zoom steps for the follow camera of
+    /// `scene_id`'s family, which the render thread takes on its next frame.
+    fn zoom_camera(&mut self, scene_id: &SceneId, steps: i32) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.as_str().to_owned(),
+            })?;
+        if !(-16..=16).contains(&steps) {
+            return Err(ProtocolError::invalid_argument(
+                "steps",
+                "must be within -16..=16",
+            ));
+        }
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        if state
+            .scene(&family)
+            .and_then(|family| family.camera_follow())
+            .is_none()
+        {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` has no camera that follows the pointer"),
+            });
+        }
+        *self.camera_zooms.entry(family).or_default() += i64::from(steps);
+        self.publish_live();
+        Ok(())
     }
 
     /// Sends the `live.changed` events due at `now` and releases the committed values
@@ -4313,6 +4754,54 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         }),
         primary: info.primary,
     })
+}
+
+/// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves
+/// with (ADR-0101): a Move over the default preset's duration and easing, in which
+/// `inherit` takes the preset's `unmatched`, or no animation when its kind has none (a
+/// `cut`, a `stinger`, a pack's). `None` when the preset lasts no time.
+fn item_run(graph: &Graph) -> Option<transition::Run> {
+    let state = graph.state();
+    let preset_id = state.default_preset().clone();
+    let preset = state.preset(&preset_id)?;
+    if preset.duration_ms() == 0 {
+        return None;
+    }
+    let unmatched = match preset.kind() {
+        jstream_protocol::FADE | jstream_protocol::MOVE => {
+            jstream_protocol::TransitionEffect::from_setting(preset.settings().get("unmatched"))
+        }
+        _ => jstream_protocol::TransitionEffect::None,
+    };
+    Some(transition::Run {
+        preset_id,
+        pairs: true,
+        duration_ms: preset.duration_ms(),
+        easing: preset.easing(),
+        unmatched,
+        stagger_ms: 0,
+        stinger: None,
+    })
+}
+
+/// An error from the `item.set_visible` an item action applies, with its field named
+/// as the action's (`scene_id`, not `edits.0.scene_id`).
+fn action_field(error: ProtocolError) -> ProtocolError {
+    match error {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
+            field: field
+                .strip_prefix("edits.0.")
+                .map(str::to_owned)
+                .unwrap_or(field),
+            reason,
+            blockers,
+        },
+        other => other,
+    }
 }
 
 /// A protocol variant added after this engine was written.

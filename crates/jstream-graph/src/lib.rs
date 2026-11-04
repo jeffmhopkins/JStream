@@ -20,6 +20,7 @@ mod hotkey;
 mod keyframe;
 mod mix;
 mod model;
+mod motion;
 mod organise;
 mod persist;
 mod plan;
@@ -31,8 +32,10 @@ mod transition;
 pub use apply::Applied;
 pub use model::{
     Bus, Chains, Encoder, Filter, Folder, Graph, Item, Label, MAX_BUSES, MAX_CANVAS_EDGE,
-    MAX_CHAIN_FILTERS, Output, Overrides, Placement, Preset, Scene, Source, State, VideoMix,
+    MAX_CHAIN_FILTERS, MotionList, Output, Overrides, Placement, Preset, Scene, Source, State,
+    VideoMix,
 };
+pub use motion::{anim_modifiers, camera_anim_modifiers};
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
 

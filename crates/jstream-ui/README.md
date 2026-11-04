@@ -84,7 +84,9 @@ Contents ([Design](#design) explains the choices):
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
-  press, its label and the edits that bind a chord to a scene, tested natively.
+  press, its label and the edits that bind a chord to an action (a scene's
+  `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
+  `Collection::chords_for` lists a row's chords), tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -117,13 +119,18 @@ Contents ([Design](#design) explains the choices):
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
+  natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
+  with the followable items, the follow fields and adding a camera modifier tested
   natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
-  field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
+  and switching kind, an audio row's fields, measure switch and what it hears, tested
+  natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
@@ -416,7 +423,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's) and Properties, the source's settings form. A scene shows its object
+  the parent's), Motion (folded, with the modifier count as its hint: a row per motion
+  modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
+  one-shot impulse with its length and decay, or audio: what it hears, the program mix or
+  a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
+  picked), what it follows, level, peak, beat or a band, and its curve, ADR-0100), that
+  kind's fields, when its time starts (in step, when shown, or when fired; not for
+  audio), an On check, a Fire button on a row that starts when fired
+  (`item.trigger_motion` for that modifier, #1107) and Remove,
+  and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
+  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
+  source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -526,7 +546,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
-  Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
+  With a camera on, a scene's own dialog shows `CameraMoves`
+  ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
+  offered while the scene places a display or window capture (`followable`), with the
+  item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
+  hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
+  Camera motion, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
+  (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
+  on the position's x. Both are draft fields, which OK sends as
+  `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
+  `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
+  shows neither, since it draws its parent's.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion
+  and follow camera, the follow on the copy of the item it follows. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The

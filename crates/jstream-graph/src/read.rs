@@ -326,6 +326,8 @@ impl Scene {
                 .collect(),
             items: self.items.iter().map(Item::to_info).collect(),
             camera: self.camera,
+            camera_motion: self.camera_motion.clone(),
+            camera_follow: self.camera_follow.clone(),
         }
     }
 }
@@ -360,6 +362,7 @@ impl Item {
             blend: self.blend,
             transition: self.transition,
             locked: self.locked,
+            motion: self.motion.clone(),
             effects_space: self.effects_space,
         }
     }

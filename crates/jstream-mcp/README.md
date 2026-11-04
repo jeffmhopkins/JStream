@@ -27,8 +27,8 @@ async runtime.
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`server.rs`): `Server`, which answers one JSON-RPC message at a time
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
-  serves. Its instructions end with the design guidance in `design.rs`. A `video.snapshot` result leads with an image content block, the only place
-  its PNG appears.
+  serves. Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
+  an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
   (`PEOPLE_ONLY`) and the deprecated
@@ -125,9 +125,13 @@ today `device`, `history`, `output`, `pack` (whose writes and deletes change fil
 disk that undo never reaches), `pairing`, `ui_settings` and `values` (whose values a
 browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
-stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
-`live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
-shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
+`live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
+itself, #1107), the `preview` actions, `scene.zoom_camera`
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
+puts back and nothing stores) and `item.show`, `item.hide`
+and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
+opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
@@ -185,12 +189,23 @@ blending is linear, 3D sets through
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
-[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), choosing between
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a camera that moves on its
+own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
+pointer over a screen capture (`scene.set_camera_follow`, its zoom stepped live by
+`scene.zoom_camera`, both set on the family's scene,
+[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
-source's `html` (time-based animation on the wall clock so separate pages agree, with
-subtle ambient motion and streaks that move less per frame than their length, and falling back to the built-in kinds where no browser is
-available), and checking
+source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
+kinds where no browser is available), continuous motion as `item.set_motion` on items
+rather than in pages (one engine clock, so items, masks and nested scenes move in step;
+a one-shot jolt as an `impulse` on the `triggered` clock that `item.trigger_motion`
+fires, rather than stepping the item call by call;
+a sway on a group's item moves the group as one; a keyframe scene's own list across a
+`move`; kept subtle, with streaks that move less per frame than their length,
+[ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md); an `audio`
+modifier for something that follows a bus or a beat, which hears only while an output
+runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
@@ -240,7 +255,7 @@ batches (MCP removed them in 2025-06-18).
 
 | What happened | MCP answer |
 |---|---|
-| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block. A successful `video.snapshot` also leads `content` with an image block (`type` `image`, `mimeType` `image/png`, `data` the result's base64 PNG); see [Snapshots](#design) |
+| The engine answered | a result: `structuredContent` is the protocol `Response` (`{"id", "result"}`), repeated as JSON in a text block. A successful `video.snapshot`, `video.frames` or `scene.switch_and_watch` also leads `content` with an image block (`type` `image`, `mimeType` `image/png`, `data` the result's base64 PNG); see [Snapshots](#design) |
 | The engine refused (`ControlError::Protocol`) | a result with `isError: true` and `{"error": <WireError>}`: the stable `code`, its details and the message |
 | The arguments don't fit the tool, or an `events` cursor is past the newest event | the same, with the protocol's `malformed` code and the reason |
 | The connection to the engine was lost during the call | the same, with code `disconnected` (an MCP-layer code, not a protocol one), saying whether the call took effect is unknown. The next call sends `hello` again ([Session and identity](#design)). |
@@ -257,6 +272,13 @@ image block. In the text block and `structuredContent`, the result keeps its sha
 `"<in the image content block: N bytes of base64>"`, with `N` the length of the base64
 in the image block. It is not base64: decode the image block's `data` instead. The
 `video` tool's description says so too, next to the schema that calls `png` base64.
+A frame sheet (`video.frames`, and `scene.switch_and_watch` on the `scene` tool, #1061)
+is handled the same way: its tiled PNG is the image block, and its JSON keeps
+`frames`, each tile's `at_ms` and `rev`, so an agent reads which tile is which time.
+The instructions and the two tools' descriptions say what a sheet is for: checking
+motion, such as a stinger's cover at its `cut_ms` or a 600 ms move, which one
+snapshot can't show. `scene.switch_and_watch` is an action, so the `video` tool, whose
+ops are all queries, stays `readOnlyHint`.
 
 MCP asks for errors the model can correct (bad input, refused operations) to come back
 as tool results with `isError`, and for problems with the request itself as JSON-RPC
