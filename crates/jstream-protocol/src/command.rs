@@ -529,6 +529,21 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
+    /// Changes where a recording output writes its file (since 0.74, #1072), keeping its
+    /// container, encoder profile, mix, bus and filters. A running output keeps writing
+    /// where it started; the new path applies from its next `output.start`, which still
+    /// never overwrites. The path is checked as in `output.create`'s
+    /// [`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a
+    /// recording is `invalid_argument`. Inverse: `output.set_path` with the previous
+    /// path.
+    #[serde(rename = "output.set_path")]
+    OutputSetPath {
+        /// The recording output to change.
+        output_id: OutputId,
+        /// Where the finished recording goes: an absolute path on the engine's machine,
+        /// ending in a file name.
+        path: String,
+    },
     /// Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).
     /// Items keep their canvas-pixel placements; nothing moves or resizes. Zero, or a
     /// side over the engine's maximum (at least 7680, both ways), is `invalid_argument`.
@@ -1094,6 +1109,7 @@ impl Edit {
             Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
+            Edit::OutputSetPath { .. } => "output.set_path",
             Edit::OutputDelete { .. } => "output.delete",
             Edit::OutputSetEncoder { .. } => "output.set_encoder",
             Edit::EncoderCreate { .. } => "encoder.create",
@@ -1935,7 +1951,8 @@ impl Crop {
 ///
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). They blend in linear light,
-/// except overlay, difference and exclusion, which blend sRGB-encoded values.
+/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),
+/// which blend sRGB-encoded values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -1959,11 +1976,19 @@ pub enum BlendMode {
     Difference,
     /// Like difference, with lower contrast.
     Exclusion,
+    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,
+    /// #1096): a soft overlay designed in a browser keeps its strength, where `normal`
+    /// mixes linear light and a faint veil over a dark backdrop comes out brighter.
+    NormalSrgb,
+    /// Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in
+    /// a browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha
+    /// is source-over, so the two differ inside a translucent layer.
+    AdditiveSrgb,
 }
 
 impl BlendMode {
     /// Every mode, in the order the UI lists them.
-    pub const ALL: [BlendMode; 9] = [
+    pub const ALL: [BlendMode; 11] = [
         BlendMode::Normal,
         BlendMode::Additive,
         BlendMode::Multiply,
@@ -1973,6 +1998,8 @@ impl BlendMode {
         BlendMode::Lighten,
         BlendMode::Difference,
         BlendMode::Exclusion,
+        BlendMode::NormalSrgb,
+        BlendMode::AdditiveSrgb,
     ];
 
     /// The mode with this wire name.
@@ -1999,6 +2026,8 @@ impl BlendMode {
             BlendMode::Lighten => "lighten",
             BlendMode::Difference => "difference",
             BlendMode::Exclusion => "exclusion",
+            BlendMode::NormalSrgb => "normal_srgb",
+            BlendMode::AdditiveSrgb => "additive_srgb",
         }
     }
 }

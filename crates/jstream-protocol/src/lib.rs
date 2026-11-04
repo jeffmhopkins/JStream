@@ -67,7 +67,7 @@ pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
     FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX,
     MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    SceneCamera, Size, Vec3, legacy_quad,
+    SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
@@ -79,7 +79,7 @@ pub use id::{
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
-    VisibleIf, check_asset_path,
+    VisibleIf, check_asset_path, not_a_reference,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,

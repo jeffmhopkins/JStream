@@ -10,8 +10,46 @@
 
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
-    CameraView, Canvas, CanvasPoint, Finite32, ItemGeometry, Placed, SceneCamera, Size, Vec2, Vec3,
+    CameraView, Canvas, CanvasPoint, Finite32, ItemGeometry, Placed, SceneCamera, SceneId, Size,
+    Vec2, Vec3,
 };
+
+/// The camera an orbit or dolly shows until the collection has it, kept with the scene it
+/// moves, so another scene is never seen through it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Preview {
+    /// The scene the camera is that scene's.
+    pub scene: SceneId,
+    /// The camera shown.
+    pub camera: SceneCamera,
+}
+
+impl Preview {
+    /// The camera `scene` is seen through: `preview`'s when it moves that scene, otherwise
+    /// the `stored` one.
+    pub fn camera_in(
+        preview: Option<&Preview>,
+        scene: Option<&SceneId>,
+        stored: Option<SceneCamera>,
+    ) -> Option<SceneCamera> {
+        match preview {
+            Some(p) if scene == Some(&p.scene) => Some(p.camera),
+            _ => stored,
+        }
+    }
+
+    /// Whether to stop showing it now that the canvas shows `scene` with `stored`: the
+    /// collection has its camera, or the scene's camera was removed, or another scene
+    /// (or none) is shown.
+    pub fn caught_up(&self, shown: Option<(Option<&SceneId>, Option<SceneCamera>)>) -> bool {
+        match shown {
+            Some((Some(scene), stored)) if *scene == self.scene => {
+                stored.is_none_or(|c| c == self.camera)
+            }
+            _ => true,
+        }
+    }
+}
 
 /// Degrees the camera turns about its target per screen pixel of an orbit drag.
 pub const ORBIT_DEG_PER_PX: f32 = 0.3;
@@ -127,7 +165,8 @@ fn vec3([x, y, z]: [f32; 3]) -> Option<Vec3> {
 
 /// `start` turned about its target by a drag of `dx`, `dy` screen pixels: right turns
 /// the camera to the right around the target, down raises it to look down on the set,
-/// up to [`MAX_ELEVATION_DEG`]. Its distance, field of view and roll stay.
+/// up to [`MAX_ELEVATION_DEG`], or no further than it started when a camera typed in
+/// Properties is already past that. Its distance, field of view and roll stay.
 pub fn orbit(start: SceneCamera, dx: f32, dy: f32) -> SceneCamera {
     let target = get(start.target);
     let position = get(start.position);
@@ -140,8 +179,10 @@ pub fn orbit(start: SceneCamera, dx: f32, dy: f32) -> SceneCamera {
     let level = offset[0].hypot(offset[2]);
     let elevation = (-offset[1]).atan2(level);
     let azimuth = offset[0].atan2(offset[2]);
-    let limit = MAX_ELEVATION_DEG.to_radians();
-    let elevation = (elevation + (dy * ORBIT_DEG_PER_PX).to_radians()).clamp(-limit, limit);
+    // Only the side a typed camera is already past widens; the other keeps the cap.
+    let cap = MAX_ELEVATION_DEG.to_radians();
+    let (below, above) = (cap.max(-elevation), cap.max(elevation));
+    let elevation = (elevation + (dy * ORBIT_DEG_PER_PX).to_radians()).clamp(-below, above);
     let azimuth = azimuth - (dx * ORBIT_DEG_PER_PX).to_radians();
     let moved = [
         target[0] + distance * elevation.cos() * azimuth.sin(),
@@ -301,6 +342,64 @@ mod tests {
             .to_degrees();
         assert!((elevation - MAX_ELEVATION_DEG).abs() < 0.01, "{elevation}");
         assert!(raised.view(CANVAS).is_ok());
+    }
+
+    fn elevation_of(c: SceneCamera) -> f32 {
+        let p = get(c.position);
+        let t = get(c.target);
+        (t[1] - p[1])
+            .atan2((p[0] - t[0]).hypot(p[2] - t[2]))
+            .to_degrees()
+    }
+
+    #[test]
+    fn an_orbit_from_past_the_cap_does_not_jump_to_it() {
+        // A near top-down camera typed in Properties: 89° down on the target.
+        let mut start = SceneCamera::framing(CANVAS);
+        let t = get(start.target);
+        let d = distance(start);
+        let e = 89f32.to_radians();
+        start.position = vec3([t[0], t[1] - d * e.sin(), t[2] + d * e.cos()]).expect("finite");
+        assert!((elevation_of(start) - 89.0).abs() < 0.01);
+        // Sideways, and further down, it stays where it was rather than snapping to 85°.
+        assert!((elevation_of(orbit(start, 30.0, 0.0)) - 89.0).abs() < 0.01);
+        assert!((elevation_of(orbit(start, 0.0, 100.0)) - 89.0).abs() < 0.01);
+        // Back up, it comes down from there, and on the far side stops at the cap.
+        let lowered = elevation_of(orbit(start, 0.0, -10.0));
+        assert!((lowered - 86.0).abs() < 0.01, "{lowered}");
+        let under = elevation_of(orbit(start, 0.0, -10_000.0));
+        assert!((under + MAX_ELEVATION_DEG).abs() < 0.01, "{under}");
+    }
+
+    #[test]
+    fn a_preview_is_shown_only_in_its_own_scene() {
+        let a = SceneId::new("a");
+        let b = SceneId::new("b");
+        let stored = SceneCamera::framing(CANVAS);
+        let moved = orbit(stored, 40.0, 0.0);
+        let p = Preview {
+            scene: a.clone(),
+            camera: moved,
+        };
+        assert_eq!(
+            Preview::camera_in(Some(&p), Some(&a), Some(stored)),
+            Some(moved)
+        );
+        // Scene B, shown while A's commit is in flight, keeps its own camera.
+        assert_eq!(
+            Preview::camera_in(Some(&p), Some(&b), Some(stored)),
+            Some(stored)
+        );
+        assert_eq!(Preview::camera_in(None, Some(&a), None), None);
+        // Nor is a 2D scene shown mid-drag seen through it.
+        assert_eq!(Preview::camera_in(Some(&p), Some(&b), None), None);
+        // It is dropped once A has the camera, once A's camera is removed, or once
+        // another scene is shown; A with its old camera still keeps it.
+        assert!(p.caught_up(Some((Some(&a), Some(moved)))));
+        assert!(p.caught_up(Some((Some(&a), None))));
+        assert!(p.caught_up(Some((Some(&b), Some(stored)))));
+        assert!(p.caught_up(None));
+        assert!(!p.caught_up(Some((Some(&a), Some(stored)))));
     }
 
     #[test]

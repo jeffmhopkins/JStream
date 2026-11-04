@@ -139,7 +139,8 @@ depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
 
 In **Outputs**, add a **Recording (MP4)** output with the file path to write, then press
 **Record** at the top. **Stop recording** finishes the file. A recording runs on its own,
-whether or not you are live.
+whether or not you are live. It never overwrites a file, so for another take, press
+**Edit** on its card and give it a new file name.
 
 <a id="vcam"></a>
 ## The virtual camera (optional)

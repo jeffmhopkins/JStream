@@ -254,6 +254,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 container: RecordContainer::Mp4,
             },
         },
+        Edit::OutputSetPath {
+            output_id: OutputId::new("out_rec"),
+            path: "/home/me/Videos/show-take2.mp4".into(),
+        },
         Edit::OutputCreate {
             output_id: OutputId::new("out_live"),
             kind: OutputKind::Rtmp {
