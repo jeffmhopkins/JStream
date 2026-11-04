@@ -818,8 +818,9 @@ pub enum Edit {
     /// pointer over a display or window capture in the scene. It belongs to the scene
     /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
     /// scene or doesn't show a display or window capture, and for a number
-    /// `CameraFollow::check` refuses. Deleting the item removes it, in the same edit.
-    /// Inverse: `scene.set_camera_follow` with the previous value.
+    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
+    /// leaves the follow in place and inert until it is set again or an undo brings the
+    /// item back. Inverse: `scene.set_camera_follow` with the previous value.
     #[serde(rename = "scene.set_camera_follow")]
     SceneSetCameraFollow {
         /// The scene to change.
@@ -1528,8 +1529,8 @@ pub enum Action {
     /// Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per
     /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
     /// edit: nothing is stored or undone, and the zoom starts again at the follow camera's
-    /// own `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a
-    /// wheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,
+    /// own `zoom` when it changes or the engine restarts. One step by default, so a hotkey
+    /// can run it (ADR-0112). `not_found` for a scene that doesn't exist,
     /// `action_failed` for one without a camera that follows, and
     /// `invalid_argument` for `steps` outside -16..=16.
     #[serde(rename = "scene.zoom_camera")]

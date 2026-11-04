@@ -130,7 +130,6 @@ impl CameraMoves {
     /// `base`, the camera the scene draws through, as it is at `at`: glided after the
     /// pointer by the follow camera, then moved by the motion. `shown` is when the scene
     /// started being drawn on program, `zooms` the zoom steps asked for its family.
-    #[allow(clippy::too_many_arguments, reason = "each is one input of the frame")]
     pub(crate) fn apply(
         &self,
         base: SceneCamera,
@@ -672,15 +671,15 @@ impl Cameras {
         (at, zooms): (MediaTime, i64),
     ) -> SceneCamera {
         let start = || Follow::new(follow, base, canvas, bx, pointer, (at, zooms));
-        let state = self
-            .follows
-            .entry(family.clone())
-            .and_modify(|state| {
-                if !state.is_for(follow) {
-                    *state = start();
-                }
-            })
-            .or_insert_with(start);
+        // The state nearly always exists: clone the family only to insert it.
+        if let Some(state) = self.follows.get_mut(family) {
+            if !state.is_for(follow) {
+                *state = start();
+            }
+            state.zoom_to(zooms);
+            return state.step(base, canvas, bx, pointer, at);
+        }
+        let state = self.follows.entry(family.clone()).or_insert_with(start);
         state.zoom_to(zooms);
         state.step(base, canvas, bx, pointer, at)
     }

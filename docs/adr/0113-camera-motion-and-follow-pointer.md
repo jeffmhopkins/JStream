@@ -2,14 +2,14 @@
 id = "ADR-0113"
 title = "Camera motion, and a scene camera that follows the pointer over a capture"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "agent"
 -->
 
 # ADR-0113: Camera motion, and a scene camera that follows the pointer over a capture
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Extends [ADR-0094](0094-scene-cameras.md) (scene cameras) with
@@ -110,7 +110,8 @@ It ran 27 s with no frame showing past the screen's edge.
    live zoom by 1.25 per step. A negative step zooms out, and the result is held to 1 to 4.
    The zoom is smoothed in log space over 350 ms. It isn't an edit: it isn't undone or
    stored, and it starts again at `follow.zoom` when the camera's `follow` changes or the
-   engine restarts. It takes one step, so a wheel chord can bind it (ADR-0112 decision 3).
+   engine restarts. It takes one step by default, so a hotkey can bind it, and a wheel
+   chord once ADR-0112's wheel keys land (decision 3).
    It is `not_found` for a scene that doesn't exist and `action_failed` for one
    without a follow camera. The engine counts the steps asked for each family and hands
    the count to the render thread on the live-value channel; a follow camera takes the
@@ -139,4 +140,9 @@ It ran 27 s with no frame showing past the screen's edge.
   - get the protocol version from the release queue;
   - carry #1152's review notes N1 and N2 (the published frame's size, and `None` when the
     DPI context can't be set) into the render-thread wiring;
-  - check the pointer on real hardware (Windows, and a macOS display).
+  - check the pointer on real hardware (Windows, and a macOS display);
+  - with ADR-0112's PR: the wheel keys, so a wheel chord can zoom (refusing one bound
+    with more than one step), and decision 4's default-binding offer;
+  - keep in mind that an inert follow (its item gone) isn't saved: a project file holds
+    only a follow whose item is in the scene, since the load's `scene.set_camera_follow`
+    would refuse any other.

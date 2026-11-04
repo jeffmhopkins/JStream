@@ -111,8 +111,8 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// preview scene, showing or hiding an item (ADR-0101: the opposite action brings the
 /// picture back, though in a keyframe a hide's new override stays until
 /// `item.clear_override`), a live value and its cancel, the loudness meter's reset, a
-/// follow camera's zoom (ADR-0113: a step the other way takes it back, and nothing
-/// stores it), and a preview stream (which MCP can't receive anyway). A tool whose actions are all here
+/// follow camera's zoom (ADR-0113: another zoom puts it back, and nothing stores
+/// it), and a preview stream (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.

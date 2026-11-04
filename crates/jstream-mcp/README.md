@@ -123,8 +123,8 @@ browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness`, the `preview` actions, `scene.zoom_camera`
-([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which a step the
-other way takes back and nothing stores) and `item.show`, `item.hide`
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
+puts back and nothing stores) and `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
 opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
