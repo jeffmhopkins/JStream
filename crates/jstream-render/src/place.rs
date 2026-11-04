@@ -129,10 +129,10 @@ pub(crate) fn shape(
 /// nothing to draw. `view` is the scene's camera (ADR-0094), through which a geometry
 /// item is placed in the scene's space; `None` in a 2D scene.
 ///
-/// A non-finite component is [`RenderError::Invalid`]. A product that overflows is
-/// too, except where a stored placement makes it: a geometry the graph stored draws or
-/// draws nothing (#629, #1046), so a neutral box too large for `f32` draws nothing, and
-/// a finite legacy transform whose corners leave `f32` draws nothing (#1130).
+/// A non-finite component is [`RenderError::Invalid`]. A product of finite components
+/// that overflows draws nothing instead: a geometry the graph stored draws or draws
+/// nothing (#629, #1046), so a neutral box too large for `f32` draws nothing, and so
+/// does a legacy transform whose scale times the source's size overflows (#1130).
 ///
 /// # Errors
 /// [`RenderError::Invalid`] when a placement component is not finite or not drawable.
@@ -172,7 +172,13 @@ pub(crate) fn depth(view: &CameraView, placement: Placement) -> f64 {
     }
 }
 
-/// Corners and UVs from [`legacy_quad`].
+/// Corners and UVs from [`legacy_quad`], or `Ok(None)` when finite components overflow.
+///
+/// The graph stores any finite legacy transform, and ADR-0022 decision 5 keeps every
+/// write 0.3 accepted, so a scale like `1e35` can't be refused when it is written. It
+/// is evaluated against the source's current size, and once that product or a corner
+/// overflows `f32` the item draws nothing rather than failing the frame, as an
+/// oversized neutral geometry does (#1046, #1130).
 fn legacy(
     source_width: u32,
     source_height: u32,
@@ -186,8 +192,6 @@ fn legacy(
     };
     let placed = match legacy_quad(transform, crop, source_width, source_height) {
         Ok(placed) => placed,
-        // Finite values can still put a corner past f32's range (a huge scale of a large
-        // source): it draws nothing rather than failing the frame, as a box does (#1130).
         Err(GeometryError::NotFinite) => return Ok(None),
         Err(err) => return Err(placement_error(err)),
     };
@@ -575,21 +579,6 @@ mod tests {
         );
     }
 
-    /// #1130: a finite transform whose corners overflow f32 draws nothing, and the frame
-    /// goes on.
-    #[test]
-    fn a_legacy_transform_past_f32_draws_nothing() {
-        let placement = Placement::Legacy(LegacyTransform {
-            scale: [1e35, 1.0],
-            ..LegacyTransform::IDENTITY
-        });
-        assert!(
-            shape(4096, 2, placement, Crop::NONE)
-                .expect("no error")
-                .is_none()
-        );
-    }
-
     #[test]
     fn non_finite_placement_is_an_error() {
         let placement = Placement::Legacy(LegacyTransform {
@@ -597,6 +586,49 @@ mod tests {
             ..LegacyTransform::IDENTITY
         });
         assert!(shape(4, 2, placement, Crop::NONE).is_err());
+    }
+
+    /// #1130: finite fields whose product with the source's size overflows `f32` draw
+    /// nothing instead of failing the frame, whether the scale, the rotated offset or
+    /// the position takes a corner past `f32::MAX`.
+    #[test]
+    fn a_legacy_transform_that_overflows_draws_nothing() {
+        let cases = [
+            LegacyTransform {
+                scale: [1e35, 1.0],
+                ..LegacyTransform::IDENTITY
+            },
+            // Each side is finite, but turned 45° the far corner sums past f32::MAX.
+            LegacyTransform {
+                scale: [8e34, -1.5e35],
+                rotation_deg: 45.0,
+                ..LegacyTransform::IDENTITY
+            },
+            LegacyTransform {
+                position: [f32::MAX, 0.0],
+                scale: [1e34, 1.0],
+                ..LegacyTransform::IDENTITY
+            },
+        ];
+        for transform in cases {
+            assert!(
+                matches!(
+                    shape(4096, 2160, Placement::Legacy(transform), Crop::NONE),
+                    Ok(None)
+                ),
+                "{transform:?}"
+            );
+        }
+        // The same scale against a source small enough to stay finite still draws.
+        let small = LegacyTransform {
+            scale: [1e35, 1.0],
+            ..LegacyTransform::IDENTITY
+        };
+        assert!(
+            shape(1, 1, Placement::Legacy(small), Crop::NONE)
+                .expect("finite")
+                .is_some()
+        );
     }
 
     #[test]

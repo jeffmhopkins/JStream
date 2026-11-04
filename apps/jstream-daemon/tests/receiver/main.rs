@@ -886,7 +886,20 @@ async fn a_stream_reconnects_after_the_receiver_restarts() {
             .is_some_and(|s| s.frames >= frames + 90)
     })
     .await;
+    // The stats are read here, while the outage is still inside the health's window.
     let stats = rig.stats("live");
+    // The output's own count can run ahead of what reached the new connection, so wait
+    // on the receiver's file too before stopping: on a slow runner it held only about
+    // 1.1 s (#1141). The file is written in blocks, so it lags what was received.
+    let deadline = Instant::now() + Duration::from_secs(30);
+    while receiver.received_seconds() < 2.5 {
+        assert!(
+            Instant::now() < deadline,
+            "the receiver never held 2.5 s after the reconnect: {:?}",
+            probe(&receiver.file)
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
     rig.stop("live").await;
     let after = receiver.finish();
 
