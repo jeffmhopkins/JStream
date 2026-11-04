@@ -27,9 +27,10 @@ part of a platform crate, so that only the helper's build downloads and builds C
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` (a
 location, a size, a frame-rate cap, the custom CSS and whether a page from the
-internet may reach the local network) and returns a `BrowserPage`:
-its latest frame as a `GpuFrame`, its audio, a way to replace its custom CSS while it
-runs, and how many of its requests were refused (`denied_requests`). `use_device` gives
+internet may reach the local network, and what the page API grants it, if anything)
+and returns a `BrowserPage`: its latest frame as a `GpuFrame`, its audio, a way to
+replace its custom CSS while it runs, a way to send a granted page what the engine
+shows it (`send_data`), and how many of its requests were refused (`denied_requests`). `use_device` gives
 the backend a GPU device to copy the pages' paints onto. The host gives it one it opens
 on the media adapter, for paints before any program stage; while the program stage
 runs, the engine lends it the stage's own context in its place, so the compositor
@@ -111,6 +112,20 @@ frame of the page's rate (ADR-0095). Dropping the page closes it.
   reach out; a missing file is refused. Every other scheme is refused. Each refusal is counted. The
   folder is trusted as an asset root is: something that can write in it could swap a
   file for a link between the check and the load.
+- `page_api.rs`: the page API's shared parts
+  ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)). `PageApi` is what a
+  spec grants (`page_api: None` grants nothing, and the page never has
+  `window.jstream`): the clock and the page's own visibility always, the scenes and
+  the shared values if granted. `PageData` is one update: a clock anchor (time and
+  lead), the visibility and scenes as JSON text, and each changed value's JSON text
+  (`None` for one removed); `split` cuts one larger than `MAX_PAGE_DATA_BYTES` (192 KiB)
+  into several, each value whole in one of them. For the helper: `ApiHome`, the
+  documents the API is defined in, which is the source's own web origin (scheme, host
+  and port, `same_web_origin` in `request.rs`), its local file's folder and below, or
+  a `data:` document for a page given as HTML; `PageCache`, the updates merged, which
+  a new document is fed whole, its clock moved on by the time since its anchor; and
+  `shim`, the JavaScript (`page_api.js`) that defines a frozen `window.jstream` with
+  only the granted members and returns the one function updates go in through.
 - `cpu_frames.rs` (Linux, and in tests): what both sides of the Linux frame path agree
   on: three slot files per page, the number that names each one's file, the largest
   frame (16384 pixels a side), and the conversion of CEF's premultiplied BGRA8 to
@@ -119,7 +134,8 @@ frame of the page's rate (ADR-0095). Dropping the page closes it.
   pages it opens, their CSS changes and whether they were closed, and can be told to
   refuse. Its pages paint only when told to paint on the CPU (`paint_on_cpu`) and handed
   a frame (`FakePageState::paint`). `FakePageState::request` plays a request through the page's
-  policy.
+  policy, and `take_data` returns the page API updates a granted page was sent, split
+  as the pipe would send them.
 
 **The CEF backend** (`cef/`, Windows and Linux, feature `cef` only): pages run in the
 sandboxed browser helper process ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)),
@@ -156,7 +172,9 @@ What follows is Windows; **On Linux** below says what differs.
   load's white paint never reaches the engine either (#1155); a first load that fails
   before its document starts ends that hold at once, as no paint is coming to wait for. It says when it took the reload (`Reloading`), and the engine
   drops paints that left before that, so a `restart_on_show` page is transparent while
-  it reloads, never the end of its last run nor a white frame. The helper sends
+  it reloads, never the end of its last run nor a white frame. An `Open` carries the
+  page API grant in one flags byte, and a granted page's updates go as `PageData`,
+  already split to fit. The helper sends
   frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
   the engine's log. A reader thread hands each to its page, stamping frames and audio on
   the media clock as they arrive. When the helper's pipe ends, every page's audio fails
@@ -224,6 +242,23 @@ What follows is Windows; **On Linux** below says what differs.
   goes through it too, in `OnResourceRedirect`, which can't cancel: a refused one is pointed at
   `about:jstream-refused`, which loads nothing. The engine logs the first refusal per
   page at `warn` and later ones at `debug`, with the count only.
+- **The page API** (`helper/page_api.rs`, ADR-0102). A granted page gets a request
+  context of its own, so no other page's renderer process holds it, and its grant and
+  `ApiHome` go to the renderer in the browser's `extra_info`. The browser process keeps
+  each page's updates merged (`PageCache`); once the browser exists it sends the whole
+  cache, then each update, as a `jstream.page_data` process message to the main frame,
+  and the whole cache again whenever the main frame starts loading a document, which
+  may be in a renderer process that has none of it.
+  In the renderer, the render-process handler keeps each granted browser's grant, home
+  and cache; when a JavaScript context is made in a main frame whose URL the home
+  covers, it evaluates the shim before any page script runs, feeds it the cache, and
+  feeds it each later update. A cross-origin navigation (a `data:` page's reload among
+  them) makes the renderer's new browser object before it destroys the old one with
+  the same ID, so the entry is counted and goes only with the last. The shim reports
+  only what changed, so the state sent again fires no events. A subframe, a popup, or a main frame on any other
+  document gets no `window.jstream`. It takes messages only from the browser process,
+  and the client drops every process message a renderer sends, so nothing reaches the
+  engine from a page.
 - **Frames** (`helper/d3d11.rs`): a D3D11 device on the engine's adapter. Each
   accelerated paint's texture is opened, checked to be single-mip BGRA8, and copied into
   the next of three textures the page shares with the engine through NT handles; the
@@ -252,8 +287,11 @@ loads one image from outside its folder), and the shutdown time. It runs on Wind
 **The Linux check.** `tests/linux_page.rs` (feature `cef`, ignored by default) opens a
 file page through the real helper named by `JSTREAM_BROWSER_HELPER`, as `cargo xtask
 browser-linux` lays it out, and waits for a paint whose left half is opaque red and
-right half transparent, then shuts the helper down. CI's `browser-linux` job runs it,
-sandboxed, headless and without a GPU.
+right half transparent, then shuts the helper down. A second test opens a page granted
+the page API, which paints one colour without `window.jstream`, another with it and
+no data, a third once an update has arrived (and a fourth if a member it wasn't
+granted exists), and checks the update survives a reload. CI's `browser-linux` job
+runs both, sandboxed, headless and without a GPU.
 
 <a id="open-items"></a>
 ## Open items

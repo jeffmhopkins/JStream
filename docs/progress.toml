@@ -1262,23 +1262,21 @@ prs = [1074]
 id = "MO2"
 milestone = "M3"
 title = "Native motion: continuous wiggle, oscillate and drift on items, drawn each frame (item.set_motion)"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1125]
-note = "Passed review (protocol 0.81); waits its turn in the protocol queue"
-needs = ["build"]
+prs = [1125,  1176]
+note = "Protocol 0.81; landed with wave/alpha4 (#1176), with camera motion and the follow-cursor camera (#1157, ADR-0113, 0.85); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, and step 5e the follow camera (#1159)"
 
 [[item]]
 id = "MO3"
 milestone = "M3"
 title = "A one-shot shake that a hotkey fires and that decays"
-status = "planned"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = []
-note = "Built on MO2's motion and HK1's hotkeys; pushes after both merge"
-needs = ["build"]
+prs = [1156,  1176]
+note = "item.trigger_motion, protocol 0.84; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware"
 
 [[item]]
 id = "MO4"
@@ -1293,34 +1291,31 @@ prs = [1076]
 id = "MO5"
 milestone = "M3"
 title = "Audio-reactive motion modifiers drawn from the render loop"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1149]
-note = "A draft stacked on MO2"
-needs = ["build"]
+prs = [1149,  1176]
+note = "Protocol 0.86; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, with real audio"
 
 [[item]]
 id = "HK1"
 milestone = "M3"
 title = "Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101)"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1082]
-note = "Passed review (protocol 0.80); waits its turn in the protocol queue"
-needs = ["build"]
+prs = [1082,  1176]
+note = "Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware"
 
 [[item]]
 id = "FS1"
 milestone = "M3"
 title = "Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch)"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1080]
-note = "Protocol 0.82; back in review after its protocol renumber"
-needs = ["build"]
+prs = [1080,  1176]
+note = "Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware"
 
 [[item]]
 id = "PA1"
@@ -1390,12 +1385,11 @@ prs = [1111]
 id = "CB3"
 milestone = "M3"
 title = "Opacity above 1 as a gain, so additive items can add more than their source"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1104]
-note = "Protocol 0.83; back in review after its renumber"
-needs = ["build"]
+prs = [1104,  1176]
+note = "Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware"
 
 [[item]]
 id = "CH1"
@@ -1410,11 +1404,10 @@ prs = [1134]
 id = "LB1"
 milestone = "M3"
 title = "A local web browser source's first load passes on Linux"
-status = "review"
+status = "done"
 release = "alpha.4"
 gate = true
 prs = [1094]
-needs = ["build"]
 
 [[item]]
 id = "RL4"

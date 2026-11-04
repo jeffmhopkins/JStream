@@ -44,6 +44,10 @@ pub struct PageSpec {
     /// page's access: it covers every opaque frame inside the page, one a third-party
     /// frame creates included, while the main frame is still on `data:`.
     pub local_network: bool,
+    /// The page API it is granted (ADR-0102): `window.jstream` in its main frame while
+    /// that shows the source's own document, with these members. `None`, the default
+    /// for every existing source, defines nothing and sends the page nothing.
+    pub page_api: Option<crate::PageApi>,
 }
 
 /// Where a page loads from.

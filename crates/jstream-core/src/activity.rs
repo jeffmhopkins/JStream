@@ -75,6 +75,19 @@ fn included(state: &State, scene_id: &SceneId) -> bool {
 /// placed scene's placements are drawn through (ADR-0116). The scene graph has no cycles;
 /// each scene is still walked once per keyframe it is reached through.
 fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
+    walk(state, root, true)
+}
+
+/// The sources `root` shows: [`reachable`]'s walk, but through every placed nested
+/// scene source, whatever its audio and its scene's `include_audio`. This is what a
+/// granted page's `jstream.source` reports (ADR-0102 decision 5).
+pub(crate) fn shown_sources<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
+    walk(state, root, false)
+}
+
+/// The walk under [`reachable`] and [`shown_sources`]: `audio` follows only nested
+/// scene sources whose audio reaches the Mixer.
+fn walk<'a>(state: &'a State, root: &SceneId, audio: bool) -> BTreeSet<&'a SourceId> {
     let mut reached = BTreeSet::new();
     let mut walked = BTreeSet::new();
     let keyframe = state
@@ -98,8 +111,9 @@ fn reachable<'a>(state: &'a State, root: &SceneId) -> BTreeSet<&'a SourceId> {
             };
             reached.insert(source.id());
             if let SourceKind::Scene { scene_id } = source.kind()
-                && source.audio().is_none_or(|audio| audio.enabled)
-                && included(state, scene_id)
+                && (!audio
+                    || source.audio().is_none_or(|audio| audio.enabled)
+                        && included(state, scene_id))
             {
                 // Only a group stays in the keyframe's tree, and only where the keyframe
                 // overrides one of its children, as the plan draws it; otherwise a scene

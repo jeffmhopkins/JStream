@@ -298,6 +298,7 @@ setInterval(() => {
             fps: args.fps,
             css: DEFAULT_CSS.to_owned(),
             local_network: false,
+            page_api: None,
         };
         line(format_args!("opening {}", spec.location.to_url()));
         let started = Instant::now();

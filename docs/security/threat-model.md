@@ -214,6 +214,10 @@ covers = [
   "crates/jstream-browser/src/helper/mod.rs",
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
+  "crates/jstream-browser/src/page_api.rs",
+  "crates/jstream-browser/src/page_api.js",
+  "crates/jstream-browser/src/helper/page_api.rs",
+  "crates/jstream-sources/src/page_api.rs",
 ]
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/runbooks/linux-testing.md#script"]
 -->
@@ -292,16 +296,22 @@ user, accepted for tester builds. Revisit it when Linux gets a package
 ([ADR-0060](../adr/0060-linux-platform-support.md) decision 9): a root-owned install
 location removes it.
 
-**Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
-source may opt its page in to a read-only `window.jstream` with the engine animation clock
-and the page's own visibility, and, per further setting, the program and preview scenes,
-named shared values and one bus's levels and bands. The API exists only in the main frame
-while it shows the source's own document. Data flows one way, filtered to the grant in the
-engine, and the helper drops every message a renderer sends. A page has no path to the
-engine, and a compromised renderer holds only what the sources sharing its renderer were
-granted (each such page is to get a renderer of its own). Whatever a page is granted, a web
-page can send off the machine: preview scene names and a microphone bus's bands matter
-most.
+**Built, in part** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source
+may opt its page in to a read-only `window.jstream` with the engine animation clock and
+the page's own visibility, and, per further setting, the program and preview scenes and
+named shared values. One bus's levels and bands are decided, not built. The renderer
+defines the API only in the main frame, and only while it shows the source's own
+document: the source's web origin exactly, its file's folder or below, or the `data:`
+document of a page given as HTML. Data flows one way: the engine filters it to the
+grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
+updates in the renderer only from the browser process, and its client drops every
+process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A
+page has no path to the engine. A compromised renderer holds only what the sources
+sharing its renderer were granted; each granted page gets a request context of its own,
+which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
+granted, a web page can send off the machine: preview scene names matter most, and once
+built, a microphone bus's bands. The engine has no studio mode to leave, so a page
+granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
 ## Files and decoders
