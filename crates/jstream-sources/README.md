@@ -140,8 +140,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   rise at once and fall over a few frames. `AudioMeter::new` plans the FFT and allocates
   its buffers, so `measure(scope, ms)` allocates nothing and takes no lock, and can run
   on the engine's render thread. It hears silence once the ring has stood still for a
-  quarter second, as the scope sources do, and a non-finite sample as silence. Tests
-  measure a 1 kHz tone, then silence, and a window with NaN and infinite samples.
+  quarter second, as the scope sources do, and a non-finite sample as silence. For an
+  audio motion modifier ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)),
+  `raw` gives the latest window's level, peak and onset before any fall
+  (`RawMeasure`), and `band(low_hz, high_hz)` the spectrum between two frequencies as an
+  amplitude: the square root of its bins' summed power, scaled so a full-scale sine in
+  the band reads 1, a band narrower than a bin reading the bin it falls in. Tests
+  measure a 1 kHz tone, then silence, a window with NaN and infinite samples, and a
+  half-scale sine read at its amplitude by a band around it and not by one away from
+  it, an inverted or NaN band reading 0, with its raw level, peak and onset.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless

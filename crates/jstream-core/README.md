@@ -266,6 +266,21 @@ state machine. Contents:
   legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
   `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
   moves one only where every moved value is back within them (a shrinking modifier).
+- **Audio-reactive motion** (`reactive.rs`,
+  [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
+  modifier hears the program mix, a bus or a source (`Hearing`), as a `spectrum` source
+  with the same settings would. The live sources find what items' and keyframe
+  overrides' motion hears on each sync (`audio::heard_by_motion`, so those buses and
+  sources are fed as a scope source's are) and keep its scopes in `FilterAssets`
+  (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
+  (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
+  loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
+  scope is first heard, never while it is steady) and advances each modifier's
+  envelope by the tick's media time, per item and modifier ID, so every pass and mix of
+  the tick reads the same level. Each binding holds that level as an atomic, which the
+  draw paths read by item and ID without allocating. A modifier with nothing heard, a
+  preview shot (no follower) and the program mix while no output runs read silence,
+  the modifier's `from`.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -1227,7 +1242,8 @@ sync (`FilterAssets::heard`), the source it names is fed like a scope source's
 (`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
 (made with the program, or when it starts to hear, never while a steady frame draws)
 measures it and hands the levels, bands and waveform to the
-program (`VideoFilter::set_audio`).
+program (`VideoFilter::set_audio`). Items' `audio` motion modifiers hear their scopes
+the same way, through the same sync (*Audio-reactive motion* in [Purpose](#purpose)).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -2840,7 +2856,9 @@ encoder's size, the program at the canvas size: the mix's scene and the scenes i
 nests, or a running transition sampled at the tick's media time, with every `display`
 and `window` source that has no stored frame showing its capture. With no scene it
 draws the primary display's capture scaled to fill the canvas, fitted to the frame. A
-capture whose mailbox is empty repeats its last frame.
+capture whose mailbox is empty repeats its last frame. Before the tick's mixes are
+drawn, the loop's `reactive::Follower` measures what the shot's audio motion
+modifiers hear and advances their envelopes once (ADR-0100).
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,

@@ -9,9 +9,10 @@
 //! `1 + value`, and opacity is then clamped to `0..=1`. `item.set_motion` writes the
 //! whole list, and a keyframe scene can override it whole (`OverrideField::Motion`).
 //!
-//! An `audio` modifier ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md))
-//! follows a measure of a bus or a source instead of the clock: the engine measures what
-//! it hears each frame and follows it with the modifier's attack and release.
+//! An `audio` modifier ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md),
+//! since 0.82) follows a measure of a bus or a source instead of the clock: the engine
+//! measures what it hears each frame and follows it with the modifier's attack and
+//! release.
 
 use crate::finite::Finite32;
 use crate::{BusId, SourceId};
@@ -114,7 +115,7 @@ impl MotionShape {
     ];
 }
 
-/// What an `audio` modifier measures of what it hears.
+/// What an `audio` modifier measures of what it hears (since 0.82).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -138,7 +139,7 @@ pub enum MotionMeasure {
 }
 
 /// How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.
-/// None overshoots.
+/// None overshoots (since 0.82).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -201,7 +202,7 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
-    /// Follows a measure of a bus or a source (ADR-0100): the measure in dBFS from
+    /// Follows a measure of a bus or a source (ADR-0100, since 0.82): the measure in dBFS from
     /// `floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with
     /// `attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence
     /// is `from`. It hears what a `spectrum` source with the same `audio` and

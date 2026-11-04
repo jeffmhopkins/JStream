@@ -138,7 +138,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
   `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
-  shares ([Motion](#design)).
+  shares ([Motion](#design)). Since 0.82 `MotionKind::Audio`, with its `MotionMeasure`
+  and `MotionCurve`, follows a bus or a source
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -222,7 +224,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   within which any source draws a legacy transform: its position within `MAX_DRAWN_PX`
   and its scale within ±`MAX_LEGACY_SCALE` (100 000, #1130). They are enough, not
   needed, and no edit checks them (ADR-0022); motion keeps a moved transform within
-  them. `PROTOCOL_VERSION` is 0.81 because of
+  them. `PROTOCOL_VERSION` is 0.82 because of the
+  `audio` motion kind and its `MotionMeasure` and `MotionCurve`
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)); 0.81 because of
   `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
   `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)),
   with 0.76 to 0.80 left to changes that claimed them first; 0.75 because of the
@@ -1789,8 +1793,9 @@ after 1.0:
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
-  property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
+  `MotionCurve`, 0.82): a later kind or property won't break a 0.81 client's
+  `state.get`, and a 0.81 client reads an `audio` modifier as an unknown kind. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
@@ -1820,6 +1825,23 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
   `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
   100 000, rates within ±100 000.
+- **`audio`** (since 0.82,
+  [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)) follows what it
+  hears instead of a clock: the program mix (the master after its filters, as the
+  outputs hear it), a bus named by `audio` after its fader, or a source named by
+  `audio_source` after its own filters, fader, mute and follow, as a `spectrum` source
+  with the same settings would draw. Its `measure` is `level` (the default, RMS),
+  `peak`, `onset` (1 on a jump of the level above its recent average, else 0) or `band`
+  (the spectrum between `low_hz` and `high_hz`, both `20..=20000` and only with `band`,
+  as an amplitude). The measure in dBFS from `floor_db` (default -60, at least -90) to
+  `ceiling_db` (default 0, at most 0, above the floor) maps onto 0 to 1, an onset as it
+  is; that is followed with `attack_ms` (default 10) and `release_ms` (default 250),
+  each `0..=10000`, bent by `curve` (`linear`, the default, `ease_in`, `ease_out` or
+  `ease_in_out`, none overshooting), and mapped onto `from` (default 0) to `to`
+  (default 1), each within ±100 000 and `to` below `from` to invert. Silence is `from`,
+  and so is everything the engine doesn't hear: while no output runs the program mix
+  is silent, and a preview reads every audio modifier as silence. Its `clock` is
+  ignored.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then clamped to 0 to 1. Two modifiers on one property add up.

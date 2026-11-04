@@ -123,8 +123,8 @@ Contents ([Design](#design) explains the choices):
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
-  pure list helpers, adding with a free ID, each kind's fields and switching kind, tested
-  natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  pure list helpers, adding with a free ID, each kind's fields and switching kind, an
+  audio row's fields and measure switch, tested natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
@@ -415,8 +415,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
   the parent's), Motion (folded, with the modifier count as its hint: a row per motion
-  modifier with what it moves, how (wiggle, oscillate with its shape, or drift), that
-  kind's fields, when its time starts (in step, or when shown), an On check and Remove,
+  modifier with what it moves, how (wiggle, oscillate with its shape, drift, or audio:
+  what it hears, the program mix or a bus, what it follows, level, peak, beat or a band,
+  and its curve, ADR-0100), that kind's fields, when its time starts (in step, or when
+  shown; not for audio), an On check and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099) and Properties, the source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
