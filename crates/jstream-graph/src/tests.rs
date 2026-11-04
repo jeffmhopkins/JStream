@@ -4837,6 +4837,48 @@ mod hotkeys {
         );
     }
 
+    /// A bound `values.set` is checked as the call would be: a bad name or an oversized
+    /// value is refused at bind time, so the binding never fails every press.
+    #[test]
+    fn a_bound_value_set_is_checked_at_bind_time() {
+        let mut graph = fixture();
+        let values_set = |name: &str, value: serde_json::Value| Action::ValuesSet {
+            name: name.into(),
+            value: Some(value),
+        };
+        for (action, at) in [
+            (
+                values_set("Status", serde_json::json!(1)),
+                "edits.0.action.name",
+            ),
+            (
+                values_set(
+                    "status",
+                    serde_json::json!("x".repeat(jstream_protocol::MAX_VALUE_BYTES)),
+                ),
+                "edits.0.action.value",
+            ),
+        ] {
+            let error = apply_err(&mut graph, vec![set("F1", action)]);
+            let ProtocolError::InvalidArgument { field, .. } = &error else {
+                panic!("expected invalid_argument, got {error:?}");
+            };
+            assert_eq!(field, at);
+        }
+        apply_ok(
+            &mut graph,
+            vec![set(
+                "F1",
+                values_set("status.text", serde_json::json!("On air")),
+            )],
+        );
+        let removal = Action::ValuesSet {
+            name: "status.text".into(),
+            value: None,
+        };
+        apply_ok(&mut graph, vec![set("F2", removal)]);
+    }
+
     /// A binding to something the batch deletes later goes with it; one the batch binds
     /// after the delete is refused.
     #[test]

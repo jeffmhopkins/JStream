@@ -691,6 +691,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -6492,6 +6513,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -11941,6 +11983,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "pack"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
                 ],
                 "type": "object"
               },
@@ -17857,6 +17920,71 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "ui_settings"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `values` operation: set `op.type` to one of `values.set` (action), `values.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `values` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the shared values (0.78, ADR-0102 decision 7), ordered by name: every one,\nor with `prefix`, the value named `prefix` and every value below it (`status`\ncovers `status` and `status.text`). Shared values are not collection state, so\nthe result carries no `rev`.",
+                "properties": {
+                  "prefix": {
+                    "description": "Only this name and the names below it. Omitted for every value.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "values.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "values"
     },
     {
       "annotations": {

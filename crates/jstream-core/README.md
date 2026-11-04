@@ -731,8 +731,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
-  or not the mixer runs, and `live.set` and `live.cancel` (see *Live values* below).
-  `live.list` is a query answered from the gesture table.
+  or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
+  `values.set` (see [Shared values](#shared-values)).
+  `live.list` is a query answered from the gesture table, and `values.list` from the
+  shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** always reads off (see *No privacy screen* below).
 - **`source.sizes`** reads each source's size, and every plan sends a
@@ -1186,6 +1188,7 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
+
 **Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
 and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
 runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as
@@ -1705,6 +1708,21 @@ The collection lock is not held across the GPU wait
 call's future waits for the snapshot thread, so an async host's worker thread is
 free while the GPU renders, reads back and the PNG is encoded. This query is
 control-plane work, not the render thread.
+
+<a id="shared-values"></a>
+## Shared values
+<!-- @section
+covers = ["crates/jstream-core/src/values.rs"]
+-->
+
+The engine holds the shared values (`values.rs`, `SharedValues`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7) in its state
+beside the studio, under the collection lock: never saved, never `rev`, never an undo
+step. `values.set` checks the name and size with the protocol's
+shared checks and the 256-name limit, changes nothing on a refusal, and emits
+`values.changed` only when the value really changed. It is not in the activity or audit
+log, as `live.set` isn't: it carries data and may come many times a second.
+`values.list` reads them by name.
 
 <a id="preview-streams"></a>
 ## Preview streams
@@ -2802,6 +2820,10 @@ request's `request_id`, or `live.ended` with no `request_id` when it expired wit
 session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
 setters it held a value for, one per parameter, without the values. Its `rev` before
 and after are the same.
+
+`values.set` gets no entry either, nor an `activity.list` line: a shared value is data
+for pages, not a change to the studio, and may be set many times a second (ADR-0102
+decision 7, [Shared values](#shared-values)).
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection

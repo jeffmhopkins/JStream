@@ -219,6 +219,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("pack.delete", N),
     ("pack.list", Class(R)),
     ("pack.read", Class(R)),
+    // Not named in any class by ADR-0069, so "never" until a PR places it; reading the
+    // values is a read.
+    ("values.set", N),
+    ("values.list", Class(R)),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),

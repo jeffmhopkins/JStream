@@ -749,7 +749,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   while the pack watcher is held, so it loads at once and a failed one keeps the old
   version; `pack.list` names who last wrote each pack, and every write and delete is in
   the activity log. Plugins get `pack.list` and `pack.read` (class `read`), never the
-  writes. A plugin calls the API
+  writes. The action `values.set`, the query `values.list` and the event
+  `values.changed` (0.78, [ADR-0102](adr/0102-page-api-for-browser-sources.md)) keep
+  shared values: named JSON values the engine holds in memory, never saved and never an
+  undo step, for agents to set and browser source pages to read. A plugin calls the API
   through a scoped `Control` that checks each call against its grant, using
   `jstream-protocol`'s table of every command's class (`read`, `edit`, `live`, `outputs`
   or never), and the hosts and files a call's settings name against the grant's hosts
@@ -945,7 +948,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -988,7 +991,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pack`, `pairing` and `ui_settings`;
+  `pack`, `pairing`, `ui_settings` and `values`;
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets
