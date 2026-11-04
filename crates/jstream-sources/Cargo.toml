@@ -35,11 +35,16 @@ jstream-protocol.workspace = true
 png.workspace = true
 # The spectrum source's FFT (C10).
 realfft.workspace = true
+# The `model` kind's glTF loader reads the file's JSON into typed structs (ADR-0107).
+serde.workspace = true
 # Settings values and the kind descriptors' defaults (ADR-0025).
 serde_json.workspace = true
 # Fonts for the text source (ADR-0061: pure-Rust font crates).
 skrifa.workspace = true
 thiserror.workspace = true
+# What the `model` kind's loader leaves out of a file (skins, animations), logged once
+# per load (ADR-0107).
+tracing.workspace = true
 zune-core.workspace = true
 zune-jpeg.workspace = true
 
