@@ -9,7 +9,7 @@ tier = "maintainer"
 # ADR-0112: Assignable zoom bindings for a follow-cursor camera, heard while another app has the focus
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
