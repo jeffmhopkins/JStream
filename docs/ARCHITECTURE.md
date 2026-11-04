@@ -715,7 +715,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
-  `scene.set_camera_motion` gives the camera motion modifiers, and
+  `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
+  which a camera can't hear), and
   `scene.set_camera_follow` a camera that glides after the pointer over a display or
   window capture, each set on the family's scene; the action `scene.zoom_camera` steps
   a follow camera's live zoom, with no `rev` change

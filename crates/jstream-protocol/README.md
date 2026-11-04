@@ -176,7 +176,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
   the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
-  which checks a camera's list as `check_motion` checks an item's; `CameraFollow`, a
+  which checks a camera's list as `check_motion` checks an item's and refuses an
+  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
   `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
   `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
