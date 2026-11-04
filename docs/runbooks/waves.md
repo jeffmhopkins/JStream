@@ -129,10 +129,11 @@ conflict, so the wave owner hands out the numbers one at a time:
    into the wave. The owner keeps the order in the queue, but a PR that isn't ready doesn't
    hold up the ones behind it. It gets the next free number once it is ready.
 2. **One bump holds the next number at a time.** That PR sets `minor` to the next number,
-   along with every doc and schema snapshot that names it, and turns on auto-merge. The
-   next ready bump may set its number too, but it keeps auto-merge off until the one
-   before it has merged. Setting the number is a push, so the review gate runs one more
-   round on it.
+   along with every doc and schema snapshot that names it, and turns on auto-merge. Every
+   other bump, ready or not, keeps the placeholder it was built with and auto-merge off.
+   It sets its real number once, in the same push that merges the wave in, when the one
+   before it has merged and it becomes the holder. Setting the number is a push, so the
+   review gate runs one more round on it ([Without churn](#churn)).
 3. **The holder comes first.** When another PR lands in the wave and the holder conflicts,
    the holder's thread merges the wave in before anything else it is doing. The owner
    watches the holder and tells its thread what conflicts, and how to resolve them, as soon
@@ -141,3 +142,30 @@ conflict, so the wave owner hands out the numbers one at a time:
    automatic.
 
 If the wave is cut first, the queue continues in the next wave.
+
+<a id="churn"></a>
+## Merging main without churn
+<!-- @section
+depends_on = ["docs/runbooks/waves.md#protocol"]
+-->
+
+Every push to a PR runs CI again and starts a new review round, so a merge of `main` costs
+a full CI run and a reviewer's time. `main` doesn't require a PR to be up to date before it
+merges, so most of those merges buy nothing. The same holds for a PR into a wave.
+
+- **Merge `main` only when it is needed:** the PR conflicts (GitHub then runs no CI on it),
+  it is the protocol holder and something landed ([Protocol versions](#protocol)), or it
+  needs code that has just landed. Not after every change to `main`, and not to make a PR
+  look fresh while it waits for review.
+- **One push per round.** Answer every finding, merge `main` if it is needed, set the
+  protocol number if it is now the holder, and verify every stale section, then push once.
+  Don't push again while a review round or CI is running on the head unless that round has
+  failed.
+- **Batch the ledger.** Run `docs verify` for every stale section before the push, never
+  one push per section. A conflict that is only in `docs/verified.toml` or a `@generated`
+  block is one `docs merge-main` and one push.
+- **Say it is merge-only.** A push whose only commits merge `main` (with its stamp
+  resolutions and `docs verify --merge` restamps) says so on the PR. The reviewer then
+  reviews the merge and its restamps, not the whole PR again
+  ([REVIEW › Gather](../../REVIEW.md#gather)).
+- **Draft until it is ready.** CI skips drafts, so a PR still being built stays a draft.

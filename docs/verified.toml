@@ -5837,6 +5837,12 @@ stamp = { hash = "b3:ef078d22b4977c46", by = "agent:help-about", note = "Re-read
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
 stamp = { hash = "b3:e81888df72bb7e0f", by = "agent:timer", note = "#1027 adds jiff to [workspace.dependencies] in Cargo.toml; [workspace.package] version and the apps taking it are unchanged, so the section holds." }
 
+["RUNBOOK-WAVES#churn"."body"]
+stamp = { hash = "b3:437334f41b954503", by = "agent:release-thread", note = "New section: main has no up-to-date requirement (ruleset required_status_checks strict=false), so merge main only on a conflict, as protocol holder, or for needed code; one push per round; batch ledger verifies; merge-only pushes say so and get REVIEW gather item 6's lighter review; drafts until ready (R-GIT-003 skips CI on drafts)" }
+
+["RUNBOOK-WAVES#churn"."dep:docs/runbooks/waves.md#protocol"]
+stamp = { hash = "b3:faae342ae8a3ca35", by = "agent:release-thread", note = "New section: main has no up-to-date requirement (ruleset required_status_checks strict=false), so merge main only on a conflict, as protocol holder, or for needed code; one push per round; batch ledger verifies; merge-only pushes say so and get REVIEW gather item 6's lighter review; drafts until ready (R-GIT-003 skips CI on drafts)" }
+
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }
 
@@ -5847,7 +5853,7 @@ stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
 
 ["RUNBOOK-WAVES#landing"."dep:REVIEW.md#gather"]
-stamp = { hash = "b3:d87b17731373b1f2", by = "agent:draft-ci-wording", note = "REVIEW#gather gained a note that a draft head has no CI results (#386 N3); landing step 4 only points reviewers at gather for sync merges, still holds" }
+stamp = { hash = "b3:f57da91e5aa737ca", by = "agent:release-thread", note = "Stale via REVIEW.md#gather, which gained item 6 (merge-only rounds); landing step 4 still points the reviewer at gather for a wave's sync merges, which item 5 still covers; holds" }
 
 ["RUNBOOK-WAVES#landing"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Landing now carries governance sections (governance diffs the wave against main), REVIEW#gather's sync-merge scope, and GitHub's delete_branch_on_merge." }
@@ -5859,7 +5865,7 @@ stamp = { hash = "b3:c9f78031bb1abe35", by = "agent:wave-owner", note = "Step 2'
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#protocol"."body"]
-stamp = { hash = "b3:7650e29b79071515", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "#419 whole change: replaced the single queue sentence with three rules: the next number goes to the first ready bump (out of draft, review passed, dependencies merged); one holder with auto-merge on, the next may pre-set its number with auto-merge off (one more review round); the holder merges the wave first, with merge-main resolving stamp and @generated conflicts" }
+stamp = { hash = "b3:faae342ae8a3ca35", by = "agent:release-thread", note = "Step 2 now says a non-holder bump keeps its placeholder and auto-merge off and sets its real number once, in the push that merges the wave in when it becomes the holder; steps 1 and 3 unchanged and consistent with it; links the new #churn section" }
 
 ["RUNBOOK-WAVES#protocol"."dep:docs/adr/0055-wave-branches.md#consequences"]
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
