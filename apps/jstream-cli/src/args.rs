@@ -1493,7 +1493,8 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_blend", "i", "dissolve"]),
             "`item.set_blend` takes one of normal, additive, multiply, screen, overlay, \
-             darken, lighten, difference, exclusion, not `dissolve`"
+             darken, lighten, difference, exclusion, normal_srgb, additive_srgb, not \
+             `dissolve`"
         );
         assert_eq!(
             err(&["edit", "scene.set_role", "s", "folder"]),
