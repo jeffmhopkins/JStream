@@ -44,6 +44,7 @@ use jstream_sources::CaptureSpec;
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::lock;
+use crate::profile::{DrawMeter, Phase};
 use crate::runtime::RenderSnapshot;
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
@@ -359,6 +360,9 @@ impl Boxed {
     fn geometry_of(&self, placement: Placement, crop: Crop) -> Option<ItemGeometry> {
         match placement {
             Placement::Geometry(geometry) => Some(geometry),
+            // A model's layer covers the canvas; its box is the model's pose, not where
+            // the layer's pixels are, so it has none to pair by.
+            Placement::Layer(_) => None,
             Placement::Legacy(transform) => {
                 let [width, height] = self.input?;
                 let transform = jstream_protocol::ItemTransform {
@@ -2461,6 +2465,8 @@ impl Shot {
 fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
     let scale = match placement {
         Placement::Legacy(transform) => transform.scale[0].abs().max(transform.scale[1].abs()),
+        // Drawn at its own size.
+        Placement::Layer(_) => 1.0,
         Placement::Geometry(geometry) => {
             let cut = ProtocolCrop {
                 left: crop.left,
@@ -3589,6 +3595,33 @@ impl DrawAt {
 pub(crate) fn compose(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: (&Shot, MediaTime),
+    view: View<'_>,
+    live: &LiveParams,
+    captures: &dyn Captures,
+    to: DrawAt,
+) -> Result<Output, RenderError> {
+    compose_metered(
+        compositor,
+        (cache, chains, &mut DrawMeter::default()),
+        shot,
+        view,
+        live,
+        captures,
+        to,
+    )
+}
+
+/// [`compose`], timing each unit of the work into `meter` (ADR-0103): each source's
+/// upload, each capture, each video chain (an item's with its box), each nested pass and
+/// the composite, and the phases they make up. The readback's wait counts toward the
+/// finish phase, not the composite. The caller ends the meter's frame.
+///
+/// # Errors
+/// As for [`compose`].
+pub(crate) fn compose_metered(
+    compositor: &mut Compositor,
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     (shot, at): (&Shot, MediaTime),
     view: View<'_>,
     live: &LiveParams,
@@ -3600,10 +3633,12 @@ pub(crate) fn compose(
         readback,
     } = to;
     let canvas = shot.canvas()?;
+    let uploads = Instant::now();
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
         };
+        let started = Instant::now();
         match &frame.pixels {
             // Sampled where it is, on the context it was painted on. Another compositor
             // (`video.snapshot`'s, or a program stage opened since) can't read it.
@@ -3627,17 +3662,21 @@ pub(crate) fn compose(
                 }
             }
         }
+        meter.upload(source, started);
     }
+    meter.phase_since(Phase::Uploads, uploads);
     let passes = shot.passes_of(view.mix);
     let tracks = shot
         .transition
         .as_ref()
         .filter(|_| shot.shows_program(view.mix));
     let mut fallback = None;
+    let capturing = Instant::now();
     for spec in &shot.captures {
         let Some(capture) = captures.frame(spec) else {
             continue;
         };
+        let started = Instant::now();
         let key = GpuKey::Capture(spec.clone());
         match capture.image {
             CaptureImage::Rgba { size, rgba } => cache.upload(
@@ -3651,9 +3690,20 @@ pub(crate) fn compose(
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
+        meter.capture(spec, started);
         fallback = Some(key);
     }
-    run_chains(compositor, (&mut *cache, &mut *chains), shot, live, at)?;
+    meter.phase_since(Phase::Captures, capturing);
+    let chaining = Instant::now();
+    let ran = run_chains(
+        compositor,
+        (&mut *cache, &mut *chains, &mut *meter),
+        shot,
+        live,
+        at,
+    );
+    meter.phase_since(Phase::Chains, chaining);
+    ran?;
     let stage = view
         .stage
         .then(|| shot.stage_of(view.mix, view.owner))
@@ -3665,7 +3715,13 @@ pub(crate) fn compose(
         && !chains.stage(&stage.mixed)
     {
         // Another output's frame drew this mix and ran its master stage this tick.
-        return finish_stage(compositor, (cache, chains), stage, at, (output, readback));
+        return finish_stage(
+            compositor,
+            (cache, chains, meter),
+            stage,
+            at,
+            (output, readback),
+        );
     }
     let (root, nested) = match (tracks, passes.split_last()) {
         (Some(_), _) => (None, passes),
@@ -3702,7 +3758,7 @@ pub(crate) fn compose(
                     .collect();
                 let shown = scene(target, Color::BLACK, &items);
                 let Some(stage) = &stage else {
-                    return compositor.render(&shown, readback);
+                    return composite(compositor, meter, &shown, readback);
                 };
                 let layer = cache
                     .get(&stage.mixed)
@@ -3710,12 +3766,19 @@ pub(crate) fn compose(
                         what: "cache",
                         detail: format!("no image for {:?}", stage.mixed),
                     })?;
+                let started = Instant::now();
                 compositor.render_into(&shown, layer)?;
+                let took = meter.phase_since(Phase::Passes, started);
+                meter.composite(took);
             }
             return match &stage {
-                Some(stage) => {
-                    finish_stage(compositor, (cache, chains), stage, at, (output, readback))
-                }
+                Some(stage) => finish_stage(
+                    compositor,
+                    (cache, chains, meter),
+                    stage,
+                    at,
+                    (output, readback),
+                ),
                 None => Err(RenderError::Invalid {
                     what: "output stage",
                     detail: "a frame without an output stage reached it".into(),
@@ -3736,9 +3799,13 @@ pub(crate) fn compose(
         };
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
+            let started = Instant::now();
             fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
+            let took = meter.phase_since(Phase::Passes, started);
+            meter.pass(&pass.scene, took);
         }
+        let started = Instant::now();
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
         let clear = match (root, tracks) {
             (_, Some(transition)) => {
@@ -3758,22 +3825,30 @@ pub(crate) fn compose(
         match &stage {
             Some(stage) => {
                 compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
+                let took = meter.phase_since(Phase::Passes, started);
+                meter.composite(took);
             }
             None if direct => {
                 let shown = scene(output, clear, &items);
-                return compositor.render(&shown, readback);
+                return composite_from(compositor, meter, &shown, readback, started);
             }
             None => {
                 let layer = image(&GpuKey::Program)?;
                 compositor.render_into(&scene(canvas, clear, &items), layer)?;
                 let placed = [fitted(layer, canvas, output)];
                 let shown = scene(output, Color::BLACK, &placed);
-                return compositor.render(&shown, readback);
+                return composite_from(compositor, meter, &shown, readback, started);
             }
         }
     }
     match &stage {
-        Some(stage) => finish_stage(compositor, (cache, chains), stage, at, (output, readback)),
+        Some(stage) => finish_stage(
+            compositor,
+            (cache, chains, meter),
+            stage,
+            at,
+            (output, readback),
+        ),
         // Every path without a stage returned above.
         None => Err(RenderError::Invalid {
             what: "output stage",
@@ -3793,17 +3868,20 @@ pub(crate) fn compose(
 /// What the compositor reports for the frame's pass.
 fn finish_stage(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     stage: &Stage<'_>,
     at: MediaTime,
     (output, readback): (FrameSize, bool),
 ) -> Result<Output, RenderError> {
+    let started = Instant::now();
     let mut shown = None;
     let mut failed = false;
     for (owner, chain) in [stage.master, stage.output].into_iter().flatten() {
         let key = GpuKey::Filtered(owner.clone());
         if chains.stage(&key) {
+            let running = Instant::now();
             chains.run_one(compositor, cache, (owner, chain), at);
+            meter.chain(owner, running);
         }
         failed |= chains.failed(&key);
         shown = Some(key);
@@ -3819,7 +3897,38 @@ fn finish_stage(
         })
         .into_iter()
         .collect();
-    compositor.render(&scene(output, Color::BLACK, &placed), readback)
+    let drawn = compositor.render(&scene(output, Color::BLACK, &placed), readback);
+    meter.phase_since(Phase::Finish, started);
+    drawn
+}
+
+/// `compositor.render` of `shown`, the program scene's composite into the frame, timed
+/// into `meter` from `started`: the readback's wait counts toward the finish phase, the
+/// rest toward the composite.
+fn composite_from(
+    compositor: &mut Compositor,
+    meter: &mut DrawMeter,
+    shown: &Scene<'_>,
+    readback: bool,
+    started: Instant,
+) -> Result<Output, RenderError> {
+    let drawn = compositor.render(shown, readback);
+    let took = started.elapsed();
+    let waited = compositor.readback_wait().min(took);
+    meter.phase(Phase::Finish, waited);
+    meter.phase(Phase::Passes, took.saturating_sub(waited));
+    meter.composite(took.saturating_sub(waited));
+    drawn
+}
+
+/// [`composite_from`] starting now.
+fn composite(
+    compositor: &mut Compositor,
+    meter: &mut DrawMeter,
+    shown: &Scene<'_>,
+    readback: bool,
+) -> Result<Output, RenderError> {
+    composite_from(compositor, meter, shown, readback, Instant::now())
 }
 
 /// Runs `shot`'s video chains, once per frame of the cache however many mixes draw it
@@ -3832,7 +3941,7 @@ fn finish_stage(
 /// has marked the frame, no later mix of the tick runs them either.
 fn run_chains(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     shot: &Shot,
     live: &LiveParams,
     at: MediaTime,
@@ -3842,10 +3951,12 @@ fn run_chains(
     }
     let canvas = shot.canvas()?;
     for step in &shot.chain_steps {
+        let started = Instant::now();
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
                     chains.run_one(compositor, cache, (source, chain), at);
+                    meter.chain(source, started);
                 }
             }
             ChainStep::Box(owner) => {
@@ -3862,6 +3973,8 @@ fn run_chains(
                         Ok(()) => chains.drew_box(owner),
                         Err(error) => chains.fail_box(owner, &error),
                     }
+                    // The box counts toward the item's effects, which run next.
+                    meter.chain(owner, started);
                 }
             }
             ChainStep::Pass(pass) => {
@@ -3872,6 +3985,7 @@ fn run_chains(
                     continue;
                 };
                 compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
+                meter.pass(&pass.scene, started.elapsed());
             }
         }
     }
@@ -4185,7 +4299,8 @@ fn scale_down(src_w: u32, src_h: u32, rgba: &[u8], dst_w: u32, dst_h: u32) -> Ve
     out
 }
 
-fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+/// `rgba` as a PNG, for `video.snapshot` and a preview stream's `png` codec.
+pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     let mut encoder = png::Encoder::new(&mut buf, width, height);
     encoder.set_color(png::ColorType::Rgba);
@@ -4198,8 +4313,9 @@ fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
-/// Standard base64 with padding and no line breaks.
-fn base64(data: &[u8]) -> String {
+/// Standard base64 with padding and no line breaks: a `video.snapshot`'s PNG, and an
+/// image `pack.read` returns.
+pub(crate) fn base64(data: &[u8]) -> String {
     const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let push = |out: &mut String, n: u32, count: usize| {
@@ -4247,8 +4363,9 @@ pub(crate) fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((info.width, info.height, buf))
 }
 
-/// Standard base64 decode, for tests that check the query's `png` field.
-#[cfg(test)]
+/// Standard base64 with padding decoded, strictly: `=` only at the end of the last
+/// four characters. For a `pack.write`'s images (ADR-0097), which a client sends, and
+/// tests that check `video.snapshot`'s `png` field.
 pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
     fn val(byte: u8) -> Result<u8, String> {
         match byte {
@@ -4265,10 +4382,14 @@ pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
         return Err("base64 length is not a multiple of 4".into());
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
+    let last = bytes.len() / 4;
+    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
         let pad = chunk.iter().rev().take_while(|b| **b == b'=').count();
         if pad > 2 {
             return Err("too much base64 padding".into());
+        }
+        if (pad > 0 && index + 1 != last) || chunk[..4 - pad].contains(&b'=') {
+            return Err("base64 padding before the end".into());
         }
         let mut n = 0u32;
         for (i, byte) in chunk.iter().enumerate() {
@@ -5293,6 +5414,72 @@ pub(crate) mod tests {
         let Some(rgba) = snap(&shot) else { return };
         assert_eq!(at(&rgba, 100, 360), GREEN);
         assert_eq!(at(&rgba, 1100, 360), GREEN);
+    }
+
+    /// A metered frame names each unit it ran: the uploads, the nested scene's pass
+    /// and the program's composite, and its phases add up to no more than the frame
+    /// (ADR-0103).
+    #[test]
+    fn a_metered_frame_names_its_units() {
+        use super::{DrawAt, NoCaptures, compose_metered};
+        use crate::profile::UnitKey;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            scale: [0.5, 1.0],
+            rotation_deg: 0.0,
+        });
+        let shot = shot(vec![
+            ("program", vec![fill("red"), nest("a", right)]),
+            ("a", vec![fill("green")]),
+        ]);
+        let slot = Arc::new(crate::profile::DrawerSlot::default());
+        let mut meter = slot.meter(Duration::from_millis(33));
+        let mut cache = ResourceCache::new();
+        let started = Instant::now();
+        cache.begin_frame();
+        let output = compose_metered(
+            &mut compositor,
+            (&mut cache, &mut Chains::default(), &mut meter),
+            (&shot, zero()),
+            View::default(),
+            &LiveParams::default(),
+            &NoCaptures,
+            DrawAt::read(FrameSize::new(1280, 720).expect("size")),
+        );
+        drop(cache.end_frame(&compositor));
+        output.expect("drawn");
+        let took = started.elapsed();
+        // The first frame starts the second; one a second later publishes it.
+        meter.end_frame(took, started, drop);
+        assert!(slot.load().is_none(), "nothing published within the second");
+        meter.end_frame(took, started + Duration::from_secs(1), drop);
+        let totals = slot.load().expect("published");
+        assert_eq!(totals.frames, 2);
+        let units: Vec<_> = totals.units.iter().map(|(key, _)| key.clone()).collect();
+        for want in [
+            UnitKey::Upload(SourceId::new("green")),
+            UnitKey::Upload(SourceId::new("red")),
+            UnitKey::Pass(SceneId::new("a")),
+            UnitKey::Composite,
+        ] {
+            assert!(units.contains(&want), "{want:?} in {units:?}");
+        }
+        let (_, pass) = totals
+            .units
+            .iter()
+            .find(|(key, _)| *key == UnitKey::Pass(SceneId::new("a")))
+            .expect("the pass");
+        assert_eq!(pass.frames, 1, "only the drawn frame ran it");
+        let phases: u64 = totals.phases.iter().sum();
+        assert!(phases > 0, "the phases were timed");
+        assert!(
+            u128::from(phases) <= took.as_nanos(),
+            "the phases fit in the frame: {phases} > {took:?}"
+        );
     }
 
     /// Opens whatever adapter opens (software in CI) for a test that drives [`compose`]

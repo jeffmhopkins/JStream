@@ -28,7 +28,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 |---|---|---|
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
-| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start |
+| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
@@ -51,7 +51,7 @@ No telemetry leaves the machine, and logs and crash reports stay local
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
 | Text an MCP agent reads | Source names, window titles and application names (`capture.targets`, [ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)), chat (later), server error text | Yes: it may carry instructions (prompt injection) |
 | A WASM plugin | Code the user installed | Yes: sandboxed by default ([R-SEC-003](../RULES.md#R-SEC-003)) |
-| A CLAP plugin or WGSL effect pack | Native code, or GPU code, the user installed | Partly: CLAP gets crash isolation, not a security sandbox ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)); WGSL is validated, not bounded |
+| A CLAP plugin or WGSL effect pack | Native code, or GPU code, the user installed or an agent wrote with `pack.write` ([ADR-0097](../adr/0097-agents-write-effect-packs.md)) | Partly: CLAP gets crash isolation, not a security sandbox ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)); WGSL is validated, not bounded |
 | Another process of the same user | Everything the user can do | No: it can read the token file and the credential store anyway |
 | Another local user, or a service | Its own account on the same machine | Yes for files and shared memory JStream creates |
 | An administrator or SYSTEM | Full control of the machine | No |
@@ -91,6 +91,7 @@ covers = [
   "crates/jstream-server/src/session.rs",
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
+  "crates/jstream-server/src/token_file.rs",
 ]
 depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
 -->
@@ -116,6 +117,10 @@ a stolen token, local denial of service.
   it is not built: an opt-in second listener for the network, TLS only with a
   self-signed certificate clients pin by fingerprint, admitting device tokens and never
   the control token.
+  The desktop app serves only its window, on an OS-picked port with a token kept in
+  memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
+  (4455 by default), turns MCP on and takes its token from a token file with the
+  daemon's checks, which both hosts share (`jstream_server::token_file`).
 - Limits: 4 MiB messages and MCP bodies (one over that and up to 16 MiB is read and
   refused with `too_large`, echoing at most a 256-byte `id`, one larger closes the
   connection or is `413`; [ADR-0074](../adr/0074-too-large-requests.md)), 128 open TCP connections of any kind
@@ -126,7 +131,7 @@ a stolen token, local denial of service.
 - Failed tokens are logged one by one only up to 10 a minute, then counted, so a flood
   of them can't fill the log (#354).
 - On Unix the token file is created `0600` and refused if group or others can read it.
-  On Windows (#548) the daemon's token, devices and log files, the desktop app's log file
+  On Windows (#548) the daemon's token (and the desktop app's, with `--mcp`), devices and log files, the desktop app's log file
   (#780), the daemon's and the desktop app's crash reports (#656), and the UI settings
   file both write (ADR-0084), are created with a protected DACL for SYSTEM and the user
   in the same `CreateFileW` call (`jstream_platform_windows::create_private_file`), so
@@ -313,7 +318,7 @@ depends_on = ["docs/RULES.md#R-SEC-003", "docs/adr/0035-clap-plugins-out-of-proc
 |---|---|---|---|
 | CLAP audio plugins | Trusted native code the user installed; adding one shows a warning | The shared-memory contract (`jstream-plugin-proto`), the mixer's side, the host process, its launcher and supervisor, and CLAP filters in a source's chain | One host process per instance, in a kill-on-close job, with no token, no protocol connection and a scrubbed environment ([ADR-0035](../adr/0035-clap-plugins-out-of-process.md)). It isolates crashes, not capabilities |
 | WASM automation plugins | Untrusted | The `jstream-plugin-wasm` host (#486, #623, #722): a fixed set of five imports and no WASI, an empty capability list by default, a fuel budget, a wall-time deadline per entry (100 ms an invocation, 1 s the load), 64 MiB of memory, 10,000 table elements, a 512 KiB stack and 50 commands to `Control` a second, each edit of a batch counted. The engine runs it in process ([ADR-0075](../adr/0075-wasm-plugin-host-in-the-engine.md)): `plugin.install` loads a package a person names, with the grant they give it, never more than its manifest asks for; installed plugins and their grants are saved in the plugin folder ([ADR-0076](../adr/0076-saved-wasm-plugins-and-manifest-requests.md)) | wasmtime with no ambient imports, so no filesystem, network or clock; each plugin's own engine session checks every call against its grant (its classes, a hotkey's bound action, and the hosts and folders a call's settings reach) and answers `forbidden` for one outside it ([R-SEC-003](../RULES.md#R-SEC-003), [ADR-0069](../adr/0069-wasm-plugin-limits-and-capabilities.md)) |
-| WGSL effect packs | Untrusted GPU code | The engine loads the packs in the effects folder (`effects` in the data folder by default) and draws their kinds in video chains ([jstream-core › Design](../../crates/jstream-core/README.md#design)) | naga validation against the shader contract, with static limits on bindings, uniforms and memory ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)); the effects folder is trusted as the rest of the user's data folder is |
+| WGSL effect packs | Untrusted GPU code | The engine loads the packs in the effects folder (`effects` in the data folder by default) and draws their kinds in video chains ([jstream-core › Design](../../crates/jstream-core/README.md#design)). An authenticated client, an MCP agent included, can write, read and delete a pack with `pack.write`, `pack.read` and `pack.delete` ([ADR-0097](../adr/0097-agents-write-effect-packs.md)); plugins can only list and read | naga validation against the shader contract, with static limits on bindings, uniforms and memory ([ARCH › GPU pipeline](../ARCHITECTURE.md#gpu-pipeline)); the effects folder is trusted as the rest of the user's data folder is. A write lands only in `<packs>/<pack>`, under the asset-path rules for each file and size limits, is loaded in a staging folder before it is swapped in, and replaces only the pack it names; `pack.list` names its writer and the activity log records it, so a person can see that an agent installed GPU code. A quarantine follows a blamed shader's digest, so a rewrite under another ID doesn't put it back on air |
 
 What the engine reads back from a CLAP host is checked: the block's magic, version and
 sizes, seqlocked rings with fixed slot indexing, a latency cap, and non-finite samples
@@ -371,7 +376,7 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -379,7 +384,7 @@ injection), and so using its full access against the user.
 
 **Controls on main:** MCP goes through the same gate and token as the WebSocket API
 (over stdio, through `jstream-cli mcp`, it uses the CLI's token). The desktop app keeps
-MCP off. Tool arguments and results are not logged; the audit log records who changed
+MCP off unless started with `--mcp`, which serves it behind the same token and checks. Tool arguments and results are not logged; the audit log records who changed
 what, without arguments. Agents can read the last 100 entries with `activity.list`,
 each with a sentence that names objects and gives values but never settings, targets
 or keys ([ADR-0083](../adr/0083-activity-log-over-the-protocol.md)); WASM plugins can't.
@@ -394,8 +399,11 @@ are data and never instructions. That rejection text has the key replaced, is cu
 too: the `capture` tool's description and the server instructions mark it as data and
 never instructions ([ADR-0085](../adr/0085-capture-target-names-marked-as-remote-text.md)).
 Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
-`openWorldHint`), so a client can ask the user before an agent retargets an output,
-sets its key, goes live or deletes something (#346).
+`openWorldHint`), so a client can ask the user before an agent retargets or deletes an
+output, sets or clears its key, goes live or stops, steps through its undo history,
+revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
+deletes of scenes, sources and items included, are undoable and unannounced
+([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through

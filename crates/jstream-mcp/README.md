@@ -33,8 +33,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
-  `batch`, which carries their edits, is open-world too), and the decoding of tool
-  arguments into protocol calls, which refuses an output edit with a `youtube` target.
+  `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
+  actions that don't make a tool destructive), and the decoding of tool arguments into
+  protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
+  `OUTPUT_ONLY_EDITS` that can remove a stream key.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
   `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
@@ -70,6 +72,10 @@ person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its acc
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
 in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
 on (#349). The `gpu.device_lost` event that reports the loss does reach agents.
+The `pack` tool does (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
+[ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
+WGSL of an effect pack, which loads at once, and `pack.list` names the client that
+last wrote each pack, so a person can see that an agent installed GPU code.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
@@ -77,7 +83,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -104,8 +110,18 @@ Every tool carries MCP `annotations`, derived from its ops' classes
 ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), with every hint
 written out because the spec's defaults call a tool destructive and open-world. A tool
 of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool is
-`destructiveHint` when it has an action, a history call or a `delete`/`remove` edit, as
-`batch` is; `canvas`, whose edits only change, is not. `openWorldHint` is true for the
+`destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
+history call
+([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
+today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
+disk that undo never reaches), `pairing` and `ui_settings`. `history` stays
+destructive because an undo past an `output.create` or `output.set_target` removes a
+stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
+`live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
+shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+`output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
+back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
+either. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
 server, and `source`, whose `browser` kind loads any http or https page set as its `url`
 (or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
@@ -125,11 +141,16 @@ application's name), set by the application that owns it, in a field that isn't
 the `capture` tool's description and the server instructions say it is untrusted too. A
 `font.list` font's `remote_family` and `remote_style` come from the font file, and the
 `font` tool's description says they are data, never instructions
-([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). The
+([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `profile.get` thread's
+`remote_name` was set by a library or driver loaded into the engine, and the `profile`
+tool's description says so; it also tells an agent how to find a hot spot: let the
+scene run, read the profile, change the costliest unit and read it again
+([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). The
 server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s
 U1). Tested by `annotations_follow_what_each_tool_can_do`,
+`reversible_actions_name_actions`, `batch_refuses_edits_that_can_remove_a_key`,
 `output_tool_marks_remote_rejection_text`, `capture_tool_marks_window_titles_as_remote_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
 
@@ -173,8 +194,8 @@ place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 The `ui_settings` tool (protocol 0.52) is the same:
 [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)'s server answers it,
 so an agent can read or change the UI's kept settings, such as the web UI's dock, and
-gets `unsupported` from a session with no server in front. Being an action's tool, it is
-`destructiveHint`.
+gets `unsupported` from a session with no server in front. `ui_settings.set` replaces a
+person's settings whole, so the tool is `destructiveHint`.
 
 ### MCP revisions
 

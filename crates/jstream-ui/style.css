@@ -447,7 +447,7 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .row .rename { flex: 1; min-width: 0; padding: 0.15rem 0.35rem; }
 .row .row-tools { display: flex; gap: 2px; visibility: hidden; }
 .row:hover .row-tools, .row.selected .row-tools, .row:focus-within .row-tools { visibility: visible; }
-.row .row-tools button, .row .eye { border-color: transparent; background: none; font-size: 0.75rem; }
+.row .row-tools button, .row .eye, .row .lock { border-color: transparent; background: none; font-size: 0.75rem; }
 .row .row-tools button:hover:not(:disabled) { border-color: var(--line); }
 /* The Scenes and Sources panels (spec-panels.md 1 and 2): search, filter and
    30 px rows with a caret slot, a type icon, the name and hover-revealed buttons. */
@@ -1210,6 +1210,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   border-radius: 8px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
   font-size: 13px;
+  /* A menu taller than the window scrolls rather than running off its bottom. */
+  max-height: calc(100vh - 8px);
+  overflow-y: auto;
 }
 .context-menu.submenu { z-index: 101; width: 250px; min-width: 0; }
 .context-menu .menuitem { justify-content: flex-start; gap: 0; padding: 0 10px 0 8px; color: var(--text); }

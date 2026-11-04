@@ -55,6 +55,7 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
   await page.mouse.click(margin.x, margin.y, { button: 'right' });
   expect(await labels(page)).toEqual([
     'Pop out',
+    'Screenshot (scene)',
     'Select all',
     'Turn snapping on',
     'Transition in',
@@ -159,11 +160,13 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   expect(await labels(page)).toEqual([
     'Rename',
     'Visible',
+    'Lock',
     'Properties…',
     'Edit filters…',
     'Copy/paste filters',
     'Labels',
     'Pop out',
+    'Screenshot (source)',
     'Reference to original',
     'Independent clone',
     'Copy',
@@ -467,6 +470,12 @@ test('the item menu renames, hides, blends, copies and pastes, as OBS\'s does', 
   await expect(item('Visible')).toHaveAttribute('aria-checked', 'false');
   await item('Visible').click();
   await expect.poll(() => rev(page)).toBe(at + 2);
+
+  // Screenshot (source) asks the engine for a PNG; the mock engine streams no
+  // pictures, so the toast says it couldn't.
+  await rows(page).first().click({ button: 'right' });
+  await item('Screenshot (source)').click();
+  await expect(page.locator('.toast')).toContainText('screenshot');
 
   // Blending lists the modes, Normal checked; Multiply sets it, as the Inspector shows.
   await rows(page).first().click({ button: 'right' });
