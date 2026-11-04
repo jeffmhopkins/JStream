@@ -29,7 +29,8 @@ pub const MIN_CAMERA_DISTANCE: f32 = 0.001;
 pub const MAX_BLUR_PX: f32 = 64.0;
 
 /// Within this angle of straight up or down, a camera's picture takes world `−z` as up
-/// (ADR-0094 decision 3).
+/// looking down and `+z` looking up, the up a camera facing `−z` has as it tilts to the
+/// pole, so the picture doesn't turn over there (ADR-0094 decision 3, #1047).
 const UP_FALLBACK_DEG: f64 = 0.01;
 
 /// A point or a direction in a scene's 3D space, in scene pixels: x right, y down, z
@@ -187,7 +188,7 @@ impl SceneCamera {
         let position = self.position.get();
         let forward = normalize(sub(self.target.get(), position));
         let up = if forward[1].abs() > UP_FALLBACK_DEG.to_radians().cos() {
-            [0.0, 0.0, -1.0]
+            [0.0, 0.0, -forward[1].signum()]
         } else {
             [0.0, -1.0, 0.0]
         };
