@@ -97,7 +97,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 
 Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
 [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (the daemon sets up its OAuth token store
-only there), on Linux a way to download OpenH264 (LNX2) and the UI's warning while
+only there), and on Linux the UI's warning while
 stream keys are in ADR-0071's fallback file, a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -162,7 +162,8 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   with health `poor`, and its uptime keeps counting. Once the server is back, the output
   reconnects by itself and goes `active`. It stays `poor` while the video lost in the
   outage is inside the health's ten-second window (#994). The new connection opens on a
-  keyframe, with audio.
+  keyframe, with audio, and the test stops the output only once the receiver's file
+  holds 2.5 s of video after the reconnect, not on the output's own frame count (#1141).
 - **The daemon binary on its own backends** (`binary.rs`). The built `jstream-daemon`
   runs as a user runs it, on the Linux backends `serve.rs` builds, with no fakes and
   nothing in process. Its data, config and log folders are in the test's scratch

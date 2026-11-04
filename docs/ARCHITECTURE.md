@@ -809,6 +809,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   plugins: it answers `plugin.install` with
   `unsupported`, and the other two with `not_found`, as an engine built without the
   feature does.
+- **Codec downloads** (protocol 0.69,
+  [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): the query
+  `codec.downloads` lists the codec libraries the engine downloads on a person's request,
+  each with the notice and licence link a client shows beside the offer, whether it is
+  installed and whether the machine has a hardware encoder for its codec; the actions
+  `codec.download` and `codec.delete` fetch it from its maker and check it against the
+  engine's pin, or delete it. On Linux that is Cisco's OpenH264, the software H.264
+  encoder, through the platform's `Codecs::downloads`; elsewhere the list is empty. They
+  are for a person, so no MCP tool, plugin or hotkey carries them.
 - **Studio mode** (protocol 0.30): the action `studio.set_preview { scene_id }` puts a
   scene on preview, also with no `rev` change; `studio.get` and `studio.changed` carry
   `preview_scene` beside `program_scene`.
@@ -998,7 +1007,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
   quarantined after a GPU device loss
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
-  `gpu.device_lost` event that reports it reaches agents. The `pack.*` ops are not
+  `gpu.device_lost` event that reports it reaches agents. And for the `codec.*` ops:
+  Cisco's OpenH264 downloads only when a person asks, after seeing Cisco's licence
+  ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). The `pack.*` ops are not
   held back: an agent may write, read and delete an effect pack's WGSL
   ([ADR-0097](adr/0097-agents-write-effect-packs.md)), and `pack.list` shows a person
   which client last wrote each.

@@ -119,6 +119,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   both read back by a fresh page, the mix resized from its Edit form and deleted once the
   recording is back on the program; a second client sees outputs created, started and
   deleted.
+- **Codec downloads** (`codec-downloads.spec.js`, on the Outputs panel): the mock
+  engine has no codec backend, so the spec routes the page's WebSocket and answers
+  `codec.downloads`, `codec.download` and `codec.delete` for one OpenH264 download. With
+  no hardware H.264 encoder, Encoders offers it with Cisco's notice, the licence link and
+  the licence's full text, sends nothing until Download is pressed, then shows it
+  installed with the notice, link and Delete. The About dialog then lists it with the
+  notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
+  it out of About. With hardware, nothing is offered until the encoder form asks for software
+  H.264 (and not for HEVC), and a saved software profile brings the section's offer.
 - **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
