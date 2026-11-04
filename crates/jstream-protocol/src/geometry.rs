@@ -13,12 +13,14 @@ use serde::{Deserialize, Serialize};
 
 mod camera;
 mod drawn;
+mod solid;
 
 pub use camera::{
     CameraView, DEFAULT_FOV_DEG, Focus, MAX_BLUR_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG,
     SceneCamera, Vec3,
 };
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
+pub use solid::{Solid, SolidBounds};
 
 /// How the cropped source fills the item's box.
 ///

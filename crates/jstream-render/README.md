@@ -41,6 +41,13 @@ and calls this crate.
   `perspective_px` ignored. A legacy placement under a camera is drawn as before and
   sorts at the canvas centre's depth. Items sort together only within one
   `Item.depth_run` (`0` but for a stinger's items).
+- A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
+  own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
+  version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
+  item's geometry, the scene's camera, the lighting) into a canvas-sized layer with its
+  own depth test. The engine runs filters over that layer and places it with
+  `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
+  at the model's centre.
 - Each item places one image with one of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
@@ -50,6 +57,9 @@ and calls this crate.
   - a **legacy 0.3 placement** (decision 5): crop in source pixels, then scale the
     remaining rectangle by `scale` relative to the source's current size, put its
     top-left at `position` in canvas pixels, and rotate clockwise about that corner.
+  - or a **layer** (`Placement::Layer`, ADR-0107): an image already in the canvas's own
+    pixels, such as a model's, drawn flat at its size from the canvas's top-left whatever
+    the camera, sorting as an item with its geometry would. Crop is ignored.
 
   Both depend on the image's size, which is runtime state, so the compositor evaluates
   the placement on every `render`. That size is the image's **extent**
@@ -68,9 +78,12 @@ and calls this crate.
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
   [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md) (`blend.rs`): `normal`,
   `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
-  `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop,
-  a copy of the target's texels under the item. Those three last mix sRGB-encoded
-  values, the rest linear light. A layer blends with its own texels only.
+  `darken`, `lighten`, `overlay`, `difference`, `exclusion`, `normal_srgb` and
+  `additive_srgb` by reading a backdrop, a copy of the target's texels under the item.
+  Overlay, difference and exclusion mix sRGB-encoded values, and so do the two `_srgb`
+  modes, which composite as a browser does
+  ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); the rest blend
+  in linear light. A layer blends with its own texels only.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -375,6 +388,9 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
+| Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
+| Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
+| `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
 | `Nv12Planes` textures | The planes value |
@@ -472,7 +488,29 @@ coverage to `clamp(d / 2r + 0.5)`. `place` pushes every vertex out by the larger
 pixel and the largest blur radius of the shape's corners (`CameraView::blur_at`), the
 largest on a plane; past the edge `w` runs on beyond the corners', so the cap keeps the
 soft edge inside the push and it falls off whole.
-Colour is averaged in linear light, so a blur keeps the item's mean light.
+Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's layer (ADR-0107, below) is placed
+flat, so its `dof` is zero and depth of field doesn't blur it yet.
+
+**Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
+from the model's space to the viewing frame, composed in `f64` relative to the camera,
+and for the model-to-clip matrix built from it: only that product is `f32`, so a far
+camera doesn't jitter. Depth is reversed `Depth32Float`, cleared to 0 with `Greater`:
+with perspective, clip `z` is `NEAR_W`, so `z / w = NEAR_W / w` and the GPU's own
+`z ≤ w` clip is ADR-0050's near plane; without (a 2D scene with no `perspective_px`) it
+is linear in the model's depth. Opaque and masked primitives draw first with depth
+writes, then blended ones far to near by their centres, testing without writing. There
+is no cull: a mirrored map (`Solid::mirrored`) swaps which face is the front, so the
+shader discards back faces itself unless the material is double-sided. A back face of a
+double-sided material turns its normal and tangent over together, so a normal map tilts
+its back as the turned-over front would. The bitangent takes its sign from the raw
+`front_facing`: a mirrored map reverses the cross product of normal and tangent, a back
+face needs it turned over though that cross product isn't, and the raw flag is false with
+either alone and true with both. A material with no normal map keeps the interpolated
+normal as it is.
+`upload_model` refuses a primitive whose vertex or index buffer would pass the
+adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl`
+shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
+under the studio rig, fixed to the viewing frame, or unlit.
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
@@ -858,6 +896,22 @@ for overlay, difference and exclusion), within 2 sRGB 8-bit steps; and backdrop 
 a row seeing the ones before, clipped at the canvas edge, drawn into a layer after the
 backdrop grew larger, and a 3D item reading the backdrop across its edge fringe.
 
+**Model goldens** (`model/tests.rs`, ADR-0107). Built-in shapes drawn into a layer and
+placed with `Placement::Layer` on a 160×100 canvas, checked pixel by pixel: a cube with
+an unlit colour per face shows only its front, on the box, in a 2D scene; turned 30° it
+shows the near side where the shared placement puts it and none of its back or far side;
+seen from above through a camera its front and top hide its back and bottom, the front's
+centre where `Solid::place` puts it; mirrored it still shows its front; a plane's texture
+reads upright; the studio key light makes a sphere brighter at its upper left; a blended
+material is half see-through; a floor running under the camera is clipped by the near
+plane; a model's layer sorts with a card by the model's depth, whatever the stacking
+order; a normal map tilted up its texture lights the same, toward the key light, when
+the placement mirrors the model, and seen from behind (a double-sided plane turned 180°)
+lights as the front of the opposite tilt, while an unmapped plane's back lights as its
+front; a model draws into layers of three sizes in a row (the
+depth target follows the layer); and a primitive past the adapter's buffer limit is
+refused with `RenderError::Invalid`.
+
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
 reference that averages 8×8 (16×16 for C and D) point samples per pixel, each mapped
@@ -1017,7 +1071,13 @@ A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with rea
 (`composite_1080p_readback`) and without, waiting for the queue (`composite_1080p_submit`),
 4 of the items drawn `normal`, `multiply` and `overlay` (`composite_1080p_blend`, which
 prices a fixed-function mode's second draw and a backdrop mode's copy and pass), and
-refilling a 1080p upload in place (`rewrite_rgba8_1080p`). Run them with
+the same items as cards in a 3D scene, turned, at their own depths and seen
+through an off-axis camera, their mips rebuilt each frame as a live source's are
+(`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
+(`model_1080p`), and
+refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
+20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
+items against 9.6, 17 and 58 ms for the 2D submit, and either model 22 ms. Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the

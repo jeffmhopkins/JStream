@@ -67,7 +67,7 @@ pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
     FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_BLUR_PX,
     MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm,
-    ProjectedQuad, SceneCamera, Size, Vec3, legacy_quad,
+    ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
