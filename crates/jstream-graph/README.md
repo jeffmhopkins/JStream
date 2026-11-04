@@ -184,7 +184,8 @@ with no inverse. The engine draws open gestures' source settings through it
   `item.add`'s `opacity` accept 0 to `MAX_OPACITY` (4; above 1 a gain on the item's
   light, #1101), as do keyframe overrides; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
-  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
+  [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as a `scene` owner (`invalid_argument`

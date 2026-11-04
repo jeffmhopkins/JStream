@@ -1925,7 +1925,8 @@ pub const MAX_OPACITY: f32 = 4.0;
 ///
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). They blend in linear light,
-/// except overlay, difference and exclusion, which blend sRGB-encoded values.
+/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),
+/// which blend sRGB-encoded values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -1949,11 +1950,19 @@ pub enum BlendMode {
     Difference,
     /// Like difference, with lower contrast.
     Exclusion,
+    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,
+    /// #1096): a soft overlay designed in a browser keeps its strength, where `normal`
+    /// mixes linear light and a faint veil over a dark backdrop comes out brighter.
+    NormalSrgb,
+    /// Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in
+    /// a browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha
+    /// is source-over, so the two differ inside a translucent layer.
+    AdditiveSrgb,
 }
 
 impl BlendMode {
     /// Every mode, in the order the UI lists them.
-    pub const ALL: [BlendMode; 9] = [
+    pub const ALL: [BlendMode; 11] = [
         BlendMode::Normal,
         BlendMode::Additive,
         BlendMode::Multiply,
@@ -1963,6 +1972,8 @@ impl BlendMode {
         BlendMode::Lighten,
         BlendMode::Difference,
         BlendMode::Exclusion,
+        BlendMode::NormalSrgb,
+        BlendMode::AdditiveSrgb,
     ];
 
     /// The mode with this wire name.
@@ -1989,6 +2000,8 @@ impl BlendMode {
             BlendMode::Lighten => "lighten",
             BlendMode::Difference => "difference",
             BlendMode::Exclusion => "exclusion",
+            BlendMode::NormalSrgb => "normal_srgb",
+            BlendMode::AdditiveSrgb => "additive_srgb",
         }
     }
 }

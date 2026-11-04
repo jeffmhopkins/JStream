@@ -145,7 +145,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   (protocol 0.71).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
   item's opacity (above 1 a gain on its light, protocol 0.77) and blend mode; the engine
-  draws every mode (protocol 0.47).
+  draws every mode (protocol 0.47), and `normal_srgb` and `additive_srgb` (0.75) blend
+  as a browser does.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
