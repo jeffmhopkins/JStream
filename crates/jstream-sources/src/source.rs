@@ -129,6 +129,31 @@ pub trait Source: Send {
     fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
         None
     }
+
+    /// Whether the source's page is granted the page API (ADR-0102): a `browser` source
+    /// with `page_api` on. Only such a source is handed [`page_view`](Self::page_view)
+    /// and [`page_clock`](Self::page_clock). `false`, the default, for every other.
+    fn page_api(&self) -> bool {
+        false
+    }
+
+    /// What the source's page may see changed, or may have: the engine calls this after
+    /// every change that could matter (a switch, an edit, a shared value), and the
+    /// source sends its page only what changed and its grant covers, at most once per
+    /// page frame (ADR-0102 decision 3). Returns when, on the media clock, it has an
+    /// update still to send, so the engine calls again by then. The default does
+    /// nothing and returns `None`.
+    fn page_view(&mut self, view: &crate::PageView<'_>) -> Option<MediaTime> {
+        let _ = view;
+        None
+    }
+
+    /// The engine looks at the source at `now` on the media clock (the animation clock,
+    /// ADR-0099): a granted page is sent a clock anchor when one is due, with whatever
+    /// else is waiting once a page frame has passed. The default does nothing.
+    fn page_clock(&mut self, now: MediaTime) {
+        let _ = now;
+    }
 }
 
 /// A `model` source's picture ([`Source::model`]): the model, built off the render

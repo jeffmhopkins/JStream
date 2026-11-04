@@ -76,7 +76,10 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("fps", false),
             ("css", true),
             ("restart_on_show", true),
-            ("local_network", false)
+            ("local_network", false),
+            ("page_api", false),
+            ("page_api_scenes", false),
+            ("page_api_values", false),
         ]
     );
 }
@@ -273,6 +276,92 @@ fn local_network_opts_a_page_in() {
     assert!(page.spec().local_network);
     assert!(page.request("ws://127.0.0.1:8080/"));
     assert!(page.request("http://192.168.1.10/"));
+}
+
+/// ADR-0102: off by default; on, the page opens with its grant, and the engine's view
+/// reaches it filtered to that grant, sending only what changed.
+#[test]
+fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
+    use jstream_browser::PageApi;
+    use jstream_media::{MediaTime, Timebase};
+    use jstream_sources::PageView;
+    use std::collections::BTreeMap;
+
+    fn view(values: &BTreeMap<String, serde_json::Value>, ms: i64) -> PageView<'_> {
+        PageView {
+            now: MediaTime::new(ms, Timebase::MILLIS),
+            program: true,
+            preview: false,
+            program_scene: Some(("scn_1", "Main")),
+            preview_scene: None,
+            values,
+        }
+    }
+
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let mut plain =
+        create(&ctx, &settings(&[("url", json!("https://example.com/"))])).expect("a page");
+    assert!(!plain.page_api());
+    assert_eq!(browser.pages()[0].spec().page_api, None);
+    let mut values = BTreeMap::new();
+    values.insert("status.text".to_owned(), json!("On air"));
+    values.insert("other".to_owned(), json!(1));
+    plain.page_view(&view(&values, 0));
+    plain.page_clock(MediaTime::new(0, Timebase::MILLIS));
+    assert!(browser.pages()[0].take_data().is_empty());
+
+    let mut granted = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/")),
+            ("page_api", json!(true)),
+            ("page_api_values", json!("status.*")),
+        ]),
+    )
+    .expect("a granted page");
+    assert!(granted.page_api());
+    let page = &browser.pages()[1];
+    assert_eq!(
+        page.spec().page_api,
+        Some(PageApi {
+            scenes: false,
+            values: true
+        })
+    );
+    granted.page_view(&view(&values, 1000));
+    let sent = page.take_data();
+    assert_eq!(sent.len(), 1);
+    assert_eq!(sent[0].clock.map(|c| c.0), Some(1.0));
+    assert!(
+        sent[0]
+            .source
+            .as_deref()
+            .unwrap()
+            .contains(r#""shown":true"#)
+    );
+    assert_eq!(sent[0].scenes, None, "scenes weren't granted");
+    assert_eq!(
+        sent[0].values,
+        [("status.text".to_owned(), Some(r#""On air""#.to_owned()))]
+    );
+    // The same view again sends nothing; a look a quarter second on sends an anchor.
+    granted.page_view(&view(&values, 1100));
+    assert!(page.take_data().is_empty());
+    granted.page_clock(MediaTime::new(1250, Timebase::MILLIS));
+    let anchors = page.take_data();
+    assert_eq!(anchors.len(), 1);
+    assert_eq!(anchors[0].clock.map(|c| c.0), Some(1.25));
+
+    let bad = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/")),
+            ("page_api", json!(true)),
+            ("page_api_values", json!("Not a name")),
+        ]),
+    );
+    assert!(matches!(bad, Err(SourceError::Setting { param, .. }) if param == "page_api_values"));
 }
 
 #[test]

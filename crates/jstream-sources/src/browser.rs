@@ -4,15 +4,16 @@
 
 use crate::color::frame_size;
 use crate::describe::{asset, kind, param, size};
+use crate::page_api::{Feed, Grant, MAX_VALUES_GRANT_BYTES, PageView};
 use crate::source::{changed_non_live, setting};
 use crate::{Context, Source, SourceAudio, SourceError, SourceKind};
 use jstream_browser::{
-    BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageAudio, PageLocation,
-    PageSpec,
+    BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageAudio, PageData,
+    PageLocation, PageSpec,
 };
 use jstream_media::{AudioFormat, MediaTime, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame};
-use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
+use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings, VisibleIf};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -30,6 +31,9 @@ pub fn opens_browser(kind: &str) -> bool {
 
 /// The longest `url` setting, in characters.
 const MAX_URL_CHARS: u32 = 8192;
+
+/// The settings group the page API's grant is shown in (ADR-0102 decision 1).
+const PAGE_API_GROUP: &str = "Page API";
 
 /// The `browser` kind.
 pub(crate) struct BrowserKind(KindDescriptor);
@@ -136,6 +140,52 @@ impl BrowserKind {
                         json!(false),
                     )
                 },
+                ParamDescriptor {
+                    description: Some(
+                        "Give the page window.jstream: the engine's clock, so it moves in step \
+                         with native motion and other pages, and whether this source is \
+                         shown on program and preview. A page from the web can send what \
+                         it reads anywhere."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    ..param("page_api", "Page API", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page the program and preview scenes' names. A \
+                         preview scene's name can say what hasn't been shown yet."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(VisibleIf {
+                        param: "page_api".into(),
+                        equals: json!(true),
+                    }),
+                    ..param("page_api_scenes", "Scenes", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The shared values the page may read, set with values.set: names \
+                         or prefixes ending in .*, separated by commas (status.text, \
+                         counter.*). Empty gives it none."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(VisibleIf {
+                        param: "page_api".into(),
+                        equals: json!(true),
+                    }),
+                    ..param(
+                        "page_api_values",
+                        "Shared values",
+                        text(
+                            u32::try_from(MAX_VALUES_GRANT_BYTES).unwrap_or(u32::MAX),
+                            false,
+                        ),
+                        json!(""),
+                    )
+                },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
@@ -194,12 +244,14 @@ pub(crate) fn open(
         .get("local_network")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let grant = Grant::of(settings)?;
     let page = backend.open(&PageSpec {
         location,
         size,
         fps,
         css,
         local_network,
+        page_api: grant.as_ref().map(Grant::api),
     })?;
     let audio: Arc<dyn SourceAudio> = Arc::new(PageAudioOf(Arc::clone(page.audio())));
     Ok(Box::new(BrowserSource {
@@ -209,6 +261,7 @@ pub(crate) fn open(
         blank,
         audio,
         every_ms: i64::from(1000_u32.div_ceil(fps)),
+        feed: grant.map(|grant| Feed::new(grant, fps)),
         hidden: false,
     }))
 }
@@ -267,6 +320,8 @@ struct BrowserSource {
     /// How often a page that paints on the CPU is looked at again, in milliseconds: one
     /// frame at its frame rate.
     every_ms: i64,
+    /// What a page granted the page API was sent (ADR-0102); `None` without a grant.
+    feed: Option<Feed>,
     /// Whether the page was told nothing draws it.
     hidden: bool,
 }
@@ -338,6 +393,44 @@ impl Source for BrowserSource {
 
     fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
         Some(Arc::clone(&self.audio))
+    }
+
+    fn page_api(&self) -> bool {
+        self.feed.is_some()
+    }
+
+    fn page_view(&mut self, view: &PageView<'_>) -> Option<MediaTime> {
+        let feed = self.feed.as_mut()?;
+        let data = feed.view(view);
+        feed.post(data);
+        if let Some(data) = feed.flush(view.now) {
+            self.page.send_data(data);
+        }
+        feed.due()
+    }
+
+    /// Sends a clock anchor when one is due, its lead taking in how old the page's
+    /// latest frame is now (frames are stamped on the media clock as they arrive), with
+    /// whatever else is waiting, once a page frame has passed since the last update.
+    fn page_clock(&mut self, now: MediaTime) {
+        let Some(feed) = &mut self.feed else {
+            return;
+        };
+        let pts = self
+            .page
+            .frame()
+            .map(|frame| frame.info().pts)
+            .or_else(|| self.page.cpu_frame().map(|frame| frame.info().pts));
+        let age = pts.map(|pts| now.as_secs_f64() - pts.as_secs_f64());
+        if let Some(clock) = feed.clock(now, age) {
+            feed.post(PageData {
+                clock: Some(clock),
+                ..PageData::default()
+            });
+        }
+        if let Some(data) = feed.flush(now) {
+            self.page.send_data(data);
+        }
     }
 }
 

@@ -17,7 +17,9 @@ use super::PageShared;
 pub(crate) struct Page(pub(crate) Arc<PageShared>);
 
 wrap_app! {
-    pub(crate) struct JstreamApp;
+    pub(crate) struct JstreamApp {
+        granted: super::page_api::Grants,
+    }
 
     impl App {
         fn on_before_command_line_processing(
@@ -52,12 +54,17 @@ wrap_app! {
                 );
             }
         }
+
+        // Used only in renderer processes: the page API (ADR-0102, `page_api.rs`).
+        fn render_process_handler(&self) -> Option<RenderProcessHandler> {
+            Some(super::page_api::renderer(&self.granted))
+        }
     }
 }
 
 /// The browser process's app.
 pub(crate) fn app() -> App {
-    JstreamApp::new()
+    JstreamApp::new(super::page_api::Grants::default())
 }
 
 wrap_task! {
@@ -110,6 +117,18 @@ wrap_client! {
 
         fn permission_handler(&self) -> Option<PermissionHandler> {
             Some(self.permission.clone())
+        }
+
+        // Nothing a page's renderer sends is taken: no message from a page reaches the
+        // engine (ADR-0102 decision 3).
+        fn on_process_message_received(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _source_process: ProcessId,
+            _message: Option<&mut ProcessMessage>,
+        ) -> c_int {
+            1
         }
     }
 }
@@ -348,6 +367,7 @@ wrap_load_handler! {
                 && frame.is_main() == 1
             {
                 self.page.0.load_started();
+                self.page.0.document_started(frame);
             }
         }
 

@@ -24,7 +24,7 @@ use std::path::PathBuf;
 
 use jstream_media::FrameSize;
 
-use crate::{PageLocation, PageSpec};
+use crate::{PageApi, PageData, PageLocation, PageSpec};
 
 /// The longest message either side sends: a page opened with at most 128 KiB of HTML and
 /// 64 KiB of CSS, with room to spare.
@@ -60,6 +60,10 @@ pub(crate) enum ToHelper {
     Released { page: u32, slot: u8 },
     /// Close every page and exit.
     Shutdown,
+    /// An update to a page's `window.jstream` (ADR-0102), within
+    /// [`MAX_PAGE_DATA_BYTES`](crate::MAX_PAGE_DATA_BYTES). Nothing for a page opened
+    /// without a page API.
+    PageData { page: u32, data: PageData },
 }
 
 /// What the helper tells the engine.
@@ -134,6 +138,18 @@ impl Out {
         self.0.extend_from_slice(s.as_bytes());
         Ok(())
     }
+    fn opt_str(&mut self, s: Option<&str>) -> Result<(), WireError> {
+        match s {
+            Some(s) => {
+                self.u8(1);
+                self.str(s)
+            }
+            None => {
+                self.u8(0);
+                Ok(())
+            }
+        }
+    }
 }
 
 /// Reads one message's body.
@@ -169,6 +185,15 @@ impl In<'_> {
         let len = self.len()?;
         String::from_utf8(self.take(len)?.to_vec())
             .map_err(|_| WireError::Malformed("a string isn't UTF-8"))
+    }
+    fn opt_string(&mut self) -> Result<Option<String>, WireError> {
+        match self.u8()? {
+            0 => Ok(None),
+            1 => Ok(Some(self.string()?)),
+            _ => Err(WireError::Malformed(
+                "an optional field's flag isn't 0 or 1",
+            )),
+        }
     }
     fn end(self) -> Result<(), WireError> {
         if self.0.is_empty() {
@@ -232,6 +257,10 @@ impl ToHelper {
                 out.u32(spec.fps);
                 out.str(&spec.css)?;
                 out.u8(u8::from(spec.local_network));
+                out.u8(match spec.page_api {
+                    None => 0,
+                    Some(api) => 1 | (u8::from(api.scenes) << 1) | (u8::from(api.values) << 2),
+                });
             }
             Self::SetCss { page, css } => {
                 out.u8(2);
@@ -256,6 +285,25 @@ impl ToHelper {
                 out.u8(8);
                 out.u32(*page);
                 out.u8(u8::from(*hidden));
+            }
+            Self::PageData { page, data } => {
+                out.u8(9);
+                out.u32(*page);
+                match data.clock {
+                    Some((t, lead)) => {
+                        out.u8(1);
+                        out.u64(t.to_bits());
+                        out.u64(lead.to_bits());
+                    }
+                    None => out.u8(0),
+                }
+                out.opt_str(data.source.as_deref())?;
+                out.opt_str(data.scenes.as_deref())?;
+                out.len(data.values.len())?;
+                for (name, value) in &data.values {
+                    out.str(name)?;
+                    out.opt_str(value.as_deref())?;
+                }
             }
         }
         Ok(())
@@ -289,6 +337,14 @@ impl ToHelper {
                     1 => true,
                     _ => return Err(WireError::Malformed("a local-network flag isn't 0 or 1")),
                 };
+                let page_api = match body.u8()? {
+                    0 => None,
+                    flags if flags & !0b111 == 0 && flags & 1 == 1 => Some(PageApi {
+                        scenes: flags & 0b10 != 0,
+                        values: flags & 0b100 != 0,
+                    }),
+                    _ => return Err(WireError::Malformed("a page API's flags are unknown")),
+                };
                 Self::Open {
                     page,
                     spec: PageSpec {
@@ -297,6 +353,7 @@ impl ToHelper {
                         fps,
                         css,
                         local_network,
+                        page_api,
                     },
                 }
             }
@@ -327,6 +384,35 @@ impl ToHelper {
                     _ => return Err(WireError::Malformed("a hidden flag isn't 0 or 1")),
                 },
             },
+            9 => {
+                let page = body.u32()?;
+                let clock = match body.u8()? {
+                    0 => None,
+                    1 => Some((f64::from_bits(body.u64()?), f64::from_bits(body.u64()?))),
+                    _ => return Err(WireError::Malformed("a clock flag isn't 0 or 1")),
+                };
+                let source = body.opt_string()?;
+                let scenes = body.opt_string()?;
+                let count = body.len()?;
+                // Each value takes at least five bytes, so a count the message can't hold
+                // is refused before anything is allocated for it.
+                if count > body.0.len() / 5 {
+                    return Err(WireError::Malformed("more values than the message holds"));
+                }
+                let mut values = Vec::with_capacity(count);
+                for _ in 0..count {
+                    values.push((body.string()?, body.opt_string()?));
+                }
+                Self::PageData {
+                    page,
+                    data: PageData {
+                        clock,
+                        source,
+                        scenes,
+                        values,
+                    },
+                }
+            }
             _ => return Err(WireError::Malformed("an unknown message to the helper")),
         };
         body.end()?;
@@ -552,6 +638,7 @@ mod tests {
             fps: 60,
             css: "body { color: red; } /* é */".into(),
             local_network: true,
+            page_api: None,
         }
     }
 
@@ -604,6 +691,39 @@ mod tests {
                 hidden: false,
             },
             ToHelper::Released { page: 3, slot: 2 },
+            ToHelper::Open {
+                page: 5,
+                spec: PageSpec {
+                    page_api: Some(PageApi {
+                        scenes: true,
+                        values: false,
+                    }),
+                    ..spec(PageLocation::Web("https://example.com/".into()))
+                },
+            },
+            ToHelper::Open {
+                page: 6,
+                spec: PageSpec {
+                    page_api: Some(PageApi::default()),
+                    ..spec(PageLocation::Html("<p>x</p>".into()))
+                },
+            },
+            ToHelper::PageData {
+                page: 5,
+                data: PageData {
+                    clock: Some((12.375, 0.05)),
+                    source: Some(r#"{"shown":true}"#.into()),
+                    scenes: Some(r#"{"program":null,"preview":null}"#.into()),
+                    values: vec![
+                        ("status.text".into(), Some(r#""On air""#.into())),
+                        ("counter.a".into(), None),
+                    ],
+                },
+            },
+            ToHelper::PageData {
+                page: 5,
+                data: PageData::default(),
+            },
             ToHelper::Shutdown,
         ]);
         round_trip(&[

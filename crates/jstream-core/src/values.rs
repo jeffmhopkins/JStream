@@ -46,6 +46,11 @@ impl SharedValues {
         Ok(true)
     }
 
+    /// Every value, by name, for the pages granted them (ADR-0102 decision 7).
+    pub(crate) fn map(&self) -> &BTreeMap<String, Value> {
+        &self.values
+    }
+
     /// The values `prefix` covers ([`prefix_covers`]), ordered by name.
     pub(crate) fn list(&self, prefix: Option<&str>) -> Vec<SharedValue> {
         self.values

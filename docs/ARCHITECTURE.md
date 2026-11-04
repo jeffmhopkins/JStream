@@ -1273,7 +1273,7 @@ before. Built: the audio chains in protocol 0.29, the video chains in 0.60.
 <a id="browser-source"></a>
 ## Browser source
 <!-- @section
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0095-browser-helper-on-linux.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md"]
 -->
 
 A browser source is a CEF off-screen browser
@@ -1299,6 +1299,13 @@ imports it through hal as in the GPU pipeline's step 2, copies it into a texture
 source owns, waits for that copy, and hands the shared texture back. The source's audio
 comes from CEF's audio handler as planar float PCM, which crosses the pipe interleaved;
 the engine stamps frames and audio as they arrive.
+
+A source can opt its page in to a read-only `window.jstream`
+([ADR-0102](adr/0102-page-api-for-browser-sources.md)): the engine sends the page its
+clock anchors, its own visibility, and as granted the scenes and shared values, over the
+pipe and then as process messages from the helper's browser process to the page's
+renderer, which defines the API in the main frame of the source's own documents. Nothing
+flows back.
 
 **Choices made by spike S4:**
 - **Bindings:** the `cef` crate (tauri-apps/cef-rs), pinned exactly, with default
