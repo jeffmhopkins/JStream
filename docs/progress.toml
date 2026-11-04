@@ -1363,12 +1363,10 @@ prs = [1100]
 id = "PS2"
 milestone = "M3"
 title = "Software compositing: a nested scene drawn once a frame, and blur taps bounded lower"
-status = "review"
+status = "done"
 release = "alpha.4"
 gate = true
 prs = [1106]
-note = "Passed review; waits to merge"
-needs = ["build"]
 
 [[item]]
 id = "CB1"
@@ -1403,12 +1401,10 @@ needs = ["build"]
 id = "CH1"
 milestone = "M3"
 title = "File filters such as Apply LUT on the program and output chains"
-status = "review"
+status = "done"
 release = "alpha.4"
 gate = true
 prs = [1134]
-note = "Passed review (protocol 0.79); waits to merge"
-needs = ["build"]
 
 [[item]]
 id = "LB1"

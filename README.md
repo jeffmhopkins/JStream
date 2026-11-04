@@ -166,7 +166,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 | `0.1.0-alpha.1` | The first portable Windows build: scenes, sources, mixing, streaming, recording and the virtual camera, driven from the UI or an agent | 📦 released as `v0.1.0-alpha.1` | `██████████` 100% | 114 | 0 | 0 |
 | `0.1.0-alpha.2` | Fixes and UI work on the first build | 📦 released as `v0.1.0-alpha.2` | `██████████` 100% | 1 | 0 | 0 |
 | `0.1.0-alpha.3` | Fixes, compositor blend modes and capture pickers | 📦 released as `v0.1.0-alpha.3` | no items | 0 | 0 | 0 |
-| `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 🔨 next: waits on 24 gate items, 13 merged | `██████░░░░` 62% | 18 | 9 | 2 |
+| `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 🔨 next: waits on 24 gate items, 15 merged | `███████░░░` 69% | 20 | 7 | 2 |
 | Not scheduled | Roadmap items no release is gathering yet | ⏳ later | `░░░░░░░░░░` 0% | 0 | 0 | 12 |
 
 <details>
@@ -301,7 +301,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 </details>
 
 <details open>
-<summary><b>0.1.0-alpha.4</b>: 18 of 29 merged</summary>
+<summary><b>0.1.0-alpha.4</b>: 20 of 29 merged</summary>
 
 | ID | Item | Gate | Milestone | Status | PRs |
 |---|---|---|---|---|---|
@@ -312,9 +312,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | 🚧 | M3 | 🔍 in review: Passed review (protocol 0.80); waits its turn in the protocol queue | #1082 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🚧 | M3 | 🔍 in review: Protocol 0.82; back in review after its protocol renumber | #1080 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🚧 | M3 | 🔍 in review | #1146 |
-| PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | 🚧 | M3 | 🔍 in review: Passed review; waits to merge | #1106 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | 🚧 | M3 | 🔍 in review: Protocol 0.83; back in review after its renumber | #1104 |
-| CH1 | File filters such as Apply LUT on the program and output chains | 🚧 | M3 | 🔍 in review: Passed review (protocol 0.79); waits to merge | #1134 |
 | LB1 | A local web browser source's first load passes on Linux | 🚧 | M3 | 🔍 in review | #1094 |
 | X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🚧 | M3 | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
 | AG1 | MCP prompts only for what undo can't take back (destructiveHint) | 🚧 | M3 | ✅ merged | #1055 |
@@ -327,8 +325,10 @@ An item counts toward the release it first ships in. A release's gate items are 
 | PA1 | Page API part 1: ADR-0102 and shared values (values.set, values.list) | 🚧 | M3 | ✅ merged | #1077, #1127 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | 🚧 | M3 | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | 🚧 | M3 | ✅ merged | #1100 |
+| PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | 🚧 | M3 | ✅ merged | #1106 |
 | CB1 | Blend in sRGB-encoded space, so HTML overlays match a browser (normal_srgb, additive_srgb) | 🚧 | M3 | ✅ merged | #1109 |
 | CB2 | Item effects after placement, over the canvas | 🚧 | M3 | ✅ merged | #1111 |
+| CH1 | File filters such as Apply LUT on the program and output chains | 🚧 | M3 | ✅ merged | #1134 |
 | V0 | Video filter chain runtime |  | M1b | ✅ merged: part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; effect-pack kinds are drawn, with the packs folder watched by the engine (#971). No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5) | #595, #607, #626, #712, #717, #718, #730, #971 |
 | V4 | Scene filter chains and item effects |  | M1b | ✅ merged: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968) | #802, #813, #815, #823, #824, #897, #921, #944, #968 |
 | K1 | Keyframe scenes, folders, organisation metadata and hotkeys |  | M2 | ✅ merged: hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53, #941) and overrides of a group's children (protocol 0.55, #947) and a Move of an unflattened group's children inside its layer (#948) are built; then the UI (#846, #970): the canvas's live values on a keyframe, and a group's children overridden from their rows and the Inspector; keyframe overrides of an item's effects (ADR-0088, protocol 0.63, #985), in the protocol, graph, engine and the Filters panel | #319, #720, #941, #947, #970, #985 |
@@ -349,12 +349,12 @@ Each goal is a milestone of the roadmap.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `█████░░░░░` 50% | 21 | 9 | 12 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `█████░░░░░` 55% | 23 | 7 | 12 |
 
-133 of 156 items are merged; 13 of those still wait on a run on Windows hardware.
+135 of 156 items are merged; 13 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 36 items, by next step: 🔨 build 24, 🧪 Windows run 11, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 34 items, by next step: 🔨 build 22, 🧪 Windows run 11, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -391,9 +391,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🔨 build | Passed review (protocol 0.80); waits its turn in the protocol queue | #1082 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🔨 build | Protocol 0.82; back in review after its protocol renumber | #1080 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🔨 build |  | #1146 |
-| PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | M3 | 🔨 build | Passed review; waits to merge | #1106 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🔨 build | Protocol 0.83; back in review after its renumber | #1104 |
-| CH1 | File filters such as Apply LUT on the program and output chains | M3 | 🔨 build | Passed review (protocol 0.79); waits to merge | #1134 |
 | LB1 | A local web browser source's first load passes on Linux | M3 | 🔨 build |  | #1094 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🔨 build, then 🧪 Windows run | Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile |  |
 
@@ -562,7 +560,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 21 of 42 merged</summary>
+<summary><b>M3</b> Depth and reach: 23 of 42 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -601,11 +599,11 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🔍 in review | #1146 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | ✅ merged | #1100 |
-| PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | 🔍 in review: Passed review; waits to merge | #1106 |
+| PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | ✅ merged | #1106 |
 | CB1 | Blend in sRGB-encoded space, so HTML overlays match a browser (normal_srgb, additive_srgb) | ✅ merged | #1109 |
 | CB2 | Item effects after placement, over the canvas | ✅ merged | #1111 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | 🔍 in review: Protocol 0.83; back in review after its renumber | #1104 |
-| CH1 | File filters such as Apply LUT on the program and output chains | 🔍 in review: Passed review (protocol 0.79); waits to merge | #1134 |
+| CH1 | File filters such as Apply LUT on the program and output chains | ✅ merged | #1134 |
 | LB1 | A local web browser source's first load passes on Linux | 🔍 in review | #1094 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | ⏳ planned: Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile |  |
 
