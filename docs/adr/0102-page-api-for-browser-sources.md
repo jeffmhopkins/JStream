@@ -122,10 +122,10 @@ it must never hand a page the control token (#347).
 7. **Shared values.** A new studio-level store of named values that pages and
    (later) timelines and text sources read. Each value is set over the protocol and MCP:
    - **Commands.** `values.set { name, value }` (`value: null` removes it), `values.list`,
-     and a `values.changed` event. MCP tools `values_set` and `values_list`. They are
-     **actions**, not edits ([R-ARCH-006](../RULES.md#R-ARCH-006),
-     [ADR-0013](0013-command-model.md)): a value that changes often must not fill the undo
-     history.
+     and a `values.changed` event. The MCP `values` tool (ops `values.set`,
+     `values.list`, per [R-API-002](../RULES.md#R-API-002)). They are **actions**, not
+     edits ([R-ARCH-006](../RULES.md#R-ARCH-006), [ADR-0013](0013-command-model.md)): a
+     value that changes often must not fill the undo history.
    - **Storage.** The engine holds values in memory. They are not collection state, not
      saved, and not `rev`. A collection that wants a value at start sets it from a
      timeline cue (#1059) or from the agent that builds the scene.
