@@ -162,7 +162,12 @@ each frame from one clock, so every item, mask and nested scene showing the same
 modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
 one, and give a keyframe scene its own list (`scene_id`) to calm or quicken it across a \
 `move`. Use `clock` `shown` for motion that should start fresh each time the item is \
-shown. Keep continuous motion \
+shown. For lights, meters or a logo that react to the music, use an `audio` modifier \
+instead of a page that fakes the beat: it follows the program mix (or a bus, `audio`, or \
+a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`high_hz`, \
+such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
+to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
+40% between beats. It hears only while an output runs. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. Changing `html` \
