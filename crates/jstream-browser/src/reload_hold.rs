@@ -6,9 +6,10 @@
 //! On Linux about one reload in seven painted that, either before the main frame's load
 //! ended (`OnLoadEnd`) or just after it, and it was always the first paint since the
 //! load start. So the hold lasts until both have happened: the load ended or failed,
-//! and the first paint since the load start was skipped. Or until [`DEADLINE`] after the
-//! load start, whichever comes first, so a page whose load never ends (a hung
-//! subresource) still shows. A load aborted by another doesn't end it: the load that
+//! and the first paint since the load start was skipped. [`DEADLINE`] after the load
+//! start counts as the load's end, so a page whose load never ends (a hung subresource)
+//! still shows, from its second paint: its first is still skipped, as it may be the
+//! blank even then (a render-blocking stylesheet can delay it past the deadline). A load aborted by another doesn't end it: the load that
 //! replaced it does. Only the latest reload's latest load start arms the deadline, so an
 //! earlier one's never cuts a later reload's hold short.
 //!
@@ -21,7 +22,8 @@
 
 use std::time::Duration;
 
-/// How long after the reloaded document starts loading its paints are held at most.
+/// How long after the reloaded document starts loading the hold stops waiting for the
+/// load to end. It still waits for the first paint since the load start.
 pub(crate) const DEADLINE: Duration = Duration::from_millis(500);
 
 /// How long after a hold ends the helper asks for a paint, if none went through by then.
@@ -32,6 +34,8 @@ pub(crate) const REPAINT_AFTER: Duration = Duration::from_millis(100);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Released {
     paints: u64,
+    /// The hold's last reload or load start: a later one's hold is not this one's.
+    armed: u64,
 }
 
 /// What becomes of one paint of the page.
@@ -85,11 +89,12 @@ impl ReloadHold {
         Some(self.armed)
     }
 
-    /// The deadline armed with `token` passed: releases the hold if no reload or load
-    /// start came since. Returns the release if it did.
+    /// The deadline armed with `token` passed: if no reload or load start came since, it
+    /// counts as the load's end. Returns the release if that ended the hold: it does once
+    /// the first paint since the load start was skipped.
     pub(crate) fn deadline(&mut self, token: u64) -> Option<Released> {
         if self.held && token == self.armed {
-            self.release()
+            self.load_finished()
         } else {
             None
         }
@@ -124,12 +129,13 @@ impl ReloadHold {
     /// [`REPAINT_AFTER`] after `released`: whether to ask CEF for a paint, because none
     /// went through since and no new hold began.
     pub(crate) fn needs_repaint(&self, released: Released) -> bool {
-        !self.held && self.paints == released.paints
+        !self.held && self.armed == released.armed && self.paints == released.paints
     }
 
     fn release(&mut self) -> Option<Released> {
         std::mem::take(&mut self.held).then_some(Released {
             paints: self.paints,
+            armed: self.armed,
         })
     }
 }
@@ -217,13 +223,17 @@ mod tests {
     }
 
     #[test]
-    fn a_page_that_paints_nothing_is_released_by_its_deadline() {
+    fn a_deadline_before_any_paint_still_skips_the_first() {
         let mut hold = ReloadHold::default();
         hold.reload();
         let token = hold.load_started().expect("held");
-        assert_eq!(hold.load_finished(), None);
-        assert!(hold.deadline(token).is_some());
-        assert_eq!(hold.deadline(token), None, "once");
+        // A render-blocking stylesheet keeps the page from painting past the deadline.
+        assert_eq!(hold.deadline(token), None, "still held");
+        assert!(
+            matches!(hold.paint(), Paint::SkipLast(_)),
+            "its first paint, maybe the blank, is skipped and ends the hold"
+        );
+        assert_eq!(hold.paint(), Paint::Send);
     }
 
     #[test]
@@ -263,6 +273,7 @@ mod tests {
         let aborted = hold.load_started().expect("held");
         // The load was aborted and replaced (a redirect) before its deadline.
         let replaced = hold.load_started().expect("held");
+        assert_eq!(hold.paint(), Paint::Skip);
         assert_eq!(hold.deadline(aborted), None);
         assert!(hold.deadline(replaced).is_some());
     }
@@ -290,6 +301,27 @@ mod tests {
         let released = hold.load_finished().expect("released");
         assert_eq!(hold.paint(), Paint::Send);
         assert!(!hold.needs_repaint(released));
+    }
+
+    #[test]
+    fn an_earlier_hold_s_repaint_is_not_a_later_one_s() {
+        let mut hold = ReloadHold::default();
+        hold.reload();
+        hold.load_started().expect("held");
+        assert_eq!(hold.load_finished(), None);
+        let Paint::SkipLast(first) = hold.paint() else {
+            panic!("the hold ends");
+        };
+        // Reloaded again before the first repaint is due, and released again.
+        hold.reload();
+        hold.load_started().expect("held");
+        assert_eq!(hold.paint(), Paint::Skip);
+        let second = hold.load_finished().expect("released");
+        assert!(
+            !hold.needs_repaint(first),
+            "it may fire right at the second load end"
+        );
+        assert!(hold.needs_repaint(second));
     }
 
     #[test]

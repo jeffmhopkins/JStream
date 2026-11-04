@@ -515,8 +515,8 @@ impl PageShared {
     }
 
     /// The main frame started loading a document (`OnLoadStart`, UI thread): while a
-    /// reload holds the page's paints, the hold ends [`reload_hold::DEADLINE`] from now
-    /// at the latest, so a load that never ends still shows (#1151).
+    /// reload holds the page's paints, [`reload_hold::DEADLINE`] from now counts as the
+    /// load's end, so a load that never ends still shows (#1151).
     pub(crate) fn load_started(self: &Arc<Self>) {
         let Some(token) = lock(&self.reloading).load_started() else {
             return;

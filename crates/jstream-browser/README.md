@@ -140,8 +140,8 @@ What follows is Windows; **On Linux** below says what differs.
   tells the helper which adapter to paint on, and shuts it down.
   A reload hides the page until the reloaded document paints for real: the helper skips
   the page's paints from the reload until the main frame's load has ended or failed and
-  the first paint since its start has been skipped, or 500 ms after that start at the
-  latest (`reload_hold.rs`), since Chromium's first paint of a new document can be its
+  the first paint since its start has been skipped, 500 ms after that start counting
+  as the load's end (`reload_hold.rs`), since Chromium's first paint of a new document can be its
   blank, opaque white (#1151). It asks for a paint 100 ms after the hold ends if none
   came, so a static page shows again. It says when it took the reload (`Reloading`), and the engine
   drops paints that left before that, so a `restart_on_show` page is transparent while
