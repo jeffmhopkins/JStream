@@ -54,9 +54,10 @@ its own.
 - `measure` is one of `level` (RMS of the latest window), `peak` (its peak absolute
   sample), `onset` (`AudioMeter`'s 0 to 1 jump above the recent average), or
   `band { low_hz, high_hz }`: the spectrum between the two frequencies, 20 Hz to
-  20 kHz with `low_hz < high_hz`, as an amplitude (the RMS of its bins, the square
-  root of their mean power), so it maps in dB like a level. A band narrower than one of the meter's
-  bands reads the band it falls in.
+  20 kHz with `low_hz < high_hz`, as an amplitude: the square root of the power of the
+  spectrum's bins in the band, summed and scaled so that a full-scale sine inside the
+  band reads 0 dBFS. It is never the power itself, so it maps in dB like a level. A band
+  narrower than one bin reads the bin it falls in.
 
 **3. How a measure becomes a value.** In order, each step a pure function in
 `jstream-anim` so a client previews what the engine draws:
