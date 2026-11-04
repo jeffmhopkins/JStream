@@ -160,7 +160,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   placed, Ctrl+A selects both, one nudge moves both as one edit, Shift-click on the
   canvas takes one out and Shift-click on its row in the sources list adds it back; a
   double click opens the item's Properties dialog with it selected, and a double click
-  on the canvas tools over an item leaves the selection alone.
+  on the canvas tools over an item leaves the selection alone; a row's lock button
+  locks the Backdrop, after which a drag selects it but leaves it in place, the readout
+  reads “640 × 360 · locked”, an arrow key sends nothing, and the item menu's checked
+  Lock unlocks it.
 - **Crop** (`crop.spec.js`): the Crop tool, C, V, Escape, the item menu's Crop and a
   switch of scene enter and leave crop mode, whose readout says there is no source size
   while the engine reports none, and then a handle drag resizes as usual; with `sourceSizes` giving the Backdrop's source a size,
@@ -181,7 +184,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
-  with its check following, Blending's Multiply replaces the checked Normal, and Paste
+  with its check following, Screenshot (source) shows a toast (the mock engine streams
+  no pictures, so it can't take one), Blending's Multiply replaces the checked Normal, and Paste
   stays off until Copy, then places the source again; a scene row's Show in multiview
   toggles its check, and Copy then Paste scene adds a copy of the scene; Copy filters
   from the Backdrop pastes its two video filters onto a nested Intro, a second paste
@@ -386,6 +390,12 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
+- **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
+  camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
+  top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
+  back and which draws the box smaller; Alt-drag on the canvas shows the camera's
+  readout, sends live values, and commits one `scene.set_camera` with a moved camera as
+  one revision, which one undo puts back.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the

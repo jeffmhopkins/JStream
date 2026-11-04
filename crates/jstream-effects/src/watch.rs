@@ -197,6 +197,15 @@ impl PackWatcher {
         }
     }
 
+    /// Makes the next [`Self::poll`] reload the pack folder `dir`, whatever its files'
+    /// stamps say: for a host that replaced the folder, whose new files may keep the old
+    /// ones' sizes and times.
+    pub fn mark_stale(&mut self, dir: &Path) {
+        if let Some(folder) = self.folders.get_mut(dir) {
+            folder.stamp.clear();
+        }
+    }
+
     /// The packs loaded now, by folder.
     pub fn packs(&self) -> impl Iterator<Item = &Pack> {
         self.folders.values().filter_map(|f| f.pack.as_ref())
@@ -211,6 +220,16 @@ impl PackWatcher {
     pub fn source(&self, kind_id: &str) -> Option<&ShaderSource> {
         self.packs().find_map(|p| p.source(kind_id))
     }
+}
+
+/// Loads the pack in `dir` as a poll loads one: on a [`LOAD_THREAD`], a panic caught and
+/// returned as [`PackError::Panicked`]. For a host that checks a pack before it puts it
+/// where the watcher reads (ADR-0097's staging folder).
+///
+/// # Errors
+/// What [`Pack::load`] fails with, or [`PackError::Panicked`].
+pub fn load_pack(dir: &Path, prelude: &str) -> Result<Pack, PackError> {
+    load_caught(Pack::load, dir, prelude)
 }
 
 /// The name of the thread each pack loads on. A panic there is caught and becomes

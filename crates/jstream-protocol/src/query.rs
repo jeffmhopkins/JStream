@@ -20,6 +20,7 @@ use crate::mix::VideoMixInfo;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
+use crate::profile::ProfileInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{
@@ -179,6 +180,28 @@ pub enum Query {
     /// that shows once it restarts.
     #[serde(rename = "font.list")]
     FontList,
+    /// Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by
+    /// pack ID: each one's folder, its kinds while it loads, and the client that last
+    /// wrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left
+    /// out. Packs are not collection state, so no `rev`. Fails with `unsupported` from an
+    /// engine that loads no packs.
+    #[serde(rename = "pack.list")]
+    PackList,
+    /// Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and
+    /// `.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,
+    /// a file's `text` is left out; read it by `path`. With `path`, only that file, and
+    /// an image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which
+    /// only a person can have put there, fails with `too_large`. Fails with `not_found`
+    /// (entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it
+    /// doesn't have, and `unsupported` from an engine that loads no packs.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack ID.
+        pack: String,
+        /// One file of it, `/`-separated. Omitted for every file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -220,6 +243,24 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
+    /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
+    /// drawing thread, per unit of drawing work and its owner (a source's upload or
+    /// chain, a scene's chain or pass, an item's effects, an output's chain), per
+    /// source, the planner, and the CPU of each thread of the process. The engine
+    /// measures all the time, so it needs no start. Runtime state: the result carries
+    /// no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// The window, in seconds, from 1 to 60
+        /// ([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window
+        /// longer than the engine has read for covers what it has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seconds: Option<u32>,
+        /// At most this many entries in each list, the costliest. Omitted, 20; above 200
+        /// ([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -283,10 +324,13 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
             Query::FontList => "font.list",
+            Query::PackList => "pack.list",
+            Query::PackRead { .. } => "pack.read",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
+            Query::ProfileGet { .. } => "profile.get",
         }
     }
 }
@@ -564,6 +608,18 @@ pub enum QueryResult {
         /// The installed fonts, ordered by family, then style, then path.
         fonts: Vec<FontInfo>,
     },
+    /// The result of `pack.list`.
+    #[serde(rename = "pack.list")]
+    PackList {
+        /// The packs, ordered by ID.
+        packs: Vec<crate::PackInfo>,
+    },
+    /// The result of `pack.read`.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack's files, ordered by path: every file, or the one `path` named.
+        files: Vec<crate::PackFileInfo>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -598,6 +654,13 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
+    /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// Where the time went.
+        #[serde(flatten)]
+        profile: ProfileInfo,
+    },
 }
 
 impl QueryResult {
@@ -627,10 +690,13 @@ impl QueryResult {
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::FontList { .. } => "font.list",
+            QueryResult::PackList { .. } => "pack.list",
+            QueryResult::PackRead { .. } => "pack.read",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
+            QueryResult::ProfileGet { .. } => "profile.get",
         }
     }
 }
@@ -954,6 +1020,11 @@ pub struct ItemInfo {
     /// empty, so missing (also from an older server) parses as none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<FilterInfo>,
+    /// Whether its canvas box is locked (ADR-0096, since 0.71): see
+    /// [`Edit::ItemSetLocked`](crate::Edit::ItemSetLocked). Omitted while unlocked, so
+    /// missing (also from an older server) parses as unlocked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 fn opaque() -> Finite32 {
