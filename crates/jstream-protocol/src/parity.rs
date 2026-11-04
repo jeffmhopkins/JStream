@@ -599,6 +599,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         role: SceneRole::Group,
                         transition_in: None,
                         transition_out: None,
+                        camera_motion: Vec::new(),
+                        camera_follow: None,
                         items: items_of_b(),
                         folder: None,
                         meta: Default::default(),
@@ -614,6 +616,8 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         role: SceneRole::Scene,
                         transition_in: None,
                         transition_out: None,
+                        camera_motion: Vec::new(),
+                        camera_follow: None,
                         items: items_of_a(),
                         folder: None,
                         meta: Default::default(),
@@ -798,9 +802,9 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::ItemSetOpacity {
                 item_id: ItemId::new("i1"),
                 scene_id: None,
-                opacity: finite(1.5),
+                opacity: finite(4.5),
             }),
-            invalid("edits.0.opacity", "must be from 0 to 1"),
+            invalid("edits.0.opacity", "must be from 0 to 4"),
         ),
         (
             Batch::single(Edit::ItemAdd {
@@ -812,7 +816,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 opacity: Some(finite(-0.5)),
                 blend: None,
             }),
-            invalid("edits.0.opacity", "must be from 0 to 1"),
+            invalid("edits.0.opacity", "must be from 0 to 4"),
         ),
         (
             Batch::single(Edit::ItemSetGeometry {
@@ -2409,6 +2413,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
         locked: false,
+        motion: Vec::new(),
         effects_space: crate::EffectsSpace::Box,
     };
     vec![
@@ -2425,6 +2430,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
             locked: false,
+            motion: Vec::new(),
             effects_space: crate::EffectsSpace::Box,
         },
         plain("i1", "cam_copy"),
@@ -2447,6 +2453,7 @@ fn items_of_b() -> Vec<ItemInfo> {
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
         locked: false,
+        motion: Vec::new(),
         effects_space: crate::EffectsSpace::Box,
     }]
 }

@@ -1000,10 +1000,7 @@ impl Control for PluginControl {
             Executed::Pending(reply, _span) => Box::pin(async move {
                 reply
                     .await
-                    .map(|result| Response {
-                        id,
-                        result: CallResult::Query { result },
-                    })
+                    .map(|result| Response { id, result })
                     .map_err(ControlError::from)
             }),
         }

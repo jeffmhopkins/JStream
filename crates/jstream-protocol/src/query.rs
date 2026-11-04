@@ -2,11 +2,13 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
+use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
+use crate::frames::{FrameSheet, FrameStrip};
 use crate::geometry::{Canvas, ItemGeometry, PlacementForm, SceneCamera};
 use crate::hotkey::HotkeyBinding;
 use crate::id::{
@@ -17,6 +19,7 @@ use crate::keyframe::ItemOverride;
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
+use crate::motion::MotionModifier;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
@@ -79,6 +82,26 @@ pub enum Query {
     /// runtime state and can change without a new `rev`.
     #[serde(rename = "video.snapshot")]
     VideoSnapshot,
+    /// A frame sheet (since 0.82, #1061): `count` pictures of the program mix, or of
+    /// `scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be
+    /// checked in one call. The first is taken `delay_ms` after the call. The answer
+    /// comes once the last picture is drawn, so the call takes at least `delay_ms +
+    /// (count - 1) × interval_ms`. Each picture is what that mix or scene shows at that
+    /// moment, as `video.snapshot` draws it: a running transition where it is then,
+    /// each source's latest frame, and nothing for a display, window or camera capture.
+    /// A scene off program shows what its preview stream would. Fails with
+    /// `invalid_argument` past the [`FrameStrip`] limits, and `not_found` for a scene not
+    /// in the collection, at the call or when a picture is due. To watch a switch from
+    /// its start, use `scene.switch_and_watch`.
+    #[serde(rename = "video.frames")]
+    VideoFrames {
+        /// When to take the pictures.
+        #[serde(flatten)]
+        strip: FrameStrip,
+        /// The scene to show alone. Omitted for the program mix.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
     /// Lists every kind the engine can create, ordered by ID. Kinds are not collection
     /// state, so the result carries no `rev`.
     #[serde(rename = "kind.list")]
@@ -328,6 +351,7 @@ impl Query {
             Query::ItemList { .. } => "item.list",
             Query::StateGet => "state.get",
             Query::VideoSnapshot => "video.snapshot",
+            Query::VideoFrames { .. } => "video.frames",
             Query::KindList => "kind.list",
             Query::KindDescribe { .. } => "kind.describe",
             Query::OutputList => "output.list",
@@ -488,6 +512,13 @@ pub enum QueryResult {
         height: u32,
         /// The PNG file, standard base64 with padding and no line breaks.
         png: String,
+    },
+    /// The result of `video.frames`: the frame sheet.
+    #[serde(rename = "video.frames")]
+    VideoFrames {
+        /// The sheet.
+        #[serde(flatten)]
+        sheet: FrameSheet,
     },
     /// The result of `kind.list`.
     #[serde(rename = "kind.list")]
@@ -708,6 +739,7 @@ impl QueryResult {
             QueryResult::ItemList { .. } => "item.list",
             QueryResult::StateGet { .. } => "state.get",
             QueryResult::VideoSnapshot { .. } => "video.snapshot",
+            QueryResult::VideoFrames { .. } => "video.frames",
             QueryResult::KindList { .. } => "kind.list",
             QueryResult::KindDescribe { .. } => "kind.describe",
             QueryResult::OutputList { .. } => "output.list",
@@ -947,6 +979,16 @@ pub struct SceneInfo {
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
+    /// Its camera motion (ADR-0113, since 0.85): the modifiers that change its camera as it is drawn.
+    /// It belongs to the family, so a keyframe scene reports none and draws its parent's.
+    /// Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub camera_motion: Vec<CameraMotionModifier>,
+    /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
+    /// belongs to the family, so a keyframe scene reports none and draws its parent's.
+    /// Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_follow: Option<CameraFollow>,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
@@ -1040,8 +1082,9 @@ pub struct ItemInfo {
     pub crop: Crop,
     /// Whether it is drawn.
     pub visible: bool,
-    /// Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)
-    /// parses as 1.
+    /// Its opacity, from 0 to `MAX_OPACITY` (4): up to 1 an alpha multiplier, and above 1
+    /// (since 0.83, #1101) a gain on its light, as `item.set_opacity` sets it. Missing
+    /// (from a server older than this field) parses as 1.
     #[serde(default = "opaque")]
     pub opacity: Finite32,
     /// How it composites onto what is below it. Missing parses as `normal`.
@@ -1062,6 +1105,12 @@ pub struct ItemInfo {
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub locked: bool,
+    /// Its motion modifiers (ADR-0099, since 0.81), first first, which move it on the
+    /// engine's animation clock as each frame is drawn: see [`MotionModifier`]. Written
+    /// whole by `item.set_motion`. Omitted while empty, so missing (also from an older
+    /// server) parses as none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion: Vec<MotionModifier>,
     /// Where its effects run (ADR-0106, since 0.76): see
     /// [`Edit::ItemSetEffectsSpace`](crate::Edit::ItemSetEffectsSpace). Omitted while
     /// `box`, so missing (also from an older server) parses as `box`.
