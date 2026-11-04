@@ -360,7 +360,8 @@ impl Host {
             hidden: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
-            reloading: Mutex::new(ReloadHold::default()),
+            // Held from the start, so the first load's white paint is skipped (#1155).
+            reloading: Mutex::new(ReloadHold::opening()),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -460,9 +461,10 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
-    /// Held from a reload until the reloaded document has loaded and its first paint was
-    /// skipped (`reload_hold.rs`): the old document's paints and the new one's first,
-    /// which can be opaque white (#1151), are skipped, so the engine shows neither. A paint holds the lock from its check until its frame is
+    /// Held from the page's opening (#1155) or a reload until the document has loaded and
+    /// its first paint was skipped (`reload_hold.rs`): the old document's paints and the
+    /// new one's first, which can be opaque white (#1151), are skipped, so the engine
+    /// shows neither. A paint holds the lock from its check until its frame is
     /// sent, and a reload holds it until [`ToEngine::Reloading`] is sent, so no old frame
     /// follows that message.
     reloading: Mutex<ReloadHold>,
