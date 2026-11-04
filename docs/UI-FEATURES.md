@@ -452,7 +452,9 @@ not remove them; they move into the prototype's look.
   and folders when it asks for them. It opens after an install that asks for more than
   `read`, and grants and turns on, in one step, a plugin whose update needs a grant.
 - 3D scenes on the canvas ([ADR-0094](adr/0094-scene-cameras.md)): outlines go through
-  the camera with `jstream-protocol`'s `project_seen`, so they lie on the picture; a
+  the camera as the compositor draws the box, `jstream-protocol`'s `drawn_polygon_seen`
+  clipped to the near plane, so they lie on the picture and a box partly behind the
+  camera is outlined and hit by its front (#1054); a
   click hits the box the engine draws on top (the nearest along the view with Nearest on
   top, else stacking order). Dragging a box moves it in its own depth plane, under the
   pointer, with no snapping; a 3D scene's boxes have no resize or rotate handles, which

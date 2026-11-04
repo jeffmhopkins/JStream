@@ -4,14 +4,16 @@
 //!
 //! The engine draws the picture under the boxes. This module only has to agree with
 //! it, and it does so through the same `jstream-protocol` functions the compositor
-//! uses (`project_seen`, `CameraView::depth_of` and `CameraView::on_plane`).
+//! uses (`drawn_polygon_seen`, clipped to the near plane as the compositor clips it,
+//! `CameraView::depth_of` and `CameraView::on_plane`).
 //!
-//! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md
+//! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md,
+//! docs/adr/0111-camera-up-at-the-poles.md
 
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
-    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, Placed, SceneCamera,
-    SceneId, Size, Vec2, Vec3,
+    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, SceneCamera, SceneId,
+    Size, Vec2, Vec3,
 };
 
 /// The camera an orbit or dolly shows until the collection has it, kept with the scene it
@@ -83,20 +85,6 @@ pub const MIN_DOLLY_PX: f32 = 10.0;
 /// refuse it.
 pub fn view(camera: Option<SceneCamera>, canvas: Canvas) -> Option<CameraView> {
     camera?.view(canvas).ok()
-}
-
-/// The box's four corners on the canvas through `view`, or `None` when any is behind the
-/// camera or not finite.
-pub fn corners(geometry: &ItemGeometry, view: &CameraView) -> Option<[Point; 4]> {
-    let quad = geometry.project_seen(Some(view)).ok()?;
-    let mut out = [Point { x: 0.0, y: 0.0 }; 4];
-    for (slot, corner) in out.iter_mut().zip(quad.corners) {
-        let Placed::At(at) = corner else {
-            return None;
-        };
-        *slot = Point { x: at.x, y: at.y };
-    }
-    Some(out)
 }
 
 /// The part of the box in front of the camera, as the compositor draws it: the whole box
@@ -287,7 +275,22 @@ pub fn finite(value: f32, fallback: Finite32) -> Finite32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::FitMode;
+    use jstream_control::protocol::{FitMode, Placed};
+
+    /// The box's four corners through `view` by `project_seen`, or `None` when any is
+    /// behind the camera or not finite: what `polygon` agrees with for a box wholly in
+    /// front.
+    fn corners(geometry: &ItemGeometry, view: &CameraView) -> Option<[Point; 4]> {
+        let quad = geometry.project_seen(Some(view)).ok()?;
+        let mut out = [Point { x: 0.0, y: 0.0 }; 4];
+        for (slot, corner) in out.iter_mut().zip(quad.corners) {
+            let Placed::At(at) = corner else {
+                return None;
+            };
+            *slot = Point { x: at.x, y: at.y };
+        }
+        Some(out)
+    }
 
     const CANVAS: Canvas = Canvas {
         width: 1920,

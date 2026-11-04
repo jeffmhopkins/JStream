@@ -92,10 +92,9 @@ so no item field is added:
   It is kept, so removing the camera brings the item's own perspective back.
 
 **3. The camera's projection.** The camera looks from `position` toward `target`. The
-picture's up is world `−y` (up on the canvas). Within 0.01° of straight down it is world
-`−z`, and within 0.01° of straight up world `+z`: the up a camera facing `−z` has as it
-tilts to either pole, so an orbit to the pole doesn't turn the picture over (#1047).
-`roll_deg` then turns the picture clockwise. A point at distance `D` along the viewing axis lands at the canvas centre plus `f · (X, Y) / D`, where
+picture's up is world `−y` (up on the canvas), or world `−z` when the camera looks within
+0.01° of straight up or down. `roll_deg` then turns the picture clockwise. A point at
+distance `D` along the viewing axis lands at the canvas centre plus `f · (X, Y) / D`, where
 `(X, Y)` are its right and down offsets from the axis and `f = (canvas height / 2) /
 tan(fov / 2)` is the focal length in pixels.
 - In ADR-0050's terms this is the same homogeneous map with `w = D / f`. So the near plane
@@ -166,9 +165,8 @@ space, the framing camera and how to animate a camera with keyframe scenes.
     different once its scene gets a camera: `depth_px` moves it toward the camera, its
     angles gain the camera's perspective, and its own perspective is ignored. The UI
     says so when it turns a scene's camera on;
-  - the UI's canvas has no handles in a 3D scene: dragging an item moves it on the plane
-    of constant depth through it (`z = depth_px`, `CameraView::on_plane`), not along
-    screen axes and not in a tilted item's own plane.
+  - the UI's canvas handles in a 3D scene work in the item's plane through `unplace`, so
+    dragging an item moves it in its own plane, not along screen axes.
 - **Not decided here:**
   - groups that share their parent's 3D space (CSS `preserve-3d`), which would flatten
     the group into the parent's sort;

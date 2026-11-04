@@ -29,8 +29,9 @@ pub const MIN_CAMERA_DISTANCE: f32 = 0.001;
 pub const MAX_BLUR_PX: f32 = 64.0;
 
 /// Within this angle of straight up or down, a camera's picture takes world `−z` as up
-/// looking down and `+z` looking up, the up a camera facing `−z` has as it tilts to the
-/// pole, so the picture doesn't turn over there (ADR-0094 decision 3, #1047).
+/// looking down and `+z` looking up: the up a camera facing `−z` has as it tilts to that
+/// pole, so such a camera's picture doesn't turn over there (ADR-0111, amending ADR-0094
+/// decision 3; #1047). A camera facing another way still turns over at a pole.
 const UP_FALLBACK_DEG: f64 = 0.01;
 
 /// A point or a direction in a scene's 3D space, in scene pixels: x right, y down, z
