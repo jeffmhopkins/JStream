@@ -114,6 +114,14 @@ pub trait Source: Send {
         None
     }
 
+    /// The 3D model this source shows (ADR-0107), for the `model` kind: when it is
+    /// `Some`, the engine draws the model where an item places the source, and
+    /// [`frame`](Self::frame) is only a transparent stand-in of the model's size. `None`
+    /// (the default) for every other kind, and for a model with nothing to draw.
+    fn model(&self) -> Option<ShownModel> {
+        None
+    }
+
     /// The source's own audio, for kinds that produce sound as well as frames
     /// (`browser`), which the engine records into a mixer input as it records a device.
     /// `None` (the default) means the source has none. The same source returns the same
@@ -121,6 +129,17 @@ pub trait Source: Send {
     fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
         None
     }
+}
+
+/// A `model` source's picture ([`Source::model`]): the model, built off the render
+/// thread, and how it is lit. A new [`Model::version`](jstream_media::model::Model::version)
+/// is a new model to upload; the same version is the same one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShownModel {
+    /// The model.
+    pub model: Arc<jstream_media::model::Model>,
+    /// How it is lit.
+    pub lighting: jstream_media::model::Lighting,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.

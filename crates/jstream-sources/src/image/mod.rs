@@ -1,6 +1,6 @@
 //! The `image` source: a PNG, JPEG, WebP or GIF file, animated when the file is.
 
-mod decode;
+pub(crate) mod decode;
 
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
