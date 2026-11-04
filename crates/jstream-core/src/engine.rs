@@ -2415,6 +2415,14 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many times the live sources painted `source_id` (ADR-0103's meters), for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn paints(&self, source_id: &str) -> u64 {
+        let meters = lock(&self.shared.state).live.meters();
+        meters.paints(&SourceId::new(source_id))
+    }
+
     /// Forgets every source's size without telling anyone, as if plans had taken new
     /// frames since the last `sync_sizes`, so a test sees which re-plan catches up.
     #[cfg(test)]

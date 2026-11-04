@@ -566,7 +566,8 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`) only
+  while a mix draws it (`a_waveform_no_mix_draws_is_not_painted`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
@@ -1670,9 +1671,13 @@ FFT each 1/30 s, `chat_message`, which redraws when another message is featured,
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
-them ahead on a thread of its own, so the plan's `frame` calls under the lock never
-draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+zeros. The thread paints only the painters the latest round of plans looked at, the
+program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
+while something else re-plans every frame; a plan that reaches one again paints it for
+the current time first, under the lock, so it never shows the frame it had when it was
+last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
+them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
+calls under the lock never draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
@@ -2731,7 +2736,8 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
-each live source for a frame it already has. The snapshot compositor belongs to the snapshot
+each live source for a frame it already has, apart from one catch-up paint of a painter
+a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
