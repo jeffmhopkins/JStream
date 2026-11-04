@@ -3,7 +3,7 @@
 import fs from 'fs';
 const yml = fs.readFileSync(new URL("../workflows/review-gate.yml", import.meta.url), 'utf8');
 const block = yml.slice(yml.indexOf('// BEGIN decide'), yml.indexOf('// END decide'));
-const { decide, carryCandidate, sameChange } = new Function(block + '\nreturn { decide, carryCandidate, sameChange };')();
+const { decide, carryCandidate, sameChange, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, sameChange, onlyBaseMerges };')();
 const H = 'a'.repeat(40), OLD = 'b'.repeat(40);
 const mk = (verdict, round, opts = {}) => ({
   author_association: opts.assoc ?? 'OWNER',
@@ -57,4 +57,14 @@ eq('differ: extra file', sameChange([f('a.rs', P1)], [f('a.rs', P1), f('c.rs', '
 eq('differ: status', sameChange([f('a.rs', P1)], [f('a.rs', P1, 'added')]), false);
 eq('closed: no patch', sameChange([f('a.png', undefined)], [f('a.png', undefined)]), false);
 eq('closed: 300 files', sameChange(Array.from({ length: 300 }, (_, i) => f(`f${i}`, '+x')), Array.from({ length: 300 }, (_, i) => f(`f${i}`, '+x'))), false);
+eq('closed: files missing', sameChange(null, null), false);
+const M = { parents: 2, parentInBase: true, files: null };
+const R = { parents: 1, parentInBase: false, files: ['docs/verified.toml'] };
+eq('merges: a base merge', onlyBaseMerges([M]), true);
+eq('merges: a base merge then a ledger restamp', onlyBaseMerges([M, R]), true);
+eq('merges: a merge of a branch not in the base', onlyBaseMerges([{ ...M, parentInBase: false }]), false);
+eq('merges: a plain commit that moves a line (#1132 B1)', onlyBaseMerges([M, { parents: 1, parentInBase: false, files: ['src/x.rs'] }]), false);
+eq('merges: a restamp that also touches code', onlyBaseMerges([{ ...R, files: ['docs/verified.toml', 'src/x.rs'] }]), false);
+eq('merges: files unknown', onlyBaseMerges([{ ...R, files: null }]), false);
+eq('merges: an octopus merge', onlyBaseMerges([{ ...M, parents: 3 }]), false);
 process.exit(fails ? 1 : 0);

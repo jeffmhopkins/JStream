@@ -50,13 +50,6 @@ riskier than one that landed without the merge. Re-reviewing it buys little.
 - **The success description says so**, naming the reviewed SHA and this ADR, and it
   dispatches the after-review jobs for the new head as any pass does
   ([ADR-0054](0054-platform-ci-after-review.md)). CI still runs on every push.
-- **When the diff did change, a merge-only head still gets a lighter round.** If the
-  commits after the passed head only merge the base branch in, plus ledger and
-  `@generated` restamps, but the conflict resolutions changed the PR's lines, the reviewer
-  reviews only those commits: the remerge-diff of each merge, the restamped sections, and
-  the rules and sections that now apply to the PR's files
-  ([REVIEW › Gather](../../REVIEW.md#gather) item 6). A protocol renumber or regenerated
-  snapshots beyond the merge's own conflicts still get a full review.
 - The decision function stays self-contained in the workflow file, and `gate-test` tests
   it, including `sameChange` and `carryCandidate`.
 

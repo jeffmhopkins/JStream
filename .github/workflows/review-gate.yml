@@ -106,21 +106,41 @@ jobs:
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
 
             // 4. ADR-0109: a pass carries across merges of the base branch. When the head has no
-            //    verdict, and the latest reviewed head is an ancestor of it whose PR diff (against
-            //    the base branch, ignoring the stamp ledger) is the same as the head's, that
-            //    review's verdict stands for the head. Any doubt (an API error, a truncated
-            //    file list, a file without a patch) leaves it pending, as before.
+            //    verdict, the latest reviewed head is an ancestor of it, every commit since
+            //    merges the base branch in (or only restamps the ledger), and the PR's diff
+            //    against the base branch is the same at both, that review's verdict stands for
+            //    the head. Any doubt (an API error, a truncated list, a file without a patch)
+            //    leaves it pending, as before.
             let carry = null;
             const from = carryCandidate(comments, head);
             if (from) {
               try {
-                const { data: path } = await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead: `${from}...${head}`, per_page: 1 });
-                if (path.status === 'ahead') {
-                  const files = async (sha) => (await github.rest.repos.compareCommitsWithBasehead({
-                    owner, repo, basehead: `${pr.base.sha}...${sha}`, per_page: 300,
-                  })).data.files ?? [];
+                const cmp = async (basehead, per_page) =>
+                  (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead, per_page })).data;
+                const path = await cmp(`${from}...${head}`, 100);
+                const commits = [];
+                if (path.status === 'ahead' && path.total_commits <= 100 && path.commits.length === path.total_commits) {
+                  for (const c of path.commits) {
+                    const entry = { parents: c.parents.length, parentInBase: false, files: null };
+                    if (c.parents.length === 2) {
+                      // A merge of the base: one parent is the base branch's tip or behind it.
+                      for (const p of c.parents) {
+                        const st = (await cmp(`${p.sha}...${pr.base.sha}`, 1)).status;
+                        if (st === 'ahead' || st === 'identical') entry.parentInBase = true;
+                      }
+                    } else if (c.parents.length === 1) {
+                      const { data: one } = await github.rest.repos.getCommit({ owner, repo, ref: c.sha, per_page: 100 });
+                      entry.files = (one.files ?? null) && one.files.map((f) => f.filename);
+                    }
+                    commits.push(entry);
+                  }
+                }
+                if (commits.length > 0 && onlyBaseMerges(commits)) {
+                  const files = async (sha) => (await cmp(`${pr.base.sha}...${sha}`, 300)).files ?? null;
                   if (sameChange(await files(from), await files(head))) carry = { from };
                   else core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
+                } else {
+                  core.info(`commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
                 }
               } catch (e) {
                 core.warning(`could not compare ${from.slice(0, 7)} with ${head.slice(0, 7)}: ${e.message}`);
@@ -163,10 +183,21 @@ jobs:
             // moved under them. docs/verified.toml is left out: a merge restamps it. Fails
             // closed on a file without a patch (binary or too large) or a list of 300 files,
             // which may be truncated.
+            // ADR-0109: whether the commits after the reviewed head only merge the base branch
+            // in. Each is { parents, parentInBase, files }: a merge must have a parent that is in
+            // the base branch; any other commit must have one parent and touch only the stamp
+            // ledger (a `docs verify --merge` restamp). Anything else, or files unknown, is no.
+            function onlyBaseMerges(commits) {
+              return commits.every((c) =>
+                c.parents === 2 ? c.parentInBase
+                  : c.parents === 1 && Array.isArray(c.files) && c.files.length > 0
+                    && c.files.every((f) => f === 'docs/verified.toml'));
+            }
+
             function sameChange(a, b) {
               const ledger = 'docs/verified.toml';
               const key = (files) => {
-                if (files.length >= 300) return null;
+                if (!Array.isArray(files) || files.length >= 300) return null;
                 const out = [];
                 for (const f of files) {
                   if (f.filename === ledger) continue;
