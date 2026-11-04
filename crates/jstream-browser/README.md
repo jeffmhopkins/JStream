@@ -138,10 +138,12 @@ What follows is Windows; **On Linux** below says what differs.
   helper does with CEF's `WasHidden` on its UI thread, so a hidden page stops painting;
   a hide sent before the browser exists applies when it arrives, #1071), closes it,
   tells the helper which adapter to paint on, and shuts it down.
-  A reload hides the page until the reloaded document has loaded: the helper skips the
-  page's paints from the reload until the main frame's load ends or fails
-  (`reload_hold.rs`), since Chromium can paint the new document once before its style,
-  opaque white (#1151), and says when it took the reload (`Reloading`), and the engine
+  A reload hides the page until the reloaded document paints for real: the helper skips
+  the page's paints from the reload until the main frame's load has ended or failed and
+  the first paint since its start has been skipped, or 500 ms after that start at the
+  latest (`reload_hold.rs`), since Chromium's first paint of a new document can be its
+  blank, opaque white (#1151). It asks for a paint 100 ms after the hold ends if none
+  came, so a static page shows again. It says when it took the reload (`Reloading`), and the engine
   drops paints that left before that, so a `restart_on_show` page is transparent while
   it reloads, never the end of its last run nor a white frame. The helper sends
   frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for

@@ -337,6 +337,19 @@ wrap_load_handler! {
     }
 
     impl LoadHandler {
+        fn on_load_start(
+            &self,
+            _browser: Option<&mut Browser>,
+            frame: Option<&mut Frame>,
+            _transition_type: TransitionType,
+        ) {
+            if let Some(frame) = frame
+                && frame.is_main() == 1
+            {
+                self.page.0.load_started();
+            }
+        }
+
         fn on_load_error(
             &self,
             _browser: Option<&mut Browser>,
@@ -345,8 +358,8 @@ wrap_load_handler! {
             _error_text: Option<&CefString>,
             _failed_url: Option<&CefString>,
         ) {
-            // An aborted load was replaced by another, whose end ends the hold; the old
-            // document may still be the one painting until then.
+            // An aborted load was replaced by another, whose end or deadline ends the
+            // hold; the old document may still be the one painting until then.
             if let Some(frame) = frame
                 && frame.is_main() == 1
                 && error_code != Errorcode::ABORTED
