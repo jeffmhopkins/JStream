@@ -2544,10 +2544,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   disconnect does.
 - **Disabling.** A plugin that traps, runs out of fuel, runs past its deadline or grows
   its memory or table past the cap while handling an event is disabled: its subscription
-  closes, its instance drops, a warning is logged, and `plugin.state_changed` carries
-  `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
+  closes, its instance drops, a warning is logged, `plugins.json` is saved, and then
+  `plugin.state_changed` carries `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
   makes growing past one a trap, `Error::MemoryLimit`) or `trap` (anything else). The
-  engine never re-enables it. `plugin.enable` reads the package again and loads it as an
+  engine never re-enables it. Since the save comes before the event, no save from that
+  run lands after a client that saw the event has rewritten the file (#1123).
+  `plugin.enable` reads the package again and loads it as an
   install does, answering `action_failed` if that fails, which leaves it disabled; for a
   running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
   with `not_found` for a plugin that isn't installed.
