@@ -482,7 +482,8 @@ not remove them; they move into the prototype's look.
   encoder or a profile asks for software H.264, and the encoder form offers it under the
   hardware choice while the draft would need it. Each offer names Cisco, shows Cisco's
   notice with a link to its licence and the licence's full text under "Licence terms", and downloads only when the person presses its
-  button; once installed, the notice and link stay beside a Delete button.
+  button; once installed, the notice and link stay beside a Delete button, and About
+  lists it with the notice, link and terms ([HD-10](#header)).
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.
 - Settings forms generated from kind descriptors, with groups, advanced settings,
