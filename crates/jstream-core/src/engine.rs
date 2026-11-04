@@ -2378,6 +2378,22 @@ impl Engine {
         lock(&self.shared.state).audio.packets(source_id)
     }
 
+    /// Audio source `source_id`'s mixer input and its chain's filters, as the program
+    /// stage's last pass saw them, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_keyed(&self, source_id: &SourceId) -> Option<crate::audio_sources::Keyed> {
+        lock(&self.shared.state).audio.keyed(source_id)
+    }
+
+    /// The same, as the first pass that recorded `source_id` saw it, for tests.
+    #[cfg(test)]
+    pub(crate) fn first_audio_keyed(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::Keyed> {
+        lock(&self.shared.state).audio.first_keyed(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {

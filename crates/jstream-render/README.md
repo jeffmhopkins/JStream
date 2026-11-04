@@ -123,6 +123,10 @@ and calls this crate.
   a hardware adapter first by default (`OpenOptions::hardware`), with the software
   adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
   holds on a machine with no GPU. `OpenOptions::headless` asks for software first.
+  On Linux that software adapter is Mesa's lavapipe Vulkan driver: without it there is
+  no adapter at all, and `RenderError::NoAdapter` ends with `NO_ADAPTER_HINT`, which
+  names the package to install. `adapter_available` checks for any adapter without
+  opening a device, for a host's startup warning (#1073).
 - A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
   a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
   linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
@@ -474,6 +478,23 @@ drawable bound seen from close by, draws nothing rather than failing the frame, 
 vertex the edge push can't move stays where it was. A camera that `SceneCamera::view`
 refuses makes the render `RenderError::Invalid` (`camera`), as a bad opacity does; the
 engine only passes cameras the graph accepted.
+
+**Depth of field.** A camera with `focus_px` and a `blur_px` above 0
+([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) blurs each fragment by its own
+distance along the view: `Shape.dof` carries the focus as a `w` (`focus / f`), the far
+blur and the shape's largest blur to every vertex, and `composite.wgsl`'s `source` works
+out `r = blur · |w − focus| / w`, at most that largest blur and 64 px, from the
+fragment's interpolated `w`. Under half a pixel it takes the
+one sample as before. Otherwise it averages 16 taps on a golden-angle spiral over the
+disc, turned per pixel, each read through `textureSampleGrad` at the mip level of the
+taps' spacing (explicit gradients are allowed in the branch), and widens the edge
+coverage to `clamp(d / 2r + 0.5)`. `place` pushes every vertex out by the larger of a
+pixel and the largest blur radius of the shape's corners (`CameraView::blur_at`), the
+largest on a plane; past the edge `w` runs on beyond the corners', so the cap keeps the
+soft edge inside the push and it falls off whole.
+Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's
+layer (ADR-0107, below) is placed flat, so its `dof` is zero and depth of field doesn't
+blur it yet.
 
 **Models.** `draw_model` asks `ItemGeometry::solid` (in `jstream-protocol`) for the map
 from the model's space to the viewing frame, composed in `f64` relative to the camera,
@@ -924,7 +945,19 @@ back with `unplace_seen`:
 
 The set's floor is minified toward the horizon as in C, so its limit is C's kind. A
 third checks the draw order: a far item stacked above a near one is drawn under it
-with `depth_sort` on, and over it with it off.
+with `depth_sort` on, and over it with it off. Four check depth of field
+([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) against the same draw without
+it, measured in linear light: an item on the focus plane is within 2 code values of
+it everywhere, and one blurred by 8 px keeps its mean (77.5 both, on lavapipe) while its
+pattern's spread falls from 23.8 to 1.1 (limit: half) and its edge widens from 1 px to
+12 (limit: 7 to 20); and of two items, the one 600 px away blurs (spread 15.9 to 4.4,
+limit 0.6 times) while the one on the focus plane keeps its spread within 1. A plane
+tilted 60° and focused at its near end blurs along itself: its far band's spread falls
+from 25.3 to 9.1 (limit: half) and its near band's from 23.3 to 20.0 (limit: 0.8 times).
+Blurred hard by 64 px, a white plane's far edge falls off with no hard cut: beside the
+background its brightest pixel is 0.025 of the plane's light (limit 0.1, 0.912 sharp),
+where with each vertex pushed by its own blur, or the blur past the edge uncapped, it is
+cut at about 0.18.
 
 The p99 limit is 40 throughout the S5 table. C's pattern is much finer than the spike's (one-texel
 rings every 16 texels), which is why its mean is higher than the spike's 1.16. Further
@@ -947,12 +980,13 @@ tests check:
 
 Accepted means drawable (protocol 0.34's `check_drawable`): over 3D geometries from a
 fixed seed, every input spread from 0.1 to f32's limit, and the same boxes with neutral
-3D, each one `check_drawable` accepts gives a `place::shape` (a neutral box too large
-for `f32` gives none, `a_huge_neutral_box_draws_nothing`, #1046) for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with
-and without a crop (`every_drawable_geometry_gives_a_shape`), and a frame of the most
-extreme of them renders on 8192×1, 1×8192 and 64×36 sources
-(`a_frame_of_the_most_extreme_accepted_3d_items_renders`). Both fail with the input
-bound removed.
+3D, each one `check_drawable` accepts gives a `place::shape` or nothing, never an error,
+for 64×36, 8192×1, 1×8192, 16384×1 and 1×16384 sources, with and without a crop
+(`every_drawable_geometry_gives_a_shape`); a neutral box too large for `f32` gives
+nothing (`a_huge_neutral_box_draws_nothing`, #1046). A frame of the most extreme of the
+3D ones renders on 8192×1, 1×8192 and 64×36 sources
+(`a_frame_of_the_most_extreme_accepted_3d_items_renders`); it and the sweep fail with
+the input bound removed.
 
 **What is checked.** Background only; an opaque rect over a background (position and
 stacking); crop; an image placed at an extent of half its pixels (its size and its crop

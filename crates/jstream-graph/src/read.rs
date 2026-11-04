@@ -360,6 +360,7 @@ impl Item {
             blend: self.blend,
             transition: self.transition,
             locked: self.locked,
+            effects_space: self.effects_space,
         }
     }
 }

@@ -223,8 +223,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
   turn, depth and per-item perspective, drawn in stacking order with no depth buffer.
-  A scene with a `camera` (`SceneCamera`: position, target, field of view, roll and
-  `depth_sort`) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
+  A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
+  `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
+  [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
   canvas extended toward the viewer is one space, each item's geometry is its pose
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
@@ -313,7 +314,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
   no scene filters of its own, but may override an item's effects, the `keyframe` owner
   of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
-  effects over its box in a layer grown by their outset, before its opacity and blend.
+  effects over its box in a layer grown by their outset, before its opacity and blend,
+  or with its `effects_space` `canvas` over a canvas-sized layer it is placed into
+  ([ADR-0106](adr/0106-item-effects-in-canvas-space.md)).
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
   map of values described by its kind's descriptor, which the engine reports and
   validates against. References to scenes, sources, buses and asset files inside
@@ -623,8 +626,8 @@ fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
-covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
-depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
+covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**", "crates/jstream-control/src/**", "crates/jstream-server/src/**"]
+depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md", "crates/jstream-protocol/README.md#design", "crates/jstream-protocol/README.md#compatibility", "crates/jstream-protocol/README.md#errors"]
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
@@ -696,7 +699,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0089](adr/0089-scene-options-and-nested-audio.md), protocol 0.65).
   `scene.set_camera` gives a scene a camera, making it a 3D scene, or removes it; it is
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
-  protocol 0.70).
+  protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
+  ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
@@ -777,7 +781,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
   settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
   locks an item's canvas box, an editing aid clients honour and the engine never
-  enforces. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  enforces. `item.set_effects_space` (0.76,
+  [ADR-0106](adr/0106-item-effects-in-canvas-space.md)) makes an item's effects run over
+  the canvas after it is placed. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
   `state.get` reports the presets and the default under `transitions`, and `kind.list`
   the transition kinds.
@@ -1078,7 +1084,10 @@ keeps a stinger's items over the scenes under them), far to near by the depth of
 centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
-mid-stinger leaves through the camera each item had.
+mid-stinger leaves through the camera each item had. A camera with a depth of field
+([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment of a flat item by its
+distance from the focus plane in the same draw: a disc of taps from the item's mips, its
+edge softened to match, with no extra pass or target. A 3D model's layer isn't blurred.
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
@@ -1138,7 +1147,8 @@ import, a browser page's included) into a premultiplied `Rgba16Float` layer, of 
 `apply_filter_into` draws into a layer the caller keeps, which is how `jstream-core`'s
 chain runtime runs a source's video chain before placement, and a scene's over its
 composite once per frame wherever the scene shows, and an item's effects over its box
-([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), without allocating per
+([ADR-0065](adr/0065-scene-chains-and-item-effects.md)), or over the canvas
+([ADR-0106](adr/0106-item-effects-in-canvas-space.md)), without allocating per
 frame. A shader source's program ([ADR-0093](adr/0093-shader-sources-from-effect-packs.md))
 draws through the same harness: a filter of several passes that ignores its input,
 reads its own earlier frames, the pack's images and the scenes the chain runtime hands
@@ -1307,7 +1317,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

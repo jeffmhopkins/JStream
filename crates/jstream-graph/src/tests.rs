@@ -2,7 +2,7 @@
 
 use crate::{Graph, Placement};
 use jstream_protocol::{
-    AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EncoderProfile,
+    AudioFollow, BlendMode, BusId, Canvas, Crop, DeleteTarget, Edit, EffectsSpace, EncoderProfile,
     EncoderProfileId, EntityKind, Finite32, FitMode, ItemGeometry, ItemId, ItemTransform,
     KindCategory, KindDescriptor, Media, MixInput, MixResolution, OutputId, OutputInfo, OutputKind,
     ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query, QueryResult, RecordContainer,
@@ -4117,6 +4117,39 @@ fn a_lock_is_undone_and_survives_a_removal() {
         item_id: item(),
         locked: true,
     }));
+    apply_ok(&mut g, removed.inverse.edits);
+    assert_eq!(g.state(), &before);
+}
+
+/// `item.set_effects_space` (ADR-0106) sets where the item's effects run, its inverse
+/// puts the old space back, and removing a canvas-space item is undone in canvas space.
+#[test]
+fn an_effects_space_is_undone_and_survives_a_removal() {
+    let mut g = fixture();
+    apply_ok(&mut g, vec![add("a", "i1", "cam")]);
+    let item = || ItemId::new("i1");
+    let set = |space| Edit::ItemSetEffectsSpace {
+        item_id: item(),
+        space,
+    };
+    let missing = apply_err(
+        &mut g,
+        vec![Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("nope"),
+            space: EffectsSpace::Canvas,
+        }],
+    );
+    assert!(
+        matches!(missing, ProtocolError::NotFound { .. }),
+        "{missing:?}"
+    );
+    assert!(item_info(&g, "i1").effects_space.is_box(), "added as box");
+    let changed = apply_ok(&mut g, vec![set(EffectsSpace::Canvas)]);
+    assert_eq!(item_info(&g, "i1").effects_space, EffectsSpace::Canvas);
+    assert_eq!(changed.inverse.edits, [set(EffectsSpace::Box)]);
+    let before = g.state().clone();
+    let removed = apply_ok(&mut g, vec![Edit::ItemRemove { item_id: item() }]);
+    assert!(removed.inverse.edits.contains(&set(EffectsSpace::Canvas)));
     apply_ok(&mut g, removed.inverse.edits);
     assert_eq!(g.state(), &before);
 }

@@ -373,6 +373,14 @@ pub(crate) fn edits() -> Vec<Edit> {
             item_id: ItemId::new("itm_1"),
             locked: true,
         },
+        Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("itm_1"),
+            space: crate::EffectsSpace::Canvas,
+        },
+        Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("itm_2"),
+            space: crate::EffectsSpace::Box,
+        },
         Edit::VideoMixCreate {
             mix_id: VideoMixId::new("mix_cam"),
             name: "Camera".into(),
@@ -441,6 +449,14 @@ pub(crate) fn edits() -> Vec<Edit> {
         Edit::SceneSetCamera {
             scene_id: SceneId::new("scn_1"),
             camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
+        },
+        Edit::SceneSetCamera {
+            scene_id: SceneId::new("scn_1"),
+            camera: Some(SceneCamera {
+                focus_px: crate::Finite32::new(800.0),
+                blur_px: crate::Finite32::new(6.0).unwrap_or(crate::Finite32::ZERO),
+                ..SceneCamera::framing(CameraCanvas::DEFAULT)
+            }),
         },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
@@ -1657,6 +1673,7 @@ fn item_infos() -> Vec<ItemInfo> {
                 settings: vignette(),
             }],
             locked: false,
+            effects_space: crate::EffectsSpace::Box,
         },
         ItemInfo {
             item_id: ItemId::new("itm_2"),
@@ -1684,6 +1701,7 @@ fn item_infos() -> Vec<ItemInfo> {
             },
             effects: Vec::new(),
             locked: false,
+            effects_space: crate::EffectsSpace::Box,
         },
     ]
 }

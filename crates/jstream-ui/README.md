@@ -317,7 +317,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings, lock and effects, or duplicates the copied scene. As OBS's
+  with their placement settings, lock, effects and effects space, or duplicates the copied scene. As OBS's
   does, the item menu also copies the primary item's source's filters (`FilterClip`)
   and pastes them onto each selected item's source, after its own or replacing them,
   chain by chain (a chain the clip has nothing for keeps its own), and copies the
@@ -517,7 +517,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
-  one (`camera_start`). A note warns when items already have depth or angles (`has_3d_items`).
+  one (`camera_start`). A note warns when items already have depth or angles
+  (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
+  on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
+  on selection (`focus_on`) sets the focus to the selected item's distance along the
+  view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
@@ -591,7 +595,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `effects_owner`): the item's own until a change there, which the engine applies to a
   copy of them, gives the keyframe its own; a note says which, and Follow the item sends
   `item.clear_override` of `effects`. Their Uses the scene picker leaves out the scenes
-  whose picture holds the keyframe. The Add filter dialog lists the vignette under Style.
+  whose picture holds the keyframe. Under an item's effects, an "Over the canvas" check
+  (`EffectsSpaceCheck`) sends `item.set_effects_space`
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
+  after the item is placed. It isn't shown under a keyframe's effects, since the space
+  belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
@@ -1048,7 +1056,7 @@ browser, and `mod.rs` is the component.
   The drag keeps the scene it started on (`Action::Orbit.scene`), and the overlay keeps
   the dragged camera with it (`camera::Preview`) until the collection has it, showing it
   in no other scene; a drag that ends with another scene shown is dropped, not
-  committed. In place of the
+  committed (`Preview::to_commit`). In place of the
   selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at

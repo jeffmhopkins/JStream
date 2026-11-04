@@ -1,0 +1,141 @@
+#!/bin/bash
+# JStream's launcher on Linux (scripts/linux/install.sh installs it beside the daemon, links
+# it as ~/.local/bin/jstream and names it in the app menu entry). Starts the daemon beside
+# it with the web UI in ui/, waits until it serves, copies the control token to the
+# clipboard, says so in a notification and opens the UI in the browser. Run again while
+# JStream runs, it opens the UI again.
+#
+#   jstream            start JStream (or open it again) and open it in the browser
+#   jstream --stop     stop JStream: the daemon saves and stops
+#   jstream --print    start JStream without opening anything, and print three lines:
+#                      the daemon's process ID, the UI's URL and the control token (CI)
+#   jstream --running  exit 0 when JStream runs, 1 when it doesn't
+#
+# Docs: docs/runbooks/linux-testing.md#script
+
+set -euo pipefail
+
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+daemon="$here/jstream-daemon"
+# The daemon's data folder on Linux (jstream-platform's `paths::data_dir`): the token, the
+# collection (the desktop app's file name) and the logs live there.
+data="${XDG_DATA_HOME:-$HOME/.local/share}/jstream"
+pid_file="$data/launcher.pid"
+url_file="$data/launcher.url"
+out="$data/logs/launcher-stdout.txt"
+err="$data/logs/launcher-stderr.txt"
+
+# The daemon this launcher started, if it still runs.
+running_pid() {
+    local pid
+    pid=$(cat "$pid_file" 2>/dev/null) || return 1
+    [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null || return 1
+    [ "$(readlink -f "/proc/$pid/exe" 2>/dev/null)" = "$(readlink -f "$daemon")" ] || return 1
+    echo "$pid"
+}
+
+notify() {
+    if command -v notify-send >/dev/null 2>&1; then
+        notify-send --app-name=JStream --icon=jstream "$1" "$2" 2>/dev/null || true
+    fi
+    printf '%s: %s\n' "$1" "$2" >&2
+}
+
+# Puts the token on the clipboard, and takes it off again after two minutes if it is still
+# there, as the Mac launcher does.
+copy_token() {
+    local token=$1 copy paste clear
+    if [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
+        copy=(wl-copy) paste=(wl-paste --no-newline) clear=(wl-copy --clear)
+    elif [ -n "${DISPLAY:-}" ] && command -v xclip >/dev/null 2>&1; then
+        copy=(xclip -selection clipboard) paste=(xclip -selection clipboard -o)
+        clear=(xclip -selection clipboard /dev/null)
+    elif [ -n "${DISPLAY:-}" ] && command -v xsel >/dev/null 2>&1; then
+        copy=(xsel --clipboard --input) paste=(xsel --clipboard --output) clear=(xsel --clipboard --clear)
+    else
+        return 1
+    fi
+    printf '%s' "$token" | "${copy[@]}" >/dev/null 2>&1 || return 1
+    (
+        sleep 120
+        if [ "$("${paste[@]}" 2>/dev/null)" = "$token" ]; then "${clear[@]}" </dev/null >/dev/null 2>&1; fi
+    ) </dev/null >/dev/null 2>&1 &
+    disown 2>/dev/null || true
+}
+
+# Starts the daemon detached and waits for its `listening on` line; the `ui: <url>` line
+# comes just before it. Leaves the URL in $url and the PID in $pid.
+start() {
+    mkdir -p "$data/logs"
+    chmod 700 "$data"
+    # Its own session, so closing the terminal or the menu's launch doesn't stop it. The
+    # daemon keeps its own rotating log files in logs/; these two hold one run's output.
+    setsid "$daemon" --token-file "$data/token" --collection "$data/collection.json" \
+        --ui-dir "$here/ui" </dev/null >"$out" 2>"$err" &
+    pid=$!
+    for _ in $(seq 1 300); do
+        if grep -q '^listening on ' "$out" 2>/dev/null; then
+            url=$(sed -n 's/^ui: \(http[^[:space:]]*\).*/\1/p' "$out" | head -1)
+            if [ -z "$url" ]; then
+                kill "$pid" 2>/dev/null || true
+                echo "the daemon serves no UI" >&2
+                return 1
+            fi
+            echo "$pid" >"$pid_file"
+            echo "$url" >"$url_file"
+            return 0
+        fi
+        if ! kill -0 "$pid" 2>/dev/null; then
+            tail -n 15 "$err" >&2
+            return 1
+        fi
+        sleep 0.1
+    done
+    kill "$pid" 2>/dev/null || true
+    echo "JStream didn't start within 30 seconds. Its output is in $data/logs." >&2
+    return 1
+}
+
+stop() {
+    local pid
+    pid=$(running_pid) || { echo "JStream isn't running" >&2; return 0; }
+    # SIGTERM: the daemon saves and stops; wait up to 10 seconds for it.
+    kill "$pid"
+    for _ in $(seq 1 100); do
+        kill -0 "$pid" 2>/dev/null || break
+        sleep 0.1
+    done
+    rm -f "$pid_file" "$url_file"
+    notify "JStream stopped" "Your scenes are saved."
+}
+
+main() {
+    case "${1:-}" in
+        --stop) stop; return ;;
+        --running) running_pid >/dev/null; return ;;
+        --print | "") ;;
+        -h | --help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; return ;;
+        *) echo "unknown option: $1 (try --help)" >&2; return 2 ;;
+    esac
+    local pid url
+    if pid=$(running_pid); then
+        url=$(cat "$url_file")
+    elif ! start; then
+        notify "JStream couldn't start" "Its logs are in $data/logs."
+        return 1
+    fi
+    local token
+    token=$(tr -d '[:space:]' <"$data/token")
+    if [ "${1:-}" = --print ]; then
+        printf '%s\n%s\n%s\n' "$pid" "$url" "$token"
+        return
+    fi
+    if copy_token "$token"; then
+        notify "JStream is running" "Your access token is on the clipboard for two minutes. When your browser asks you to sign in, paste it as the password (any user name)."
+    else
+        notify "JStream is running" "When your browser asks you to sign in, use the token in $data/token as the password (any user name)."
+    fi
+    xdg-open "$url" >/dev/null 2>&1 || echo "Open $url in your browser." >&2
+}
+
+main "$@"
