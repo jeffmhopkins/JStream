@@ -14,6 +14,7 @@ use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
+use crate::frames::FrameStrip;
 use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
@@ -1436,6 +1437,24 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preset_id: Option<TransitionPresetId>,
     },
+    /// `scene.switch`, then a frame sheet of the program mix from the switch on (since
+    /// 0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a
+    /// stinger's cover or a keyframe move as it plays, from one call. The switch is made
+    /// as `scene.switch` makes it, and emits what it emits; the answer comes once the
+    /// last picture is drawn, as a `scene.switch_and_watch` result. Switching to the
+    /// scene already on program still takes the sheet. Fails as `scene.switch` does,
+    /// before switching with `invalid_argument` past the [`FrameStrip`] limits.
+    #[serde(rename = "scene.switch_and_watch")]
+    SceneSwitchAndWatch {
+        /// The scene to put on program.
+        scene_id: SceneId,
+        /// The preset to use, overriding the scenes' and the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<TransitionPresetId>,
+        /// When to take the pictures, counted from the switch.
+        #[serde(flatten)]
+        strip: FrameStrip,
+    },
     /// Puts a scene on preview, the scene studio mode prepares before it goes on program
     /// with `scene.switch`. Preview is runtime state like program: it changes no `rev`,
     /// is never undone, and emits `studio.changed`. It never affects what an output
@@ -1668,6 +1687,7 @@ impl Action {
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::UiSettingsSet { .. } => "ui_settings.set",
@@ -1699,6 +1719,11 @@ impl Action {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+            }
+            | Action::SceneSwitchAndWatch {
+                scene_id,
+                preset_id,
+                ..
             } => {
                 let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
                 if let Some(preset_id) = preset_id {
@@ -1760,6 +1785,11 @@ impl Action {
             Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
+            )),
+            Action::SceneSwitchAndWatch { .. } => Some((
+                "type",
+                "`scene.switch_and_watch` can't be bound: its frame sheet answers only the \
+                 session that sends it; bind `scene.switch`",
             )),
             Action::LiveSet { .. } | Action::LiveCancel { .. } => Some((
                 "type",

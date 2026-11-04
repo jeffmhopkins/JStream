@@ -428,7 +428,7 @@ collection (`state.get`, with the folders and labels in their orders, `scene.lis
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
-[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status`, `video.snapshot` and `video.frames` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items

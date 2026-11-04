@@ -10,6 +10,7 @@ mod audio_routing;
 mod automation;
 mod collection;
 mod fonts;
+mod frames;
 mod gpu_capture;
 mod history;
 mod item_actions;

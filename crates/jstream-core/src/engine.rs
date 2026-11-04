@@ -16,6 +16,7 @@ use crate::drops::{self, DropLedger, DropSource, DropSourceId};
 use crate::effect_packs::Packs;
 use crate::events::{QueueRef, Subscribers, Subscription};
 use crate::forget::ForgetSources;
+use crate::frames;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
@@ -52,15 +53,16 @@ use jstream_platform::{
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
     EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome, OutputHealth, OutputId,
-    OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query,
-    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
-    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
+    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
+    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, TryRecvError};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError, Weak};
 use std::task::Waker;
@@ -101,6 +103,8 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
+    sheets: AtomicUsize,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -185,6 +189,7 @@ impl Default for Engine {
                 Shared {
                     state: Mutex::new(state),
                     snapshots: SnapshotWorker::default(),
+                    sheets: AtomicUsize::new(0),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -1227,6 +1232,45 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if let Call::Query {
+            query: Query::VideoFrames { strip, scene_id },
+        } = call
+        {
+            drop(_entered);
+            let reply = self.frame_sheet(strip, scene_id, frames::query_answer);
+            return Executed::Pending(reply, span);
+        }
+        if let Call::Action {
+            action:
+                Action::SceneSwitchAndWatch {
+                    scene_id,
+                    preset_id,
+                    strip,
+                },
+        } = call
+        {
+            drop(_entered);
+            if let Err(error) = strip.check() {
+                return Executed::Ready(Box::new(Err(error)));
+            }
+            // The switch runs, is logged and audited as the `scene.switch` it is.
+            let switch = Call::Action {
+                action: Action::SceneSwitch {
+                    scene_id,
+                    preset_id,
+                },
+            };
+            return match self.execute(client_id, request_id, switch, previews) {
+                Executed::Ready(result) => match *result {
+                    Ok(_) => Executed::Pending(
+                        self.frame_sheet(strip, None, frames::action_answer),
+                        span,
+                    ),
+                    Err(error) => Executed::Ready(Box::new(Err(error))),
+                },
+                pending @ Executed::Pending(..) => pending,
+            };
         }
         let audit = Audit::records(&call).then(|| self.audit_context(client_id, &call));
         let output = match &call {
@@ -2309,6 +2353,64 @@ impl Engine {
         self.shared.snapshots.request(snapshot, live, rev, at)
     }
 
+    /// A frame sheet (#1061): `strip`'s pictures of the program mix, or of `scene_id`'s
+    /// scene alone, taken in real time from now by a `jstream-frames` thread and drawn
+    /// by the snapshot thread ([`frames`]). Its answer is `answer`'s wrapping of the
+    /// sheet, or the error that stopped it.
+    fn frame_sheet(
+        &self,
+        strip: FrameStrip,
+        scene_id: Option<SceneId>,
+        answer: fn(FrameSheet) -> CallResult,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        if let Err(error) = strip.check() {
+            reply.send(Err(error));
+            return waiting;
+        }
+        let begin = Instant::now();
+        let start = match self.shared.sample(scene_id.as_ref()) {
+            Ok(sample) => sample.at,
+            Err(error) => {
+                reply.send(Err(error));
+                return waiting;
+            }
+        };
+        let taken = self.shared.sheets.fetch_add(1, Ordering::AcqRel);
+        if taken >= frames::MAX_SHEETS {
+            self.shared.sheets.fetch_sub(1, Ordering::AcqRel);
+            reply.send(Err(frames::busy()));
+            return waiting;
+        }
+        let shared = Arc::downgrade(&self.shared);
+        // The thread owns the reply: if it can't start, dropping it answers `internal`.
+        let spawned = thread::Builder::new()
+            .name("jstream-frames".into())
+            .spawn(move || {
+                let samples = take_samples(&shared, &strip, scene_id.as_ref(), begin);
+                let Some(shared) = shared.upgrade() else {
+                    return;
+                };
+                shared.sheets.fetch_sub(1, Ordering::AcqRel);
+                match samples {
+                    Ok(samples) => shared.snapshots.request_sheet(
+                        frames::Sheet {
+                            samples,
+                            start,
+                            answer,
+                        },
+                        reply,
+                    ),
+                    Err(error) => reply.send(Err(error)),
+                }
+            });
+        if let Err(err) = spawned {
+            self.shared.sheets.fetch_sub(1, Ordering::AcqRel);
+            tracing::error!(error = %err, "starting a frame sheet thread failed");
+        }
+        waiting
+    }
+
     /// The render hub the pipeline's render thread reads, for tests.
     #[cfg(test)]
     pub(crate) fn render_hub(&self) -> Arc<RenderHub> {
@@ -2447,11 +2549,64 @@ impl Engine {
     }
 }
 
+/// A frame sheet's samples, each read when it is due (`begin` plus its offset). Stops
+/// with `internal` if the engine ends, and with the read's error (a scene deleted
+/// meanwhile) if one fails.
+fn take_samples(
+    shared: &Weak<Shared>,
+    strip: &FrameStrip,
+    scene_id: Option<&SceneId>,
+    begin: Instant,
+) -> Result<Vec<frames::Sample>, ProtocolError> {
+    let mut samples = Vec::with_capacity(strip.count as usize);
+    for index in 0..strip.count {
+        let due = begin + Duration::from_millis(strip.offset_ms(index));
+        if let Some(wait) = due.checked_duration_since(Instant::now()) {
+            thread::sleep(wait);
+        }
+        let shared = shared.upgrade().ok_or_else(|| ProtocolError::Internal {
+            reason: "the engine ended while taking the frame sheet".into(),
+        })?;
+        samples.push(shared.sample(scene_id)?);
+    }
+    Ok(samples)
+}
+
+impl Shared {
+    /// What `video.snapshot` would draw now, for a frame sheet: the program mix's
+    /// published render snapshot, or `scene_id`'s scene planned alone as its preview
+    /// stream plans it, with the live values, `rev` and the media clock's time, all
+    /// read under the collection lock. `not_found` for a scene not in the collection.
+    fn sample(&self, scene_id: Option<&SceneId>) -> Result<frames::Sample, ProtocolError> {
+        let mut state = lock(&self.state);
+        let snapshot = match scene_id {
+            None => state.render.load(),
+            Some(scene_id) => {
+                let shot =
+                    state
+                        .plan_scene_alone(scene_id)
+                        .ok_or_else(|| ProtocolError::NotFound {
+                            entity: EntityKind::Scene,
+                            id: scene_id.to_string(),
+                        })?;
+                RenderSnapshot::following(None, shot)
+            }
+        };
+        Ok(frames::Sample {
+            snapshot,
+            live: state.render.load_live(),
+            rev: state.graph.rev(),
+            at: state.live.now(),
+        })
+    }
+}
+
 /// What [`Engine::execute`] produced: an answer, or a snapshot still being drawn.
 pub(crate) enum Executed {
     /// Boxed: a `state.get` result is large, and the snapshot case is small.
     Ready(Box<Result<CallResult, ProtocolError>>),
-    /// `video.snapshot`, answered by the snapshot thread, and the call's `command` span.
+    /// `video.snapshot`, `video.frames` or `scene.switch_and_watch`, answered by the
+    /// snapshot thread, and the call's `command` span.
     Pending(SnapshotReply, tracing::Span),
 }
 
@@ -3834,6 +3989,35 @@ impl State {
             };
             emit(source_id, now);
         }
+    }
+
+    /// `scene_id`'s scene planned alone now, as its preview stream plans it, with the open
+    /// gestures' source settings: what a frame sheet of that scene draws. It reaches no
+    /// source, so it never makes one shown or heard (ADR-0028). `None` for a scene not
+    /// in the collection.
+    fn plan_scene_alone(&mut self, scene_id: &SceneId) -> Option<snapshot::Shot> {
+        let Self {
+            graph,
+            shown,
+            frames,
+            frame_versions,
+            live,
+            ..
+        } = self;
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
+        graph.state().scene(scene_id)?;
+        let now = live.now();
+        let assets = live.filter_assets();
+        let planning = snapshot::plan_scene(
+            graph,
+            scene_id,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        );
+        Some(planning.shot)
     }
 
     /// Re-plans the program mix and the scene each video mix shows at the current time,
