@@ -133,10 +133,7 @@ impl Control for InProcessControl {
                         Err(error) => tracing::debug!(code = error.code(), "call failed"),
                     }
                     result
-                        .map(|result| Response {
-                            id,
-                            result: jstream_protocol::CallResult::Query { result },
-                        })
+                        .map(|result| Response { id, result })
                         .map_err(ControlError::from)
                 }
                 .instrument(span),

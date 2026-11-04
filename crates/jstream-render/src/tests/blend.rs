@@ -51,11 +51,15 @@ fn mixed(mode: BlendMode, cs: f64, cb: f64) -> f64 {
 
 /// The resolved straight sRGB pixel of `source` (straight sRGB 8-bit, times `opacity`)
 /// composited with `mode` over `backdrop` (straight sRGB in [0, 1], alpha linear).
+/// Opacity above 1 is a gain (#1101): the linear colour times the excess, the alpha
+/// times at most 1.
 fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) -> [u8; 4] {
-    let sa = f64::from(source[3]) / 255.0 * f64::from(opacity);
+    let opacity = f64::from(opacity);
+    let sa = f64::from(source[3]) / 255.0 * opacity.min(1.0);
     let ba = f64::from(backdrop.a);
     let back = [backdrop.r, backdrop.g, backdrop.b].map(|c| decode(f64::from(c)));
-    let src = [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0));
+    let src =
+        [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0) * opacity.max(1.0));
     let alpha = if matches!(mode, BlendMode::Additive | BlendMode::AdditiveSrgb) {
         sa + ba * (1.0 - sa)
     } else {
@@ -183,6 +187,152 @@ fn every_mode_matches_the_reference() {
             }
         }
     }
+}
+
+/// #1101 review B1: a gain keeps an item's anti-aliased edge. At a fringe pixel the
+/// alpha is the opacity's (at most 1) times the coverage, as at opacity 1, not clamped
+/// back to opaque.
+#[test]
+fn a_gain_keeps_the_edge_coverage() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let white = solid(compositor, 16, 16, [255, 255, 255, 255]);
+    // A 3D item: its polygon's edges cross pixels part way (ADR-0050 decision 6).
+    let finite = |v: f32| Finite32::new(v).expect("finite");
+    let turned = Placement::Geometry(ItemGeometry {
+        turn_deg: finite(40.0),
+        perspective_px: Some(finite(200.0)),
+        ..ItemGeometry::try_new(
+            Vec2::new(16.0, 16.0).expect("finite"),
+            Size::try_new(24.0, 24.0).expect("positive"),
+        )
+        .expect("valid")
+    });
+    let clear = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+    let mut alphas = |opacity: f32| {
+        let items = [blended(&white, turned, opacity, BlendMode::Normal)];
+        let shot = render(compositor, (32, 32), clear, &items);
+        (0..32)
+            .flat_map(|y| (0..32).map(move |x| (x, y)))
+            .map(|(x, y)| shot.pixel(x, y).expect("inside")[3])
+            .collect::<Vec<u8>>()
+    };
+    let at_one = alphas(1.0);
+    let fringe: Vec<usize> = (0..at_one.len())
+        .filter(|&i| (32..=223).contains(&at_one[i]))
+        .collect();
+    assert!(
+        fringe.len() >= 4,
+        "a turned item has a soft edge: {at_one:?}"
+    );
+    for opacity in [2.0, jstream_protocol::MAX_OPACITY] {
+        let gained = alphas(opacity);
+        for &i in &fringe {
+            assert!(
+                gained[i].abs_diff(at_one[i]) <= TOLERANCE,
+                "pixel {i} at {opacity}: alpha {}, at 1: {}",
+                gained[i],
+                at_one[i]
+            );
+        }
+    }
+}
+
+/// #1101: opacity above 1 is a gain on the item's light. An additive item adds that
+/// many times its light; a normal one is drawn brighter and covers the backdrop no more
+/// than fully.
+#[test]
+fn opacity_above_one_is_a_gain_on_the_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let backdrops = [
+        Color::rgb(0.1, 0.2, 0.3),
+        Color {
+            r: 0.5,
+            g: 0.9,
+            b: 0.25,
+            a: 0.5,
+        },
+    ];
+    let sources: [([u8; 4], f32); 3] = [
+        ([60, 40, 20, 255], 2.0),
+        ([90, 60, 30, 128], 3.0),
+        ([20, 30, 40, 255], jstream_protocol::MAX_OPACITY),
+    ];
+    for mode in [BlendMode::Normal, BlendMode::Additive] {
+        for backdrop in backdrops {
+            for (rgba, opacity) in sources {
+                let image = solid(compositor, 2, 2, rgba);
+                let items = [blended(&image, Placement::IDENTITY, opacity, mode)];
+                let shot = render(compositor, (4, 4), backdrop, &items);
+                let expected = reference(mode, rgba, opacity, backdrop);
+                let got = shot.pixel(0, 0).expect("inside");
+                assert!(
+                    (0..4).all(|c| got[c].abs_diff(expected[c]) <= TOLERANCE),
+                    "{} of {rgba:?} at {opacity} over {backdrop:?}: {got:?}, expected \
+                     {expected:?}",
+                    mode.as_str()
+                );
+            }
+        }
+    }
+    // Twice the light of the same item at 1, added to black.
+    let image = solid(compositor, 2, 2, [60, 40, 20, 255]);
+    let once = render(
+        compositor,
+        (4, 4),
+        Color::rgb(0.0, 0.0, 0.0),
+        &[blended(
+            &image,
+            Placement::IDENTITY,
+            1.0,
+            BlendMode::Additive,
+        )],
+    );
+    let twice = render(
+        compositor,
+        (4, 4),
+        Color::rgb(0.0, 0.0, 0.0),
+        &[blended(
+            &image,
+            Placement::IDENTITY,
+            2.0,
+            BlendMode::Additive,
+        )],
+    );
+    let linear = |v: u8| f64::from(srgb_channel_to_linear(f32::from(v) / 255.0));
+    let (a, b) = (
+        once.pixel(0, 0).expect("inside"),
+        twice.pixel(0, 0).expect("inside"),
+    );
+    for c in 0..3 {
+        let ratio = linear(b[c]) / linear(a[c]);
+        assert!((ratio - 2.0).abs() < 0.1, "channel {c}: {a:?} then {b:?}");
+    }
+    // Over the limit is refused.
+    let refused = compositor.render(
+        &Scene {
+            canvas: FrameSize::new(4, 4).expect("non-zero"),
+            background: Color::rgb(0.0, 0.0, 0.0),
+            items: &[blended(
+                &image,
+                Placement::IDENTITY,
+                jstream_protocol::MAX_OPACITY + 0.5,
+                BlendMode::Additive,
+            )],
+        },
+        true,
+    );
+    assert!(refused.is_err());
 }
 
 /// Items in a row that read the backdrop each see the ones before: the second difference

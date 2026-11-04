@@ -91,6 +91,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
     ("video.snapshot", N),
+    // Pictures of the program mix, like `video.snapshot`.
+    ("video.frames", N),
     ("youtube.status", N),
     ("youtube.list_broadcasts", N),
     ("youtube.list_streams", N),
@@ -191,6 +193,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("live.set", Class(E)),
     ("live.cancel", Class(E)),
     ("scene.switch", Class(L)),
+    // It switches as `scene.switch` does, but answers with pictures of the program mix,
+    // like `video.snapshot`.
+    ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),

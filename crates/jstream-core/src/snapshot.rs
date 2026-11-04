@@ -30,9 +30,9 @@ use jstream_graph::{
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneCamera,
-    SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
+    BlendMode, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
+    ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
+    SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
@@ -44,6 +44,7 @@ use jstream_sources::CaptureSpec;
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::follow::{CameraMotion, CameraMoves, FollowPlan};
+use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
 use crate::profile::{DrawMeter, Phase};
@@ -3427,15 +3428,24 @@ impl OpenBackoff {
     }
 }
 
-/// One snapshot request: the published render snapshot, the `rev` it answers with,
-/// and where to send the answer.
+/// One request for the snapshot thread, and where to send the answer.
 struct Job {
-    snapshot: Arc<RenderSnapshot>,
-    live: Arc<LiveParams>,
-    rev: Rev,
-    /// The moment to draw, on the media clock: where a running transition is.
-    at: MediaTime,
+    work: Work,
     reply: ReplyTx,
+}
+
+/// What a [`Job`] draws.
+enum Work {
+    /// `video.snapshot`: the published render snapshot and the `rev` it answers with.
+    Picture {
+        snapshot: Arc<RenderSnapshot>,
+        live: Arc<LiveParams>,
+        rev: Rev,
+        /// The moment to draw, on the media clock: where a running transition is.
+        at: MediaTime,
+    },
+    /// A frame sheet's pictures (#1061).
+    Sheet(Box<Sheet>),
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
@@ -3456,6 +3466,26 @@ impl SnapshotWorker {
         at: MediaTime,
     ) -> SnapshotReply {
         let (reply, answer) = reply_pair();
+        self.enqueue(
+            Work::Picture {
+                snapshot,
+                live,
+                rev,
+                at,
+            },
+            reply,
+        );
+        answer
+    }
+
+    /// Queues a frame sheet's samples, answering through `reply` once they are drawn.
+    pub(crate) fn request_sheet(&self, sheet: Sheet, reply: ReplyTx) {
+        self.enqueue(Work::Sheet(Box::new(sheet)), reply);
+    }
+
+    /// Queues `work`, starting the thread if it isn't running. A failure answers
+    /// `internal` through `reply`.
+    fn enqueue(&self, work: Work, reply: ReplyTx) {
         let mut queue = lock(&self.queue);
         if queue.is_none() {
             let (tx, rx) = mpsc::channel();
@@ -3468,24 +3498,17 @@ impl SnapshotWorker {
                     reply.send(Err(ProtocolError::Internal {
                         reason: format!("starting the snapshot thread: {err}"),
                     }));
-                    return answer;
+                    return;
                 }
             }
         }
         if let Some((tx, _)) = queue.as_ref()
-            && let Err(mpsc::SendError(job)) = tx.send(Job {
-                snapshot,
-                live,
-                rev,
-                at,
-                reply,
-            })
+            && let Err(mpsc::SendError(job)) = tx.send(Job { work, reply })
         {
             // The thread is gone; dropping the job answers `internal`.
             drop(job);
             *queue = None;
         }
-        answer
     }
 }
 
@@ -3513,17 +3536,26 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 fn worker(jobs: Receiver<Job>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
-    for Job {
-        snapshot,
-        live,
-        rev,
-        at,
-        reply,
-    } in jobs
-    {
+    for Job { work, reply } in jobs {
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache, chains) = open(&mut gpu, &mut backoff)?;
-            draw(snapshot.shot(), &live, rev, at, compositor, (cache, chains))
+            match &work {
+                Work::Picture {
+                    snapshot,
+                    live,
+                    rev,
+                    at,
+                } => draw(
+                    snapshot.shot(),
+                    live,
+                    *rev,
+                    *at,
+                    compositor,
+                    (cache, chains),
+                )
+                .map(|result| CallResult::Query { result }),
+                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains)),
+            }
         }));
         let result = result.unwrap_or_else(|_| {
             gpu = None;
@@ -3565,7 +3597,7 @@ fn open<'a>(
     })
 }
 
-type Answer = Result<QueryResult, ProtocolError>;
+type Answer = Result<CallResult, ProtocolError>;
 
 #[derive(Default)]
 struct Slot {
@@ -3575,12 +3607,12 @@ struct Slot {
 
 /// The sending half of a snapshot answer. Dropped without sending, it answers
 /// `internal`, so a caller never waits on a job the thread lost.
-struct ReplyTx {
+pub(crate) struct ReplyTx {
     slot: Option<Arc<Mutex<Slot>>>,
 }
 
 impl ReplyTx {
-    fn send(mut self, answer: Answer) {
+    pub(crate) fn send(mut self, answer: Answer) {
         if let Some(slot) = self.slot.take() {
             fill(&slot, answer);
         }
@@ -3631,7 +3663,9 @@ impl Future for SnapshotReply {
     }
 }
 
-fn reply_pair() -> (ReplyTx, SnapshotReply) {
+/// A new answer slot: the sending half for whoever draws, and the future the call waits
+/// on.
+pub(crate) fn reply_pair() -> (ReplyTx, SnapshotReply) {
     let slot = Arc::new(Mutex::new(Slot::default()));
     (
         ReplyTx {
@@ -3642,16 +3676,72 @@ fn reply_pair() -> (ReplyTx, SnapshotReply) {
 }
 
 /// Renders `shot` with `live` applied at the canvas size and encodes the capped PNG.
-/// The images and filters `cache` no longer needs are dropped here, on the snapshot
-/// thread.
 fn draw(
     shot: &Shot,
     live: &LiveParams,
     rev: Rev,
     at: MediaTime,
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    caches: (&mut ResourceCache<GpuKey>, &mut Chains),
 ) -> Result<QueryResult, ProtocolError> {
+    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches)?;
+    let (width, height) = fit(full_w, full_h);
+    let rgba = scale_down(full_w, full_h, &rgba, width, height);
+    let png =
+        encode_png(width, height, &rgba).map_err(|reason| ProtocolError::Internal { reason })?;
+    Ok(QueryResult::VideoSnapshot {
+        rev,
+        width,
+        height,
+        png: base64(&png),
+    })
+}
+
+/// Draws each of a frame sheet's samples at its own time, scales it to a tile and
+/// encodes the tiled PNG (#1061). The layout follows the first picture's size.
+fn draw_sheet(
+    sheet: &Sheet,
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+) -> Answer {
+    let mut layout = None;
+    let mut tiles = Vec::with_capacity(sheet.samples.len());
+    for sample in &sheet.samples {
+        let (width, height, rgba) = render(
+            sample.snapshot.shot(),
+            &sample.live,
+            sample.at,
+            compositor,
+            (&mut *cache, &mut *chains),
+        )?;
+        let count = u32::try_from(sheet.samples.len()).unwrap_or(u32::MAX);
+        let layout = *layout.get_or_insert_with(|| frames::Layout::new(count, (width, height)));
+        tiles.push(frames::downscale((width, height), &rgba, layout.tile));
+    }
+    let layout = layout.ok_or_else(|| ProtocolError::Internal {
+        reason: "a frame sheet with no pictures".into(),
+    })?;
+    let rgba = frames::assemble(&layout, &tiles);
+    let png = encode_png(layout.size.0, layout.size.1, &rgba)
+        .map_err(|reason| ProtocolError::Internal { reason })?;
+    Ok((sheet.answer)(frames::sheet(
+        &layout,
+        &sheet.samples,
+        sheet.start,
+        base64(&png),
+    )))
+}
+
+/// Renders `shot` with `live` applied at the canvas size and reads it back: its width,
+/// height and tightly packed RGBA8. The images and filters `cache` no longer needs are
+/// dropped here, on the snapshot thread.
+fn render(
+    shot: &Shot,
+    live: &LiveParams,
+    at: MediaTime,
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+) -> Result<(u32, u32, Vec<u8>), ProtocolError> {
     cache.begin_frame();
     let output = compose(
         compositor,
@@ -3670,16 +3760,7 @@ fn draw(
         .ok_or_else(|| ProtocolError::Internal {
             reason: "reading the frame back produced no pixels".into(),
         })?;
-    let (width, height) = fit(full.width(), full.height());
-    let rgba = scale_down(full.width(), full.height(), full.rgba(), width, height);
-    let png =
-        encode_png(width, height, &rgba).map_err(|reason| ProtocolError::Internal { reason })?;
-    Ok(QueryResult::VideoSnapshot {
-        rev,
-        width,
-        height,
-        png: base64(&png),
-    })
+    Ok((full.width(), full.height(), full.rgba().to_vec()))
 }
 
 /// Adds one of the output stage's chains to `cost`, run over an input of `width` by
@@ -4612,7 +4693,7 @@ fn fill_items<'a>(
 fn moved_track(canvas_box: bool, by: &jstream_anim::Offsets, sampled: Endpoint) -> Endpoint {
     if canvas_box {
         Endpoint {
-            opacity: by.opacity_of(sampled.opacity),
+            opacity: motion::opacity_of(by, sampled.opacity),
             ..sampled
         }
     } else {

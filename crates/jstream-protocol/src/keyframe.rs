@@ -63,7 +63,7 @@ pub struct ItemOverride {
     /// The overridden visibility.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
-    /// The overridden opacity, in `0..=1`.
+    /// The overridden opacity, from 0 to [`MAX_OPACITY`](crate::MAX_OPACITY).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opacity: Option<Finite32>,
     /// The overridden effects, first first, which the keyframe draws in place of the
