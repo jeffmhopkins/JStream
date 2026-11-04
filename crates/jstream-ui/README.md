@@ -547,7 +547,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   offered while the scene places a display or window capture (`followable`), with the
   item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
   hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
-  Camera motion, a list of the camera's modifiers with the Inspector's kinds and fields
+  Camera motion, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. Both are draft fields, which OK sends as
   `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
