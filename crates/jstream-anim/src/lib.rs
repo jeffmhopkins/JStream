@@ -41,7 +41,7 @@ pub use keyframe::{
 };
 pub use modifier::{
     Clock, InvalidModifier, Kind, MAX_MODIFIERS, Modifier, Offsets, Property, Shape, check_list,
-    evaluate,
+    evaluate, evaluate_with,
 };
 pub use switch::{Motion, Step, plan_switch};
 pub use timeline::{

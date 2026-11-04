@@ -56,7 +56,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -131,8 +131,14 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it (its `effects` since 0.63), `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63, its `motion` since 0.75), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped.
+- **Motion** (`motion.rs`, since 0.75,
+  [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
+  `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
+  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
+  `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
+  shares ([Motion](#design)).
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -212,8 +218,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.74 because of
-  `output.set_path` (#1072); 0.73 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of
+  `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
+  `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
+  0.74 because of `output.set_path` (#1072); 0.73 because of the
   `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
@@ -1254,7 +1262,7 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
-`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
+`item.set_transition`, `item.set_locked` and `item.set_motion` the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1778,6 +1786,38 @@ after 1.0:
   too, except `FilterChain`: an owner has a video and an audio chain and no other
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)), so code that picks a
   chain matches it exhaustively.
+
+### Motion
+
+Since 0.75 an item carries continuous motion
+([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md), `motion.rs`):
+`ItemInfo.motion`, an ordered list of at most 8 `MotionModifier`s that the engine
+evaluates as each frame is drawn. A modifier never writes the item's values: `state.get`
+reports the same geometry, crop and opacity whatever it adds. Each modifier has a
+`modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
+the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
+`opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
+- **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
+  `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
+  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
+  `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
+  100 000, rates within ±100 000.
+- **How a value applies:** positions, angles, depth and crop edges add it (crop in
+  source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
+  and opacity is then clamped to 0 to 1. Two modifiers on one property add up.
+- **Clocks:** `engine` (the default) is the engine's animation time, so items with the
+  same settings move in step; `shown` starts at 0 each time the item starts being drawn.
+- **`item.set_motion {item_id, scene_id?, motion}`** writes the whole list, and is
+  undone by the same edit with the old list. Addressed to a keyframe scene, it writes
+  that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
+  field `motion` removes. An empty override list stops the item's motion in that
+  keyframe. A list that breaks the rules above is `invalid_argument` naming the field,
+  and `check_motion` is the check every implementation shares. Plugins need the `edit`
+  class for it.
+
+During a scene switch a moving item keeps moving: a matched pair blends its two sides'
+motion by the transition's progress, an appearing item moves as its new scene says and a
+disappearing one as its old scene said.
 
 ### Item geometry
 

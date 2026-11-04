@@ -1057,6 +1057,7 @@ mod tests {
         assert!(!has_3d_items(&c, &a));
         geometry.turn_deg = Finite32::new(30.0).expect("finite");
         scene.items.push(ItemInfo {
+            motion: Default::default(),
             item_id: "i".into(),
             source_id: "s".into(),
             placement: PlacementForm::Geometry,

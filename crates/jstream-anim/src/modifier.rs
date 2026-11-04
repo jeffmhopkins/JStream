@@ -20,6 +20,9 @@ pub enum Property {
     Tilt,
     /// The 3D turn about the vertical axis (ADR-0094), in degrees, added.
     Turn,
+    /// The 3D offset along the viewing axis (ADR-0094's `depth_px`), in pixels toward
+    /// the viewer, added.
+    Depth,
     /// Opacity: the value `v` multiplies it by `1 + v`, clamped to `0..=1` after.
     Opacity,
     /// Source pixels cut off the left edge, added.
@@ -34,13 +37,14 @@ pub enum Property {
 
 impl Property {
     /// Every property, in wire order.
-    pub const ALL: [Property; 11] = [
+    pub const ALL: [Property; 12] = [
         Property::X,
         Property::Y,
         Property::Scale,
         Property::Rotation,
         Property::Tilt,
         Property::Turn,
+        Property::Depth,
         Property::Opacity,
         Property::CropLeft,
         Property::CropTop,
@@ -57,6 +61,7 @@ impl Property {
             Property::Rotation => "rotation",
             Property::Tilt => "tilt",
             Property::Turn => "turn",
+            Property::Depth => "depth",
             Property::Opacity => "opacity",
             Property::CropLeft => "crop_left",
             Property::CropTop => "crop_top",
@@ -142,6 +147,19 @@ pub enum Kind {
         /// Where it wraps back to 0, if it does.
         wrap: Option<f64>,
     },
+    /// A one-shot decaying shake: `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)`
+    /// for `t` in `0..duration_ms`, and 0 outside it. Usually on the [`Clock::Triggered`]
+    /// clock, so an action fires it (#1107).
+    Impulse {
+        /// Its size at the start of the envelope.
+        amplitude: f64,
+        /// How many times a second it swings.
+        frequency_hz: f64,
+        /// How fast it dies away, per second: 0 keeps its size to the end.
+        decay_per_s: f64,
+        /// How long it lasts, in milliseconds.
+        duration_ms: f64,
+    },
 }
 
 /// Where a modifier's time starts (ADR-0099 decision 3).
@@ -152,6 +170,9 @@ pub enum Clock {
     Engine,
     /// From when the item was last shown on program, so it starts fresh each time.
     Shown,
+    /// From when an action last fired this modifier (#1107). Before it is ever fired,
+    /// the modifier contributes nothing.
+    Triggered,
 }
 
 /// One motion modifier on an item.
@@ -192,6 +213,8 @@ pub enum InvalidModifier {
 const MAX_MAGNITUDE: f64 = 100_000.0;
 /// The highest wiggle frequency, in hertz.
 const MAX_FREQUENCY_HZ: f64 = 60.0;
+/// The fastest impulse decay, per second.
+const MAX_DECAY_PER_S: f64 = 1000.0;
 /// The longest oscillator period, in milliseconds: one hour.
 const MAX_PERIOD_MS: f64 = 3_600_000.0;
 
@@ -245,6 +268,30 @@ impl Modifier {
                     None
                 }
             }
+            Kind::Impulse {
+                amplitude,
+                frequency_hz,
+                decay_per_s,
+                duration_ms,
+            } => {
+                if !magnitude(amplitude) {
+                    Some("amplitude")
+                } else if !(frequency_hz.is_finite()
+                    && frequency_hz > 0.0
+                    && frequency_hz <= MAX_FREQUENCY_HZ)
+                {
+                    Some("frequency_hz")
+                } else if !(decay_per_s.is_finite()
+                    && (0.0..=MAX_DECAY_PER_S).contains(&decay_per_s))
+                {
+                    Some("decay_per_s")
+                } else if !(duration_ms.is_finite() && (1.0..=MAX_PERIOD_MS).contains(&duration_ms))
+                {
+                    Some("duration_ms")
+                } else {
+                    None
+                }
+            }
         }
     }
 
@@ -283,6 +330,21 @@ impl Modifier {
                     Some(w) => travelled.rem_euclid(w),
                     None => travelled,
                 }
+            }
+            Kind::Impulse {
+                amplitude,
+                frequency_hz,
+                decay_per_s,
+                duration_ms,
+            } => {
+                // Outside its envelope, or with unchecked parameters, it is still.
+                if !(seconds >= 0.0 && seconds * 1000.0 < duration_ms) {
+                    return 0.0;
+                }
+                let v = amplitude
+                    * (-decay_per_s * seconds).exp()
+                    * (std::f64::consts::TAU * frequency_hz * seconds).sin();
+                if v.is_finite() { v } else { 0.0 }
             }
         };
         if v.is_finite() { v } else { 0.0 }
@@ -328,6 +390,8 @@ pub struct Offsets {
     pub tilt: f32,
     /// Added to the turn, in degrees.
     pub turn: f32,
+    /// Added to the depth, in pixels toward the viewer.
+    pub depth: f32,
     /// Multiplies the opacity, which is then clamped to `0..=1` ([`Offsets::opacity_of`]).
     pub opacity: f32,
     /// Added to each crop edge, in source pixels: left, top, right, bottom.
@@ -343,6 +407,7 @@ impl Offsets {
         rotation: 0.0,
         tilt: 0.0,
         turn: 0.0,
+        depth: 0.0,
         opacity: 1.0,
         crop: [0.0; 4],
     };
@@ -355,18 +420,28 @@ impl Offsets {
     /// Applies one modifier's `value` to its property.
     fn add(&mut self, property: Property, value: f64) {
         let v = value as f32;
-        match property {
-            Property::X => self.x += v,
-            Property::Y => self.y += v,
-            Property::Scale => self.scale *= 1.0 + v,
-            Property::Rotation => self.rotation += v,
-            Property::Tilt => self.tilt += v,
-            Property::Turn => self.turn += v,
-            Property::Opacity => self.opacity *= 1.0 + v,
-            Property::CropLeft => self.crop[0] += v,
-            Property::CropTop => self.crop[1] += v,
-            Property::CropRight => self.crop[2] += v,
-            Property::CropBottom => self.crop[3] += v,
+        let slot = match property {
+            Property::X => &mut self.x,
+            Property::Y => &mut self.y,
+            Property::Scale => &mut self.scale,
+            Property::Rotation => &mut self.rotation,
+            Property::Tilt => &mut self.tilt,
+            Property::Turn => &mut self.turn,
+            Property::Depth => &mut self.depth,
+            Property::Opacity => &mut self.opacity,
+            Property::CropLeft => &mut self.crop[0],
+            Property::CropTop => &mut self.crop[1],
+            Property::CropRight => &mut self.crop[2],
+            Property::CropBottom => &mut self.crop[3],
+        };
+        let next = match property {
+            Property::Scale | Property::Opacity => *slot * (1.0 + v),
+            _ => *slot + v,
+        };
+        // Unchecked values near the float range can overflow the sum (or the cast to
+        // `f32`); a step that would leave the offsets non-finite is skipped instead.
+        if next.is_finite() {
+            *slot = next;
         }
     }
 
@@ -393,6 +468,7 @@ impl Offsets {
             rotation: lerp(self.rotation, to.rotation),
             tilt: lerp(self.tilt, to.tilt),
             turn: lerp(self.turn, to.turn),
+            depth: lerp(self.depth, to.depth),
             opacity: lerp(self.opacity, to.opacity),
             crop: [
                 lerp(self.crop[0], to.crop[0]),
@@ -404,18 +480,35 @@ impl Offsets {
     }
 }
 
+/// Evaluates an item's modifiers at one moment, in list order, with no
+/// [`Clock::Triggered`] modifier fired: see [`evaluate_with`].
+pub fn evaluate(modifiers: &[Modifier], engine_s: f64, shown_s: Option<f64>) -> Offsets {
+    evaluate_with(modifiers, engine_s, shown_s, |_| None)
+}
+
 /// Evaluates an item's modifiers at one moment, in list order. The list should have
 /// passed [`check_list`]; unchecked input never panics or loops, and an oscillator with
-/// a period that isn't positive contributes 0. `engine_s` is the
-/// animation time in seconds; `shown_s` is the time since the item was last shown on
-/// program, `None` when it isn't shown, in which case [`Clock::Shown`] modifiers are at
-/// their start. Allocates nothing, so the render thread calls it per item per frame.
-pub fn evaluate(modifiers: &[Modifier], engine_s: f64, shown_s: Option<f64>) -> Offsets {
+/// a period that isn't positive contributes 0. `engine_s` is the animation time in
+/// seconds; `shown_s` is the time since the item was last shown on program, `None` when
+/// it isn't shown, in which case [`Clock::Shown`] modifiers are at their start;
+/// `triggered` gives, by modifier ID, the time since a [`Clock::Triggered`] modifier was
+/// last fired, and a modifier never fired contributes nothing. Allocates nothing, so
+/// the render thread calls it per item per frame.
+pub fn evaluate_with(
+    modifiers: &[Modifier],
+    engine_s: f64,
+    shown_s: Option<f64>,
+    triggered: impl Fn(&str) -> Option<f64>,
+) -> Offsets {
     let mut out = Offsets::IDENTITY;
     for m in modifiers {
         let t = match m.clock {
             Clock::Engine => engine_s,
             Clock::Shown => shown_s.unwrap_or(0.0),
+            Clock::Triggered => match triggered(&m.id) {
+                Some(t) => t,
+                None => continue,
+            },
         };
         out.add(m.property, m.value_at(t));
     }
@@ -629,6 +722,48 @@ mod tests {
     }
 
     #[test]
+    fn an_impulse_decays_inside_its_envelope_and_waits_for_its_trigger() {
+        let shake = Modifier {
+            clock: Clock::Triggered,
+            ..modifier(
+                "jolt",
+                Property::X,
+                Kind::Impulse {
+                    amplitude: 10.0,
+                    frequency_hz: 1.0,
+                    decay_per_s: 2.0,
+                    duration_ms: 700.0,
+                },
+            )
+        };
+        assert!(
+            close(shake.value_at(0.25), 10.0 * (-0.5f64).exp()),
+            "a quarter swing in"
+        );
+        assert_eq!(shake.value_at(0.7), 0.0, "ends at its duration");
+        assert_eq!(shake.value_at(-0.1), 0.0, "nothing before it starts");
+        let mods = [shake];
+        assert_eq!(evaluate(&mods, 100.0, None).x, 0.0, "never fired: still");
+        let fired = evaluate_with(&mods, 100.0, None, |id| (id == "jolt").then_some(0.25));
+        assert!((f64::from(fired.x) - 10.0 * (-0.5f64).exp()).abs() < 1e-5);
+        assert_eq!(
+            check_list(&[Modifier {
+                kind: Kind::Impulse {
+                    amplitude: 1.0,
+                    frequency_hz: 1.0,
+                    decay_per_s: -1.0,
+                    duration_ms: 100.0,
+                },
+                ..mods[0].clone()
+            }]),
+            Err(InvalidModifier::Parameter {
+                id: "jolt".into(),
+                param: "decay_per_s"
+            })
+        );
+    }
+
+    #[test]
     fn unchecked_bad_periods_give_zero_not_nan() {
         for period_ms in [0.0, -5.0, f64::NAN] {
             let m = modifier("o", Property::Opacity, sine(1.0, period_ms));
@@ -664,6 +799,9 @@ mod tests {
                 wrap: None,
             },
         ];
+        let huge = modifier("h", Property::X, sine(f64::MAX, 1000.0));
+        let summed = evaluate(&[huge.clone(), huge], 0.6, None);
+        assert!(summed.x.is_finite());
         for kind in bad {
             let m = modifier("x", Property::Opacity, kind);
             assert!(check_list(std::slice::from_ref(&m)).is_err(), "{kind:?}");

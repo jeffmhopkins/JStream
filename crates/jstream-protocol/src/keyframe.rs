@@ -17,6 +17,7 @@ use crate::filter::FilterInfo;
 use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{ItemId, SceneId};
+use crate::motion::MotionModifier;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +39,8 @@ pub enum OverrideField {
     Opacity,
     /// Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).
     Effects,
+    /// Its motion modifiers, the whole list (`item.set_motion`, since 0.75, ADR-0099).
+    Motion,
 }
 
 /// What a keyframe scene overrides for one item in its parent's tree, as `state.get`
@@ -68,6 +71,11 @@ pub struct ItemOverride {
     /// there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effects: Option<Vec<FilterInfo>>,
+    /// The overridden motion modifiers, which the keyframe moves the item with in place
+    /// of the item's own (since 0.75, ADR-0099). An empty list is an override too: no
+    /// motion there. A Move between two members of a family blends both sides'.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub motion: Option<Vec<MotionModifier>>,
 }
 
 /// Overrides a batch dropped because their item left the keyframe scene's tree

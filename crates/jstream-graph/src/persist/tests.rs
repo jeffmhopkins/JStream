@@ -19,10 +19,14 @@ const V1: &str = include_str!("fixtures/v1.json");
 /// (ADR-0065). It must keep loading as version 1 must.
 const V2: &str = include_str!("fixtures/v2.json");
 
-/// A collection file at schema version 3, the current one: version 2 with a keyframe
-/// scene that overrides an item's effects (ADR-0088). The same rule applies once
-/// version 4 exists.
+/// A collection file at schema version 3: version 2 with a keyframe scene that
+/// overrides an item's effects (ADR-0088). It must keep loading as version 1 must.
 const V3: &str = include_str!("fixtures/v3.json");
+
+/// A collection file at schema version 4, the current one: version 3 with an item's
+/// motion modifiers and a keyframe scene's override of them (ADR-0099). The same rule
+/// applies once version 5 exists.
+const V4: &str = include_str!("fixtures/v4.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -183,6 +187,67 @@ fn v3_graph() -> Graph {
     graph
 }
 
+/// The v3 fixture's collection, plus a sway on group item `i4` and keyframe scene `k`'s
+/// own motion for item `i3` (ADR-0099), in one more batch: rev 5.
+fn v4_graph() -> Graph {
+    use jstream_protocol::{
+        Finite32, MotionClock, MotionKind, MotionModifier, MotionProperty, MotionShape,
+    };
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let mut graph = v3_graph();
+    let applied = graph.apply(
+        &[
+            Edit::ItemSetMotion {
+                item_id: ItemId::new("i4"),
+                scene_id: None,
+                motion: vec![
+                    MotionModifier {
+                        modifier_id: "sway".into(),
+                        property: MotionProperty::X,
+                        kind: MotionKind::Wiggle {
+                            amplitude: f(3.0),
+                            frequency_hz: f(0.5),
+                            seed: 4,
+                            octaves: 2,
+                        },
+                        clock: MotionClock::Engine,
+                        enabled: true,
+                    },
+                    MotionModifier {
+                        modifier_id: "roll".into(),
+                        property: MotionProperty::Rotation,
+                        kind: MotionKind::Oscillate {
+                            shape: MotionShape::Sine,
+                            amplitude: f(0.1),
+                            period_ms: 4000,
+                            phase: f(0.0),
+                        },
+                        clock: MotionClock::Shown,
+                        enabled: false,
+                    },
+                ],
+            },
+            Edit::ItemSetMotion {
+                item_id: ItemId::new("i3"),
+                scene_id: Some(SceneId::new("k")),
+                motion: vec![MotionModifier {
+                    modifier_id: "scroll".into(),
+                    property: MotionProperty::CropLeft,
+                    kind: MotionKind::Drift {
+                        rate_per_s: f(-8.0),
+                        wrap: Some(f(64.0)),
+                    },
+                    clock: MotionClock::Engine,
+                    enabled: true,
+                }],
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -246,9 +311,18 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v3_graph().to_collection_json(), V3);
+    assert_eq!(v4_graph().to_collection_json(), V4);
 }
 
+#[test]
+fn the_v4_fixture_loads_exactly() {
+    let expected = v4_graph();
+    let loaded = load(V4);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(5)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 3 upgrades unchanged: it has no motion.
 #[test]
 fn the_v3_fixture_loads_exactly() {
     let expected = v3_graph();
@@ -1412,4 +1486,40 @@ fn a_version_2_override_has_no_effects() {
         .as_object_mut()
         .map(|o| o.remove("effects"));
     assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(4)));
+}
+
+/// A version 3 file has no motion (ADR-0099): its migration refuses an item's or an
+/// override's, and upgrades everything else unchanged.
+#[test]
+fn a_version_3_file_has_no_motion() {
+    let mut value: Value = serde_json::from_str(V4).unwrap_or_default();
+    value["schema_version"] = json!(3);
+    let scene = |value: &Value, id: &str| {
+        value["scenes"]
+            .as_array()
+            .and_then(|scenes| scenes.iter().position(|s| s["id"] == id))
+            .expect("the v4 fixture has the scene")
+    };
+    let (b, k) = (scene(&value, "b"), scene(&value, "k"));
+    assert_eq!(
+        load(&value.to_string()).map(|g| g.rev()),
+        Err(LoadError::Migration {
+            from: 3,
+            reason: "a version 3 item has no `motion`".into()
+        })
+    );
+    value["scenes"][b]["items"][0]
+        .as_object_mut()
+        .map(|o| o.remove("motion"));
+    assert_eq!(
+        load(&value.to_string()).map(|g| g.rev()),
+        Err(LoadError::Migration {
+            from: 3,
+            reason: "a version 3 keyframe override has no `motion`".into()
+        })
+    );
+    value["scenes"][k]["overrides"][0]
+        .as_object_mut()
+        .map(|o| o.remove("motion"));
+    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(5)));
 }

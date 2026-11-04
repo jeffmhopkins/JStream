@@ -10,6 +10,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
 use super::Properties;
+use super::motion::MotionSection;
 use super::number::NumberField;
 use super::studio;
 use crate::app::SessionContext;
@@ -512,7 +513,8 @@ pub fn Inspector() -> impl IntoView {
             Shown::Item(scene, item) => view! {
                 <div class="inspector">
                     <ItemHeader item=item.clone() />
-                    <Placement scene=scene item=item linked=linked />
+                    <Placement scene=scene.clone() item=item.clone() linked=linked />
+                    <MotionSection scene=scene item=item />
                     <Fold title="Properties" open=true>
                         <Properties />
                     </Fold>
@@ -1165,7 +1167,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     min=0.0 max=100.0 send=send_opacity />
             </div>
         </Fold>
-        // A keyframe changes only placement, visibility and opacity (ADR-0049), so its
+        // A keyframe changes only placement, visibility, opacity and motion (ADR-0049,
+        // ADR-0099), so its
         // items' switches are the parent's and aren't shown here.
         <Show when=move || keyframe_of.with(Option::is_none)>
             <Fold title="Scene switches" open=false hint=switch_hint>

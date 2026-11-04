@@ -18,10 +18,10 @@ use crate::{Graph, Placement, audio};
 use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
     EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
-    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, OutputId,
-    OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole,
-    Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId, VideoMix,
-    VideoMixId,
+    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, MotionModifier,
+    OutputId, OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId,
+    VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
@@ -49,7 +49,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2, v2_to_v3];
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [v1_to_v2, v2_to_v3, v3_to_v4];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -88,6 +88,32 @@ fn v2_to_v3(value: &mut Value) -> Result<(), String> {
             .any(|o| o.get("effects").is_some())
         {
             return Err("a version 2 keyframe override has no `effects`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 4 adds motion modifiers (ADR-0099): an item's own (`items[].motion`) and a
+/// keyframe scene's override of them (`scenes[].overrides[].motion`). A version 3 file
+/// has neither, so it upgrades unchanged; one there is refused, as version 3 refused it.
+fn v3_to_v4(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if overrides
+            .into_iter()
+            .flatten()
+            .any(|o| o.get("motion").is_some())
+        {
+            return Err("a version 3 keyframe override has no `motion`".into());
+        }
+        let items = scene.get("items").and_then(Value::as_array);
+        if items
+            .into_iter()
+            .flatten()
+            .any(|i| i.get("motion").is_some())
+        {
+            return Err("a version 3 item has no `motion`".into());
         }
     }
     Ok(())
@@ -308,6 +334,10 @@ struct FileOverride {
     /// the keyframe follows the item's own. An empty list is an override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     effects: Option<Vec<FileFilter>>,
+    /// The overridden motion modifiers (ADR-0099, schema_version 4), in order; omitted
+    /// when the keyframe follows the item's own. An empty list is an override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    motion: Option<Vec<MotionModifier>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -372,6 +402,10 @@ struct FileItem {
     /// collection with no locked item saves as it did before, with no schema bump.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     locked: bool,
+    /// Its motion modifiers (ADR-0099, schema_version 4), in order; omitted when there
+    /// are none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    motion: Vec<MotionModifier>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -575,6 +609,7 @@ impl Graph {
                                 visible: info.visible,
                                 opacity: info.opacity,
                                 effects: o.effects.as_ref().map(|e| self.file_filters(&e.video)),
+                                motion: info.motion,
                             }
                         })
                         .collect(),
@@ -599,6 +634,7 @@ impl Graph {
                                 effects: self.file_filters(&item.effects.video),
                                 transition: item.transition,
                                 locked: item.locked,
+                                motion: item.motion.clone(),
                             }
                         })
                         .collect(),
@@ -1094,10 +1130,20 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if item.locked {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetLocked {
                         item_id: item.id.clone(),
                         locked: true,
+                    },
+                ));
+            }
+            if !item.motion.is_empty() {
+                edits.push((
+                    object,
+                    Edit::ItemSetMotion {
+                        item_id: item.id.clone(),
+                        scene_id: None,
+                        motion: item.motion.clone(),
                     },
                 ));
             }
@@ -1243,7 +1289,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
 }
 
 /// The edits addressed to the keyframe scene `scene_id` that write `o`: the placement
-/// edits, then `item.set_effects`.
+/// edits, then `item.set_motion`, then `item.set_effects`.
 fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
     let (item_id, scene_id) = (&o.item_id, Some(scene_id.clone()));
     let mut edits = Vec::new();
@@ -1280,6 +1326,13 @@ fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
             item_id: item_id.clone(),
             scene_id: scene_id.clone(),
             opacity,
+        });
+    }
+    if let Some(motion) = &o.motion {
+        edits.push(Edit::ItemSetMotion {
+            item_id: item_id.clone(),
+            scene_id: scene_id.clone(),
+            motion: motion.clone(),
         });
     }
     if let (Some(effects), Some(scene_id)) = (&o.effects, scene_id) {

@@ -39,6 +39,7 @@ mod history;
 mod kinds;
 mod live;
 mod load;
+mod motion;
 mod output_stats;
 mod outputs;
 mod pack_source;

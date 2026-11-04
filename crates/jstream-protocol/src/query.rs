@@ -17,6 +17,7 @@ use crate::keyframe::ItemOverride;
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
 use crate::mix::VideoMixInfo;
+use crate::motion::MotionModifier;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
@@ -1025,6 +1026,12 @@ pub struct ItemInfo {
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub locked: bool,
+    /// Its motion modifiers (ADR-0099, since 0.75), first first, which move it on the
+    /// engine's animation clock as each frame is drawn: see [`MotionModifier`]. Written
+    /// whole by `item.set_motion`. Omitted while empty, so missing (also from an older
+    /// server) parses as none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub motion: Vec<MotionModifier>,
 }
 
 fn opaque() -> Finite32 {

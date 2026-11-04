@@ -221,8 +221,8 @@ state machine. Contents:
   and drawn at `State::items_through`; a group it doesn't override is drawn as itself,
   so the layer stays shared. A Move within the family flattens a group over the whole
   canvas into its children, which pair by item and move between the two sides'
-  values. A group that doesn't flatten (placed elsewhere, or with a blend, chain or
-  effects) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
+  values. A group that doesn't flatten (placed elsewhere, or with a blend, chain,
+  effects or motion) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
   it is shown through its `scene` source's own video chain, which moves it as one
   picture with nothing inside it moving:
   `transition.rs` plans them by item between the group's two sides (a view through
@@ -244,6 +244,21 @@ state machine. Contents:
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
+- **Motion** (`motion.rs`,
+  [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
+  motion modifiers, turned into `jstream-anim`'s once when the shot is planned, are
+  evaluated each time a pass draws the item, at the frame's animation time, and added
+  to its placement, crop and opacity after any live value (`apply`: position, size,
+  rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
+  placement, crop rounded and never below 0, opacity clamped to 0 to 1). The item's
+  stored values never change. A shot with motion anywhere (`Shot::moves`) changes with
+  time (`Shot::changes_with_time`), as a running transition does, so a preview stream
+  sends it each frame too. During a transition each track
+  carries both sides' motion (`TrackMotion`): a matched pair blends their offsets by
+  the eased progress, an appearing item moves by its new side's and a disappearing one
+  by its old side's. The `shown` clock starts when an item starts being drawn in any
+  pass: the engine keeps when each drawn item appeared (`ShownSince`) and stamps it on
+  each shot it publishes (`Shot::set_shown`).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads

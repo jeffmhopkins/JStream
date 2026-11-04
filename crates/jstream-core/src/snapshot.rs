@@ -44,6 +44,7 @@ use jstream_sources::CaptureSpec;
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::lock;
+use crate::motion::{self, TrackMotion};
 use crate::profile::{DrawMeter, Phase};
 use crate::runtime::RenderSnapshot;
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
@@ -305,6 +306,9 @@ struct Placed {
     /// (ADR-0049 §3): its track and the transition's start, which replace the fields
     /// above (`placement` holds its end) and its live values.
     moving: Option<Moving>,
+    /// Its motion modifiers (ADR-0099), evaluated as each frame is drawn: both sides'
+    /// for a moving child, its own on both sides otherwise.
+    motion: TrackMotion,
 }
 
 /// A layer's track inside a group a transition moves, and when the transition started.
@@ -437,6 +441,9 @@ struct ItemBox {
     placement: Placement,
     crop: Crop,
     boxed: Boxed,
+    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, the rest
+    /// moves the box where it is placed.
+    motion: motion::Motion,
 }
 
 /// The program mix and every video mix, copied out of the collection so they can be
@@ -491,6 +498,13 @@ pub(crate) struct Shot {
     /// an output's frame is drawn ([`compose`] with [`View::stage`]), not in the chain
     /// phase, and never on the editing canvas or a preview.
     stages: BTreeMap<ChainOwner, Chain>,
+    /// Whether an item it draws has a motion modifier (ADR-0099), so what it draws
+    /// changes with time.
+    moves: bool,
+    /// When each item it draws was first drawn, the origin of its `shown` clock
+    /// (ADR-0099), as the engine set it ([`Shot::set_shown`]). An item missing here is
+    /// at its start.
+    shown: BTreeMap<ItemId, MediaTime>,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -498,8 +512,9 @@ pub(crate) struct Shot {
 #[derive(Debug, PartialEq)]
 struct Transitioning {
     start: MediaTime,
-    /// Each track with the camera its visual is seen through.
-    tracks: Vec<(GpuKey, Track, Seen)>,
+    /// Each track with the camera its visual is seen through, and its motion modifiers
+    /// (ADR-0099).
+    tracks: Vec<(GpuKey, Track, Seen, TrackMotion)>,
     /// The backgrounds it fades between, from the scene it leaves to the one it shows,
     /// over `end_ms`.
     backgrounds: (Color, Color),
@@ -609,6 +624,8 @@ impl Default for Shot {
             chain_steps: Vec::new(),
             boxes: BTreeMap::new(),
             stages: BTreeMap::new(),
+            moves: false,
+            shown: BTreeMap::new(),
         }
     }
 }
@@ -667,11 +684,64 @@ impl Shot {
         self.transition.is_some()
     }
 
-    /// Whether what this shot draws may change with time alone: a transition runs, or a
+    /// Whether what this shot draws may change with time alone: a transition runs, a
     /// source has a video chain, whose filters may move or hold frames (scroll, video
-    /// delay). Every chain counts, which redraws a still filtered picture too.
+    /// delay), or an item it draws has motion (ADR-0099). Every chain counts, which
+    /// redraws a still filtered picture too.
     pub(crate) fn changes_with_time(&self) -> bool {
-        self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty()
+        self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
+    }
+
+    /// Whether an item this shot draws has a motion modifier: in a pass, a chain
+    /// phase's pass, a box or a transition track.
+    fn has_motion(&self) -> bool {
+        let chain_passes = self.chain_steps.iter().filter_map(|step| match step {
+            ChainStep::Pass(pass) => Some(pass),
+            ChainStep::Run(_) | ChainStep::Box(_) => None,
+        });
+        self.passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .chain(chain_passes)
+            .flat_map(|pass| &pass.layers)
+            .any(|layer| !layer.motion.is_still())
+            || self.boxes.values().any(|boxed| !boxed.motion.is_empty())
+            || self
+                .transition
+                .iter()
+                .flat_map(|t| &t.tracks)
+                .any(|(_, _, _, motion)| !motion.is_still())
+    }
+
+    /// Every item this shot draws, in any pass or transition track: whose `shown`
+    /// clock runs (ADR-0099).
+    pub(crate) fn drawn_items(&self) -> BTreeSet<ItemId> {
+        let layers = self
+            .passes
+            .iter()
+            .chain(self.mix_passes.values().flatten())
+            .flat_map(|pass| &pass.layers)
+            .map(|layer| &layer.item);
+        let tracks = self
+            .transition
+            .iter()
+            .flat_map(|t| &t.tracks)
+            .flat_map(|(_, _, _, motion)| [&motion.from.0, &motion.to.0]);
+        layers
+            .chain(tracks)
+            .filter(|item| !item.as_str().is_empty())
+            .cloned()
+            .collect()
+    }
+
+    /// Sets when each item it draws was first drawn ([`motion::ShownSince`]).
+    pub(crate) fn set_shown(&mut self, shown: BTreeMap<ItemId, MediaTime>) {
+        self.shown = shown;
+    }
+
+    /// When `item` was first drawn, if this shot knows.
+    fn shown_at(&self, item: &ItemId) -> Option<MediaTime> {
+        self.shown.get(item).copied()
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -777,7 +847,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, seen)| t.cameras.camera(track, *seen, elapsed_ms))
+                .map(|(_, track, seen, _)| t.cameras.camera(track, *seen, elapsed_ms))
                 .collect()
         })
     }
@@ -789,7 +859,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, seen)| t.cameras.depth_run(track, *seen))
+                .map(|(_, track, seen, _)| t.cameras.depth_run(track, *seen))
                 .collect()
         })
     }
@@ -800,7 +870,7 @@ impl Shot {
     pub(crate) fn tracks(&self) -> Option<Vec<Track>> {
         self.transition
             .as_ref()
-            .map(|t| t.tracks.iter().map(|(_, track, _)| *track).collect())
+            .map(|t| t.tracks.iter().map(|(_, track, _, _)| *track).collect())
     }
 
     /// The layers a transition moves inside a group's layer (ADR-0049 §3), each item
@@ -824,6 +894,58 @@ impl Shot {
                 .map(|p| (p.item.clone(), p.placement, p.opacity))
                 .collect()
         })
+    }
+
+    /// What the program pass of scene `id` draws at `at`, bottom first, with each
+    /// item's motion (ADR-0099) and no live values: each item with its placement, crop
+    /// and opacity, or `None` when no program pass draws the scene, for tests.
+    #[cfg(test)]
+    pub(crate) fn moved_at(
+        &self,
+        id: &SceneId,
+        at: MediaTime,
+    ) -> Option<Vec<(ItemId, Placement, Crop, f32)>> {
+        let pass = self.passes.iter().find(|pass| pass.scene == *id)?;
+        Some(
+            pass.layers
+                .iter()
+                .map(|layer| {
+                    let (item, modifiers) = &layer.motion.to;
+                    let by = motion::offsets(modifiers, at, self.shown_at(item));
+                    let (placement, crop, opacity) =
+                        motion::apply(&by, layer.placement, layer.crop, layer.opacity);
+                    (layer.item.clone(), placement, crop, opacity)
+                })
+                .collect(),
+        )
+    }
+
+    /// The running transition's tracks sampled `elapsed_ms` into it at `at`, with their
+    /// motion (ADR-0099), in drawing order, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn tracks_moved_at(
+        &self,
+        elapsed_ms: f32,
+        at: MediaTime,
+    ) -> Option<Vec<Option<jstream_render::transition::Endpoint>>> {
+        let canvas = canvas_size(self.canvas);
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, _, moved)| {
+                    let by = moved.offsets(track, elapsed_ms, at, |item| self.shown_at(item));
+                    track
+                        .sample(elapsed_ms, canvas)
+                        .map(|end| motion::apply_endpoint(&by, end))
+                })
+                .collect()
+        })
+    }
+
+    /// When each item this shot draws was first drawn, for tests.
+    #[cfg(test)]
+    pub(crate) fn shown(&self) -> &BTreeMap<ItemId, MediaTime> {
+        &self.shown
     }
 
     /// What scene `id` places, bottom first, as it is drawn with the live values in
@@ -864,6 +986,8 @@ impl PartialEq for Shot {
             && self.transition == other.transition
             && self.boxes == other.boxes
             && self.stages == other.stages
+            && self.moves == other.moves
+            && self.shown == other.shown
     }
 }
 
@@ -1094,7 +1218,9 @@ fn plan_inner(
             let tracks = planned
                 .tracks
                 .into_iter()
-                .map(|(visual, track)| (key(&visual.image, &shot), track, visual.seen))
+                .map(|(visual, track)| {
+                    (key(&visual.image, &shot), track, visual.seen, visual.motion)
+                })
                 .collect();
             let to = planner
                 .background(&running.to)
@@ -1161,7 +1287,7 @@ fn plan_inner(
                 transition
                     .tracks
                     .iter()
-                    .filter_map(|(key, _, _)| match key {
+                    .filter_map(|(key, _, _, _)| match key {
                         GpuKey::Capture(spec) => Some(spec.clone()),
                         _ => None,
                     }),
@@ -1193,6 +1319,7 @@ fn plan_inner(
     if mixes {
         shot.stages = plan_stages(state, assets);
     }
+    shot.moves = shot.has_motion();
     Planning {
         shot,
         wake: planner.wake,
@@ -1361,7 +1488,7 @@ fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
     let mut path = BTreeSet::new();
-    for (key, _, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+    for (key, _, _, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
         if let GpuKey::Layer(scene, depth) = key {
             visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
         }
@@ -1707,6 +1834,7 @@ impl<'a> Planner<'a, '_> {
                 blend: child.at.blend,
                 effects: None,
                 moving: Some((start, *track)),
+                motion: child.motion.clone(),
             });
             tracks.push((child, *track));
         }
@@ -1781,6 +1909,7 @@ impl<'a> Planner<'a, '_> {
             effects: Vec::new(),
             inside: None,
             seen: Seen::AsPlanned,
+            motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
         }]
     }
 
@@ -1932,6 +2061,7 @@ impl<'a> Planner<'a, '_> {
                 placement: Placement::Geometry(geometry),
                 crop: crop(item.crop()),
                 boxed,
+                motion: motion::of(item),
             },
         );
         self.add_chain(owner, chain, out);
@@ -1994,6 +2124,8 @@ impl<'a> Planner<'a, '_> {
                         && self.scene_chain(scene_id).is_none()
                         && !self.filters_scene(source)
                         && !item.effects().iter().any(|effect| effect.enabled())
+                        // A group that moves on its own is one picture (ADR-0099).
+                        && item.motion().is_empty()
                     {
                         self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
                         continue;
@@ -2059,6 +2191,7 @@ impl<'a> Planner<'a, '_> {
                 effects,
                 inside: None,
                 seen: Seen::AsPlanned,
+                motion: TrackMotion::same(item.id().clone(), motion::of(item)),
             });
         }
         path.remove(id);
@@ -2103,6 +2236,7 @@ impl<'a> Planner<'a, '_> {
                     blend: item.blend(),
                     effects,
                     moving: None,
+                    motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 });
             }
         }
@@ -2365,6 +2499,8 @@ struct Layer {
     boxed: Option<Boxed>,
     /// Its track, for a group's child a transition moves inside the group's layer.
     moving: Option<Moving>,
+    /// Its motion modifiers (ADR-0099): the moving child's both sides, else its own.
+    motion: TrackMotion,
 }
 
 impl Shot {
@@ -2512,6 +2648,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 blend: BlendMode::Normal,
                 boxed: None,
                 moving: None,
+                motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
             })
             .into_iter()
             .collect();
@@ -2751,6 +2888,7 @@ fn visit_into(
             blend: placed.blend,
             boxed: placed.effects,
             moving: placed.moving,
+            motion: placed.motion.clone(),
         });
     }
     path.remove(id);
@@ -3800,7 +3938,13 @@ pub(crate) fn compose_metered(
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
             let started = Instant::now();
-            fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
+            fill_items(
+                &mut items,
+                (cache, chains),
+                (shot, pass),
+                (at, canvas),
+                live,
+            );
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
             meter.pass(&pass.scene, took);
@@ -3809,11 +3953,17 @@ pub(crate) fn compose_metered(
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
         let clear = match (root, tracks) {
             (_, Some(transition)) => {
-                fill_tracks(&mut items, (cache, chains), transition, canvas, at);
+                fill_tracks(&mut items, (cache, chains), (shot, transition), canvas, at);
                 transition.background(at)
             }
             (Some(root), None) => {
-                fill_items(&mut items, (cache, chains), root, (at, canvas), live);
+                fill_items(
+                    &mut items,
+                    (cache, chains),
+                    (shot, root),
+                    (at, canvas),
+                    live,
+                );
                 root.background
             }
             (None, None) => {
@@ -3965,7 +4115,7 @@ fn run_chains(
                     match draw_box(
                         compositor,
                         (&mut *cache, &mut *chains),
-                        shot,
+                        (shot, at),
                         owner,
                         boxed,
                         live,
@@ -3980,7 +4130,13 @@ fn run_chains(
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 let mut items = Vec::new();
-                fill_items(&mut items, (&*cache, &*chains), pass, (at, canvas), live);
+                fill_items(
+                    &mut items,
+                    (&*cache, &*chains),
+                    (shot, pass),
+                    (at, canvas),
+                    live,
+                );
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
                 };
@@ -4014,7 +4170,7 @@ fn box_input(shot: &Shot, source: &SourceRef) -> Option<GpuKey> {
 fn draw_box(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
-    shot: &Shot,
+    (shot, at): (&Shot, MediaTime),
     owner: &ChainOwner,
     boxed: &ItemBox,
     live: &LiveParams,
@@ -4032,6 +4188,9 @@ fn draw_box(
         boxed.placement,
         boxed.crop,
     );
+    // Its motion's crop is cut here; the rest moves the box where it is placed.
+    let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item));
+    let (_, crop, _) = motion::apply(&by, placement, crop, OPAQUE);
     let inside = boxed
         .boxed
         .geometry_of(placement, crop)
@@ -4142,7 +4301,7 @@ pub(crate) fn claim_layers(
 fn fill_items<'a>(
     items: &mut Vec<Item<'a>>,
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
-    pass: &Pass,
+    (shot, pass): (&Shot, &Pass),
     (at, canvas): (MediaTime, FrameSize),
     live: &LiveParams,
 ) {
@@ -4154,7 +4313,11 @@ fn fill_items<'a>(
             return None;
         }
         if let Some((start, track)) = &layer.moving {
-            let sampled = track.sample(transition::elapsed_ms(*start, at), size)?;
+            let elapsed = transition::elapsed_ms(*start, at);
+            let by = layer
+                .motion
+                .offsets(track, elapsed, at, |item| shot.shown_at(item));
+            let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
             return Some(Item {
                 image: cache.get(&layer.image)?,
                 placement: Placement::Geometry(sampled.geometry),
@@ -4167,6 +4330,10 @@ fn fill_items<'a>(
             });
         }
         let (placement, crop) = live.apply(layer);
+        // Its motion moves it on top of its live values (ADR-0099).
+        let (item, modifiers) = &layer.motion.to;
+        let by = motion::offsets(modifiers, at, shot.shown_at(item));
+        let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
         let (placement, crop) = match &layer.boxed {
             Some(boxed) => {
                 let geometry = boxed.geometry_of(placement, crop)?;
@@ -4178,7 +4345,7 @@ fn fill_items<'a>(
             image: cache.get(&layer.image)?,
             placement,
             crop,
-            opacity: layer.opacity,
+            opacity,
             blend: layer.blend,
             visible: true,
             camera,
@@ -4192,30 +4359,36 @@ fn fill_items<'a>(
 fn fill_tracks<'a>(
     items: &mut Vec<Item<'a>>,
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
-    transition: &Transitioning,
+    (shot, transition): (&Shot, &Transitioning),
     canvas: FrameSize,
     at: MediaTime,
 ) {
     let elapsed = transition::elapsed_ms(transition.start, at);
     let size = [canvas.width() as f32, canvas.height() as f32];
     items.clear();
-    items.extend(transition.tracks.iter().filter_map(|(key, track, seen)| {
-        if chains.failed(key) {
-            return None;
-        }
-        let sampled = track.sample(elapsed, size)?;
-        Some(Item {
-            image: cache.get(key)?,
-            placement: Placement::Geometry(sampled.geometry),
-            crop: sampled.crop,
-            opacity: sampled.opacity,
-            blend: sampled.blend,
-            visible: true,
-            camera: transition.cameras.camera(track, *seen, elapsed),
-            // A stinger's items sort on their own, over the scenes under them.
-            depth_run: transition.cameras.depth_run(track, *seen),
-        })
-    }));
+    items.extend(
+        transition
+            .tracks
+            .iter()
+            .filter_map(|(key, track, seen, moved)| {
+                if chains.failed(key) {
+                    return None;
+                }
+                let by = moved.offsets(track, elapsed, at, |item| shot.shown_at(item));
+                let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
+                Some(Item {
+                    image: cache.get(key)?,
+                    placement: Placement::Geometry(sampled.geometry),
+                    crop: sampled.crop,
+                    opacity: sampled.opacity,
+                    blend: sampled.blend,
+                    visible: true,
+                    camera: transition.cameras.camera(track, *seen, elapsed),
+                    // A stinger's items sort on their own, over the scenes under them.
+                    depth_run: transition.cameras.depth_run(track, *seen),
+                })
+            }),
+    );
 }
 
 /// `image`, of size `from`, fitted inside `into`: scaled by the same factor both ways
@@ -4530,6 +4703,7 @@ pub(crate) mod tests {
             blend: jstream_protocol::BlendMode::Normal,
             effects: None,
             moving: None,
+            motion: crate::motion::TrackMotion::same(ItemId::new("itm"), std::sync::Arc::from([])),
         }
     }
 

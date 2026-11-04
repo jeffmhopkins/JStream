@@ -22,6 +22,7 @@ use crate::id::{
 };
 use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
+use crate::motion::MotionModifier;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
@@ -110,6 +111,26 @@ pub enum Edit {
         /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
         /// `effects`.
         effects: Vec<FilterInfo>,
+    },
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which
+    /// move it on the engine's animation clock as each frame is drawn. Without
+    /// `scene_id`, or with its own scene's, it writes the item's own list; with a
+    /// keyframe scene whose tree holds the item, it writes that keyframe's override.
+    /// Any other scene is `invalid_argument` on `scene_id`. The list holds at most
+    /// [`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on
+    /// `motion`; each ID is unique and well formed, and each parameter in its range,
+    /// else `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion
+    /// (in a keyframe, an override with none). Inverse: `item.set_motion` with the old
+    /// list, or `item.clear_override` of `motion` when the keyframe didn't override it.
+    #[serde(rename = "item.set_motion")]
+    ItemSetMotion {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The modifiers, first first.
+        motion: Vec<MotionModifier>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -1082,6 +1103,7 @@ impl Edit {
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
+            Edit::ItemSetMotion { .. } => "item.set_motion",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",

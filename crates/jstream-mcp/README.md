@@ -177,9 +177,12 @@ blending is linear, 3D sets through
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
-source's `html` (time-based animation on the wall clock so separate pages agree, with
-subtle ambient motion and streaks that move less per frame than their length, and falling back to the built-in kinds where no browser is
-available), and checking
+source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
+kinds where no browser is available), continuous motion as `item.set_motion` on items
+rather than in pages (one engine clock, so items, masks and nested scenes move in step;
+a sway on a group's item moves the group as one; a keyframe scene's own list across a
+`move`; kept subtle, with streaks that move less per frame than their length,
+[ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

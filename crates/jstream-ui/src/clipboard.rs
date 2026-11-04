@@ -3,7 +3,7 @@
 //! the selected items, and on a scene row (or its menu's Copy) copies the scene. Ctrl+V,
 //! or Paste in the item menu and the empty canvas's and the Sources panel's menus, places the copied items' sources again in the shown
 //! scene as references, each with the copied item's box, crop, visibility, lock, opacity,
-//! blend, transition settings and effects. Into the scene they came from they land 40
+//! blend, transition settings, motion and effects. Into the scene they came from they land 40
 //! pixels right and down, as a duplicate does. Ctrl+V in the Scenes panel, or Paste
 //! scene, duplicates the copied scene, as Duplicate scene does: a scene named
 //! "\<name\> copy" just below it, in its folder, with its labels, transitions, filters
@@ -380,6 +380,13 @@ fn place_edits(
                 locked: true,
             });
         }
+        if !item.motion.is_empty() {
+            edits.push(Edit::ItemSetMotion {
+                item_id: item_id.clone(),
+                scene_id: None,
+                motion: item.motion.clone(),
+            });
+        }
         let owner = FilterOwner::Item {
             item_id: item_id.clone(),
         };
@@ -535,6 +542,7 @@ mod tests {
 
     fn item(id: &str, source: &str, x: f32) -> ItemInfo {
         ItemInfo {
+            motion: Default::default(),
             item_id: id.into(),
             source_id: source.into(),
             placement: PlacementForm::Geometry,
@@ -596,6 +604,22 @@ mod tests {
         }
     }
 
+    /// A gentle sway along x.
+    fn sway() -> jstream_protocol::MotionModifier {
+        jstream_protocol::MotionModifier {
+            modifier_id: "sway".into(),
+            property: jstream_protocol::MotionProperty::X,
+            kind: jstream_protocol::MotionKind::Wiggle {
+                amplitude: Finite32::new(3.0).expect("finite"),
+                frequency_hz: Finite32::ONE,
+                seed: 0,
+                octaves: 1,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }
+    }
+
     /// `main` holds an image `a` and the nested scene `inner` (`b`); `inner` holds the
     /// image `c`; `other` is empty; `kf` is a keyframe of `main`.
     fn collection() -> Collection {
@@ -611,6 +635,7 @@ mod tests {
         a.locked = true;
         a.opacity = Finite32::new(0.5).expect("finite");
         a.effects = vec![blur()];
+        a.motion = vec![sway()];
         let mut kf = scene("kf", Vec::new());
         kf.variant_of = Some("main".into());
         Collection {
@@ -783,6 +808,11 @@ mod tests {
                     item_id: "item1".into(),
                     locked: true,
                 },
+                Edit::ItemSetMotion {
+                    item_id: "item1".into(),
+                    scene_id: None,
+                    motion: vec![sway()],
+                },
                 Edit::FilterAdd {
                     owner: FilterOwner::Item {
                         item_id: "item1".into(),
@@ -880,6 +910,7 @@ mod tests {
                 Edit::ItemSetCrop { .. } => "crop",
                 Edit::ItemSetVisible { .. } => "hidden",
                 Edit::ItemSetLocked { locked: true, .. } => "locked",
+                Edit::ItemSetMotion { .. } => "motion",
                 Edit::FilterAdd { .. } => "effect",
                 other => panic!("{other:?}"),
             })
@@ -898,6 +929,7 @@ mod tests {
                 "crop",
                 "hidden",
                 "locked",
+                "motion",
                 "effect",
                 "item"
             ]

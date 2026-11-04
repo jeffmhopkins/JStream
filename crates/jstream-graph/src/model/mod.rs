@@ -85,7 +85,12 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// fields it sets, each a whole value. An overridden geometry is always a
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains>;
+/// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
+/// (ADR-0099).
+pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+
+/// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
+pub type MotionList = Vec<jstream_protocol::MotionModifier>;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -422,6 +427,8 @@ impl State {
                         opacity: Finite32::new(props.opacity).unwrap_or(item.opacity),
                         // Overridden effects replace the item's own, whole (ADR-0088).
                         effects: o.effects.clone().unwrap_or_else(|| item.effects.clone()),
+                        // So does overridden motion (ADR-0099).
+                        motion: o.motion.clone().unwrap_or_else(|| item.motion.clone()),
                         ..item.clone()
                     })
                 }
@@ -906,9 +913,16 @@ pub struct Item {
     /// Whether its canvas box is locked (ADR-0096): an editing aid the engine stores and
     /// reports, and never enforces.
     pub(crate) locked: bool,
+    /// Its motion modifiers (ADR-0099): evaluated as each frame is drawn, never stored.
+    pub(crate) motion: MotionList,
 }
 
 impl Item {
+    /// Its motion modifiers (ADR-0099), in order.
+    pub fn motion(&self) -> &[jstream_protocol::MotionModifier] {
+        &self.motion
+    }
+
     /// Its ID.
     pub fn id(&self) -> &ItemId {
         &self.id
