@@ -1,5 +1,6 @@
 //! A page's reload hold in the helper (#1151): from a reload until the reloaded document
-//! paints for real, the helper sends the engine none of the page's paints.
+//! paints for real, the helper sends the engine none of the page's paints. A new page
+//! starts held ([`ReloadHold::opening`]), so its first load is held the same way (#1155).
 //!
 //! Chromium's first paint after a new document starts loading (`OnLoadStart`) can be its
 //! blank surface, opaque white over the whole page, `background: transparent` or not.
@@ -67,6 +68,15 @@ pub(crate) struct ReloadHold {
 }
 
 impl ReloadHold {
+    /// A new page's hold: held, as if it had just reloaded, so its first load's paints
+    /// wait like a reload's, and Chromium's white first paint never reaches the engine
+    /// (#1155).
+    pub(crate) fn opening() -> Self {
+        let mut hold = Self::default();
+        hold.reload();
+        hold
+    }
+
     /// The page is reloading: its paints are held from now on.
     pub(crate) fn reload(&mut self) {
         self.held = true;
@@ -143,6 +153,24 @@ impl ReloadHold {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #1155: a new page's first load is held like a reload's, so its first paint, which
+    /// can be Chromium's white blank, is skipped.
+    #[test]
+    fn a_new_page_s_first_load_is_held() {
+        let mut hold = ReloadHold::opening();
+        let token = hold.load_started().expect("held from the start");
+        assert_eq!(
+            hold.paint(),
+            Paint::Skip,
+            "the first paint may be the blank"
+        );
+        let released = hold.load_finished().expect("the load end releases it");
+        assert!(hold.needs_repaint(released), "nothing painted since");
+        assert_eq!(hold.paint(), Paint::Send);
+        assert_eq!(hold.deadline(token), None, "a stale deadline does nothing");
+        assert_eq!(hold.paint(), Paint::Send);
+    }
 
     #[test]
     fn a_page_that_never_reloaded_paints() {

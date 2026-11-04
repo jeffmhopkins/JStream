@@ -152,7 +152,8 @@ What follows is Windows; **On Linux** below says what differs.
   the first paint since its start has been skipped, 500 ms after that start counting
   as the load's end (`reload_hold.rs`), since Chromium's first paint of a new document can be its
   blank, opaque white (#1151). It asks for a paint 100 ms after the hold ends if none
-  came, so a static page shows again. It says when it took the reload (`Reloading`), and the engine
+  came, so a static page shows again. A new page starts held the same way, so its first
+  load's white paint never reaches the engine either (#1155). It says when it took the reload (`Reloading`), and the engine
   drops paints that left before that, so a `restart_on_show` page is transparent while
   it reloads, never the end of its last run nor a white frame. The helper sends
   frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
