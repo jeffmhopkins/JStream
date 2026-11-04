@@ -990,7 +990,8 @@ variant's override, and a variant's parent's) as `Pass.camera`, and live
 parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
 (`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
 between two 3D scenes interpolates the camera with the Move's own timing
-(`lerp_camera`) and draws both sides' tracks through it. A Move between a 3D scene and
+(`lerp_camera`, its focus and blur too, a side with no focus taken as focused where the
+other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and draws both sides' tracks through it. A Move between a 3D scene and
 a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
 keeps each side's own camera on its items. A stinger's items are seen through their
 own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a

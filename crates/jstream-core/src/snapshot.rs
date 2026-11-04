@@ -1238,7 +1238,7 @@ fn plan_inner(
         }));
     shot.chain_steps = schedule_chains(&shot);
     let read = placed_captures(shot.chain_steps.iter().filter_map(|step| match step {
-        ChainStep::Pass(pass) => Some(pass),
+        ChainStep::Pass(pass) => Some(&**pass),
         ChainStep::Run(_) | ChainStep::Box(_) => None,
     }))
     .collect::<Vec<_>>();
@@ -2306,8 +2306,9 @@ impl GpuKey {
 /// reads ([`schedule_chains`]).
 #[derive(Debug, PartialEq)]
 enum ChainStep {
-    /// A scene a `scene_mask` reads, or a scene that one nests.
-    Pass(Pass),
+    /// A scene a `scene_mask` reads, or a scene that one nests. Boxed: a pass holds two
+    /// cameras, which would make every step that size.
+    Pass(Box<Pass>),
     /// An item with effects, drawn into its [`GpuKey::ItemBox`] before they run.
     Box(ChainOwner),
     /// The video chain of a source or a scene.
@@ -2715,7 +2716,7 @@ impl ChainOrder {
 
 impl Passes for ChainOrder {
     fn pass(&mut self, pass: Pass) {
-        self.steps.push(ChainStep::Pass(pass));
+        self.steps.push(ChainStep::Pass(Box::new(pass)));
     }
 
     fn filtered(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {

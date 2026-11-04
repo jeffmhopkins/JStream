@@ -38,6 +38,23 @@ impl Preview {
         }
     }
 
+    /// What an orbit of `drag`'s camera from `start` commits when it ends: the preview's
+    /// camera, when the drop is kept, the canvas still shows `drag` and the camera moved.
+    /// `None` drops the drag, as when another scene is shown now (the first deleted mid-
+    /// drag, say), so a camera is never committed to a scene it wasn't dragged in.
+    pub fn to_commit(
+        preview: Option<&Preview>,
+        drag: &SceneId,
+        shown: Option<&SceneId>,
+        keep: bool,
+        start: SceneCamera,
+    ) -> Option<SceneCamera> {
+        if !keep || shown != Some(drag) {
+            return None;
+        }
+        Preview::camera_in(preview, Some(drag), None).filter(|c| *c != start)
+    }
+
     /// Whether to stop showing it now that the canvas shows `scene` with `stored`: the
     /// collection has its camera, or the scene's camera was removed, or another scene
     /// (or none) is shown.
@@ -393,6 +410,25 @@ mod tests {
         assert_eq!(Preview::camera_in(None, Some(&a), None), None);
         // Nor is a 2D scene shown mid-drag seen through it.
         assert_eq!(Preview::camera_in(Some(&p), Some(&b), None), None);
+        // A drag on A commits A's moved camera, and nothing once B is shown, cancelled,
+        // or unmoved (#1110 round 1, B1).
+        assert_eq!(
+            Preview::to_commit(Some(&p), &a, Some(&a), true, stored),
+            Some(moved)
+        );
+        assert_eq!(
+            Preview::to_commit(Some(&p), &a, Some(&b), true, stored),
+            None
+        );
+        assert_eq!(Preview::to_commit(Some(&p), &a, None, true, stored), None);
+        assert_eq!(
+            Preview::to_commit(Some(&p), &a, Some(&a), false, stored),
+            None
+        );
+        assert_eq!(
+            Preview::to_commit(Some(&p), &a, Some(&a), true, moved),
+            None
+        );
         // It is dropped once A has the camera, once A's camera is removed, or once
         // another scene is shown; A with its old camera still keeps it.
         assert!(p.caught_up(Some((Some(&a), Some(moved)))));

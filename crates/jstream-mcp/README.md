@@ -174,7 +174,9 @@ canvas space by an unflipped group around it and added at a low opacity because
 blending is linear, 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
-above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
+above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
+(`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (time-based animation on the wall clock so separate pages agree, with

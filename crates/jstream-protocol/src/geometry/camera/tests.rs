@@ -41,6 +41,8 @@ fn camera(position: Vec3, target: Vec3, fov: f32, roll: f32) -> SceneCamera {
         fov_deg: finite(fov),
         roll_deg: finite(roll),
         depth_sort: true,
+        focus_px: None,
+        blur_px: Finite32::ZERO,
     }
 }
 
@@ -397,4 +399,54 @@ fn on_plane_inverts_place() {
     assert_eq!(level.on_plane(ahead, 0.0), None);
     let framing = view(SceneCamera::framing(CANVAS));
     assert_eq!(framing.on_plane(ahead, 5000.0), None);
+}
+
+/// ADR-0108 decision 1: focus and blur are optional on the wire, checked, and not
+/// written when absent.
+#[test]
+fn depth_of_field_is_optional_and_checked() {
+    let at = vec3(960.0, 540.0, 1000.0);
+    let target = vec3(960.0, 540.0, 0.0);
+    let mut c = camera(at, target, 45.0, 0.0);
+    assert_eq!(c.focus_px, None);
+    assert_eq!(c.blur_px.get(), 0.0);
+    let written = serde_json::to_value(c).expect("writes");
+    assert!(written.get("focus_px").is_none() && written.get("blur_px").is_none());
+    c.focus_px = Some(finite(0.0));
+    assert_eq!(c.validate(), Err(GeometryError::FocusDistance));
+    c.focus_px = Some(finite(2e15));
+    assert_eq!(c.validate(), Err(GeometryError::FocusDistance));
+    c.focus_px = Some(finite(1000.0));
+    c.blur_px = finite(65.0);
+    assert_eq!(c.validate(), Err(GeometryError::Blur));
+    c.blur_px = finite(-1.0);
+    assert_eq!(c.validate(), Err(GeometryError::Blur));
+    c.blur_px = finite(8.0);
+    assert_eq!(c.validate(), Ok(()));
+    let back: SceneCamera =
+        serde_json::from_value(serde_json::to_value(c).expect("writes")).expect("reads");
+    assert_eq!(back, c);
+    assert!((c.target_distance() - 1000.0).abs() < 1e-3);
+}
+
+/// ADR-0108 decision 2: the blur is 0 on the focus plane, `blur_px` at half its distance
+/// and far behind it, and capped close to the camera; with no focus or no blur it is 0.
+#[test]
+fn the_blur_follows_the_thin_lens() {
+    let at = vec3(960.0, 540.0, 1000.0);
+    let target = vec3(960.0, 540.0, 0.0);
+    let mut c = camera(at, target, 45.0, 0.0);
+    c.blur_px = finite(8.0);
+    assert_eq!(view(c).focus(), None, "no focus distance");
+    assert_eq!(view(c).blur_at(500.0), 0.0);
+    c.focus_px = Some(finite(1000.0));
+    let seen = view(c);
+    assert_eq!(seen.blur_at(1000.0), 0.0);
+    assert!((seen.blur_at(500.0) - 8.0).abs() < 1e-4);
+    assert!((seen.blur_at(2000.0) - 4.0).abs() < 1e-4);
+    assert!((seen.blur_at(1e9) - 8.0).abs() < 1e-3);
+    assert_eq!(seen.blur_at(1.0), super::MAX_BLUR_PX);
+    assert_eq!(seen.blur_at(-5.0), super::MAX_BLUR_PX);
+    c.blur_px = finite(0.0);
+    assert_eq!(view(c).focus(), None, "no blur");
 }

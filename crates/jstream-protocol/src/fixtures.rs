@@ -450,6 +450,14 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             camera: Some(SceneCamera::framing(CameraCanvas::DEFAULT)),
         },
+        Edit::SceneSetCamera {
+            scene_id: SceneId::new("scn_1"),
+            camera: Some(SceneCamera {
+                focus_px: crate::Finite32::new(800.0),
+                blur_px: crate::Finite32::new(6.0).unwrap_or(crate::Finite32::ZERO),
+                ..SceneCamera::framing(CameraCanvas::DEFAULT)
+            }),
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
