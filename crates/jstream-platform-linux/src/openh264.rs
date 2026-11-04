@@ -25,7 +25,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use jstream_platform::{PlatformError, VideoEncoder, VideoEncoderConfig};
+use jstream_platform::media::Codec;
+use jstream_platform::{CodecDownload, PlatformError, VideoEncoder, VideoEncoderConfig};
 
 use crate::dl::SystemLibrary;
 
@@ -42,6 +43,16 @@ pub const OPENH264_NOTICE: &str = "OpenH264 Video Codec provided by Cisco System
 /// Cisco's licence page for its binary, which the app links to wherever it offers the
 /// download and in its licence information.
 pub const OPENH264_LICENSE_URL: &str = "https://www.openh264.org/BINARY_LICENSE.txt";
+
+/// The ID the codec backend lists the download under (`Codecs::downloads`), and that a
+/// person's `codec.download` names.
+pub const OPENH264_DOWNLOAD_ID: &str = "openh264";
+
+/// The full text of [`OPENH264_LICENSE_URL`], as Cisco publishes it. Its condition 4
+/// asks every application that uses the binary to reproduce all of it where licensing
+/// information is presented to the user, so the app shows it beside the download offer
+/// and the installed codec.
+pub const OPENH264_LICENSE_TEXT: &str = include_str!("openh264/BINARY_LICENSE.txt");
 
 /// The largest download accepted. Cisco's Linux library is about 1 MB compressed.
 pub const MAX_DOWNLOAD_BYTES: usize = 16 << 20;
@@ -146,6 +157,21 @@ impl OpenH264Store {
         self.pin.library_sha256.is_some() && self.library_path().is_file()
     }
 
+    /// The download as the codec backend lists it: Cisco's notice and licence link,
+    /// the pinned release, and whether it is installed.
+    pub fn download_info(&self) -> CodecDownload {
+        CodecDownload {
+            id: OPENH264_DOWNLOAD_ID,
+            name: OPENH264_COMPONENT,
+            codec: Codec::H264,
+            version: version(&self.pin),
+            notice: OPENH264_NOTICE,
+            license_url: OPENH264_LICENSE_URL,
+            license_text: OPENH264_LICENSE_TEXT,
+            installed: self.is_installed(),
+        }
+    }
+
     /// Downloads the pinned release from Cisco through `fetch`, checks it and stores it.
     /// Call it only on the user's explicit request, after showing [`OPENH264_NOTICE`]
     /// and a link to [`OPENH264_LICENSE_URL`]. Blocks for the download.
@@ -180,12 +206,13 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library. Afterwards software H.264 reports not installed. Removing
-    /// what isn't there succeeds.
+    /// Deletes the library, and any temporary file an earlier run left behind. Afterwards
+    /// software H.264 reports not installed. Removing what isn't there succeeds.
     ///
     /// # Errors
     /// [`PlatformError::Os`] when the file exists but can't be deleted.
     pub fn remove(&self) -> Result<(), PlatformError> {
+        self.sweep_parts();
         match fs::remove_file(self.library_path()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -244,26 +271,64 @@ impl OpenH264Store {
     }
 
     /// Writes `library` to a temporary file only the user can read, then renames it into
-    /// place, so a reader never sees half a file.
+    /// place, so a reader never sees half a file. Each write has a temporary file of its
+    /// own (this process's ID and a counter), so two downloads at once, from two clients'
+    /// `codec.download`, never write into one file; each renames a whole, checked
+    /// library into place. A temporary file another process left (one that stopped
+    /// mid-write) is deleted first.
     fn write(&self, library: &[u8]) -> std::io::Result<()> {
+        static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(&self.dir)?;
-        let part = self.dir.join(format!("{}.part", self.pin.file_name));
+        self.sweep_parts();
+        let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let part = self.dir.join(format!(
+            "{}.{}.{n}.part",
+            self.pin.file_name,
+            std::process::id()
+        ));
         match fs::remove_file(&part) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
             _ => {}
         }
+        let result =
+            Self::write_part(&part, library).and_then(|()| fs::rename(&part, self.library_path()));
+        if result.is_err() {
+            let _ = fs::remove_file(&part);
+        }
+        result
+    }
+
+    /// Deletes the temporary files of writes by other processes: `write` names each
+    /// `<library>.<process ID>.<n>.part`, so one from another process ID was left by a
+    /// run that stopped mid-write. This process's own are in flight and kept. Best
+    /// effort: a file it can't list or delete stays.
+    fn sweep_parts(&self) {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        let ours = format!("{}.{}.", self.pin.file_name, std::process::id());
+        let prefix = format!("{}.", self.pin.file_name);
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if name.starts_with(&prefix) && name.ends_with(".part") && !name.starts_with(&ours) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    /// Writes `library` to the new file `part`, `0600`.
+    fn write_part(part: &std::path::Path, library: &[u8]) -> std::io::Result<()> {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .mode(0o600)
-            .open(&part)?;
+            .open(part)?;
         file.write_all(library)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&part, self.library_path())
+        file.sync_all()
     }
 }
 
@@ -314,7 +379,6 @@ fn check_sha256(what: &'static str, data: &[u8], pinned: &[u8; 32]) -> Result<()
 /// in line).
 pub fn wants_software(hardware_encoders: usize, config: &VideoEncoderConfig) -> bool {
     use jstream_platform::HardwarePreference;
-    use jstream_platform::media::Codec;
     config.codec == Codec::H264
         && match config.hardware {
             HardwarePreference::Avoid => true,

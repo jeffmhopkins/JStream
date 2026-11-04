@@ -140,7 +140,13 @@ Contents:
   when the backend has no GPU path. `Codecs::capture_decoder` makes a `CaptureDecoder`
   for a capture device's compressed frames (MJPEG), since the codec path decodes them,
   not the device backend; its default is `Unsupported`, and the engine then opens the
-  device in an uncompressed format.
+  device in an uncompressed format. `Codecs::downloads` lists the codec libraries the
+  backend downloads on a person's request (`CodecDownload`: its ID, name, codec, pinned
+  version, the notice, licence link and licence text to show with the offer, and whether it is
+  installed), and `Codecs::download` and `Codecs::delete_download` fetch or delete one.
+  Their defaults list none and refuse with `Unsupported`: only Linux downloads a codec,
+  Cisco's OpenH264
+  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 - **Media files** (`media_file.rs`,
   [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the

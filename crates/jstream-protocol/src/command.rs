@@ -1681,6 +1681,32 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
+    /// Downloads a codec library `codec.downloads` lists, from its maker's server, and
+    /// checks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's
+    /// OpenH264. Send it only when a person asks, after showing the download's `notice`
+    /// and a link to its `license_url`. It answers once the library is in place, which
+    /// takes as long as the download; outputs started afterwards can encode with it.
+    /// Succeeds for one already installed, downloading it again. For a person only: no
+    /// MCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with
+    /// `invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and
+    /// `action_failed` when the download fails or doesn't match the pin (nothing is kept
+    /// then), with the reason.
+    #[serde(rename = "codec.download")]
+    CodecDownload {
+        /// The download, as `codec.downloads` lists it.
+        download_id: String,
+    },
+    /// Deletes a downloaded codec library (0.69, ADR-0061). `codec.downloads` then
+    /// lists it as not installed, and outputs started afterwards can't encode with it;
+    /// one running keeps its encoder. Succeeds for one that isn't installed. For a
+    /// person only, like `codec.download`. Fails with `invalid_argument` on
+    /// `download_id` for an ID `codec.downloads` doesn't list, and `action_failed` when
+    /// the file can't be deleted.
+    #[serde(rename = "codec.delete")]
+    CodecDelete {
+        /// The download, as `codec.downloads` lists it.
+        download_id: String,
+    },
     /// Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with
     /// `files`, or adds it, and loads it at once. The pack is always the folder named
     /// `pack` in the packs folder, whose `effect.toml` must say `id = "<pack>"`. Answers
@@ -1772,6 +1798,8 @@ impl Action {
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
             Action::EffectEnable { .. } => "effect.enable",
+            Action::CodecDownload { .. } => "codec.download",
+            Action::CodecDelete { .. } => "codec.delete",
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
             Action::ValuesSet { .. } => "values.set",
@@ -1838,6 +1866,8 @@ impl Action {
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }
+            | Action::CodecDownload { .. }
+            | Action::CodecDelete { .. }
             | Action::PackWrite { .. }
             | Action::PackDelete { .. }
             | Action::ValuesSet { .. } => vec![],
@@ -1892,6 +1922,11 @@ impl Action {
                 "type",
                 "`effect.enable` can't be bound: a person re-enables a quarantined effect \
                  through the UI (#349)",
+            )),
+            Action::CodecDownload { .. } | Action::CodecDelete { .. } => Some((
+                "type",
+                "a codec action can't be bound: a person downloads or deletes a codec \
+                 through the UI, after reading its licence (ADR-0061)",
             )),
             Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
                 "type",
