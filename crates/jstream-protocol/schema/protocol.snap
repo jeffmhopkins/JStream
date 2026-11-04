@@ -11951,12 +11951,12 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "loop",
-          "description": "It plays from 0 to `duration_ms` again and again, until stopped. A cue at\n`duration_ms` would never fire, so it is refused: put it at 0.",
+          "description": "It plays from 0 to `duration_ms` again and again, until stopped. A cue at\n`duration_ms` would never fire, so it is refused: put it at 0. `duration_ms` is at\nleast 100 ([`MIN_LOOP_MS`]).",
           "type": "string"
         },
         {
           "additionalProperties": false,
-          "description": "It plays from 0, and each time it reaches `to_ms` jumps back to `from_ms`: an\nintro, then a loop. `from_ms < to_ms <= duration_ms`, and a cue at or after\n`to_ms` is refused.",
+          "description": "It plays from 0, and each time it reaches `to_ms` jumps back to `from_ms`: an\nintro, then a loop. `from_ms < to_ms <= duration_ms`, `to_ms - from_ms` is at\nleast 100 ([`MIN_LOOP_MS`]), and a cue at or after `to_ms` is refused.",
           "properties": {
             "range": {
               "properties": {

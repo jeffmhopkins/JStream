@@ -19,8 +19,14 @@ use jstream_protocol::{
 /// The most rounds of cues one tick runs. A cue that plays a timeline starts it at the
 /// cue's own time, so its first cues are due in the same tick and run in the next round;
 /// timelines that start each other at 0 would never stop, so a tick stops after this
-/// many rounds and the rest wait for the next tick.
+/// many rounds and the rest wait for the next tick, at least [`CAPPED_WAIT_NS`] later.
 pub(crate) const MAX_ROUNDS: usize = 16;
+
+/// How long the next tick waits, at least, after a tick ran all [`MAX_ROUNDS`] rounds
+/// with cues still due: one frame at 60 fps. A timeline that plays itself at 0 restarts
+/// at that cue's time, so its cue is due again at once; this bounds it to
+/// `MAX_ROUNDS` cues a frame instead of a busy loop.
+pub(crate) const CAPPED_WAIT_NS: i64 = 16_666_667;
 
 const NS_PER_MS: i64 = 1_000_000;
 

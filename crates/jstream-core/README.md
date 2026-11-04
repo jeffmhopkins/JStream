@@ -1128,7 +1128,11 @@ and the client and request that started it. Nothing of it is saved or undone.
   events) runs `timeline_tick`, then sleeps until the next timeline is due, as well as
   until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
-  it at the cue's time, so that timeline's first cues are due in the next round.
+  it at the cue's time, so that timeline's first cues are due in the next round. A
+  round sends its loops and ends after its cues fire. When all 16 rounds ran with cues
+  due (timelines that start each other, or one that plays itself, at 0), the next tick
+  waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so such a cycle fires at most 16
+  cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
   start the ticker while a timeline plays (`start_ticker`).
 - **A cue** runs through `State::action`, as the call would (with no audit or activity

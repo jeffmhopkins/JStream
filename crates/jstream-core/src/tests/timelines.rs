@@ -196,6 +196,20 @@ fn a_timeline_runs_its_cues_in_order_and_ends() {
         [TimelineChange::Started, TimelineChange::Ended]
     );
     assert_eq!(fired(&seen), [(0, true), (1, true)]);
+    // `ended` follows the last cue's `cue_fired`.
+    let last_fired = seen
+        .iter()
+        .rposition(|event| matches!(event, Event::TimelineCueFired { .. }));
+    let ended = seen.iter().position(|event| {
+        matches!(
+            event,
+            Event::TimelineChanged {
+                change: TimelineChange::Ended,
+                ..
+            }
+        )
+    });
+    assert!(last_fired < ended, "{seen:?}");
     // The cues were actions, so undo reaches the batch that wrote the timeline.
     block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
     let Ok(QueryResult::StateGet { scenes, .. }) = query(&control, Query::StateGet) else {
@@ -273,7 +287,7 @@ fn a_loop_repeats_until_stopped() {
         &control,
         vec![timeline(
             "t",
-            30,
+            100,
             TimelineLoop::Loop,
             vec![cue(10, value("beat", 1))],
         )],
@@ -457,4 +471,43 @@ fn timelines_are_checked() {
         at_ms: 100,
     };
     assert_eq!(act(&control, past), Err("invalid_argument"));
+}
+
+/// A timeline whose cue at 0 plays itself restarts at that cue's time, so the cue is due
+/// again at once. A tick runs at most `MAX_ROUNDS` rounds and the next waits a frame,
+/// so it fires a bounded number of cues instead of spinning the ticker (#1169 B1).
+#[test]
+fn a_timeline_that_plays_itself_is_rate_limited() {
+    let (_engine, control) = engine_with_scenes();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![timeline(
+            "t",
+            1000,
+            TimelineLoop::Once,
+            vec![cue(0, play("t"))],
+        )],
+    );
+    drain(&mut events);
+    let started = Instant::now();
+    act(&control, play("t")).expect("play");
+    std::thread::sleep(Duration::from_millis(300));
+    let count = fired(&drain(&mut events)).len();
+    let elapsed = started.elapsed().as_secs_f64();
+    act(
+        &control,
+        Action::TimelineStop {
+            timeline_id: TimelineId::new("t"),
+        },
+    )
+    .expect("stop");
+    // MAX_ROUNDS (16) cues a frame (16.7 ms), plus the tick `timeline.play` runs.
+    let frames = (elapsed / 0.016_666_667).ceil();
+    let bound = 16.0 * (frames + 2.0);
+    assert!(count > 0, "the cue never fired");
+    assert!(
+        f64::from(u32::try_from(count).unwrap_or(u32::MAX)) <= bound,
+        "{count} cues fired in {elapsed:.3} s, more than {bound}"
+    );
 }

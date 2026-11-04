@@ -2179,7 +2179,8 @@ Since 0.87 a scene holds timelines
 - **Shape:** a `timeline_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`,
   unique across the collection, so an action names it alone), a `name`, a
   `duration_ms` (at most one hour), a `loop` (`once`, `loop`, or
-  `{"range": {"from_ms", "to_ms"}}` for an intro then a loop) and at most 256 `cues`,
+  `{"range": {"from_ms", "to_ms"}}` for an intro then a loop; a repeat is at least
+  100 ms, `MIN_LOOP_MS`) and at most 256 `cues`,
   each `{at_ms, action}`, in time order. A cue's `action` is read as plain JSON, as a
   hotkey binding's is (`TimelineCue::action` parses it), so a client older than an
   action a later cue runs still reads `state.get`; `timeline.set` refuses an action
