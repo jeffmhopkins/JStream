@@ -376,7 +376,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 ## Design
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml", "apps/jstream-daemon/build.rs"]
-depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
+depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "crates/jstream-core/README.md#snapshots", "crates/jstream-core/README.md#outputs", "crates/jstream-core/README.md#wasm-plugins", "crates/jstream-core/README.md#logging", "crates/jstream-core/README.md#audit-log", "docs/ARCHITECTURE.md#persistence"]
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
@@ -429,7 +429,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
     used, since desktop and application audio need it;
   - `LinuxGpu` as the GPU interop. On a machine without a Vulkan hardware adapter its
     `open_device` fails, and the engine composites on its own software device with CPU
-    frames, as core logs;
+    frames, as core logs. That software device is a Vulkan driver, Mesa's lavapipe
+    (`mesa-vulkan-drivers` on Debian, Ubuntu and Fedora), so a machine without a GPU
+    needs it installed. Without any adapter the daemon logs a warning at startup naming
+    that package (`jstream_core::no_adapter_warning`), and `video.snapshot` and
+    `output.start` fail with `action_failed`, naming it too (#1073);
   - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
     [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
     virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;
@@ -473,10 +477,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `stats.tick` about once a second while no output runs, and hands the engine the
   process CPU reader on Windows (`WindowsProcessCpu`), macOS (`MacosProcessCpu`) and
   Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
-  leave `cpu_ms` out. On Windows (`WindowsThreadCpu`) and Linux (`LinuxThreadCpu`) it
-  also hands it the thread CPU reader, for `profile.get`'s threads
-  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); on macOS the
-  profile has no threads.
+  leave `cpu_ms` out. On Windows (`WindowsThreadCpu`), macOS (`MacosThreadCpu`) and
+  Linux (`LinuxThreadCpu`) it also hands it the thread CPU reader, for `profile.get`'s
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)).
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -606,7 +609,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
-  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  [ROADMAP › M2](../../ROADMAP.md#m2); [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
+  decides it as an opt-in `--lan` flag, not built yet). Pairing is served already, and its device tokens
   are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
   pairing page and the device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on

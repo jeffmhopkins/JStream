@@ -35,6 +35,8 @@ mod link;
 mod page;
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 mod permission;
+#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+mod reload_hold;
 mod request;
 #[cfg(any(
     test,
@@ -120,6 +122,13 @@ pub trait BrowserPage: Send {
     /// CSS animations start over. It is transparent from the reload until the new
     /// document paints, never showing the end of the old one.
     fn reload(&mut self);
+
+    /// Tells the page whether anything draws it (#1071). A hidden page stops painting
+    /// and its animation frames stop (CEF's `WasHidden`), so it costs next to nothing
+    /// while no mix shows it; its scripts, timers and audio keep running, throttled as
+    /// Chromium throttles a background tab. Shown again, it paints at once, and its
+    /// frames keep showing its last paint until then. Pages open shown.
+    fn set_hidden(&mut self, hidden: bool);
 
     /// The page's audio, which the engine records into a mixer input with
     /// [`PageAudio::open`]. It is silent until the page plays something.

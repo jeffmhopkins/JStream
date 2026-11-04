@@ -9,9 +9,9 @@
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
 //! light by role, mask, and build reflections on glossy surfaces (#1062), how
-//! to build a 3D set with a scene camera (ADR-0094), which transition to use (including
-//! a `stinger`), and when to build a graphic as HTML in a `browser` source, animated on
-//! one clock. Numbers are for a 1920×1080 canvas and scale with it.
+//! to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
+//! which transition to use (including a `stinger`), and when to build a graphic as HTML
+//! in a `browser` source, animated on one clock. Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -56,7 +56,8 @@ A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in se
 and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
 optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
 shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
-and changing `mode` or `duration` restarts it. \
+and changing `mode` or `duration` restarts it. To run it again from the start at the same \
+length, change `restart` to any other number. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \
@@ -126,7 +127,12 @@ about 1304 at the default 45°, and through it a flat item lands exactly on its 
 box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
 low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
 the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
-variant) and a `move` transition, which glides the camera with the items. Put \
+variant) and a `move` transition, which glides the camera with the items. Depth of \
+field: `focus_px` is the distance along the view that stays sharp and `blur_px` (0-64) \
+how soft the far background gets; things nearer or farther blur in proportion. A soft \
+backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
+focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
 Transitions between scenes: `fade` for calm changes, `move` when the scenes share \

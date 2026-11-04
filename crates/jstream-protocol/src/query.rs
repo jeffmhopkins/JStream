@@ -2,7 +2,7 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
-use crate::command::{BlendMode, Crop, Edit, ItemTransform, SceneRole, SourceKind};
+use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
@@ -202,6 +202,16 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         path: Option<String>,
     },
+    /// Lists the shared values (0.78, ADR-0102 decision 7), ordered by name: every one,
+    /// or with `prefix`, the value named `prefix` and every value below it (`status`
+    /// covers `status` and `status.text`). Shared values are not collection state, so
+    /// the result carries no `rev`.
+    #[serde(rename = "values.list")]
+    ValuesList {
+        /// Only this name and the names below it. Omitted for every value.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        prefix: Option<String>,
+    },
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -336,6 +346,7 @@ impl Query {
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
+            Query::ValuesList { .. } => "values.list",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
@@ -631,6 +642,13 @@ pub enum QueryResult {
         /// The pack's files, ordered by path: every file, or the one `path` named.
         files: Vec<crate::PackFileInfo>,
     },
+    /// The result of `values.list` (0.78). Shared values are not collection state, so it
+    /// carries no `rev`.
+    #[serde(rename = "values.list")]
+    ValuesList {
+        /// The values, ordered by name.
+        values: Vec<crate::SharedValue>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -709,6 +727,7 @@ impl QueryResult {
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",
+            QueryResult::ValuesList { .. } => "values.list",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
@@ -1043,6 +1062,11 @@ pub struct ItemInfo {
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub locked: bool,
+    /// Where its effects run (ADR-0106, since 0.76): see
+    /// [`Edit::ItemSetEffectsSpace`](crate::Edit::ItemSetEffectsSpace). Omitted while
+    /// `box`, so missing (also from an older server) parses as `box`.
+    #[serde(default, skip_serializing_if = "EffectsSpace::is_box")]
+    pub effects_space: EffectsSpace,
 }
 
 fn opaque() -> Finite32 {

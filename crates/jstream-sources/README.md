@@ -29,7 +29,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `keeps_time(old, new)` says whether a source built from `new` in place of one running
   with `old` keeps the old one's time zero, so its `at` runs on instead of starting from
   zero; the engine asks before it builds a source again for a settings change. The
-  default is `false`; the `timer` kind keeps it unless `mode` or `duration` changed.
+  default is `false`; the `timer` kind keeps it unless `mode`, `duration` or `restart`
+  changed.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
@@ -50,6 +51,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
+  `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
+  `Model` the engine draws in 3D where an item places it, with its `Lighting`
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)). Only the `model` kind has one.
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -62,7 +66,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
-  frame is due (the engine's `jstream-sources` thread does). The `waveform` and
+  frame is due (the engine's `jstream-sources` thread does). A host that skipped a
+  source nothing showed may paint it once under its lock, to catch it up before it is
+  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
@@ -186,6 +192,32 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
+  (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
+  same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,
+  `sphere`, `cylinder`, `cone`, one unit across). The loader is the crate's own, on
+  `serde_json`: the default scene's node transforms baked into one mesh, triangles,
+  strips and fans, the metallic-roughness material with its five textures (only
+  `TEXCOORD_0`), `KHR_materials_unlit` and `KHR_materials_emissive_strength`, with
+  normals and tangents made where the file has none. Skins, morph targets, animations,
+  cameras and lights are ignored with an `info` log; a required extension it doesn't
+  know, sparse accessors and a URL are errors, `SourceError::Model` naming the file. A
+  file the model names must pass `check_asset_path` as a relative path (no `..`, no
+  absolute or drive path, no `:`, no device name), whatever root the model is under, so
+  it stays below the model's folder. Every attribute must have one element per vertex,
+  and a `TANGENT` must be a VEC4. ADR-0107's caps are checked while the model is built,
+  not after: triangles and bytes as each primitive is added, textures before each image
+  is decoded, an accessor's count (at most 3 × 2,000,000 + 2) before it is read, a
+  primitive's vertex count before anything is built from it, and at most 100,000 node
+  and primitive instances together, so a hierarchy that names the same children many
+  times stops early even when its primitives are empty (those are skipped). Buffers that
+  name the same file (once percent-decoded) share one read, and all buffers together, a
+  `.glb`'s binary chunk included, hold at most 512 MiB. Images decode as the `image` kind decodes them, within the same
+  `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
+  `double_sided` (the last three for a shape only) and `lighting` (`studio` or
+  `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
+  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -238,10 +270,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   start and stops at 99:59:59 (99:59 written `mm:ss`). `format` writes them `auto`
   (`mm:ss`, or `h:mm:ss` from an hour), `mm:ss` (minutes past an hour keep counting) or
   `hh:mm:ss`. Both count on the media clock from the source's time zero, its `at`, and
-  `keeps_time` keeps that zero through every change but `mode` and `duration`, so the
-  engine, which builds a source again for any change and any new density, keeps the
-  count going when the look is edited or the item resized; `mode` and `duration` are
-  the settings that aren't live. A `clock` shows the wall-clock time of day
+  `keeps_time` keeps that zero through every change but `mode`, `duration` and
+  `restart`, so the engine, which builds a source again for any change and any new
+  density, keeps the count going when the look is edited or the item resized. `restart`
+  (#1040) is a counter whose value means nothing: changing it, to any other number,
+  starts the count again at the same `mode` and `duration`, in one edit (and its undo
+  starts it again too). `mode`, `duration` and `restart` are the settings that aren't
+  live. A `clock` shows the wall-clock time of day
   (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
   machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone
   found for the machine it shows UTC; an unknown name is a setting error). Every frame
@@ -256,7 +291,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   date, and `frame` only hands out the one drawn last; `next_change` is the value's next
   second (a clock's next wall-clock second, or minute without seconds), `at` itself while
   the painter hasn't caught up, and `None` once a countdown ends or a stopwatch stops.
-  Every setting but `font`, `mode` and `duration` is live, and it draws at a density as
+  Every setting but `font`, `mode`, `duration` and `restart` is live, and it draws at a density as
   `text` does.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
@@ -377,6 +412,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `restart_on_show` (live, default off) reloads the page each time the program shows it
   again (`show`), so an HTML graphic or stinger plays its entrance every time. It is
   transparent while it reloads, never the end of its previous run.
+  While no mix draws the source (`set_drawn(false)`) its page is hidden
+  (`BrowserPage::set_hidden`), so it stops painting and its animation frames stop; its
+  scripts and audio go on, throttled as a background tab's. Its frames keep the last
+  paint until it is drawn again (#1071).
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
@@ -513,7 +552,8 @@ undecodable file is an error from `create`, never from the edit that set it.
 **Dependencies.** `jstream-media` (frames and the media clock), `jstream-platform`
 (the `MediaDecoders` trait the `media` kind plays through, GPU frames and audio
 handlers; its `fake` feature in tests), `jstream-protocol` (descriptors, settings and
-references), `jstream-browser` (the browser seam), `serde_json` (setting values),
+references), `jstream-browser` (the browser seam), `serde_json` (setting values)
+and `serde` (the glTF loader's typed JSON), `tracing` (what a model file holds that isn't drawn),
 `thiserror` (`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with
 `zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the
 spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`,
@@ -525,7 +565,10 @@ features off.
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
-distance transform, reading an audio target from settings and taking a YouTube video
+distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built
+by the test, node transforms and mirroring, materials and textures, refused extensions,
+URLs and overflowing accessors, attributes of another length and VEC3 tangents, a fanning hierarchy with full or empty primitives, an accessor or unindexed primitive past the caps, the texture cap before decoding, one read for a file many buffers name or spell differently, and the cap on all buffers together with a `.glb`'s chunk, and file URIs that would leave the model's folder) and the `model` kind (`model/tests.rs`: shapes, live
+looks, the stand-in's size, buffers read beside a file and not outside its root), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is
@@ -556,7 +599,8 @@ one size and changes within a second, that `frame` hands out what the painter dr
 `next_change` asks for a paint while it is out of date, that a countdown stops changing
 at its end, that an `end_text` too wide for the limits fails `create` and `update`, that
 a frame its padding takes past the limits names `end_text` rather than `text`, a
-density, a live update that keeps the count, which changes keep the time zero, and an
+density, a live update that keeps the count, which changes keep the time zero (a
+change of `restart` doesn't), and an
 unknown time zone; its unit tests check the values in every mode and format, the times
 they change at, and the candidates the box is measured by. The unit tests check the shape's distances (a
 rectangle's, a pill's corner, an ellipse's axes) and premultiplied mixing. The scope's unit tests check the
