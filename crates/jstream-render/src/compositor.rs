@@ -12,6 +12,7 @@ use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::mips::{MipPipelines, Mips, Region};
+use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 use jstream_protocol::BlendMode;
@@ -91,6 +92,7 @@ pub struct Compositor {
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
     mip_pipelines: MipPipelines,
+    models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
 }
@@ -391,6 +393,33 @@ impl Compositor {
         Ok(())
     }
 
+    /// Uploads a 3D model (ADR-0107): its meshes, its textures with the mips the model
+    /// already holds, and its materials. Do it once per [`jstream_media::model::Model::version`]
+    /// and keep the result; drawing it allocates nothing.
+    ///
+    /// # Errors
+    /// [`RenderError::TooLarge`] for a texture past the adapter's limit, and
+    /// [`RenderError::Invalid`] for a primitive too large for one draw or for one of the
+    /// adapter's buffers.
+    pub fn upload_model(
+        &self,
+        model: &jstream_media::model::Model,
+    ) -> Result<GpuModel, RenderError> {
+        self.models.upload(&self.gpu, &self.owner, model)
+    }
+
+    /// Draws a model placed by an item into `target`, a [`Self::layer`] of the canvas
+    /// size, replacing what it held (ADR-0107 decision 6): transparent where the model
+    /// isn't, the model with its own depth test where it is. A scene then places the
+    /// layer with [`crate::Placement::Layer`], after any filters run over it.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when the model or the layer came from another compositor
+    /// or the target is not a layer, or when the placement or camera can't be drawn.
+    pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
+        self.models.draw(&self.gpu, &self.owner, draw, target)
+    }
+
     /// Refills `image`, an upload this compositor made, with new tightly packed
     /// straight-alpha sRGB RGBA8 of the same size, without allocating a texture. Frames
     /// already submitted keep sampling the old contents.
@@ -645,6 +674,7 @@ impl Compositor {
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
         let filters = filter::Runtime::new(&gpu.device);
         let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
+        let models = ModelRuntime::new(&gpu);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
             size: VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM),
@@ -668,6 +698,7 @@ impl Compositor {
             staged: Vec::new(),
             filters,
             mip_pipelines,
+            models,
             readback_wait: std::time::Duration::ZERO,
         }
     }

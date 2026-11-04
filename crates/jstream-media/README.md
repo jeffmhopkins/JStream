@@ -38,6 +38,14 @@ Contents:
   whose plane count, strides and buffer lengths are checked against the format.
 - **Audio:** `AudioFormat` (non-zero sample rate, `ChannelLayout`, `f32` interleaved or
   planar `SampleFormat`) and `AudioBuffer`, whose sample count is always whole frames.
+- **3D models** (`model`, [ADR-0107](../../docs/adr/0107-3d-models.md)): a checked
+  `Model` of triangle `Primitive`s in a scene's axes (x right, y down, z toward the
+  viewer), metallic-roughness `Material`s and `ModelTexture`s, each with its mips built
+  on construction (in linear light for sRGB, weighted by alpha), so the render thread
+  only uploads them. `Model::new` checks every index and reference and the caps: 2,000,000
+  triangles, 64 textures, 4096 px a side, 512 MiB in all. `model::shapes` builds the
+  built-in plane, cube, sphere, cylinder and cone, a unit across, and `compute_tangents`
+  fills tangents from texture coordinates.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries

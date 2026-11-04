@@ -202,6 +202,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
+  `geometry/solid.rs` places a 3D model by an item
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ItemGeometry::solid(bounds, view)`
+  scales the model's `SolidBounds` into the box by its fit mode, flips, turns and moves
+  it, and returns a `Solid`: the map from the model's space to the viewing frame, in
+  `f64`, relative to the camera. Its `place` and `corners` are what an editor outlines and
+  hits, and `clip_matrix`, `view_matrix` and `normal_matrix` what the compositor draws
+  with, cast to `f32` only once composed.
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
