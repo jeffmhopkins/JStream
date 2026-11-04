@@ -540,6 +540,20 @@ impl PageShared {
         *lock(&self.reloading) = false;
     }
 
+    /// The main frame started loading a document (`OnLoadStart`): sends it everything the
+    /// page API cache holds. Chromium may put the new document in a renderer process
+    /// that has none of the page's updates (a reload of a `data:` page does), so each
+    /// document is sent the whole state again; the renderer merges it, and the shim
+    /// reports only what changed. Nothing for a page without a page API.
+    pub(crate) fn document_started(&self, frame: &::cef::Frame) {
+        let Some(cache) = &self.page_api else {
+            return;
+        };
+        // Held while sending, as `page_data` holds it, so no update overtakes it.
+        let cache = lock(cache);
+        send_to_frame(frame, &cache.full());
+    }
+
     /// The main frame finished loading: applies the custom CSS to the new document.
     pub(crate) fn loaded(&self, frame: &::cef::Frame) {
         self.load_started();
@@ -712,12 +726,17 @@ fn close(browser: &::cef::Browser) {
 /// Sends a page API update to `browser`'s main frame in its renderer, split as
 /// [`PageData::split`] does.
 fn send_page_data(browser: &::cef::Browser, data: &PageData) {
+    if let Some(frame) = browser.main_frame() {
+        send_to_frame(&frame, data);
+    }
+}
+
+/// Sends a page API update to `frame` in its renderer, split as [`PageData::split`]
+/// does.
+fn send_to_frame(frame: &::cef::Frame, data: &PageData) {
     if data.is_empty() {
         return;
     }
-    let Some(frame) = browser.main_frame() else {
-        return;
-    };
     for part in data.clone().split() {
         if let Some(mut message) = page_api::message(&part) {
             frame.send_process_message(::cef::ProcessId::RENDERER, Some(&mut message));

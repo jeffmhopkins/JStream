@@ -364,6 +364,7 @@ wrap_load_handler! {
                 && frame.is_main() == 1
             {
                 self.page.0.load_started();
+                self.page.0.document_started(frame);
             }
         }
 

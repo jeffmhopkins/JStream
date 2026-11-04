@@ -108,7 +108,9 @@
         emit(source.previewShown ? "shown" : "hidden", { on: "preview", at: source.previewShownAt });
       }
     }
-    if (grant.scenes && update.scenes) {
+    // A document is sent the whole state again when it starts loading, so only what
+    // differs from what the page holds is reported.
+    if (grant.scenes && update.scenes && JSON.stringify(update.scenes) !== JSON.stringify(scenes)) {
       scenes = update.scenes;
       emit("scenes", api.scenes);
     }
@@ -119,7 +121,7 @@
           if (values.delete(name)) {
             emit("value", { name: name, value: null });
           }
-        } else {
+        } else if (values.get(name) !== JSON.stringify(value)) {
           values.set(name, JSON.stringify(value));
           emit("value", { name: name, value: JSON.parse(values.get(name)) });
         }

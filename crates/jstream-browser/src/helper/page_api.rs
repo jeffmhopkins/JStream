@@ -101,6 +101,10 @@ struct Granted {
     /// The main frame's current context and the shim's update function in it, while that
     /// frame shows a document the rule covers.
     feed: Option<(V8Context, V8Value)>,
+    /// How many browser objects with this ID the renderer holds: a cross-origin
+    /// navigation (a `data:` page's reload among them) creates the new one before it
+    /// destroys the old, so the entry goes only with the last.
+    browsers: usize,
 }
 
 thread_local! {
@@ -147,22 +151,30 @@ wrap_render_process_handler! {
             };
             let id = browser.identifier();
             GRANTED.with_borrow_mut(|granted| {
-                granted.insert(
-                    id,
-                    Granted {
+                granted
+                    .entry(id)
+                    .and_modify(|page| page.browsers += 1)
+                    .or_insert(Granted {
                         api,
                         home,
                         cache: PageCache::default(),
                         feed: None,
-                    },
-                );
+                        browsers: 1,
+                    });
             });
         }
 
         fn on_browser_destroyed(&self, browser: Option<&mut Browser>) {
             if let Some(browser) = browser {
                 let id = browser.identifier();
-                GRANTED.with_borrow_mut(|granted| granted.remove(&id));
+                GRANTED.with_borrow_mut(|granted| {
+                    if let Some(page) = granted.get_mut(&id) {
+                        page.browsers = page.browsers.saturating_sub(1);
+                        if page.browsers == 0 {
+                            granted.remove(&id);
+                        }
+                    }
+                });
             }
         }
 
