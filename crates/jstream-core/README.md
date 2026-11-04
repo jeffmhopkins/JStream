@@ -1372,7 +1372,11 @@ pass after the chains of the sources it places and the scenes it nests, so a cha
 that masks with a scene of filtered sources sees them filtered this frame. The scene is
 drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
 canvas size), and those passes run once per frame with the chains, before any mix
-draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+draws; `claim_layers` keeps their layers too. That layer is the one a mix nesting the
+same scene at depth 1 draws into, so a mix pass whose layer the chains already drew
+this frame reads it as it is instead of drawing it again (`Chains::reuse`, #1070): a
+group shown both as itself and through a `scene` source's chain, as a reflection is,
+costs one pass. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
 scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
 a failed nested pass does, and the chains after it don't run that tick. The graph
