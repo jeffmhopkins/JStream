@@ -731,8 +731,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
-  or not the mixer runs, and `live.set` and `live.cancel` (see *Live values* below).
-  `live.list` is a query answered from the gesture table.
+  or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
+  `values.set` (see *Shared values* in *Snapshots*).
+  `live.list` is a query answered from the gesture table, and `values.list` from the
+  shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
   **`privacy.get`** always reads off (see *No privacy screen* below).
 - **`source.sizes`** reads each source's size, and every plan sends a
@@ -2812,6 +2814,10 @@ request's `request_id`, or `live.ended` with no `request_id` when it expired wit
 session, plus `gesture_id`, `outcome` (`cancelled` or `expired`) and, in `edits`, the
 setters it held a value for, one per parameter, without the values. Its `rev` before
 and after are the same.
+
+`values.set` gets no entry either, nor an `activity.list` line: a shared value is data
+for pages, not a change to the studio, and may be set many times a second (ADR-0102
+decision 7, *Shared values* under [Snapshots](#snapshots)).
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection
