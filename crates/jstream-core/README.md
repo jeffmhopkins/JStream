@@ -1004,7 +1004,8 @@ Hidden items are skipped. A source with no stored frame is skipped, not drawn as
 placeholder. Each item is drawn at its `opacity`, multiplied into its premultiplied
 colour in linear light, so a nested scene's layer fades as one image; during a
 transition each track's sampled opacity runs between its items' own. Each item is
-drawn with its blend mode ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)); a
+drawn with its blend mode ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
+[ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); a
 transition's track takes its endpoint's, and a pair whose ends differ switches halfway.
 A nested scene's items blend with its own layer, so a transition flattens a nested
 scene into its items only when it and they are all `normal`.
@@ -2021,8 +2022,9 @@ emitted and `audio.reset_loudness` does nothing.
 ### Outputs
 
 An output's configuration is collection state (`output.create`, `output.set_target`,
-`output.delete`, kept by `jstream-graph`); whether it runs is runtime state, which never
-changes `rev`. After each applied batch the runtime states follow the collection: a
+`output.set_path`, `output.delete`, kept by `jstream-graph`); a running output keeps the
+target or file it started with, and a changed one applies from its next start; whether
+it runs is runtime state, which never changes `rev`. After each applied batch the runtime states follow the collection: a
 created output starts `stopped`, and a deleted one is forgotten. The graph refuses to
 delete a running output or move one to another bus (`invalid_argument`), so the batch
 passes it the running set.

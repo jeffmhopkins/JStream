@@ -205,3 +205,34 @@ fn fs_difference(in: VsOut) -> @location(0) vec4<f32> {
 fn fs_exclusion(in: VsOut) -> @location(0) vec4<f32> {
     return blended(in, EXCLUSION);
 }
+
+// Source-over and additive mixed in sRGB-encoded values, as a web browser blends
+// (ADR-0105): the straight colours are encoded, composited premultiplied in that space,
+// and the result decoded. Below 0 is clamped for the encoding; above 1 is kept (the
+// curve continues), so an additive gain still brightens.
+fn encoded_composite(in: VsOut, additive: bool) -> vec4<f32> {
+    let s = source(in);
+    let b = textureLoad(backdrop, vec2<i32>(in.clip.xy), 0);
+    let cs = linear_to_srgb(max(unpremultiply(s), vec3<f32>(0.0)));
+    let cb = linear_to_srgb(max(unpremultiply(b), vec3<f32>(0.0)));
+    let alpha = s.a + b.a - s.a * b.a;
+    var under = b.a * (1.0 - s.a);
+    if additive {
+        under = b.a;
+    }
+    let mixed = cs * s.a + cb * under;
+    if alpha <= 0.0 {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(srgb_to_linear(mixed / alpha) * alpha, alpha);
+}
+
+@fragment
+fn fs_normal_srgb(in: VsOut) -> @location(0) vec4<f32> {
+    return encoded_composite(in, false);
+}
+
+@fragment
+fn fs_additive_srgb(in: VsOut) -> @location(0) vec4<f32> {
+    return encoded_composite(in, true);
+}

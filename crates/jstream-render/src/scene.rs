@@ -148,6 +148,11 @@ pub enum Placement {
     /// into the box by its fit mode, and `fill` is clipped to the box. Non-neutral 3D
     /// draws ADR-0050's drawn polygon.
     Geometry(jstream_protocol::ItemGeometry),
+    /// A layer already drawn in the canvas's own pixels, such as a 3D model's
+    /// ([`crate::Compositor::draw_model`], ADR-0107 decision 6): the image is drawn flat at
+    /// its own size from the canvas's top-left, whatever the scene's camera, and in a 3D
+    /// scene it sorts as an item with this geometry would. Crop is ignored.
+    Layer(jstream_protocol::ItemGeometry),
 }
 
 impl Placement {

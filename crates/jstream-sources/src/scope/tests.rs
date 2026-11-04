@@ -657,3 +657,28 @@ fn a_silent_scope_settles_on_one_frame_and_polls_slowly() {
     assert!(!Arc::ptr_eq(&silent, &restyled));
     assert_eq!(pixel(&restyled, 0, 2), RED);
 }
+
+/// Issue #1081: a bus or source reference the scope can't read is refused with the
+/// reference's shape, the reason the graph gives for the same value.
+#[test]
+fn a_bare_id_for_a_scope_reference_names_the_shape() {
+    let mut settings = Settings::new();
+    settings.insert("audio_source", Value::Null);
+    settings.insert("audio", json!("bus-1"));
+    let Err(SourceError::Setting { param, reason }) = drawn(&settings) else {
+        panic!("a bare bus id is refused");
+    };
+    assert_eq!(param, "audio");
+    assert_eq!(reason, not_a_reference("bus"));
+    assert!(
+        reason.contains(r#"{"type": "bus", "bus_id": "<id>"}"#),
+        "{reason}"
+    );
+
+    settings.insert("audio_source", json!({"type": "bus", "bus_id": "b"}));
+    let Err(SourceError::Setting { param, reason }) = drawn(&settings) else {
+        panic!("another reference is refused");
+    };
+    assert_eq!(param, "audio_source");
+    assert_eq!(reason, not_a_reference("source"));
+}
