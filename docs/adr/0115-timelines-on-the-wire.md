@@ -49,7 +49,8 @@ and an undo puts one back exactly. `timeline.delete { timeline_id }` deletes one
 `EntityKind::Timeline` names one in errors.
 
 **2. The objects a cue names are not checked, and a deleted one leaves the cue inert.**
-`timeline.set` checks a timeline's shape: its ID, its length, its loop, cues in time order
+`timeline.set` checks a timeline's shape: its ID, its length, its loop (a repeat at least
+100 ms long, `MIN_LOOP_MS`, so loops stay well below once a frame), cues in time order
 and reachable (`TimelineInfo::problem`, which agrees with `jstream-anim`'s check), and each
 cue's action in the closed set (decision 4). It doesn't check that the item, scene, source
 or timeline a cue names exists. Deleting an object never edits a timeline. A cue whose
@@ -90,14 +91,16 @@ back on undo.
   exactly at `at_ms` fires as the timeline plays on from there.
 - **Rounds.** A cue that plays another timeline starts it at the cue's time, so that
   timeline's own first cues fire in the same tick. Timelines that start each other at 0
-  would never settle, so one tick runs at most 16 rounds of cues, and the rest wait for
-  the next tick.
+  would never settle, nor would a timeline that plays itself at 0, so one tick runs at
+  most 16 rounds of cues, and the rest wait for the next tick, which then comes no
+  sooner than a frame (1/60 s) later. Such a cycle fires at most 16 cues a frame.
 - **Removal.** A batch, undo or redo that deletes a playing timeline, or its scene, stops
   it with `timeline.changed` `removed`. Changing a playing timeline keeps its start, and
   its cues fire at their new times from then on.
 - **Events.** `timeline.changed` reports a start, a seek, a loop, an end, a stop and a
-  removal. `timeline.cue_fired` reports each cue, with its error if it has one. Neither
-  is ever sent once a frame.
+  removal. `timeline.cue_fired` reports each cue, with its error if it has one. A tick
+  sends the loops and ends it reaches after the cues it fires. Neither is ever sent once
+  a frame, short of the capped cycle under Rounds.
 
 **4. The cue actions are a closed set:** `scene.switch`, `item.show`, `item.hide`,
 `item.toggle`, `values.set`, `source.restart`, and `timeline.play`, `timeline.stop` and

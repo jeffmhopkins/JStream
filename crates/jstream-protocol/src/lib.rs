@@ -134,7 +134,8 @@ pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{
     MAX_CUES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
-    PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop, check_timeline_id,
+    MIN_LOOP_MS, PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop,
+    check_timeline_id,
 };
 pub use transition::{
     CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,

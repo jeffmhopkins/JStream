@@ -19,6 +19,11 @@ pub const MAX_TIMELINES: usize = 32;
 pub const MAX_CUES: usize = 256;
 /// The longest a timeline runs, in milliseconds: one hour (ADR-0099 decision 5).
 pub const MAX_TIMELINE_MS: u32 = 3_600_000;
+
+/// The shortest a repeat may be, in milliseconds: a `loop` timeline's `duration_ms`,
+/// or a `range`'s `to_ms - from_ms`. It keeps `looped` events and the cues a repeat
+/// runs well below once a frame.
+pub const MIN_LOOP_MS: u32 = 100;
 /// The longest timeline ID, in bytes.
 pub const MAX_TIMELINE_ID_LEN: usize = 64;
 /// The longest timeline name, in bytes.
@@ -53,11 +58,12 @@ pub enum TimelineLoop {
     #[default]
     Once,
     /// It plays from 0 to `duration_ms` again and again, until stopped. A cue at
-    /// `duration_ms` would never fire, so it is refused: put it at 0.
+    /// `duration_ms` would never fire, so it is refused: put it at 0. `duration_ms` is at
+    /// least 100 ([`MIN_LOOP_MS`]).
     Loop,
     /// It plays from 0, and each time it reaches `to_ms` jumps back to `from_ms`: an
-    /// intro, then a loop. `from_ms < to_ms <= duration_ms`, and a cue at or after
-    /// `to_ms` is refused.
+    /// intro, then a loop. `from_ms < to_ms <= duration_ms`, `to_ms - from_ms` is at
+    /// least 100 ([`MIN_LOOP_MS`]), and a cue at or after `to_ms` is refused.
     Range {
         /// Where each repeat starts, in milliseconds.
         from_ms: u32,
@@ -166,14 +172,20 @@ impl TimelineInfo {
         let end = match self.looping {
             TimelineLoop::Once => None,
             TimelineLoop::Loop => {
-                if self.duration_ms == 0 {
-                    return problem("duration_ms", "a timeline that loops must be longer than 0");
+                if self.duration_ms < MIN_LOOP_MS {
+                    return problem(
+                        "duration_ms",
+                        "a timeline that loops must be at least 100 ms long",
+                    );
                 }
                 Some(self.duration_ms)
             }
             TimelineLoop::Range { from_ms, to_ms } => {
                 if !(from_ms < to_ms && to_ms <= self.duration_ms) {
                     return problem("loop", "a range needs from_ms < to_ms <= duration_ms");
+                }
+                if to_ms - from_ms < MIN_LOOP_MS {
+                    return problem("loop", "a range must be at least 100 ms long");
                 }
                 Some(to_ms)
             }
@@ -277,6 +289,19 @@ mod tests {
             field(&timeline(0, TimelineLoop::Loop, &[])).as_deref(),
             Some("duration_ms")
         );
+        assert_eq!(
+            field(&timeline(MIN_LOOP_MS - 1, TimelineLoop::Loop, &[])).as_deref(),
+            Some("duration_ms")
+        );
+        assert_eq!(
+            field(&timeline(MIN_LOOP_MS, TimelineLoop::Loop, &[])).as_deref(),
+            None
+        );
+        let short = TimelineLoop::Range {
+            from_ms: 800,
+            to_ms: 800 + MIN_LOOP_MS - 1,
+        };
+        assert_eq!(field(&timeline(1000, short, &[])).as_deref(), Some("loop"));
         assert_eq!(
             field(&timeline(MAX_TIMELINE_MS + 1, TimelineLoop::Once, &[])).as_deref(),
             Some("duration_ms")

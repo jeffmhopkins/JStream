@@ -3715,13 +3715,18 @@ impl State {
     /// Fires every playing timeline's cues due by now, in the order they fall due
     /// across timelines, and emits each loop and end (ADR-0115). A cue that plays a
     /// timeline starts it at the cue's time, so its first cues are due at once: they
-    /// run in the next round, up to [`crate::timelines::MAX_ROUNDS`] rounds a tick.
-    /// Returns when the next cue or pass boundary falls due, if any timeline plays.
+    /// run in the next round, up to [`crate::timelines::MAX_ROUNDS`] rounds a tick. A
+    /// round's loops and ends are sent after its cues have fired. Returns when the next
+    /// cue or pass boundary falls due, if any timeline plays: no sooner than
+    /// [`crate::timelines::CAPPED_WAIT_NS`] from now when every round ran with cues due,
+    /// so cues that keep starting each other can't spin the ticker.
     fn timeline_tick(&mut self, wake: &mut Vec<Waker>) -> Option<jstream_media::MediaTime> {
         use crate::timelines::{Step, schedule};
+        let mut capped = true;
         for _ in 0..crate::timelines::MAX_ROUNDS {
             let now_ns = crate::timelines::ns(self.live.now());
             let mut due = Vec::new();
+            let mut steps = Vec::new();
             for id in self.timelines.ids() {
                 let Some((scene_id, info)) = self
                     .graph
@@ -3761,25 +3766,27 @@ impl State {
                     ),
                     None => continue,
                 };
-                self.subscribers.emit(
-                    &Event::TimelineChanged {
-                        timeline_id: id.clone(),
-                        scene_id,
-                        change,
-                        playing,
-                        position_ms,
-                        pass,
-                    },
-                    wake,
-                );
+                steps.push(Event::TimelineChanged {
+                    timeline_id: id.clone(),
+                    scene_id,
+                    change,
+                    playing,
+                    position_ms,
+                    pass,
+                });
             }
-            if due.is_empty() {
-                break;
-            }
+            let idle = due.is_empty();
             // In time order across timelines; a sort that keeps each timeline's order.
             due.sort_by_key(|(_, fire, ..)| fire.at_ns);
             for (id, fire, info, by) in due {
                 self.run_cue(&id, &schedule(&info), &fire, &by, wake);
+            }
+            for step in steps {
+                self.subscribers.emit(&step, wake);
+            }
+            if idle {
+                capped = false;
+                break;
             }
         }
         let next = self
@@ -3791,6 +3798,11 @@ impl State {
                 self.timelines.next_due(&id, &schedule(info))
             })
             .min()?;
+        let next = if capped {
+            next.max(crate::timelines::ns(self.live.now()) + crate::timelines::CAPPED_WAIT_NS)
+        } else {
+            next
+        };
         Some(crate::timelines::media_time(next))
     }
 
