@@ -691,6 +691,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -1210,7 +1231,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -2836,6 +2857,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -3071,6 +3115,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -3161,7 +3220,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.80 they may name a\nfile (an asset), as an output's may.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -3902,11 +3961,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -5209,7 +5283,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.80 they may name a\nfile (an asset), as an output's may.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -6439,6 +6513,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -6958,7 +7053,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -8584,6 +8679,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -8819,6 +8937,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -8909,7 +9042,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.80 they may name a\nfile (an asset), as an output's may.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -9650,11 +9783,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -10012,7 +10160,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -10110,6 +10258,21 @@ source: crates/jstream-mcp/src/tests.rs
               "bottom"
             ],
             "type": "object"
+          },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
           },
           "FilterId": {
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
@@ -10613,7 +10776,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -10944,6 +11107,29 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "locked"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
                 ],
                 "type": "object"
               },
@@ -11801,6 +11987,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
                 "properties": {
                   "on": {
@@ -12320,7 +12527,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -13946,6 +14153,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -14181,6 +14411,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -14271,7 +14516,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.80 they may name a\nfile (an asset), as an output's may.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -15002,11 +15247,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -16275,11 +16535,26 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "integer"
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -17645,6 +17920,71 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "ui_settings"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `values` operation: set `op.type` to one of `values.set` (action), `values.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `values` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the shared values (0.78, ADR-0102 decision 7), ordered by name: every one,\nor with `prefix`, the value named `prefix` and every value below it (`status`\ncovers `status` and `status.text`). Shared values are not collection state, so\nthe result carries no `rev`.",
+                "properties": {
+                  "prefix": {
+                    "description": "Only this name and the names below it. Omitted for every value.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "values.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "values"
     },
     {
       "annotations": {

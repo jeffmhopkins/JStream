@@ -120,8 +120,11 @@ test('in crop mode a handle drag crops, as one undoable edit', async ({ page, da
   const cut = 40 / scale;
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   await expectCorners(page, [[640, 360], [1280 - cut, 360], [1280 - cut, 720], [640, 720]], 1);
-  const right = Number(await field(page, 'Right').inputValue());
-  expect(Math.abs(right - 2 * cut)).toBeLessThanOrEqual(1);
+  // The corners above can be the drop's preview; the field shows the collection, which
+  // can still be on its way, so it is polled too.
+  await expect
+    .poll(async () => Math.abs(Number(await field(page, 'Right').inputValue()) - 2 * cut))
+    .toBeLessThanOrEqual(1);
   await expect(field(page, 'Left')).toHaveValue('0');
   await expect(readout(page)).toHaveText(/^\d+ × 360\s+· cropped$/);
   // The uncropped extent shows as the crop ghost.

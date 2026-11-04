@@ -19,6 +19,7 @@ mod preview;
 mod source_sizes;
 mod sources;
 mod transitions;
+mod values;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 mod youtube;
