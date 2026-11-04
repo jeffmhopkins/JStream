@@ -33,6 +33,10 @@ use crate::{
 use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
+use crate::{
+    Drawer, DrawerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
+    ThreadProfile, UnitProfile,
+};
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
@@ -46,6 +50,7 @@ use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
+use crate::{PackContent, PackFile, PackFileInfo, PackInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
@@ -248,6 +253,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 path: "/home/me/Videos/show.mp4".into(),
                 container: RecordContainer::Mp4,
             },
+        },
+        Edit::OutputSetPath {
+            output_id: OutputId::new("out_rec"),
+            path: "/home/me/Videos/show-take2.mp4".into(),
         },
         Edit::OutputCreate {
             output_id: OutputId::new("out_live"),
@@ -1039,6 +1048,22 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
+        Action::PackWrite {
+            pack: "glow".into(),
+            files: vec![
+                PackFile {
+                    path: "effect.toml".into(),
+                    content: PackContent::Text("[pack]\nid = \"glow\"\nname = \"Glow\"\n".into()),
+                },
+                PackFile {
+                    path: "images/noise.png".into(),
+                    content: PackContent::Base64("iVBORw0KGgo=".into()),
+                },
+            ],
+        },
+        Action::PackDelete {
+            pack: "glow".into(),
+        },
         Action::PrivacySet { on: true },
         Action::PreviewSubscribe {
             channel: 2,
@@ -1123,6 +1148,23 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::FontList,
+        Query::PackList,
+        Query::PackRead {
+            pack: "glow".into(),
+            path: None,
+        },
+        Query::PackRead {
+            pack: "glow".into(),
+            path: Some("images/noise.png".into()),
+        },
+        Query::ProfileGet {
+            seconds: None,
+            top: None,
+        },
+        Query::ProfileGet {
+            seconds: Some(10),
+            top: Some(5),
+        },
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1193,6 +1235,122 @@ pub(crate) fn queries() -> Vec<Query> {
 }
 
 /// A live broadcast's audience, every count reported.
+fn profile_info() -> ProfileInfo {
+    let ms = |value: f32| Finite32::new(value).expect("finite");
+    ProfileInfo {
+        seconds: ms(5.0),
+        frame_budget_ms: ms(33.333),
+        gpu_timing: false,
+        thread_cpu: true,
+        drawers: vec![DrawerProfile {
+            drawer: Drawer::Program,
+            frames: 300,
+            frame_ms: ms(9.5),
+            frame_p95_ms: ms(12.25),
+            frame_max_ms: ms(21.0),
+            over_budget: 2,
+            skipped: 1,
+            phases: PhaseProfile {
+                uploads_ms: ms(1.25),
+                captures_ms: ms(0.5),
+                chains_ms: ms(5.5),
+                passes_ms: ms(1.0),
+                finish_ms: ms(1.25),
+            },
+        }],
+        units: vec![
+            UnitProfile {
+                drawer: Drawer::Program,
+                unit: ProfileUnit::ItemEffects {
+                    scene_id: SceneId::new("scn_1"),
+                    item_id: ItemId::new("itm_1"),
+                },
+                frames: 300,
+                ms: ms(4.0),
+                recent_max_ms: ms(6.5),
+                share: ms(0.42),
+                gpu_ms: None,
+            },
+            UnitProfile {
+                drawer: Drawer::Program,
+                unit: ProfileUnit::Upload {
+                    source_id: SourceId::new("src_browser"),
+                },
+                frames: 150,
+                ms: ms(1.5),
+                recent_max_ms: ms(2.0),
+                share: ms(0.08),
+                gpu_ms: None,
+            },
+        ]
+        .into_iter()
+        .chain(
+            [
+                ProfileUnit::Capture {
+                    source_id: Some(SourceId::new("src_display")),
+                },
+                ProfileUnit::SourceChain {
+                    source_id: SourceId::new("src_shader"),
+                },
+                ProfileUnit::SceneChain {
+                    scene_id: SceneId::new("scn_2"),
+                },
+                ProfileUnit::PlacedChain {
+                    source_id: SourceId::new("src_scene"),
+                    scene_id: SceneId::new("scn_2"),
+                },
+                ProfileUnit::ScenePass {
+                    scene_id: SceneId::new("scn_2"),
+                },
+                ProfileUnit::Composite,
+                ProfileUnit::MasterChain { mix_id: None },
+                ProfileUnit::OutputChain {
+                    output_id: OutputId::new("out_yt"),
+                },
+            ]
+            .into_iter()
+            .map(|unit| UnitProfile {
+                drawer: Drawer::Preview,
+                unit,
+                frames: 30,
+                ms: ms(0.25),
+                recent_max_ms: ms(0.5),
+                share: ms(0.01),
+                gpu_ms: Some(ms(0.125)),
+            }),
+        )
+        .collect(),
+        sources: vec![SourceProfile {
+            source_id: SourceId::new("src_wave"),
+            paints: 300,
+            paint_ms: ms(0.75),
+            looks: 300,
+            look_ms: ms(0.01),
+            build_ms: Some(ms(3.0)),
+        }],
+        plan: PlanProfile {
+            plans: 310,
+            ms: ms(0.2),
+            recent_max_ms: ms(1.5),
+        },
+        process_cpu_pct: Some(ms(85.0)),
+        threads: vec![
+            ThreadProfile {
+                name: Some("jstream-render".into()),
+                remote_name: None,
+                count: 1,
+                cpu_pct: ms(48.0),
+            },
+            ThreadProfile {
+                name: None,
+                remote_name: Some("GPU driver worker".into()),
+                count: 2,
+                cpu_pct: ms(6.5),
+            },
+        ],
+    }
+}
+
 fn audience_stats() -> AudienceStatsInfo {
     AudienceStatsInfo {
         output_id: OutputId::new("out_live"),
@@ -1791,6 +1949,30 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::PackList {
+            packs: vec![pack_info()],
+        },
+        QueryResult::PackRead {
+            files: vec![
+                PackFileInfo {
+                    path: "effect.toml".into(),
+                    size: 32,
+                    digest: "af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262".into(),
+                    text: Some("[pack]\nid = \"glow\"\nname = \"Glow\"\n".into()),
+                    base64: None,
+                },
+                PackFileInfo {
+                    path: "images/noise.png".into(),
+                    size: 8,
+                    digest: "6c63b9b2c6b1cca5d8f7a1d2a9a7e5e6e8f8a1a2b3c4d5e6f708192a3b4c5d6e".into(),
+                    text: None,
+                    base64: None,
+                },
+            ],
+        },
+        QueryResult::ProfileGet {
+            profile: profile_info(),
+        },
         QueryResult::FontList {
             fonts: vec![
                 FontInfo {
@@ -2308,6 +2490,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Device,
         EntityKind::Hotkey,
         EntityKind::Plugin,
+        EntityKind::Pack,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -2450,6 +2633,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
             broadcast: broadcast.clone(),
         },
         ActionResult::YoutubeTransitionBroadcast { broadcast },
+        ActionResult::PackWrite { pack: pack_info() },
     ] {
         msgs.push(ServerMessage::Response(Response {
             id: RequestId::new("r11"),
@@ -2477,6 +2661,17 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
 }
 
 /// Every command (edit or action), as the classification view.
+/// A pack as `pack.list` and `pack.write` report it.
+fn pack_info() -> PackInfo {
+    PackInfo {
+        id: "glow".into(),
+        folder: "glow".into(),
+        kinds: vec!["glow/ramp".into()],
+        loaded: true,
+        written_by: Some("claude-desktop".into()),
+    }
+}
+
 fn commands() -> Vec<Command> {
     let mut commands: Vec<Command> = edits().into_iter().map(Command::from).collect();
     commands.extend(actions().into_iter().map(Command::from));

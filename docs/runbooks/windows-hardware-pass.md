@@ -73,8 +73,8 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
   the last lines say what and how to undo it.
 - **Not checked by the script:** what isn't visible outside the engine, such as
   `OutputStats::readbacks` and `gpu_fallbacks` (it checks the log lines that report the
-  same events), item 19's log search (its step 3, by hand), and the items the report
-  lists under "Not in this pass".
+  same events), item 19's log search (its step 3, by hand), item 20 (all by hand), and
+  the items the report lists under "Not in this pass".
 
 | Check | Item | Source |
 |---|---|---|
@@ -241,6 +241,15 @@ device tests need a microphone and speakers. On `main`:
 The last test plays a quiet 440 Hz tone. **Pass:** all five pass: devices with one default
 each, the input format, this process's loopback, the default input on the media clock, and
 the default output's loopback.
+
+### 21. Thread CPU in `profile.get` (closes #1089, PR #1087)
+
+Run the daemon with a scene on the program for a few minutes, then
+`jstream-cli profile get 10`. **Pass:** `threads` lists JStream's threads
+(`jstream-render`, `jstream-preview`, `jstream-sources`, …) under `name`, their
+`cpu_pct` adding up to about Task Manager's figure for the process; the render thread's
+share grows with a heavier scene; and over ten minutes the daemon's handle count (Task
+Manager › Details › Handles) stays flat.
 
 <a id="m3-2"></a>
 ## From wave/m3-2, now on main
@@ -419,6 +428,28 @@ On #1083's branch, with the UI built (`trunk build --release` in `crates/jstream
    opens in the browser the same way, and the dialog shows the icon and the version.
 3. **Pass:** the log has no `a new window refused`, `navigation away from the UI
    refused` or `could not open a link in the browser` line for these clicks.
+
+### 20. Effect-pack writes on NTFS (closes #1088, PR #1085)
+
+By hand: the script doesn't run this one yet. On #1085's branch, start the daemon with
+`--effects-dir` set to an empty folder and connect a client, for example
+`jstream-cli mcp` or the UI's devtools.
+
+1. Send `pack.write` for a pack `tint`: an `effect.toml` naming `id = "tint"` and its
+   `.wgsl`. It answers with `loaded: true`, and `kind.list` has `tint/…` straight away.
+2. Open the `.wgsl` in an editor that holds it open (Notepad++ does), or start a
+   Defender custom scan of the folder. While that is running, write `tint` again with
+   another shader. It succeeds within about a second, or answers `internal`, and the old
+   version stays loaded. Close the editor and check that `.trash` and `.staging` are
+   empty or gone after the next write.
+3. Rename the folder to `Tint` by hand, then write `tint`. It replaces the folder in
+   place, and `pack.list` shows one pack.
+4. `pack.write` with pack `con`, and with files `nul.png` and `com1/x.wgsl`: each is
+   `invalid_argument`, and nothing appears in the folder.
+5. Kill the daemon while a write is running, then start it again. `tint` loads as one of
+   its versions, and `.staging` and `.deleted` are gone.
+
+Pass: every step does as described. Report on #1088.
 
 <a id="waiting"></a>
 ## Waiting on a fix

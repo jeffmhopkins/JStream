@@ -183,7 +183,8 @@ with no inverse. The engine draws open gestures' source settings through it
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
   `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
-  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
+  [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by
   the previous value, and removing an item restores both.
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as a `scene` owner (`invalid_argument`
@@ -248,7 +249,10 @@ with no inverse. The engine draws open gestures' source settings through it
   in place of a file; whether it is absolute on the engine's own machine, and
   whether the file can be written, is the engine's check at `output.start`. `output.set_target` on a recording or a virtual camera fails with
   `invalid_argument` (neither has an RTMP target). `output.delete` is undone by `output.create` with its kind, and
-  `output.set_target` by the previous target. `Graph::apply_with_running` is `apply`
+  `output.set_target` by the previous target. `output.set_path` (#1072) replaces a
+  recording's path, checked as in `output.create`, and fails with `invalid_argument` on
+  any other output; it is undone by the previous path, and touches the output's target
+  like `output.set_target`. `Graph::apply_with_running` is `apply`
   for an engine whose outputs in the given set are running: deleting one of them, or
   moving one to another bus, fails with `invalid_argument`, in edit order. The
   `OutputDelete` inverse also restores the output's encoder profile, video mix and bus,
