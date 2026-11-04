@@ -1203,7 +1203,18 @@ Queries read and never change `rev`. Those that read the collection state carry 
   base64 with padding and no line breaks. `width` and `height` are that image's size;
   the longest side is at most 1280. `rev` is the collection revision of the layout.
   Source pixels are runtime state and can change without a new `rev`. The query takes
-  no arguments and changes nothing.
+  no arguments and changes nothing. On a machine with no graphics adapter, hardware or
+  software, it fails with `action_failed`, and on Linux the reason says which driver to
+  install.
+  **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
+  which PNG can't compress, can be as large as its raw pixels: the image is the
+  canvas, scaled down so its longest side is at most 1280. The default 1920×1080
+  canvas gives 1280×720, 3.7 MB raw, and `png` can reach about 4.9 MB of base64; a
+  square canvas about 8.7 MB. A typical frame is far smaller. The 4 MiB limit `jstream-server` sets applies only to messages
+  it receives, not to its answers
+  ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
+  accept an answer of that size: `jstream-control`'s WebSocket client keeps
+  tungstenite's default limits, which are well above it.
 - **Frame sheets** (since 0.78, #1061). One picture can't show motion, so `video.frames
   {count, interval_ms, delay_ms?, scene_id?}` takes `count` pictures (2 to 16)
   `interval_ms` apart (at least 10), the first `delay_ms` after the call, of the
@@ -1221,16 +1232,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   600 ms move. It is an action (it switches), answering with an `ActionResult`
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), so the
   read-only `video` MCP tool stays read-only; it can't be bound to a hotkey, since its
-  answer is for the session that sent it. Limits are checked before the switch.
-  **Size.** The PNG is RGBA8 and nothing caps its byte size, so a noise-like frame,
-  which PNG can't compress, can be as large as its raw pixels: the image is the
-  canvas, scaled down so its longest side is at most 1280. The default 1920×1080
-  canvas gives 1280×720, 3.7 MB raw, and `png` can reach about 4.9 MB of base64; a
-  square canvas about 8.7 MB. A typical frame is far smaller. The 4 MiB limit `jstream-server` sets applies only to messages
-  it receives, not to its answers
-  ([jstream-server › Design](../jstream-server/README.md#design)), so a client must
-  accept an answer of that size: `jstream-control`'s WebSocket client keeps
-  tungstenite's default limits, which are well above it.
+  answer is for the session that sent it. Limits are checked before the switch. With no
+  graphics adapter, a sheet fails as `video.snapshot` does.
 
 **Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
