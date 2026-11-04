@@ -70,16 +70,18 @@ its own.
    low and only loud ones lift), `ease_out` (cubic, so quiet passages already show) and
    `ease_in_out`, bends the 0 to 1 envelope. These are curve shapes of their own, never
    the transition `Easing`, whose `spring` would overshoot the range.
-4. The result is mapped onto `from` to `to` (defaults 0 and 1, any finite numbers,
-   `from > to` allowed to invert). That number is the modifier's value: for `opacity`
-   `from: 0.4, to: 1` is a light that never goes fully dark and is full on a kick; for
-   `x`, `from: 0, to: 6` is a 6 px push.
+4. The result is mapped onto `from` to `to` (defaults 0 and 1, any finite numbers
+   within ADR-0099's largest amplitude, `from > to` allowed to invert). That number is
+   the modifier's value, applied as every modifier's is: added, or for `scale` and
+   `opacity` multiplying by one plus the value. So for `opacity`, `from: -0.6, to: 0` is
+   a light at 40% between beats and full on a kick, and for `x`, `from: 0, to: 6` is a
+   6 px push.
 
-**4. Where it runs.** On the render thread, like the other modifiers, with no allocation
+**4. Where it runs.** Where the other modifiers are evaluated, with no allocation
 and no wait on the control plane ([R-RT-002](../RULES.md#R-RT-002)):
 - The engine's audio sync keeps a scope for every bus and source a binding names, as it
   does for the scope sources, and drops it when no binding or scope source names it.
-- The render thread keeps one `AudioMeter` per heard scope, made when a plan first names
+- The engine keeps one `AudioMeter` per heard scope, made when a plan first names
   that scope (never while a steady frame draws) and shared by every binding that hears
   it. It measures each scope once per animation-clock frame, running the FFT only when a
   `band` binding hears that scope. Cost scales with distinct inputs, not bindings.
@@ -116,15 +118,15 @@ kind, and the MCP design guidance gets one recipe for light that pulses to the m
   a wiggle.
 - **Harder:** a frame now depends on audio as well as on time, so a render test that
   compares frames pins both: it feeds the scope known samples and fixes the animation
-  time. The envelope's per-binding state is a small table the render thread keeps in step
-  with the plan.
+  time. The envelope's per-binding state is a small table the engine keeps in step with
+  the items, beside what it keeps of when each item was shown.
 - **Limits that remain:** a binding hears nothing while no output runs, because the
   program mix stands still then, as it does for the scope sources. A scene author
   previewing reactive lights starts a recording or a stream, or a monitor once the mixer
   runs for one. Making the mixer run with no output is its own decision.
 - **Must now do, after ADR-0099's `motion` field lands:** the `jstream-anim` functions
   (dB map, envelope, curve, range); the protocol variant and its checks; the scope
-  bookkeeping and shared meters on the render thread; the Inspector and MCP surface; a
+  bookkeeping and shared meters in the engine; the Inspector and MCP surface; a
   render test with a pinned scope; the design recipe. One PR for the model and one for
   the protocol and engine, the second taking a protocol-queue slot.
 - **Not decided here:** pages hearing levels (#1060 part 2, #1063), beat detection or
