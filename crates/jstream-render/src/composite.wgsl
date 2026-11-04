@@ -107,6 +107,8 @@ const TAPS: u32 = 16u;
 const GOLDEN: f32 = 2.39996323;
 
 // The item's premultiplied linear colour at this fragment, coverage and opacity applied.
+// Opacity above 1 is a gain on the item's light (#1101): it multiplies the colour, and
+// the alpha by at most 1, so the backdrop is never covered more than fully.
 fn source(in: VsOut) -> vec4<f32> {
     // Uniform control flow: the derivatives and the one-sample read come first.
     let ddx_uv = dpdx(in.uv);
@@ -139,7 +141,12 @@ fn source(in: VsOut) -> vec4<f32> {
         edge(in.e4, at),
     );
     let coverage = clamp(d / (2.0 * max(r, 0.5)) + 0.5, 0.0, 1.0);
-    return colour * (in.opacity * coverage);
+    // Coverage scales both; only the opacity's own alpha is held to 1, so an edge's
+    // fringe stays as soft at any gain (ADR-0050 decision 6).
+    return vec4<f32>(
+        colour.rgb * in.opacity * coverage,
+        colour.a * min(in.opacity, 1.0) * coverage,
+    );
 }
 
 // A filtered sample as premultiplied linear colour, by the item's alpha `mode`.

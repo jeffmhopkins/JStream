@@ -223,6 +223,7 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
         }],
     );
     let o = ItemOverride {
+        motion: Default::default(),
         transform: None,
         item_id: ItemId::new("a1"),
         geometry: None,
@@ -1072,4 +1073,409 @@ fn a_filtered_group_source_runs_over_each_view_and_keeps_it_on_a_retarget() {
         "k's view, leaving"
     );
     assert_eq!(input(&g), Some(GpuKey::Layer(g, 1)), "a, arriving");
+}
+
+// Motion modifiers (ADR-0099): drawn each frame on top of an item's values, a keyframe
+// scene's override in place of the item's own, blended across a Move.
+
+fn secs(s: f64) -> jstream_media::MediaTime {
+    jstream_media::MediaTime::new((s * 1e6) as i64, jstream_media::Timebase::MICROS)
+}
+
+/// `item`'s motion: one drift along x at `rate` pixels a second, on `clock`.
+fn drift_x(
+    item: &str,
+    scene: Option<&str>,
+    rate: f32,
+    clock: jstream_protocol::MotionClock,
+) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "drift".into(),
+            property: jstream_protocol::MotionProperty::X,
+            kind: jstream_protocol::MotionKind::Drift {
+                rate_per_s: Finite32::new(rate).expect("finite"),
+                wrap: None,
+            },
+            clock,
+            enabled: true,
+        }],
+    }
+}
+
+/// Each item's x as the program pass of `scene` draws it at `at`, with its motion.
+fn moved_x(engine: &Engine, scene: &str, at: jstream_media::MediaTime) -> Vec<(String, f32)> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .moved_at(&SceneId::new(scene), at)
+        .expect("the program draws the scene")
+        .iter()
+        .map(|(item, placement, _, _)| (item.to_string(), x(placement)))
+        .collect()
+}
+
+#[test]
+fn an_items_motion_moves_it_each_frame_and_a_keyframe_overrides_it() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    assert!(!engine.render_hub().load().shot().changes_with_time());
+    apply(&control, vec![drift_x("a1", None, 100.0, Clock)]);
+    let shot = engine.render_hub().load();
+    assert!(shot.shot().changes_with_time(), "a moving item redraws");
+    // The animation time, not the edit's: two seconds in, 200 px along.
+    assert_eq!(
+        moved_x(&engine, "a", secs(2.0)),
+        [("a1".into(), 300.0), ("a2".into(), 500.0)]
+    );
+    // The keyframe's own motion replaces the item's there, and only there.
+    apply(&control, vec![drift_x("a1", Some("k"), -50.0, Clock)]);
+    switch(&control, "k", None);
+    assert_eq!(
+        moved_x(&engine, "k", secs(2.0)),
+        [("a1".into(), 0.0), ("a2".into(), 500.0)]
+    );
+}
+
+#[test]
+fn a_move_blends_both_sides_motion_by_its_progress() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("move"),
+                name: "Move".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+            drift_x("a1", None, 100.0, Clock),
+            drift_x("a1", Some("k"), 300.0, Clock),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let shot = engine.render_hub().load();
+    let x_of = |elapsed_ms: f32| {
+        shot.shot()
+            .tracks_moved_at(elapsed_ms, secs(1.0))
+            .expect("a transition runs")
+            .iter()
+            .map(|end| end.map(|end| end.geometry.center.x.get()))
+            .collect::<Vec<_>>()
+    };
+    // a1 moves 100 px a second on `a` and 300 on `k`: halfway, it adds 200.
+    assert_eq!(x_of(0.0), [Some(200.0), Some(500.0)]);
+    assert_eq!(x_of(200.0), [Some(300.0), Some(500.0)]);
+    assert_eq!(x_of(400.0), [Some(400.0), Some(500.0)]);
+}
+
+#[test]
+fn the_shown_clock_starts_when_the_item_is_first_drawn() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![drift_x(
+            "a1",
+            None,
+            100.0,
+            jstream_protocol::MotionClock::Shown,
+        )],
+    );
+    switch(&control, "a", None);
+    let shown = *engine
+        .render_hub()
+        .load()
+        .shot()
+        .shown()
+        .get(&ItemId::new("a1"))
+        .expect("a1 is drawn");
+    let one_second_later = secs(shown.as_secs_f64() + 1.0);
+    // The clock is the engine's, so the time a second after `shown` is only as exact
+    // as that sum in seconds.
+    let (item, x) = moved_x(&engine, "a", one_second_later)[0].clone();
+    assert_eq!(item, "a1");
+    assert!((x - 200.0).abs() < 0.01, "{x}");
+}
+
+// Audio-reactive motion modifiers (ADR-0100): an item's opacity follows the program
+// mix's level through the render thread's follower.
+
+/// `item`'s motion: its opacity follows the program mix's level, dark at silence and
+/// full at -6 dBFS, with no attack.
+fn pulse(item: &str, scene: Option<&str>) -> Edit {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "pulse".into(),
+            property: jstream_protocol::MotionProperty::Opacity,
+            kind: jstream_protocol::MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: jstream_protocol::MotionMeasure::Level,
+                low_hz: None,
+                high_hz: None,
+                floor_db: f(-60.0),
+                ceiling_db: f(-6.0),
+                attack_ms: 0,
+                release_ms: 200,
+                curve: jstream_protocol::MotionCurve::Linear,
+                from: f(-1.0),
+                to: Finite32::ZERO,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }],
+    }
+}
+
+/// Each item's opacity as the program pass of `scene` draws it at `at`.
+fn moved_opacity(engine: &Engine, scene: &str, at: jstream_media::MediaTime) -> Vec<f32> {
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .moved_at(&SceneId::new(scene), at)
+        .expect("the program draws the scene")
+        .iter()
+        .map(|(_, _, _, opacity)| *opacity)
+        .collect()
+}
+
+#[test]
+fn an_audio_modifier_follows_the_program_mix_and_reads_silence_until_heard() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![pulse("a1", None)]);
+    let snapshot = engine.render_hub().load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "an audio modifier redraws");
+    let a1 = ItemId::new("a1");
+    assert_eq!(
+        shot.audio().level(&a1, "pulse"),
+        Some(0.0),
+        "bound to the program mix"
+    );
+    // Before any tick follows it, it reads silence: its `from`, dark.
+    assert_eq!(moved_opacity(&engine, "a", secs(1.0)), [0.0, 1.0]);
+
+    // A full-scale sine on the program mix: an RMS of -3 dBFS, over the ceiling.
+    let samples: Vec<f32> = (0..2048)
+        .flat_map(|n| {
+            let s = (std::f32::consts::TAU * 440.0 * n as f32 / 48_000.0).sin();
+            [s, s]
+        })
+        .collect();
+    engine.audio_scope().push(48_000, &samples);
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(shot.audio(), secs(1.0));
+    follower.follow(shot.audio(), secs(1.016));
+    assert_eq!(
+        moved_opacity(&engine, "a", secs(1.016)),
+        [1.0, 1.0],
+        "full on"
+    );
+
+    // The keyframe's motion overrides the item's, and binds the same way.
+    apply(&control, vec![pulse("a2", Some("k"))]);
+    switch(&control, "k", None);
+    let snapshot = engine.render_hub().load();
+    assert!(
+        snapshot
+            .shot()
+            .audio()
+            .level(&ItemId::new("a2"), "pulse")
+            .is_some()
+    );
+    assert!(
+        snapshot.shot().audio().level(&a1, "pulse").is_some(),
+        "k shows a1's own"
+    );
+}
+
+/// An item whose effects run over the canvas (ADR-0106) moves inside its layer, which
+/// stays flat over the canvas: in a switch its tracks, which carry that layer, don't
+/// drift with its motion (#1125 review B8, N16).
+#[test]
+fn a_canvas_space_items_motion_leaves_its_layer_over_the_canvas() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("sharp"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("a1"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            drift_x("a1", None, 100.0, Clock),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let shot = engine.render_hub().load();
+    let xs = |at: f64| {
+        shot.shot()
+            .tracks_moved_at(200.0, secs(at))
+            .expect("a transition runs")
+            .iter()
+            .map(|end| end.map(|end| end.geometry.center.x.get()))
+            .collect::<Vec<_>>()
+    };
+    assert!(xs(1.0).iter().any(Option::is_some), "{:?}", xs(1.0));
+    assert_eq!(xs(1.0), xs(3.0), "the canvas layers stay where they are");
+}
+
+// Triggered motion (#1107): still until `item.trigger_motion` fires it, then from then.
+
+fn trigger(
+    control: &dyn Control,
+    item: &str,
+    modifier: Option<&str>,
+) -> Result<(), jstream_protocol::ProtocolError> {
+    let action = Action::ItemTriggerMotion {
+        item_id: ItemId::new(item),
+        modifier_id: modifier.map(Into::into),
+    };
+    block_on(control.call(Call::Action { action }))
+        .map(|_| ())
+        .map_err(|e| match e {
+            jstream_control::ControlError::Protocol(wire) => wire.error,
+            other => panic!("not a protocol error: {other}"),
+        })
+}
+
+/// `a1`'s motion: `jolt`, a 500 ms impulse of 40 px along y at 2 Hz that doesn't decay,
+/// and `drift`, 100 px a second along x, both on the `triggered` clock.
+fn jolt_and_drift() -> Edit {
+    use jstream_protocol::{MotionClock, MotionKind, MotionModifier, MotionProperty};
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    Edit::ItemSetMotion {
+        item_id: ItemId::new("a1"),
+        scene_id: None,
+        motion: vec![
+            MotionModifier {
+                modifier_id: "jolt".into(),
+                property: MotionProperty::Y,
+                kind: MotionKind::Impulse {
+                    amplitude: f(40.0),
+                    frequency_hz: f(2.0),
+                    decay_per_s: f(0.0),
+                    duration_ms: 500,
+                },
+                clock: MotionClock::Triggered,
+                enabled: true,
+            },
+            MotionModifier {
+                modifier_id: "drift".into(),
+                property: MotionProperty::X,
+                kind: MotionKind::Drift {
+                    rate_per_s: f(100.0),
+                    wrap: None,
+                },
+                clock: MotionClock::Triggered,
+                enabled: true,
+            },
+        ],
+    }
+}
+
+/// `a1`'s centre as the program draws it `after` seconds past when `id` was fired, or
+/// at `after` seconds on the engine's clock if it never was.
+fn a1_after(engine: &Engine, id: &str, after: f64) -> (f32, f32) {
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let origin = shot
+        .fired_at(&ItemId::new("a1"), id)
+        .map_or(0.0, |at| at.as_secs_f64());
+    let moved = shot
+        .moved_at(&SceneId::new("a"), secs(origin + after))
+        .expect("the program draws a");
+    let (_, placement, _, _) = moved
+        .iter()
+        .find(|(item, ..)| item.as_str() == "a1")
+        .expect("a1");
+    let jstream_render::Placement::Geometry(g) = placement else {
+        panic!("a1 has a box");
+    };
+    (g.center.x.get(), g.center.y.get())
+}
+
+#[test]
+fn a_triggered_modifier_is_still_until_fired_then_runs_from_the_fire() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(&control, vec![jolt_and_drift()]);
+    switch(&control, "a", None);
+    let (_, y0) = a1_after(&engine, "jolt", 0.0);
+    assert_eq!(
+        a1_after(&engine, "jolt", 5.0),
+        (100.0, y0),
+        "never fired: still"
+    );
+
+    // Firing one moves only that one, from the fire: a quarter of a 2 Hz swing is its
+    // peak, and past its 500 ms it is still again.
+    trigger(&control, "a1", Some("jolt")).expect("fires");
+    let near = |(x, y): (f32, f32), (ex, ey): (f32, f32)| {
+        assert!(
+            (x - ex).abs() < 0.01 && (y - ey).abs() < 0.01,
+            "({x}, {y}) is not ({ex}, {ey})"
+        );
+    };
+    near(a1_after(&engine, "jolt", 0.125), (100.0, y0 + 40.0));
+    near(a1_after(&engine, "jolt", 0.6), (100.0, y0));
+
+    // Firing every one starts the drift too, and restarts the jolt.
+    trigger(&control, "a1", None).expect("fires");
+    near(a1_after(&engine, "drift", 0.125), (112.5, y0 + 40.0));
+    near(a1_after(&engine, "drift", 2.0), (300.0, y0));
+}
+
+#[test]
+fn a_fire_names_an_item_and_a_well_formed_modifier() {
+    let engine = family();
+    let control = connected(&engine);
+    match trigger(&control, "nope", None) {
+        Err(jstream_protocol::ProtocolError::NotFound { entity, id }) => {
+            assert_eq!(
+                (entity, id.as_str()),
+                (jstream_protocol::EntityKind::Item, "nope")
+            );
+        }
+        other => panic!("not a not_found: {other:?}"),
+    }
+    match trigger(&control, "a1", Some("has space")) {
+        Err(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) => {
+            assert_eq!(field, "modifier_id")
+        }
+        other => panic!("not an invalid_argument: {other:?}"),
+    }
+    // A modifier the item doesn't hold is no error: a keyframe can override its list.
+    trigger(&control, "a1", Some("elsewhere")).expect("fires nothing");
 }

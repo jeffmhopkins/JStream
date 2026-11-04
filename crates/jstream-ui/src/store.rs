@@ -263,6 +263,19 @@ impl Collection {
             .collect()
     }
 
+    /// The chords bound to `action`, in chord order: for a `scene.switch`, every chord
+    /// that puts its scene on program ([`Self::scene_chords`]), whatever preset it names.
+    pub fn chords_for(&self, action: &Action) -> Vec<Chord> {
+        if let Action::SceneSwitch { scene_id, .. } = action {
+            return self.scene_chords(scene_id);
+        }
+        self.hotkeys
+            .iter()
+            .filter(|binding| binding.action().as_ref() == Some(action))
+            .map(|binding| binding.chord.clone())
+            .collect()
+    }
+
     /// The action bound to `chord`, if any, and this version knows it.
     pub fn hotkey(&self, chord: &Chord) -> Option<Action> {
         self.hotkeys
@@ -531,6 +544,9 @@ pub fn shown_items(parent: &[ItemInfo], overrides: &[ItemOverride]) -> Vec<ItemI
             if let Some(effects) = &o.effects {
                 item.effects = effects.clone();
             }
+            if let Some(motion) = &o.motion {
+                item.motion = motion.clone();
+            }
             item
         })
         .collect()
@@ -552,6 +568,7 @@ pub fn reset_edits(scene: &SceneInfo) -> Vec<Edit> {
                 (o.visible.is_some(), OverrideField::Visible),
                 (o.opacity.is_some(), OverrideField::Opacity),
                 (o.effects.is_some(), OverrideField::Effects),
+                (o.motion.is_some(), OverrideField::Motion),
             ]
             .into_iter()
             .filter(|(set, _)| *set)

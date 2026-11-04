@@ -48,6 +48,9 @@ enum Prop {
     Opacity,
     /// A keyframe scene's override of an item's effects, the whole list (ADR-0088).
     Effects,
+    /// An item's motion modifiers, the whole list, its own or a keyframe scene's
+    /// override (ADR-0099).
+    Motion,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -90,7 +93,7 @@ enum Prop {
     Meta,
     /// A scene's options (ADR-0089).
     Options,
-    /// A scene's camera (ADR-0094).
+    /// A scene's camera (ADR-0094), its camera motion or its follow camera (ADR-0113).
     Camera,
     /// A label's colour and icon.
     Look,
@@ -163,6 +166,7 @@ impl Touched {
                     OverrideField::Visible => Prop::Visible,
                     OverrideField::Opacity => Prop::Opacity,
                     OverrideField::Effects => Prop::Effects,
+                    OverrideField::Motion => Prop::Motion,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
             }
@@ -199,6 +203,9 @@ impl Touched {
             }
             Edit::ItemSetVisible { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Visible);
+            }
+            Edit::ItemSetMotion { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Motion);
             }
             Edit::ItemSetOpacity { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Opacity);
@@ -345,7 +352,9 @@ impl Touched {
             Edit::SceneSetOptions { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Options);
             }
-            Edit::SceneSetCamera { scene_id, .. } => {
+            Edit::SceneSetCamera { scene_id, .. }
+            | Edit::SceneSetCameraMotion { scene_id, .. }
+            | Edit::SceneSetCameraFollow { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Camera);
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {

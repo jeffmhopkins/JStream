@@ -69,12 +69,13 @@
 #[cfg(doc)]
 use jstream_protocol::MAX_DURATION_MS;
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, EncoderProfile,
-    EncoderProfileId, FilterChain, FilterId, Finite32, FolderId, INITIAL_PRESET, ItemGeometry,
-    ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId, OutputId, OutputKind,
-    PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
-    SourceAudio, SourceId, SourceKind, TransitionPresetId, TransitionPresetInfo, TransitionsInfo,
-    VideoMix as MixSpec, VideoMixId, builtin_transition_kinds, initial_preset,
+    Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
+    Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
+    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
+    OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
+    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -85,7 +86,12 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// fields it sets, each a whole value. An overridden geometry is always a
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains>;
+/// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
+/// (ADR-0099).
+pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+
+/// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
+pub type MotionList = Vec<jstream_protocol::MotionModifier>;
 
 /// The scene graph of one collection, its revision, and the kinds it can create.
 ///
@@ -422,6 +428,8 @@ impl State {
                         opacity: Finite32::new(props.opacity).unwrap_or(item.opacity),
                         // Overridden effects replace the item's own, whole (ADR-0088).
                         effects: o.effects.clone().unwrap_or_else(|| item.effects.clone()),
+                        // So does overridden motion (ADR-0099).
+                        motion: o.motion.clone().unwrap_or_else(|| item.motion.clone()),
                         ..item.clone()
                     })
                 }
@@ -438,6 +446,21 @@ impl State {
             };
             self.scene(scene_id)
                 .filter(|group| group.role == SceneRole::Group)
+        })
+    }
+
+    /// Whether the placement of `item_id` that `scene_id` names is visible, as
+    /// `item.set_visible` with that `scene_id` would change it: a keyframe scene's
+    /// override if it has one, else the item's own (ADR-0101's `item.toggle`). `None`
+    /// for an item the collection doesn't have.
+    pub fn visible_in(&self, item_id: &ItemId, scene_id: Option<&SceneId>) -> Option<bool> {
+        let (_, item) = self.item(item_id)?;
+        let keyframe = scene_id
+            .and_then(|id| self.scene(id))
+            .filter(|scene| scene.variant_of.is_some());
+        Some(match keyframe.and_then(|k| k.overrides.get(item_id)) {
+            Some(o) => o.apply(&item.props()).visible,
+            None => item.visible,
         })
     }
 
@@ -731,6 +754,12 @@ pub struct Scene {
     /// Its camera (ADR-0094), which makes it a 3D scene. On a keyframe scene, its
     /// override of its parent's; [`State::effective_camera`] gives what it draws through.
     pub(crate) camera: Option<SceneCamera>,
+    /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
+    /// parent's.
+    pub(crate) camera_motion: Vec<CameraMotionModifier>,
+    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
+    /// item no longer in the scene, which leaves it inert.
+    pub(crate) camera_follow: Option<CameraFollow>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -787,6 +816,18 @@ impl Scene {
     /// draws through.
     pub fn camera(&self) -> Option<&SceneCamera> {
         self.camera.as_ref()
+    }
+
+    /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
+    /// parent's.
+    pub fn camera_motion(&self) -> &[CameraMotionModifier] {
+        &self.camera_motion
+    }
+
+    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
+    /// item no longer in the scene, which leaves it inert.
+    pub fn camera_follow(&self) -> Option<&CameraFollow> {
+        self.camera_follow.as_ref()
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene
@@ -906,11 +947,18 @@ pub struct Item {
     /// Whether its canvas box is locked (ADR-0096): an editing aid the engine stores and
     /// reports, and never enforces.
     pub(crate) locked: bool,
+    /// Its motion modifiers (ADR-0099): evaluated as each frame is drawn, never stored.
+    pub(crate) motion: MotionList,
     /// Where its effects run (ADR-0106): over its box, or over the canvas once placed.
     pub(crate) effects_space: jstream_protocol::EffectsSpace,
 }
 
 impl Item {
+    /// Its motion modifiers (ADR-0099), in order.
+    pub fn motion(&self) -> &[jstream_protocol::MotionModifier] {
+        &self.motion
+    }
+
     /// Its ID.
     pub fn id(&self) -> &ItemId {
         &self.id

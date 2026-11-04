@@ -70,8 +70,39 @@ fn exists(state: &State, entity: EntityKind, id: &str) -> bool {
         EntityKind::Output => state.outputs.keys().any(|o| o.as_str() == id),
         EntityKind::Encoder => state.encoders.keys().any(|e| e.as_str() == id),
         EntityKind::Transition => state.transitions.presets.keys().any(|p| p.as_str() == id),
+        EntityKind::Item => state.item(&jstream_protocol::ItemId::new(id)).is_some(),
         _ => false,
     }
+}
+
+/// Removes every binding whose action names an item the collection no longer has
+/// (ADR-0101): `item.remove`, and the deletes that take items with them (`scene.delete`,
+/// `source.delete`), drop the bindings of `item.show`, `item.hide` and `item.toggle`
+/// naming those items. Returns the edits that restore them, ordered by chord, to run
+/// after the items are back, and records each removed binding in `removed`.
+pub(crate) fn remove_missing_items(
+    state: &mut State,
+    removed: &mut Vec<HotkeyBinding>,
+) -> Vec<Edit> {
+    let chords: Vec<Chord> = state
+        .hotkeys
+        .iter()
+        .filter(|(_, action)| {
+            action.named_objects().iter().any(|&(entity, id)| {
+                entity == EntityKind::Item
+                    && state.item(&jstream_protocol::ItemId::new(id)).is_none()
+            })
+        })
+        .map(|(chord, _)| chord.clone())
+        .collect();
+    chords
+        .into_iter()
+        .filter_map(|chord| {
+            let action = state.hotkeys.remove(&chord)?;
+            removed.push(HotkeyBinding::new(chord.clone(), &action));
+            Some(Edit::HotkeySet { chord, action })
+        })
+        .collect()
 }
 
 /// Removes every binding whose action names the object `entity` `id`, which its delete

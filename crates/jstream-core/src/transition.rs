@@ -30,6 +30,7 @@ use jstream_protocol::{
 };
 use jstream_render::transition::{Effect, Endpoint, Timing, Track};
 
+use crate::motion::TrackMotion;
 use crate::snapshot::SourceRef;
 
 /// What a running transition does: its preset, resolved.
@@ -150,6 +151,9 @@ pub(crate) struct Visual {
     /// The camera it is seen through: a planned scene's item takes its transition's,
     /// and what a switch takes from the screen keeps the one it was seen through.
     pub(crate) seen: Seen,
+    /// Its motion modifiers (ADR-0099): its own on both sides, and once a Move pairs it
+    /// with an item it leaves, that item's on the leaving side.
+    pub(crate) motion: TrackMotion,
 }
 
 /// The camera a [`Visual`] is seen through (ADR-0094 decision 7).
@@ -367,9 +371,15 @@ pub(crate) fn plan(
                 })
             })
             .flatten();
+        let mut arriving_motion = None;
         let track = match partner {
             Some(j) => {
                 used[j] = true;
+                // Both sides' modifiers, blended as it moves (ADR-0099).
+                arriving_motion = Some(TrackMotion {
+                    from: from[j].motion.to.clone(),
+                    to: item.motion.to.clone(),
+                });
                 Track::Pair {
                     from: from[j].at,
                     to: item.at,
@@ -383,7 +393,11 @@ pub(crate) fn plan(
                 timing: timing(&item.settings, delay_ms),
             },
         };
-        arriving.push((item.clone(), track));
+        let mut item = item.clone();
+        if let Some(motion) = arriving_motion {
+            item.motion = motion;
+        }
+        arriving.push((item, track));
         arriving_partners.push(partner);
     }
     let mut tracks: Vec<(Visual, Track)> = from
@@ -603,6 +617,7 @@ mod tests {
             effects: Vec::new(),
             inside: None,
             seen: super::Seen::AsPlanned,
+            motion: super::TrackMotion::same(ItemId::new(item_id), std::sync::Arc::from([])),
         }
     }
 

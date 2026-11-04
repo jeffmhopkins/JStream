@@ -654,6 +654,19 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .key-value .key { color: var(--muted); }
 .key-value select { width: 150px; }
 .inspector .note { margin: 6px 0 0; color: var(--dim); font-size: 11px; }
+.motion-row { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
+.motion-row-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.motion-row-actions .check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.motion-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.motion-button:disabled { opacity: 0.5; }
 .section { margin: 0 0 0.75rem; padding: 0; border: none; }
 .section legend, .section summary { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.4rem; }
 .field {
@@ -1150,6 +1163,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .about-facts dd { margin: 0; overflow-wrap: anywhere; }
 .about-dialog a { color: var(--link); text-decoration: none; }
 .about-dialog a:hover, .about-dialog a:focus-visible { text-decoration: underline; }
+.about-codecs { width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
+.about-codecs-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.about-codec { display: grid; gap: 4px; }
+.about-codec-name { margin: 0; }
 .about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; }
 .plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }

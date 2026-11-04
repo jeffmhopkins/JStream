@@ -2853,6 +2853,8 @@ fn render_loop(job: RenderJob) {
     // session that arrives afterwards with a new feed has nothing drawn to repeat, so
     // it gets no frames until the pipeline (already failing) stops.
     let mut broken = false;
+    // Audio motion modifiers' meters and envelopes (ADR-0100), followed once a tick.
+    let mut follower = crate::reactive::Follower::default();
     while !stop.load(Ordering::Relaxed) {
         for (feed, tap) in inputs.try_iter() {
             frames.add(feed, tap);
@@ -2971,6 +2973,8 @@ fn render_loop(job: RenderJob) {
                 // The shot's captures cover every mix's passes, so a display or window
                 // only a video mix shows is started too.
                 captures.tick(shot.captures(), now);
+                // Every mix this tick reads the same audio levels.
+                follower.follow(shot.audio(), due);
                 frames.draw(&mut draw, shot, live, &captures, due, &mut meter)
             }));
             if !matches!(tick, Ok(Ok(_))) {

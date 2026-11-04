@@ -153,7 +153,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - output buses: `output.set_audio_buses` naming a missing output, a list that isn't
     exactly one bus, a virtual camera, a missing bus and a running output moving, and
     `bus.delete` of a bus an output carries, with the graph's reason and blocker;
-  - an `opacity` outside 0 to 1, in `item.add` and `item.set_opacity` (every blend
+  - an `opacity` outside 0 to 4, in `item.add` and `item.set_opacity` (every blend
     mode is taken, as the engine draws them all,
     [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md));
   - the filter edits (`mock/filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
@@ -203,7 +203,15 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
   graph's fields, an override on a keyframe scene refused while its parent has no
   camera, and removing a parent's camera dropping its keyframes' overrides, which the
-  inverse restores; `SceneInfo.camera` reports each scene's own;
+  inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
+  follow camera ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md):
+  `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
+  `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a
+  `display` or `window` source) belong to the family, refused on a keyframe scene, with
+  the graph's inverses, and undoing a scene's delete restores them;
+  `scene.zoom_camera` is `not_found` for a missing scene, `invalid_argument` for steps
+  outside -16 to 16 and `action_failed` without a follow camera, and otherwise changes
+  nothing the mock keeps;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,
@@ -219,7 +227,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), through
   `item.set_effects` (checking only the list's length and its IDs) and the `filter.*`
   edits on the `keyframe` owner, which copy the item's own effects first where the
-  keyframe follows them, with the graph's inverses;
+  keyframe follows them, with the graph's inverses, and an item's motion
+  ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), through
+  `item.set_motion` addressed to it (the whole list, checked with the protocol's
+  `check_motion` as the item's own is);
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -227,12 +238,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
-  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
   the hotkey bindings (in `state.get`, ordered by chord).
-  `video.snapshot` is not one of those reads: the mock has no compositor and answers
-  it with `internal`, as it does for any protocol variant it does not implement;
+  `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
+  `scene.switch_and_watch`): the mock has no compositor and answers them with
+  `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -326,7 +338,12 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `stopped`). `MockEngine::emit` injects any other event;
 - the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `item.show`,
+  `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
+  `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`
+  (#1107: `not_found` for a missing item, `invalid_argument` for a malformed
+  `modifier_id`, and otherwise nothing, since the mock draws nothing), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first
   scene or deletes the program or preview scene. The mock knows only the initial `cut`
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every

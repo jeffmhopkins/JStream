@@ -11,6 +11,7 @@
 
 pub mod add_source;
 pub mod agent;
+pub mod camera_moves;
 pub mod codec_downloads;
 mod confirm;
 pub mod device_preview;
@@ -19,6 +20,7 @@ pub mod filters;
 pub mod inspector;
 pub mod labels;
 pub mod mixer;
+pub mod motion;
 pub mod number;
 pub mod outputs;
 pub mod properties;

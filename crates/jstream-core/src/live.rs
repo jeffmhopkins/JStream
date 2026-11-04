@@ -483,6 +483,25 @@ impl LiveSources {
         if !same {
             self.loaded = Arc::new((*self.loaded).clone().with_heard(Arc::new(heard)));
         }
+        // And the scope each audio motion modifier hears (ADR-0100).
+        let motion_heard = match &self.ctx.audio {
+            Some(scopes) => {
+                crate::reactive::heard_scopes(scopes, crate::audio::heard_by_motion(state))
+            }
+            None => BTreeMap::new(),
+        };
+        let same = motion_heard.len() == self.loaded.motion_heard().len()
+            && motion_heard
+                .iter()
+                .zip(self.loaded.motion_heard().iter())
+                .all(|((a, x), (b, y))| a == b && Arc::ptr_eq(x, y));
+        if !same {
+            self.loaded = Arc::new(
+                (*self.loaded)
+                    .clone()
+                    .with_motion_heard(Arc::new(motion_heard)),
+            );
+        }
     }
 
     /// Brings the video filters' assets in line with the collection's: lets go of the
@@ -588,6 +607,7 @@ impl LiveSources {
         let effects = self.loaded.effects().clone();
         let sources = self.loaded.sources().clone();
         let heard = Arc::clone(self.loaded.heard());
+        let motion_heard = Arc::clone(self.loaded.motion_heard());
         self.loaded = Arc::new(
             self.assets
                 .iter()
@@ -595,7 +615,8 @@ impl LiveSources {
                 .collect::<FilterAssets>()
                 .with_effects(effects)
                 .with_sources(sources)
-                .with_heard(heard),
+                .with_heard(heard)
+                .with_motion_heard(motion_heard),
         );
     }
 

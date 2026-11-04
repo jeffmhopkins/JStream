@@ -85,7 +85,9 @@ from `tilt_deg` -90 to 0, or a card that turns in from `turn_deg` 70, reads as a
 designed move; keep angles under 90 and pair them with opacity. `item.set_blend` sets \
 how an item composites: `screen` or `additive` for light leaks, glints and glows over \
 the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
-items stay `normal`. \
+items stay `normal`. Opacity goes up to 4 (400%): above 1 it multiplies the item's \
+light without covering more, so an `additive` glow or a blurred, masked reflection can \
+be brighter than its source draws it. \
 Layering: build a scene as separate layers by role (the background, what glows or \
 emits light, the light it throws onto nearby surfaces, and the foreground frame or \
 set in front of it), each with its own mask and blend, so lighting and reflections \
@@ -132,6 +134,15 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
+kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
+`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
+hand-held camera. To follow the pointer over a screen capture, `scene.set_camera_follow` \
+names an item of the scene showing a `display` or `window` source: the camera glides \
+after the pointer at an angle (`yaw_deg`, `pitch_deg`), keeps the capture filling the \
+frame and, with `blur_px` above 0, focuses where it looks. `zoom` (1-4) is its resting \
+zoom; `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+Both belong to the scene's family: set them on the parent, not a keyframe scene. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
@@ -159,11 +170,24 @@ its `width` and `height` to the canvas and place its item full-frame, or to the 
 graphic's bounds; the default `css` makes the page transparent, so draw only the \
 graphic and leave `body` without a background. Fonts and images can come from https \
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
-`@keyframes` that run once on load, with `animation-fill-mode: both`. Time-based animation \
-in pages: when several pages show parts of one motion (a background that drifts \
-behind several layers, lights that pulse in step), compute it from the wall clock \
-(`Date.now()`), not from when each page loaded, so separate pages agree; use load time \
-only for an effect that should replay each time it is shown. Keep continuous motion \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Continuous motion \
+(a sway, a drift, a pulse, a scan) belongs on items, not in pages: `item.set_motion` \
+gives an item up to 8 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
+`rotation`, `tilt`, `turn`, `depth`, `opacity` or a crop edge), which the engine draws \
+each frame from one clock, so every item, mask and nested scene showing the same \
+modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
+one, and give a keyframe scene its own list (`scene_id`) to calm or quicken it across a \
+`move`. Use `clock` `shown` for motion that should start fresh each time the item is \
+shown. For a one-shot jolt or shake (an impact, a kick), add an `impulse` modifier \
+(`amplitude`, `frequency_hz`, `decay_per_s`, `duration_ms`) on `clock` `triggered` and \
+fire it with `item.trigger_motion`, instead of stepping the item call by call; fire a \
+group's item to shake the group and its masks together. \
+For lights, meters or a logo that react to the music, use an `audio` modifier \
+instead of a page that fakes the beat: it follows the program mix (or a bus, `audio`, or \
+a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`high_hz`, \
+such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
+to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
+40% between beats. It hears only while an output runs. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. Changing `html` \

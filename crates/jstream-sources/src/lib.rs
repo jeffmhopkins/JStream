@@ -64,8 +64,8 @@ pub use model::ModelKind;
 pub use page_api::PageView;
 pub use registry::Registry;
 pub use scope::{
-    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, drawn_source, heard_scope,
-    heard_source,
+    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, RawMeasure, drawn_source,
+    heard_scope, heard_source,
 };
 pub use source::{
     AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,

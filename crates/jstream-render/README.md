@@ -70,9 +70,12 @@ and calls this crate.
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
-- `visible == false`, a crop that leaves no pixels, a scale of zero, or a box with neutral
-  3D so large its content overflows `f32` draws nothing.
-- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
+- `visible == false`, a crop that leaves no pixels, a scale of zero, a box with neutral
+  3D so large its content overflows `f32`, or a legacy scale so large that its size or
+  a corner overflows `f32` draws nothing.
+- Opacity is a straight-alpha multiplier in `[0, 1]`, default 1, and above 1, up to
+  `MAX_OPACITY` (4), a gain on the item's light: the shader multiplies its premultiplied
+  colour by the opacity and its alpha by at most 1 (#1101). `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
@@ -532,10 +535,14 @@ function:
   about that corner by `rotation_deg`. In y-down coordinates that is
   `x' = px + dx·cos θ − dy·sin θ`, `y' = py + dx·sin θ + dy·cos θ`.
 
+When finite fields overflow there (the destination size or a corner past `f32::MAX`),
+`place` draws nothing rather than failing the frame: the graph keeps every finite
+transform that 0.3 accepted, so a scale like `1e35` can be stored.
+
 This crate then maps those canvas pixels into clip space:
 `x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.
 
-Opacity outside `[0, 1]` and any non-finite placement, colour or opacity is
+Opacity outside `[0, 1]` and any non-finite placement field, colour or opacity is
 `RenderError::Invalid`, not a clamped draw. So is an item whose image another
 compositor made, visible or not.
 

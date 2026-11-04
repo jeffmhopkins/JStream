@@ -29,11 +29,12 @@ switch within a family by item in its own transition planner, not through
 
 Contents:
 - `Field`: the fields a variant overrides, with their wire names: the four keyable
-  ones, `geometry`, `crop`, `visible` and `opacity`, and `effects`, the item's whole
+  ones, `geometry`, `crop`, `visible` and `opacity`, then `effects`, the item's whole
   effects list ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)),
-  a type parameter that defaults to `()`. `Props` holds an item's values for the four
+  and `motion`, its whole list of motion modifiers (ADR-0099), each a type parameter
+  that defaults to `()`. `Props` holds an item's values for the four
   keyable ones, which are all a switch animates, and `Value` one field's value. `Value::problem` refuses an opacity that isn't finite or is outside
-  `0..=1`; geometry and crop are the graph's to check.
+  `0..=MAX_OPACITY` (4, the protocol's limit, #1101); geometry and crop are the graph's to check.
 - `Override`: the fields a variant overrides for one item, each whole.
   `Override::apply` gives the effective values over the parent's values as passed in,
   so an absent field follows the parent live.
@@ -55,14 +56,18 @@ Contents:
 
 - Motion ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `Modifier` is one motion modifier on an item: a `Property` (`x`, `y`, `scale`,
-  `rotation`, `tilt`, `turn`, `opacity`, the four crop edges), a `Kind` (`Wiggle`:
-  seeded smooth noise with octaves; `Oscillate`: a sine, triangle, square or saw `Shape`
-  with period and phase; `Drift`: a rate, optionally wrapping; `Audio`, below) and a `Clock` (the
-  animation time, or time since the item was shown). `check_list` refuses more than
+  `rotation`, `tilt`, `turn`, `depth`, `opacity`, the four crop edges), a `Kind`
+  (`Wiggle`: seeded smooth noise with octaves; `Oscillate`: a sine, triangle, square or
+  saw `Shape` with period and phase; `Drift`: a rate, optionally wrapping; `Impulse`: a
+  decaying sine that lasts `duration_ms`, for a shake; `Audio`, below) and a `Clock`
+  (the animation time, time since the item was shown, or `Triggered`: time since its
+  last trigger, and nothing before one). `evaluate_with` takes each triggered
+  modifier's time and each audio modifier's level from the caller; the wire has no
+  trigger yet, so the engine passes none. `check_list` refuses more than
   `MAX_MODIFIERS`, duplicate or empty IDs and out-of-range parameters. `evaluate` sums an
   item's modifiers at one moment into `Offsets`, without allocating, so the render
   thread calls it per item per frame: positions, angles and crop add, scale and opacity
-  multiply. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
+  multiply, and a step that would leave a sum non-finite is skipped. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
   every wave's phase.
 - Audio-reactive modifiers
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): `Kind::Audio`
@@ -97,12 +102,13 @@ For motion: each waveform's landmarks, period and phase, wrapping drifts, a seed
 that stays within its amplitude with no jump between frames and stays precise days in,
 how `evaluate` adds, multiplies and skips disabled modifiers, the shown clock, blending,
 every refused parameter, an unchecked bad period and other unchecked input (a tiny
-period, a zero wrap, NaN and infinite parameters) giving 0, an oscillator unchanged
-three days in; for audio, each curve's ends, clamping and lack of overshoot, the dB map
-and its clamps, onsets, the range and its inversion, attack and release time
-constants, zero times, ignored bad steps, the same envelope at 30 and 120 frames a
-second, every refused parameter, and audio modifiers read by ID, as silence when unheard;
-and for timelines a six-cue sequence fired once each under uneven ticks,
-loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and into
-later passes, unchecked zero-length loops that never spin, every refused timeline, and 200 random timelines whose cues fire the same under random ticks
-as in one window.
+period, a zero wrap, NaN and infinite parameters) giving 0, sums near the float range
+staying finite, an oscillator unchanged three days in, and an impulse decaying inside
+its envelope and waiting for its trigger; for audio, each curve's ends, clamping and
+lack of overshoot, the dB map and its clamps, onsets, the range and its inversion,
+attack and release time constants, zero times, ignored bad steps, the same envelope at
+30 and 120 frames a second, every refused parameter, and audio modifiers read by ID, as
+silence when unheard; and for timelines a six-cue sequence fired once each under uneven
+ticks, loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and
+into later passes, unchecked zero-length loops that never spin, every refused timeline,
+and 200 random timelines whose cues fire the same under random ticks as in one window.

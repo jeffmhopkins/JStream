@@ -206,8 +206,10 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library, and any temporary file an earlier run left behind. Afterwards
-    /// software H.264 reports not installed. Removing what isn't there succeeds.
+    /// Deletes the library, and any stale temporary file a write left behind (untouched
+    /// for ten minutes, and its process gone or the file a day old), but not one a write
+    /// may still be writing. Afterwards software H.264 reports not installed. Removing
+    /// what isn't there succeeds.
     ///
     /// # Errors
     /// [`PlatformError::Os`] when the file exists but can't be deleted.
@@ -272,10 +274,12 @@ impl OpenH264Store {
 
     /// Writes `library` to a temporary file only the user can read, then renames it into
     /// place, so a reader never sees half a file. Each write has a temporary file of its
-    /// own (this process's ID and a counter), so two downloads at once, from two clients'
-    /// `codec.download`, never write into one file; each renames a whole, checked
-    /// library into place. A temporary file another process left (one that stopped
-    /// mid-write) is deleted first.
+    /// own (this process's ID, a value for this run and a counter), so two downloads at
+    /// once, from two clients' `codec.download`, never write into one file, and none
+    /// reuses the name of a file an earlier run with the same ID left; each renames a
+    /// whole, checked library into place. A stale temporary file (another process's, or
+    /// an earlier run's with this ID) is deleted first (see
+    /// [`sweep_parts`](Self::sweep_parts)).
     fn write(&self, library: &[u8]) -> std::io::Result<()> {
         static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         fs::DirBuilder::new()
@@ -283,9 +287,15 @@ impl OpenH264Store {
             .mode(0o700)
             .create(&self.dir)?;
         self.sweep_parts();
+        static RUN: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
+        let run = RUN.get_or_init(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        });
         let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let part = self.dir.join(format!(
-            "{}.{}.{n}.part",
+            "{}.{}.{run}.{n}.part",
             self.pin.file_name,
             std::process::id()
         ));
@@ -301,20 +311,49 @@ impl OpenH264Store {
         result
     }
 
-    /// Deletes the temporary files of writes by other processes: `write` names each
-    /// `<library>.<process ID>.<n>.part`, so one from another process ID was left by a
-    /// run that stopped mid-write. This process's own are in flight and kept. Best
-    /// effort: a file it can't list or delete stays.
+    /// Deletes the temporary files that writes left behind. `write` names each
+    /// `<library>.<process ID>.<run>.<n>.part`. Another process sharing the data folder (a
+    /// second daemon, or the CLI while the daemon downloads) may be writing one right
+    /// now, so a file is deleted only when [`part_is_stale`] says so. A file with this
+    /// process's ID counts as one whose process is gone: this process's own writes are
+    /// as quick as anyone's, so one untouched for [`PART_GRACE`] was left by an earlier
+    /// run that had the same ID (in a container the daemon is always PID 1). Best
+    /// effort: a file it can't list, read the age of or delete stays.
     fn sweep_parts(&self) {
         let Ok(entries) = fs::read_dir(&self.dir) else {
             return;
         };
-        let ours = format!("{}.{}.", self.pin.file_name, std::process::id());
-        let prefix = format!("{}.", self.pin.file_name);
+        let now = std::time::SystemTime::now();
         for entry in entries.flatten() {
             let name = entry.file_name();
             let Some(name) = name.to_str() else { continue };
-            if name.starts_with(&prefix) && name.ends_with(".part") && !name.starts_with(&ours) {
+            // `<library>.<pid>.<run>.<n>.part`, an older JStream's `<library>.<pid>.<n>.part`
+            // or `<library>.part`.
+            let Some(middle) = name
+                .strip_suffix(".part")
+                .and_then(|rest| rest.strip_prefix(self.pin.file_name))
+                .filter(|m| m.is_empty() || m.starts_with('.'))
+            else {
+                continue;
+            };
+            let pid = middle
+                .strip_prefix('.')
+                .and_then(|m| m.split('.').next())
+                .and_then(|p| p.parse::<u32>().ok());
+            let Some(age) = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .map(|modified| now.duration_since(modified).unwrap_or_default())
+            else {
+                continue;
+            };
+            let running: fn(u32) -> bool = if pid == Some(std::process::id()) {
+                |_| false
+            } else {
+                process_is_running
+            };
+            if part_is_stale(pid, age, running) {
                 let _ = fs::remove_file(entry.path());
             }
         }
@@ -330,6 +369,29 @@ impl OpenH264Store {
         file.write_all(library)?;
         file.sync_all()
     }
+}
+
+/// How long a temporary file (another process's, or an earlier run's with this
+/// process's ID) is kept after its last write, whatever its process. A write holds the whole checked library in memory and only writes and
+/// syncs it, which takes seconds, so a file untouched this long is not being written.
+const PART_GRACE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// How long another process's temporary file is kept while a process with its ID is
+/// running. Process IDs are reused, so a running ID doesn't keep a file forever.
+const PART_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Whether a temporary file (another process's, or an earlier run's with this process's
+/// ID), last written `age` ago by process `pid` (`None` when its name has none), can be
+/// deleted: it is older than [`PART_GRACE`], and
+/// either no process `pid` is `running`, or it is older than [`PART_MAX_AGE`].
+fn part_is_stale(pid: Option<u32>, age: std::time::Duration, running: fn(u32) -> bool) -> bool {
+    age > PART_GRACE && (age > PART_MAX_AGE || !pid.is_some_and(running))
+}
+
+/// Whether a process with ID `pid` is running, as this process sees it in `/proc`. A
+/// process in another PID namespace looks absent; [`PART_GRACE`] covers it.
+fn process_is_running(pid: u32) -> bool {
+    pid != 0 && std::path::Path::new("/proc").join(pid.to_string()).exists()
 }
 
 fn version(pin: &OpenH264Pin) -> String {

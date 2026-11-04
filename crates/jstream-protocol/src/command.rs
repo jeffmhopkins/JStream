@@ -10,10 +10,12 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
+use crate::frames::FrameStrip;
 use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
@@ -22,6 +24,7 @@ use crate::id::{
 };
 use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
+use crate::motion::MotionModifier;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
@@ -110,6 +113,26 @@ pub enum Edit {
         /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
         /// `effects`.
         effects: Vec<FilterInfo>,
+    },
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which
+    /// move it on the engine's animation clock as each frame is drawn. Without
+    /// `scene_id`, or with its own scene's, it writes the item's own list; with a
+    /// keyframe scene whose tree holds the item, it writes that keyframe's override.
+    /// Any other scene is `invalid_argument` on `scene_id`. The list holds at most
+    /// [`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on
+    /// `motion`; each ID is unique and well formed, and each parameter in its range,
+    /// else `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion
+    /// (in a keyframe, an override with none). Inverse: `item.set_motion` with the old
+    /// list, or `item.clear_override` of `motion` when the keyframe didn't override it.
+    #[serde(rename = "item.set_motion")]
+    ItemSetMotion {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The modifiers, first first.
+        motion: Vec<MotionModifier>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -279,9 +302,13 @@ pub enum Edit {
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
     },
-    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
-    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
-    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are
+    /// multiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a
+    /// gain on the item's light: its premultiplied colour is multiplied by the opacity
+    /// while its alpha is multiplied by 1, so an `additive` item adds more light than its
+    /// source draws, and an item in another mode is drawn brighter. A value outside 0 to
+    /// [`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:
+    /// `item.set_opacity` with the previous value.
     #[serde(rename = "item.set_opacity")]
     ItemSetOpacity {
         /// The item to change.
@@ -289,7 +316,8 @@ pub enum Edit {
         /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
-        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        /// From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]
+        /// (its light that many times over).
         opacity: Finite32,
     },
     /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
@@ -779,6 +807,36 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
     },
+    /// Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change
+    /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
+    /// keyframe scene, which draws its parent's, and for a list `check_camera_motion`
+    /// refuses. A scene without a camera keeps the list, which draws nothing until it has
+    /// one. Inverse: `scene.set_camera_motion` with the previous list.
+    #[serde(rename = "scene.set_camera_motion")]
+    SceneSetCameraMotion {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new list, at most 8. Empty removes every modifier.
+        #[serde(default)]
+        motion: Vec<CameraMotionModifier>,
+    },
+    /// Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the
+    /// pointer over a display or window capture in the scene. It belongs to the scene
+    /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
+    /// scene or doesn't show a display or window capture, and for a number
+    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
+    /// leaves the follow in place and inert until it is set again or an undo brings the
+    /// item back. The follow camera reads the pointer only where the program is drawn
+    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
+    /// Inverse: `scene.set_camera_follow` with the previous value.
+    #[serde(rename = "scene.set_camera_follow")]
+    SceneSetCameraFollow {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new follow camera. Omitted removes it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow: Option<CameraFollow>,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -1097,6 +1155,7 @@ impl Edit {
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
+            Edit::ItemSetMotion { .. } => "item.set_motion",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1153,6 +1212,8 @@ impl Edit {
             Edit::SceneSetMeta { .. } => "scene.set_meta",
             Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::SceneSetCamera { .. } => "scene.set_camera",
+            Edit::SceneSetCameraMotion { .. } => "scene.set_camera_motion",
+            Edit::SceneSetCameraFollow { .. } => "scene.set_camera_follow",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",
@@ -1414,6 +1475,24 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preset_id: Option<TransitionPresetId>,
     },
+    /// `scene.switch`, then a frame sheet of the program mix from the switch on (since
+    /// 0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a
+    /// stinger's cover or a keyframe move as it plays, from one call. The switch is made
+    /// as `scene.switch` makes it, and emits what it emits; the answer comes once the
+    /// last picture is drawn, as a `scene.switch_and_watch` result. Switching to the
+    /// scene already on program still takes the sheet. Fails as `scene.switch` does,
+    /// before switching with `invalid_argument` past the [`FrameStrip`] limits.
+    #[serde(rename = "scene.switch_and_watch")]
+    SceneSwitchAndWatch {
+        /// The scene to put on program.
+        scene_id: SceneId,
+        /// The preset to use, overriding the scenes' and the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<TransitionPresetId>,
+        /// When to take the pictures, counted from the switch.
+        #[serde(flatten)]
+        strip: FrameStrip,
+    },
     /// Puts a scene on preview, the scene studio mode prepares before it goes on program
     /// with `scene.switch`. Preview is runtime state like program: it changes no `rev`,
     /// is never undone, and emits `studio.changed`. It never affects what an output
@@ -1424,6 +1503,86 @@ pub enum Action {
     StudioSetPreview {
         /// The scene to put on preview.
         scene_id: SceneId,
+    },
+    /// Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows
+    /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
+    /// with the same `scene_id` rules and the same errors (`not_found` for an item or
+    /// scene not in the collection, `invalid_argument` on `scene_id` for a scene whose
+    /// placement it can't change). It is collection state: `rev` moves on by one,
+    /// `state.changed` follows and the collection saves it. It is an action, so it is
+    /// never a step of the sender's undo history (ADR-0024 §5); another client's undo that
+    /// would overwrite it fails with `undo_conflict`, as after a batch. Showing an item
+    /// already shown succeeds and changes nothing.
+    ///
+    /// When the program scene draws the item, it appears with its `appear` effect, after
+    /// its `delay_ms` and with its easing, over the default preset's duration. `inherit`
+    /// is the default preset's `unmatched`, or no animation when that preset is a `cut`
+    /// or another kind without one. A source the program shows again this way restarts
+    /// as on a scene switch: a `media` or `browser` source with `restart_on_show` starts
+    /// from the beginning. A running transition continues from what is on screen.
+    #[serde(rename = "item.show")]
+    ItemShow {
+        /// The item to show.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s
+    /// opposite, with the same rules. Hiding an item already hidden succeeds and changes
+    /// nothing.
+    #[serde(rename = "item.hide")]
+    ItemHide {
+        /// The item to hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as
+    /// `item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is
+    /// the keyframe's override if it has one, else the item's own. An action takes no
+    /// `expected_rev` or idempotency key, so a retried toggle flips twice: a caller that
+    /// may retry sends `item.show` or `item.hide`, which are safe to repeat.
+    #[serde(rename = "item.toggle")]
+    ItemToggle {
+        /// The item to show or hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per
+    /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
+    /// edit: nothing is stored or undone, and the zoom starts again at the follow camera's
+    /// own `zoom` when it changes or the engine restarts. One step by default, so a hotkey
+    /// can run it (ADR-0112). `not_found` for a scene that doesn't exist,
+    /// `action_failed` for one without a camera that follows, and
+    /// `invalid_argument` for `steps` outside -16..=16.
+    #[serde(rename = "scene.zoom_camera")]
+    SceneZoomCamera {
+        /// The scene whose camera to zoom: a keyframe scene zooms its family's.
+        scene_id: SceneId,
+        /// How many steps in; negative zooms out. Default 1.
+        #[serde(default = "one_step")]
+        steps: i32,
+    },
+    /// Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),
+    /// since 0.84: the one `modifier_id` names, or every one on the item when it is
+    /// omitted. Each starts again from its beginning, so firing one while it runs
+    /// restarts it. The fire is runtime state like the program scene: it changes no
+    /// `rev`, is never undone and emits nothing; the item moves on every mix that draws
+    /// it. A modifier on a group's item moves the whole group. Firing a modifier the
+    /// item doesn't hold, or one on another clock, does nothing, since a keyframe scene
+    /// can override the list it fires. Fails with `not_found` for an item not in the
+    /// collection, and with `invalid_argument` for a malformed `modifier_id`.
+    #[serde(rename = "item.trigger_motion")]
+    ItemTriggerMotion {
+        /// The item whose modifiers it fires.
+        item_id: ItemId,
+        /// The modifier to fire. Omitted for every one on the `triggered` clock.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        modifier_id: Option<String>,
     },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
@@ -1624,10 +1783,16 @@ impl Action {
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+            Action::ItemShow { .. } => "item.show",
+            Action::ItemHide { .. } => "item.hide",
+            Action::ItemToggle { .. } => "item.toggle",
+            Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1654,6 +1819,11 @@ impl Action {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+            }
+            | Action::SceneSwitchAndWatch {
+                scene_id,
+                preset_id,
+                ..
             } => {
                 let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
                 if let Some(preset_id) = preset_id {
@@ -1661,8 +1831,20 @@ impl Action {
                 }
                 named
             }
-            Action::StudioSetPreview { scene_id } => {
+            Action::StudioSetPreview { scene_id } | Action::SceneZoomCamera { scene_id, .. } => {
                 vec![(EntityKind::Scene, scene_id.as_str())]
+            }
+            Action::ItemShow { item_id, scene_id }
+            | Action::ItemHide { item_id, scene_id }
+            | Action::ItemToggle { item_id, scene_id } => {
+                let mut named = vec![(EntityKind::Item, item_id.as_str())];
+                if let Some(scene_id) = scene_id {
+                    named.push((EntityKind::Scene, scene_id.as_str()));
+                }
+                named
+            }
+            Action::ItemTriggerMotion { item_id, .. } => {
+                vec![(EntityKind::Item, item_id.as_str())]
             }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
@@ -1708,6 +1890,11 @@ impl Action {
             Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
+            )),
+            Action::SceneSwitchAndWatch { .. } => Some((
+                "type",
+                "`scene.switch_and_watch` can't be bound: its frame sheet answers only the \
+                 session that sends it; bind `scene.switch`",
             )),
             Action::LiveSet { .. } | Action::LiveCancel { .. } => Some((
                 "type",
@@ -1760,6 +1947,11 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
+            | Action::SceneZoomCamera { .. }
+            | Action::ItemTriggerMotion { .. }
             | Action::PrivacySet { .. } => None,
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.
@@ -1966,7 +2158,30 @@ impl ItemTransform {
         },
         rotation_deg: Finite32::ZERO,
     };
+
+    /// Checks that it is within bounds where any source draws it (#1130): each position
+    /// coordinate within [`MAX_DRAWN_PX`](crate::MAX_DRAWN_PX), and each scale within
+    /// ±[`MAX_LEGACY_SCALE`]. A source is at most `u32::MAX` pixels a side, so every
+    /// corner then stays far inside f32's range. The bound is enough, not needed: a
+    /// transform past it may still draw, and `item.set_transform` and `item.add` don't
+    /// check it (ADR-0022 keeps their 0.3 meaning). Motion keeps a moved transform within
+    /// it. Returns what is wrong if it isn't.
+    pub fn check_drawable(&self) -> Result<(), &'static str> {
+        let near = |v: Finite32| v.get().abs() <= crate::MAX_DRAWN_PX;
+        if !(near(self.position.x) && near(self.position.y)) {
+            return Err("its position must be within 1e15 pixels of the origin");
+        }
+        let scale = |v: Finite32| v.get().abs() <= MAX_LEGACY_SCALE;
+        if !(scale(self.scale.x) && scale(self.scale.y)) {
+            return Err("its scale must be within -100000..=100000");
+        }
+        Ok(())
+    }
 }
+
+/// The largest scale, either way, within [`ItemTransform::check_drawable`]'s bounds. No
+/// edit checks it: `item.set_transform` stores any finite scale (ADR-0022).
+pub const MAX_LEGACY_SCALE: f32 = 100_000.0;
 
 impl Default for ItemTransform {
     fn default() -> Self {
@@ -1999,6 +2214,10 @@ impl Crop {
         bottom: 0,
     };
 }
+
+/// The highest item opacity `item.set_opacity`, `item.add` and a keyframe override
+/// accept (since 0.83, #1101). Above 1 an opacity is a gain on the item's light.
+pub const MAX_OPACITY: f32 = 4.0;
 
 /// Where an item's effects run (ADR-0106, since 0.76).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -2161,6 +2380,11 @@ impl SceneRole {
     pub fn is_scene(&self) -> bool {
         *self == SceneRole::Scene
     }
+}
+
+/// `scene.zoom_camera`'s default: one step in.
+fn one_step() -> i32 {
+    1
 }
 
 #[cfg(test)]

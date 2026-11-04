@@ -980,6 +980,7 @@ mod tests {
 
     fn item(id: &str, source_id: &str, geometry: Option<ItemGeometry>) -> ItemInfo {
         ItemInfo {
+            motion: Default::default(),
             item_id: id.into(),
             source_id: source_id.into(),
             placement: if geometry.is_some() {
@@ -1015,6 +1016,8 @@ mod tests {
             transition_in: None,
             transition_out: None,
             camera: None,
+            camera_motion: Vec::new(),
+            camera_follow: None,
         }
     }
 
