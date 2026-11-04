@@ -713,6 +713,20 @@ impl LiveSources {
         self.worker.now()
     }
 
+    /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0115):
+    /// [`Source::restart`] on its running instance, at its own time now. A source with no
+    /// running instance has nothing to restart.
+    pub(crate) fn restart(&mut self, source_id: &SourceId) {
+        let now = self.now();
+        if let Some(running) = self
+            .entries
+            .get_mut(source_id)
+            .and_then(|entry| entry.running.as_mut())
+        {
+            running.source.restart(since(now, running.start));
+        }
+    }
+
     /// Tells each running source whose page has the page API (ADR-0102) what it may read
     /// now: whether it is shown on program and on preview, nested scenes included, the
     /// two scenes, and the shared values. Each source sends its page only what changed,

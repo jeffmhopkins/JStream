@@ -4159,6 +4159,7 @@ fn an_effects_space_is_undone_and_survives_a_removal() {
 mod cameras;
 mod filters;
 mod keyframes;
+mod timelines;
 
 fn tone_create(id: &str) -> Edit {
     Edit::SourceCreate {

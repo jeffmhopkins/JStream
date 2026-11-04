@@ -2,11 +2,15 @@
 
 use crate::audio::{BusMeter, SourceMeter};
 use crate::command::Edit;
+use crate::error::ProtocolError;
 use crate::history::HistoryDirection;
-use crate::id::{ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId};
+use crate::id::{
+    ClientId, GestureId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+};
 use crate::live::LiveOutcome;
 use crate::plugin::{PluginDisabledReason, PluginState};
 use crate::query::PixelSize;
+use crate::timeline::TimelineChange;
 use crate::transition::TransitionStarted;
 use crate::youtube::{AudienceStatsInfo, HealthIssue, StreamHealth, StreamStatus, YoutubeAuth};
 use schemars::JsonSchema;
@@ -76,6 +80,22 @@ pub enum Event {
         /// The client whose request caused it.
         client_id: ClientId,
         /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
+    /// The keyframe a scene's placements draw it through changed (ADR-0116, since 0.88):
+    /// a `scene.set_keyframe` set it, or a batch, undo or redo deleted the scene or the
+    /// keyframe scene (`keyframe_id` omitted). Studio state, so it carries no `rev`.
+    #[serde(rename = "scene.keyframe_changed")]
+    SceneKeyframeChanged {
+        /// The placed scene.
+        scene_id: SceneId,
+        /// The keyframe scene it is now drawn through. Omitted for its own values.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keyframe_id: Option<SceneId>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
@@ -270,6 +290,42 @@ pub enum Event {
         /// losses, or nothing it could switch to): the outputs that drew on it fail.
         recovering: bool,
     },
+    /// A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,
+    /// since 0.87): never once a frame. Playing is studio state, so it carries no `rev`.
+    #[serde(rename = "timeline.changed")]
+    TimelineChanged {
+        /// The timeline.
+        timeline_id: TimelineId,
+        /// The scene that holds it.
+        scene_id: SceneId,
+        /// What happened.
+        change: TimelineChange,
+        /// Whether it plays now: `false` after `ended`, `stopped` and `removed`.
+        playing: bool,
+        /// Where it is now, in milliseconds from its start: where it started from, where
+        /// it looped back to, or where it stopped.
+        position_ms: u32,
+        /// Which pass it is on: 0 the first.
+        pass: u64,
+    },
+    /// A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once
+    /// for each cue `timeline.seek` runs. The cue's action has its own events (a
+    /// `scene.switch` cue's `studio.changed` follows).
+    #[serde(rename = "timeline.cue_fired")]
+    TimelineCueFired {
+        /// The timeline.
+        timeline_id: TimelineId,
+        /// The cue's index in the timeline's `cues`.
+        cue: u32,
+        /// Which pass it fired on: 0 the first.
+        pass: u64,
+        /// The cue's time, in milliseconds from the timeline's start.
+        at_ms: u32,
+        /// Why its action failed, as the call would have failed, such as `not_found` for
+        /// an item deleted since the cue was written. Omitted when it succeeded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<ProtocolError>,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -295,8 +351,11 @@ impl Event {
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
             Event::StudioChanged { .. } => Some("studio.changed"),
+            Event::SceneKeyframeChanged { .. } => Some("scene.keyframe_changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::ValuesChanged { .. } => Some("values.changed"),
+            Event::TimelineChanged { .. } => Some("timeline.changed"),
+            Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
             Event::Unknown => None,
         }
     }

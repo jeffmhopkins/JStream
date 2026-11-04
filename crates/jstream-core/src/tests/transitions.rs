@@ -207,6 +207,7 @@ fn preview_is_set_apart_from_program() {
         Ok(QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            ..
         }) => (program_scene, preview_scene),
         other => panic!("not a studio result: {other:?}"),
     };

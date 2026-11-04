@@ -73,8 +73,8 @@ use jstream_protocol::{
     Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
     OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TransitionPresetId,
-    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
@@ -197,6 +197,11 @@ pub struct State {
     pub(crate) folders: Vec<Folder>,
     /// In label order.
     pub(crate) labels: Vec<Label>,
+    /// The keyframe scene each placed scene is drawn through (keyframe tracks,
+    /// ADR-0116): studio state, which only a drawn copy holds
+    /// ([`Graph::with_placed_keyframes`](crate::Graph::with_placed_keyframes)). Empty in
+    /// the collection, never saved and never undone.
+    pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
 }
 
 impl Default for State {
@@ -218,6 +223,7 @@ impl Default for State {
             hotkeys: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
+            placed_keyframes: BTreeMap::new(),
         }
     }
 }
@@ -435,6 +441,41 @@ impl State {
                 }
             })
             .collect()
+    }
+
+    /// The keyframe scene that scene `scene_id` is drawn through where another scene
+    /// places it (ADR-0116), if a drawn copy sets one and it is still one of its
+    /// keyframe scenes.
+    pub fn placed_keyframe(&self, scene_id: &SceneId) -> Option<&Scene> {
+        let keyframe = self.scene(self.placed_keyframes.get(scene_id)?)?;
+        (keyframe.variant_of.as_ref() == Some(scene_id)).then_some(keyframe)
+    }
+
+    /// Whether scene `root` draws scene `scene_id`: it is `root`, or a scene source an
+    /// item of `root` places draws it, at any depth. A keyframe scene draws what its
+    /// parent's items place.
+    pub fn draws(&self, root: &SceneId, scene_id: &SceneId) -> bool {
+        let mut seen = BTreeSet::new();
+        let mut todo = vec![self.family_of(root).clone()];
+        while let Some(id) = todo.pop() {
+            if &id == scene_id {
+                return true;
+            }
+            if !seen.insert(id.clone()) {
+                continue;
+            }
+            let Some(scene) = self.scene(&id) else {
+                continue;
+            };
+            for item in &scene.items {
+                if let Some(SourceKind::Scene { scene_id }) =
+                    self.source(&item.source_id).map(Source::kind)
+                {
+                    todo.push(scene_id.clone());
+                }
+            }
+        }
+        false
     }
 
     /// The groups `scene` places directly, through `scene` sources: the scenes with
@@ -760,6 +801,8 @@ pub struct Scene {
     /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
     /// item no longer in the scene, which leaves it inert.
     pub(crate) camera_follow: Option<CameraFollow>,
+    /// Its timelines (ADR-0115), by ID.
+    pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
     /// The scene it is a keyframe scene of, if it is one.
     pub(crate) variant_of: Option<SceneId>,
@@ -828,6 +871,11 @@ impl Scene {
     /// item no longer in the scene, which leaves it inert.
     pub fn camera_follow(&self) -> Option<&CameraFollow> {
         self.camera_follow.as_ref()
+    }
+
+    /// Its timelines (ADR-0115), ordered by ID.
+    pub fn timelines(&self) -> &BTreeMap<TimelineId, TimelineInfo> {
+        &self.timelines
     }
 
     /// Its own items in stacking order: the first is at the bottom. A keyframe scene

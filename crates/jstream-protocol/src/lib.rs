@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
 
 #![forbid(unsafe_code)]
 
@@ -38,6 +38,7 @@ mod profile;
 mod query;
 mod schema;
 mod settings;
+mod timeline;
 mod transition;
 mod values;
 mod version;
@@ -84,10 +85,10 @@ pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
-    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
-    VideoMixId,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    TransitionPresetId, VideoMixId,
 };
-pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
+pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path, not_a_reference,
@@ -131,6 +132,11 @@ pub use query::{
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use timeline::{
+    MAX_CUES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
+    MIN_LOOP_MS, PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop,
+    check_timeline_id,
+};
 pub use transition::{
     CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
     MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,

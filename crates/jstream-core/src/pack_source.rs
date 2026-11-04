@@ -105,6 +105,11 @@ impl Source for StandIn {
         }
     }
 
+    /// As [`show`](Self::show): the program starts again (`source.restart`).
+    fn restart(&mut self, at: MediaTime) {
+        self.show(at);
+    }
+
     /// Never called: the live sources build a new stand-in for a new size, and the
     /// program takes the other settings.
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {

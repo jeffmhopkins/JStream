@@ -41,7 +41,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
-  may restart there, and the default does nothing. `sound()` gives a kind's sound that
+  may restart there, and the default does nothing. `restart(at)` starts the source again
+  whatever its settings, for `source.restart`
+  ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): a `browser` page reloads
+  and a `media` file plays from its start; the default does nothing. `sound()` gives a kind's sound that
   plays while the program shows it (`MediaAudio`, a `media` file's), for the engine to
   mix; the default is `None`. `update(settings)` applies a change
   to `live` parameters only; `needs_restart(descriptor, old, new)` says when a change

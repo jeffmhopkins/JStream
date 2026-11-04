@@ -179,7 +179,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_motion[], camera_follow?, filters { video[] }, items[] }   flat display order
+│                          camera?, camera_motion[], camera_follow?, timelines[], filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -273,6 +273,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
+  - **A placed scene can switch its own keyframe** as studio state
+    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
+    Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
@@ -737,6 +740,29 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
+- **Timelines** (protocol 0.87, a placeholder,
+  [ADR-0115](adr/0115-timelines-on-the-wire.md), building ADR-0099's decision 4): a
+  scene holds timelines of timed cues, written whole by `timeline.set` and removed by
+  `timeline.delete`. A timeline's ID is unique across the collection, so
+  `timeline.play`, `timeline.stop` and `timeline.seek`, a hotkey and a cue name it alone.
+  What is playing is studio state, like the program scene: no `rev`, never undone or
+  saved, read by `studio.get`. The engine fires each cue on the animation clock as its
+  action's call, at the cue's exact time; a cue runs only `scene.switch`, `item.show`,
+  `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, `source.restart` or
+  a timeline action. The objects a cue names aren't checked, so a deleted one leaves the
+  cue inert and its firing reports the error in `timeline.cue_fired`;
+  `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
+  `source.restart` reloads a page or plays a file from its start.
+- **Keyframe tracks** (protocol 0.88, a placeholder,
+  [ADR-0116](adr/0116-keyframe-tracks.md), building ADR-0099's keyframe tracks):
+  `scene.set_keyframe` switches the keyframe scene a scene is drawn through wherever
+  another scene places it, independently of the placing scene and of other placed
+  scenes. It is studio state: no `rev`, never undone or saved, read by `studio.get`'s
+  `keyframes` and reported by `scene.keyframe_changed`. The planners draw it as the
+  same view a keyframe of the placing scene draws a group through (ADR-0040 §2), which
+  still wins where it overrides the group's tree. On program a `move` or `fade` preset
+  plays the switch as a Move from what is on screen. Hotkeys, timeline cues, MCP and
+  plugins (`live`) can run it.
 - **Item visibility from an action** (protocol 0.80,
   [ADR-0101](adr/0101-item-show-hide-actions.md)): `item.show`, `item.hide` and
   `item.toggle` change one placement's visibility as `item.set_visible` does, with a
@@ -985,7 +1011,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1374,7 +1400,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
-  (version 5, ADR-0113) bumped it instead, each with a
+  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
+  instead, each with a
   migration that refuses the new field in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the

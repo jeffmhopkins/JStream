@@ -593,6 +593,125 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets the keyframe a scene is drawn through wherever another scene places it\n(ADR-0116, since 0.88): keyframe tracks. A scene with keyframe scenes then switches\nbetween them on its own, independently of the scene placing it and of every other\nplaced scene, so independent states (a background, a panel layout, an effect)\ndon't multiply into one keyframe each combination. Where the placing scene is\ndrawn through a keyframe of its own that overrides an item in this scene's tree,\nthat keyframe draws it instead. What each placed scene draws through is studio\nstate like the program scene: it changes no `rev`, is never undone or saved, and\n`studio.get` reports it. When program draws the scene and the preset is a `move`\nor `fade`, the change plays as its Move from what is on screen, pairing each item\nwith itself, as `item.show` does; any other kind switches at once. Emits `scene.keyframe_changed`. Fails with `not_found` for a\nscene, keyframe or preset the collection doesn't have, and with\n`invalid_argument` when `scene_id` is itself a keyframe scene or `keyframe_id`\nisn't one of its keyframe scenes.",
+          "properties": {
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "One of its keyframe scenes. Omitted for the scene's own values."
+            },
+            "preset_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TransitionPresetId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The preset whose timing the Move takes. Omitted for the default preset; one\nwith no length (a cut) switches at once."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose placements switch: not a keyframe scene."
+            },
+            "type": {
+              "const": "scene.set_keyframe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Plays a timeline from its start (ADR-0115, since 0.87), or from its start again if\nit is playing. Its cues fire at their times on the animation clock (ADR-0099\ndecision 2), on every pass of a loop, until it ends or is stopped. Playing is\nstudio state like the program scene: it changes no `rev`, is never undone, and\nemits `timeline.changed` (`started`); each cue emits `timeline.cue_fired`. A cue\nruns its action as the call would run, with the effects that call has (a\n`scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the\nclient that started the timeline. A transition a cue starts takes the cue's exact\ntime as its start, so a late tick doesn't delay what is seen. It plays whatever\nscene is on program, since each cue names its own target. Fails with `not_found`\nfor a timeline the collection doesn't hold.",
+          "properties": {
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline to play."
+            },
+            "type": {
+              "const": "timeline.play",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stops a playing timeline (ADR-0115, since 0.87), where it is: what its cues did\nstays. Emits `timeline.changed` (`stopped`). Stopping a timeline that isn't playing\nsucceeds and emits nothing. Fails with `not_found` for a timeline the collection\ndoesn't hold.",
+          "properties": {
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline to stop."
+            },
+            "type": {
+              "const": "timeline.stop",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Plays a timeline from `at_ms` on its first pass (ADR-0115, since 0.87), whether or\nnot it was playing, so the scene shows what it would if the timeline had played\nthere: first the cues before `at_ms` that set a state run at once, only the last\none for each thing they set (the program scene, an item's visibility, a shared\nvalue), then the timeline plays on from `at_ms`. Cues that are events (a toggle, a\nrestart, a fired motion, another timeline's play, stop or seek) don't run again.\nEmits `timeline.changed` (`sought`). Fails with `not_found` for a timeline the\ncollection doesn't hold, and with `invalid_argument` on `at_ms` past its\n`duration_ms`, or for a timeline that repeats, at or past where it jumps back.",
+          "properties": {
+            "at_ms": {
+              "description": "Where to play it from, in milliseconds from its start.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline."
+            },
+            "type": {
+              "const": "timeline.seek",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id",
+            "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source to restart."
+            },
+            "type": {
+              "const": "source.restart",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
           "properties": {
             "type": {
@@ -4566,6 +4685,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene that holds it."
+            },
+            "timeline": {
+              "$ref": "#/$defs/TimelineInfo",
+              "description": "The timeline, whole."
+            },
+            "type": {
+              "const": "timeline.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "timeline"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Deletes a timeline (ADR-0115, since 0.87). A playing one stops, with a\n`timeline.changed` `removed`. Hotkey bindings whose action names it are removed\nwith it (ADR-0040 §3), and listed in the result's `removed_hotkeys`; cues of other\ntimelines that name it stay, inert. Rejected with `not_found` (entity\n`timeline`) for a timeline the collection doesn't hold. Inverse: `timeline.set`\nwith it, then `hotkey.set` for each removed binding.",
+          "properties": {
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline to delete."
+            },
+            "type": {
+              "const": "timeline.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Adds a transition preset (ADR-0029, ADR-0037). Inverse: `transition.delete`.",
           "properties": {
             "duration_ms": {
@@ -5255,6 +5415,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "pack",
           "description": "An effect pack (0.72, ADR-0097). Only an error answering a `pack.*` command names\nit, so a client older than 0.72, which sends none, never reads it.",
           "type": "string"
+        },
+        {
+          "const": "timeline",
+          "description": "A timeline a scene holds (ADR-0115). Only an error answering a `timeline.*`\ncommand, or a `hotkey.set` or `timeline.set` naming one, names it, so a client\nthat sends none never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -5458,6 +5623,51 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type",
+            "client_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The keyframe a scene's placements draw it through changed (ADR-0116, since 0.88):\na `scene.set_keyframe` set it, or a batch, undo or redo deleted the scene or the\nkeyframe scene (`keyframe_id` omitted). Studio state, so it carries no `rev`.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "keyframe_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The keyframe scene it is now drawn through. Omitted for its own values."
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The placed scene."
+            },
+            "type": {
+              "const": "scene.keyframe_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
             "client_id"
           ],
           "type": "object"
@@ -5896,6 +6106,103 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "cause",
             "recovering"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,\nsince 0.87): never once a frame. Playing is studio state, so it carries no `rev`.",
+          "properties": {
+            "change": {
+              "$ref": "#/$defs/TimelineChange",
+              "description": "What happened."
+            },
+            "pass": {
+              "description": "Which pass it is on: 0 the first.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "playing": {
+              "description": "Whether it plays now: `false` after `ended`, `stopped` and `removed`.",
+              "type": "boolean"
+            },
+            "position_ms": {
+              "description": "Where it is now, in milliseconds from its start: where it started from, where\nit looped back to, or where it stopped.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene that holds it."
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline."
+            },
+            "type": {
+              "const": "timeline.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id",
+            "scene_id",
+            "change",
+            "playing",
+            "position_ms",
+            "pass"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A timeline's cue fired (ADR-0115, since 0.87), once per cue on each pass, and once\nfor each cue `timeline.seek` runs. The cue's action has its own events (a\n`scene.switch` cue's `studio.changed` follows).",
+          "properties": {
+            "at_ms": {
+              "description": "The cue's time, in milliseconds from the timeline's start.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "cue": {
+              "description": "The cue's index in the timeline's `cues`.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "error": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ProtocolError"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Why its action failed, as the call would have failed, such as `not_found` for\nan item deleted since the cue was written. Omitted when it succeeded."
+            },
+            "pass": {
+              "description": "Which pass it fired on: 0 the first.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "timeline_id": {
+              "$ref": "#/$defs/TimelineId",
+              "description": "The timeline."
+            },
+            "type": {
+              "const": "timeline.cue_fired",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "timeline_id",
+            "cue",
+            "pass",
+            "at_ms"
           ],
           "type": "object"
         }
@@ -8243,6 +8550,24 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PlacedKeyframe": {
+      "description": "A scene drawn through one of its keyframe scenes wherever another scene places it\n(keyframe tracks, ADR-0116, since 0.88), as `studio.get` reports it.",
+      "properties": {
+        "keyframe_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The keyframe scene its placements draw it through."
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The placed scene."
+        }
+      },
+      "required": [
+        "scene_id",
+        "keyframe_id"
+      ],
+      "type": "object"
+    },
     "PlacementForm": {
       "description": "Which of the two forms an item's stored placement has (ADR-0022 decision 5).\n\nThe two values are the complete set until 1.0, which removes `legacy`.",
       "oneOf": [
@@ -8279,6 +8604,38 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The longest plan, in milliseconds, in the last second it was read."
         }
       },
+      "type": "object"
+    },
+    "PlayingTimeline": {
+      "description": "A timeline that is playing, as `studio.get` reports it.",
+      "properties": {
+        "pass": {
+          "description": "Which pass it is on: 0 the first. A `once` timeline has only pass 0.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "position_ms": {
+          "description": "Where it is in its pass, in milliseconds from its start.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene that holds it."
+        },
+        "timeline_id": {
+          "$ref": "#/$defs/TimelineId",
+          "description": "The timeline."
+        }
+      },
+      "required": [
+        "timeline_id",
+        "scene_id",
+        "position_ms",
+        "pass"
+      ],
       "type": "object"
     },
     "PluginClass": {
@@ -8688,6 +9045,353 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "output_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProtocolError": {
+      "description": "Why the server refused or failed a request.\n\nOn the wire each variant is an object whose `code` tag is the variant's stable\nsnake_case code (see [`ProtocolError::code`]) and whose other fields are its details.\n[`WireError`] adds the human-readable message. A code, once released, keeps its\nmeaning and its fields (R-API-001). Clients must handle codes they don't know: they\nparse as [`ProtocolError::Unknown`], and the message still explains them.",
+      "oneOf": [
+        {
+          "description": "The server can't speak the client's protocol version.",
+          "properties": {
+            "client": {
+              "$ref": "#/$defs/ProtocolVersion",
+              "description": "The version the client asked for in `hello`."
+            },
+            "code": {
+              "const": "unsupported_version",
+              "type": "string"
+            },
+            "server": {
+              "$ref": "#/$defs/ProtocolVersion",
+              "description": "The version the server speaks."
+            }
+          },
+          "required": [
+            "code",
+            "client",
+            "server"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A request arrived before the `hello`/`welcome` handshake finished.",
+          "properties": {
+            "code": {
+              "const": "handshake_required",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The message could not be parsed: bad JSON, an unknown `type`, a missing or\nmistyped field, or a number that isn't a finite `f32` (NaN, infinity, or out of\nrange such as `1e39`). `ClientMessage::parse` produces it.",
+          "properties": {
+            "code": {
+              "const": "malformed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What the parser reported.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A batch had no edits.",
+          "properties": {
+            "code": {
+              "const": "empty_batch",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The batch's `expected_rev` was not the current revision. Nothing was applied:\nre-read the state and retry.",
+          "properties": {
+            "code": {
+              "const": "rev_conflict",
+              "type": "string"
+            },
+            "current": {
+              "$ref": "#/$defs/Rev",
+              "description": "The state's revision when the batch was checked."
+            },
+            "expected": {
+              "$ref": "#/$defs/Rev",
+              "description": "The `expected_rev` the batch carried."
+            }
+          },
+          "required": [
+            "code",
+            "expected",
+            "current"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A command named an object that doesn't exist.",
+          "properties": {
+            "code": {
+              "const": "not_found",
+              "type": "string"
+            },
+            "entity": {
+              "$ref": "#/$defs/EntityKind",
+              "description": "What kind of object."
+            },
+            "id": {
+              "description": "The ID given.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "entity",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A creating edit used an ID that is already taken.",
+          "properties": {
+            "code": {
+              "const": "already_exists",
+              "type": "string"
+            },
+            "entity": {
+              "$ref": "#/$defs/EntityKind",
+              "description": "What kind of object."
+            },
+            "id": {
+              "description": "The ID given.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "entity",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A field had a value the engine can't accept.",
+          "properties": {
+            "blockers": {
+              "description": "When a `scene.delete` or `source.delete` is refused because other objects still\nrefer to its target: every one of those references, in a stable order. The\n`delete.plan` query returns the batch that removes them with the target. Empty\notherwise, and then omitted. Missing (from a server older than 0.15)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Blocker"
+              },
+              "type": "array"
+            },
+            "code": {
+              "const": "invalid_argument",
+              "type": "string"
+            },
+            "field": {
+              "description": "The field, as a dotted path into the command (`edits.2.name`).",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why it was rejected.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "field",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An undo or redo would overwrite another client's work: a batch that client\napplied after the step changed a property the step sets, created or deleted an\nobject the step creates or deletes, or made the step's edits no longer apply.\nNothing was applied, and the step was dropped from the history, so the next undo\nreaches the step before it.",
+          "properties": {
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose batch conflicts."
+            },
+            "code": {
+              "const": "undo_conflict",
+              "type": "string"
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision that batch produced."
+            },
+            "step_rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision the step's batch originally produced."
+            }
+          },
+          "required": [
+            "code",
+            "step_rev",
+            "client_id",
+            "rev"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "There is nothing to undo, or nothing to redo.",
+          "properties": {
+            "code": {
+              "const": "history_empty",
+              "type": "string"
+            },
+            "direction": {
+              "$ref": "#/$defs/HistoryDirection",
+              "description": "Which way the call asked to move."
+            }
+          },
+          "required": [
+            "code",
+            "direction"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An action was accepted for processing but could not be carried out.",
+          "properties": {
+            "code": {
+              "const": "action_failed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What went wrong.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The call is valid, but whoever answered it doesn't serve it: `pairing.start`,\n`device.list` and `device.revoke` sent to an engine with no server in front,\na `plugin.*` action sent to an engine that hosts no plugins yet, or the deprecated\n`privacy.set` (ADR-0080).\nRetrying won't help.",
+          "properties": {
+            "call": {
+              "description": "The call's name (`pairing.start`).",
+              "type": "string"
+            },
+            "code": {
+              "const": "unsupported",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "call"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The caller may not make this call (0.35): a plugin's call outside its granted\ncapability classes, a command no plugin is ever granted, or a plugin past its cap\nof commands a second (ADR-0069). Nothing was applied. Retrying won't help until\na person widens the grant, except after the command cap, which clears within a\nsecond.",
+          "properties": {
+            "call": {
+              "description": "The call's name (`output.start`), or for a batch, its first edit's.",
+              "type": "string"
+            },
+            "code": {
+              "const": "forbidden",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why: the class the caller lacks, or that no plugin may make it.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "call",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "`output.start` could not open a hardware video encoder while other hardware\nencoder sessions were open, so the machine's hardware session limit is taken to\nbe reached (0.44, ADR-0080 §3). The engine doesn't guess vendor caps and never\nfalls back to a software encoder for this. Nothing was started. Stop one of\n`outputs`, share an encoder session with one, or start this output with an\nencoder profile whose `hardware` is `avoid`.",
+          "properties": {
+            "code": {
+              "const": "hardware_session_limit",
+              "type": "string"
+            },
+            "outputs": {
+              "description": "The running outputs that hold hardware encoder sessions, sorted.",
+              "items": {
+                "$ref": "#/$defs/OutputId"
+              },
+              "type": "array"
+            },
+            "reason": {
+              "description": "What the encoder said when it refused the new session.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "outputs",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The message was over the server's request limit (0.62, ADR-0074). The server read\nonly its envelope's `id`: nothing in it was applied, and the connection stays\nopen. Retrying the same message won't help: split the work, for example one\nfilter's `state` per batch. `Welcome.max_request_bytes` advertises the limit.",
+          "properties": {
+            "code": {
+              "const": "too_large",
+              "type": "string"
+            },
+            "limit_bytes": {
+              "description": "The server's request limit in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "size_bytes": {
+              "description": "The message's size in bytes.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "code",
+            "size_bytes",
+            "limit_bytes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
+          "properties": {
+            "code": {
+              "const": "internal",
+              "type": "string"
+            },
+            "reason": {
+              "description": "What went wrong.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
           ],
           "type": "object"
         }
@@ -9729,6 +10433,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `studio.get`. Studio state is runtime state, so it carries no `rev`.",
           "properties": {
+            "keyframes": {
+              "description": "The scenes drawn through one of their keyframe scenes where they are placed\n(ADR-0116, since 0.88), ordered by scene. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/PlacedKeyframe"
+              },
+              "type": "array"
+            },
             "preview_scene": {
               "anyOf": [
                 {
@@ -9750,6 +10461,13 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The scene on program. Omitted only while the collection has no scene."
+            },
+            "timelines": {
+              "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
+              "items": {
+                "$ref": "#/$defs/PlayingTimeline"
+              },
+              "type": "array"
             },
             "type": {
               "const": "studio.get",
@@ -10688,6 +11406,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether a multiview shows it. Omitted for `true`, the default.",
           "type": "boolean"
         },
+        "timelines": {
+          "description": "Its timelines (ADR-0115, since 0.87), ordered by ID: timed cues that\n`timeline.play` runs. Omitted when it has none.",
+          "items": {
+            "$ref": "#/$defs/TimelineInfo"
+          },
+          "type": "array"
+        },
         "transition_in": {
           "anyOf": [
             {
@@ -11352,6 +12077,148 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       },
       "type": "object"
+    },
+    "TimelineChange": {
+      "description": "Why a timeline's playing changed, in `timeline.changed`.",
+      "oneOf": [
+        {
+          "const": "started",
+          "description": "`timeline.play`, a `timeline.play` cue, or a hotkey bound to one started it from\n0, or started it again from 0.",
+          "type": "string"
+        },
+        {
+          "const": "sought",
+          "description": "`timeline.seek` started it from `position_ms`.",
+          "type": "string"
+        },
+        {
+          "const": "looped",
+          "description": "It reached the end of a pass and started the next one.",
+          "type": "string"
+        },
+        {
+          "const": "ended",
+          "description": "A `once` timeline reached its `duration_ms`, after its last cue fired.",
+          "type": "string"
+        },
+        {
+          "const": "stopped",
+          "description": "`timeline.stop`, or a `timeline.stop` cue, stopped it.",
+          "type": "string"
+        },
+        {
+          "const": "removed",
+          "description": "A batch, undo or redo deleted it, or the scene holding it, while it played.",
+          "type": "string"
+        }
+      ]
+    },
+    "TimelineCue": {
+      "description": "One timed action.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "What it does: one of the actions [`Action::cue_problem`] allows. Read as plain\nJSON, as a hotkey's action is, so a client older than an action a later cue may\nrun still reads the collection. [`TimelineCue::action`] parses it."
+        },
+        "at_ms": {
+          "description": "When it fires, in milliseconds from the timeline's start.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "at_ms",
+        "action"
+      ],
+      "type": "object"
+    },
+    "TimelineId": {
+      "description": "A timeline a scene holds (ADR-0115). Unique across the collection, so an action\nnames it alone.",
+      "type": "string"
+    },
+    "TimelineInfo": {
+      "description": "One timeline: cues at times from its start, a length, and how it repeats.",
+      "properties": {
+        "cues": {
+          "default": [],
+          "description": "Its cues, in time order: each cue's `at_ms` is at least the one before it's, and\ncues at the same time fire in list order. At most 256.",
+          "items": {
+            "$ref": "#/$defs/TimelineCue"
+          },
+          "type": "array"
+        },
+        "duration_ms": {
+          "description": "How long one pass runs, in milliseconds: at most one hour. A timeline that\nrepeats needs a length above 0.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "loop": {
+          "$ref": "#/$defs/TimelineLoop",
+          "default": "once",
+          "description": "How it repeats. Omitted means `once`."
+        },
+        "name": {
+          "description": "Its display name. Omitted means empty.",
+          "type": "string"
+        },
+        "timeline_id": {
+          "$ref": "#/$defs/TimelineId",
+          "description": "Its ID, chosen by the client: 1 to 64 bytes of ASCII letters, digits, `_` and\n`-`, unique across the collection, so an action can name it alone."
+        }
+      },
+      "required": [
+        "timeline_id",
+        "duration_ms"
+      ],
+      "type": "object"
+    },
+    "TimelineLoop": {
+      "description": "How a timeline repeats.",
+      "oneOf": [
+        {
+          "const": "once",
+          "description": "It plays once, and ends at its `duration_ms`. A cue at `duration_ms` fires.",
+          "type": "string"
+        },
+        {
+          "const": "loop",
+          "description": "It plays from 0 to `duration_ms` again and again, until stopped. A cue at\n`duration_ms` would never fire, so it is refused: put it at 0. `duration_ms` is at\nleast 100 ([`MIN_LOOP_MS`]).",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "It plays from 0, and each time it reaches `to_ms` jumps back to `from_ms`: an\nintro, then a loop. `from_ms < to_ms <= duration_ms`, `to_ms - from_ms` is at\nleast 100 ([`MIN_LOOP_MS`]), and a cue at or after `to_ms` is refused.",
+          "properties": {
+            "range": {
+              "properties": {
+                "from_ms": {
+                  "description": "Where each repeat starts, in milliseconds.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "to_ms": {
+                  "description": "Where each pass jumps back, in milliseconds.",
+                  "format": "uint32",
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "from_ms",
+                "to_ms"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "range"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "TransitionEffect": {
       "description": "How an item without a partner appears or disappears.",
@@ -12108,5 +12975,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.86"
+  "title": "JStream protocol 0.88"
 }

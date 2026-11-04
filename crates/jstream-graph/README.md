@@ -60,7 +60,8 @@ protocol's types (`Overrides`).
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
   scene's is an override of its parent's), its camera's `camera_motion` and
-  `camera_follow` (ADR-0113, a family's only), and its items in stacking order, bottom
+  `camera_follow` (ADR-0113, a family's only), its `timelines` ordered by ID
+  (ADR-0115), and its items in stacking order, bottom
   first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
@@ -112,6 +113,12 @@ the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy o
 graph with each edit that applies applied, skipping any that fails, at the same `rev`,
 with no inverse. The engine draws open gestures' source settings through it
 ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)).
+`Graph::with_placed_keyframes` is the third: a copy whose runtime-only
+`State::placed_keyframes` holds the keyframe each placed scene is switched to
+([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)), never saved or compared.
+`State::placed_keyframe` reads it back (only while the keyframe scene is still one of
+the scene's), and `State::draws` tells whether a root draws a scene through scene
+sources.
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
@@ -397,6 +404,14 @@ with no inverse. The engine draws open gestures' source settings through it
   scene stays, inert; a deleted scene's inverse restores them after its items
   (`camera::restore`). `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
+- **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
+  `timeline.set` stores a timeline in a scene (the scene `not_found`, then
+  `TimelineInfo::problem` as `invalid_argument` at `timeline.…`, then an ID another scene
+  holds `already_exists`, then a 33rd timeline in the scene) and is undone by
+  `timeline.delete` or by the old timeline; `timeline.delete` finds it by ID alone
+  (`State::timeline`) and is undone by `timeline.set`. The objects a cue names are not
+  checked, and no delete edits a timeline: a cue naming a deleted object stays, inert. A
+  deleted scene's inverse restores its timelines (`timeline::restore`).
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
@@ -415,9 +430,11 @@ with no inverse. The engine draws open gestures' source settings through it
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
   transition preset (a `scene.switch` may name one) removes the bindings that name it, and
-  any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names
-  removes those bindings too (`remove_missing_items`,
-  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), so none dangles: the result's `removed_hotkeys` lists them,
+  any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
+  or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
+  those bindings too (`remove_missing_items`,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md),
+  [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), so none dangles: the result's `removed_hotkeys` lists them,
   and the edit's inverse ends with a `hotkey.set` for each, after the object is back.
   `delete.plan` lists the bindings by applying its plan to a copy.
   `State::visible_in` reads a placement's visibility as `item.set_visible` with that
@@ -471,7 +488,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 5), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 6), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -507,7 +524,8 @@ bump either. An override's `effects` (ADR-0088), written with each filter's
 an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 `schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
 omitted while absent, are `schema_version` 5; a follow whose item has left the scene
-isn't written, so reloading never refuses it. Loading creates the folders top level first, then
+isn't written, so reloading never refuses it. A scene's `timelines` (ADR-0115), ordered
+by ID and omitted while empty, are `schema_version` 6. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -519,7 +537,8 @@ the engine's; this crate does no I/O.
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
   changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
   keyframe override's `effects` the same way, 3 to 4 an item's and an override's
-  `motion`, and 4 to 5 a scene's `camera_motion` and `camera_follow`),
+  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, and 5 to 6 a scene's
+  `timelines`),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -542,7 +561,7 @@ the engine's; this crate does no I/O.
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
   scene's camera motion and follow camera (once every item exists, which a follow
-  names), then hotkeys (`` hotkey `F1` ``). A
+  names), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a

@@ -15,6 +15,7 @@ mod frames;
 mod gpu_capture;
 mod history;
 mod item_actions;
+mod keyframe_tracks;
 mod keyframes;
 mod live_values;
 mod packs;
@@ -22,6 +23,7 @@ mod page_api;
 mod preview;
 mod source_sizes;
 mod sources;
+mod timelines;
 mod transitions;
 mod values;
 #[cfg(all(windows, feature = "hw-tests"))]

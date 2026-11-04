@@ -45,6 +45,14 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// Starts the source again from its beginning at `at`, on the same clock as
+    /// [`frame`](Self::frame), whatever its `restart_on_show` (`source.restart`,
+    /// ADR-0115): a `browser` page loads again and a `media` file plays from its start.
+    /// The default does nothing, for a kind with nothing to restart.
+    fn restart(&mut self, at: MediaTime) {
+        let _ = at;
+    }
+
     /// Whether any mix draws the source now: the program, a video mix or a preview
     /// (#1071). The engine says so when it changes. A kind that costs something to keep
     /// drawing (a `browser` page) can rest while it isn't drawn; the default does

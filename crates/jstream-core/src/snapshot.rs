@@ -1724,20 +1724,30 @@ impl<'a> Planner<'a, '_> {
 
     /// The ID to plan scene `scene_id` under, placed by an item of a scene drawn
     /// through `keyframe`: the group's view when the keyframe overrides one of its
-    /// children, at any depth (ADR-0040 §2), else the scene itself.
+    /// children, at any depth (ADR-0040 §2); else its view through the keyframe scene
+    /// its placements draw it through, when it has one (keyframe tracks, ADR-0116);
+    /// else the scene itself.
     fn nested(&self, keyframe: Option<&GraphScene>, scene_id: &SceneId) -> SceneId {
         let state = self.state;
-        let Some(keyframe) = keyframe else {
-            return scene_id.clone();
-        };
-        let group = state
-            .scene(scene_id)
-            .is_some_and(|scene| scene.role() == SceneRole::Group);
-        let view = view_id(scene_id, keyframe.id());
-        if group && state.overrides_within(keyframe, scene_id) && state.scene(&view).is_none() {
-            view
-        } else {
-            scene_id.clone()
+        if let Some(keyframe) = keyframe {
+            let group = state
+                .scene(scene_id)
+                .is_some_and(|scene| scene.role() == SceneRole::Group);
+            let view = view_id(scene_id, keyframe.id());
+            if group && state.overrides_within(keyframe, scene_id) && state.scene(&view).is_none() {
+                return view;
+            }
+        }
+        match state.placed_keyframe(scene_id) {
+            Some(placed) => {
+                let view = view_id(scene_id, placed.id());
+                if state.scene(&view).is_none() {
+                    view
+                } else {
+                    scene_id.clone()
+                }
+            }
+            None => scene_id.clone(),
         }
     }
 

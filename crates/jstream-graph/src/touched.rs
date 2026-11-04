@@ -5,8 +5,8 @@
 
 use jstream_protocol::{
     BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, FolderId, ItemId,
-    LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TransitionPresetId,
-    VideoMixId,
+    LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TimelineId,
+    TransitionPresetId, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -31,6 +31,8 @@ enum Object {
     Hotkey(Chord),
     Folder(FolderId),
     Label(LabelId),
+    /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
+    Timeline(TimelineId),
 }
 
 /// A property an edit sets, on its object.
@@ -525,6 +527,7 @@ impl Touched {
                         EntityKind::Source => Object::Source(SourceId::new(id)),
                         EntityKind::Output => Object::Output(OutputId::new(id)),
                         EntityKind::Transition => Object::Transition(TransitionPresetId::new(id)),
+                        EntityKind::Timeline => Object::Timeline(TimelineId::new(id)),
                         _ => {
                             self.unknown = true;
                             continue;
@@ -535,6 +538,16 @@ impl Touched {
             }
             Edit::HotkeyClear { chord } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
+            }
+            // A timeline is written whole, so any two writes of it conflict, and a write
+            // conflicts with deleting its scene.
+            Edit::TimelineSet { scene_id, timeline } => {
+                self.exists
+                    .insert(Object::Timeline(timeline.timeline_id.clone()));
+                self.uses.insert(Object::Scene(scene_id.clone()));
+            }
+            Edit::TimelineDelete { timeline_id } => {
+                self.exists.insert(Object::Timeline(timeline_id.clone()));
             }
             _ => self.unknown = true,
         }

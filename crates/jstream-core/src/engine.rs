@@ -3172,6 +3172,15 @@ struct State {
     /// When each item's `triggered` motion modifiers were last fired, by
     /// `item.trigger_motion` (#1107): the origin of their clock.
     fired: crate::motion::Fired,
+    /// The timelines playing (ADR-0115): studio state, like the program scene.
+    timelines: crate::timelines::Timelines,
+    /// While a timeline's cue runs, its exact time on the animation clock, which a
+    /// transition or a fire it starts takes as its start (ADR-0099 decision 4).
+    cue_at: Option<jstream_media::MediaTime>,
+    /// The keyframe scene each placed scene is drawn through (keyframe tracks,
+    /// ADR-0116): studio state, like the program scene, which the drawn copy of the
+    /// collection ([`shown`](Self::shown)) carries.
+    placed_keyframes: BTreeMap<SceneId, SceneId>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3472,6 +3481,8 @@ impl State {
         wake: &mut Vec<Waker>,
     ) {
         self.outputs.sync(self.graph.state());
+        self.reconcile_timelines(wake);
+        self.reconcile_keyframes(client_id, request_id, wake);
         self.refresh_shown();
         {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
@@ -3546,9 +3557,457 @@ impl State {
                 id: item_id.to_string(),
             });
         }
-        let now = self.live.now();
+        let now = self.action_now();
         self.fired.fire(item_id, modifier_id, now);
         self.publish_render();
+        Ok(())
+    }
+
+    /// The time an action takes as now: while a timeline's cue runs, the cue's own time
+    /// (ADR-0099 decision 4), so a transition or a fire it starts is never delayed by a
+    /// late tick; else the clock's.
+    fn action_now(&self) -> jstream_media::MediaTime {
+        self.cue_at.unwrap_or_else(|| self.live.now())
+    }
+
+    /// `timeline.play` (`from_ms` `None`) and `timeline.seek` (ADR-0115): starts
+    /// `timeline_id` from its start or from `from_ms`, replacing any play of it, and
+    /// emits `timeline.changed`. A seek first runs, at once, the state cues before
+    /// `from_ms` that a play from the start would have left in force
+    /// ([`jstream_anim::Timeline::seek`]). Its cues from there on fire from the timeline
+    /// tick; a call from a client runs that tick now, so a cue at the start fires before
+    /// the call returns, while a cue's own play waits for the tick's next round.
+    fn timeline_play(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        timeline_id: &jstream_protocol::TimelineId,
+        from_ms: Option<u32>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let (scene_id, info) = self
+            .graph
+            .state()
+            .timeline(timeline_id)
+            .map(|(scene, info)| (scene.id().clone(), info.clone()))
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Timeline,
+                id: timeline_id.to_string(),
+            })?;
+        let schedule = crate::timelines::schedule(&info);
+        let start = from_ms.unwrap_or(0);
+        if let Some(at_ms) = from_ms {
+            let end = match info.looping {
+                jstream_protocol::TimelineLoop::Once => info.duration_ms.saturating_add(1),
+                jstream_protocol::TimelineLoop::Loop => info.duration_ms,
+                jstream_protocol::TimelineLoop::Range { to_ms, .. } => to_ms,
+            };
+            if at_ms >= end {
+                return Err(ProtocolError::invalid_argument(
+                    "at_ms",
+                    "must be within the timeline: at most its duration_ms, and before \
+                     where a loop jumps back",
+                ));
+            }
+        }
+        let now = self.action_now();
+        let now_ns = crate::timelines::ns(now);
+        self.timelines.play(
+            timeline_id,
+            scene_id.clone(),
+            start,
+            now_ns,
+            client_id.clone(),
+            request_id.clone(),
+        );
+        self.subscribers.emit(
+            &Event::TimelineChanged {
+                timeline_id: timeline_id.clone(),
+                scene_id,
+                change: if from_ms.is_some() {
+                    jstream_protocol::TimelineChange::Sought
+                } else {
+                    jstream_protocol::TimelineChange::Started
+                },
+                playing: true,
+                position_ms: start,
+                pass: 0,
+            },
+            wake,
+        );
+        if let Some(at_ms) = from_ms {
+            // A cue exactly at `at_ms` fires as the timeline plays on from there.
+            let seek: Vec<usize> = schedule
+                .seek(0, at_ms)
+                .into_iter()
+                .filter(|&cue| schedule.cues[cue].at_ms < at_ms)
+                .collect();
+            let by = (client_id.clone(), request_id.clone());
+            for cue in seek {
+                let fire = jstream_anim::Fire {
+                    cue,
+                    pass: 0,
+                    at_ns: now_ns,
+                };
+                self.run_cue(timeline_id, &schedule, &fire, &by, wake);
+            }
+        }
+        if self.cue_at.is_none() {
+            self.timeline_tick(wake);
+            self.start_ticker();
+        }
+        Ok(())
+    }
+
+    /// `timeline.stop` (ADR-0115): stops `timeline_id` where it is, emitting
+    /// `timeline.changed` if it was playing.
+    fn timeline_stop(
+        &mut self,
+        timeline_id: &jstream_protocol::TimelineId,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let Some((_, info)) = self.graph.state().timeline(timeline_id) else {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Timeline,
+                id: timeline_id.to_string(),
+            });
+        };
+        let schedule = crate::timelines::schedule(info);
+        if let Some(playing) = self.timelines.stop(timeline_id) {
+            let position =
+                schedule.position(playing.started_ns, crate::timelines::ns(self.action_now()));
+            self.subscribers.emit(
+                &Event::TimelineChanged {
+                    timeline_id: timeline_id.clone(),
+                    scene_id: playing.scene_id,
+                    change: jstream_protocol::TimelineChange::Stopped,
+                    playing: false,
+                    position_ms: crate::timelines::millis(position.ms),
+                    pass: position.pass,
+                },
+                wake,
+            );
+        }
+        Ok(())
+    }
+
+    /// Runs the cue `fire` names, of `timeline_id`, at its time on the animation clock,
+    /// as its action's call would run, credited to `by`, the client and request that
+    /// started the timeline, and emits `timeline.cue_fired` with its error, if any.
+    fn run_cue(
+        &mut self,
+        timeline_id: &jstream_protocol::TimelineId,
+        schedule: &jstream_anim::Timeline<crate::timelines::CueAct>,
+        fire: &jstream_anim::Fire,
+        by: &(ClientId, RequestId),
+        wake: &mut Vec<Waker>,
+    ) {
+        let Some(c) = schedule.cues.get(fire.cue) else {
+            return;
+        };
+        let (cue, pass) = (fire.cue, fire.pass);
+        let outer = self
+            .cue_at
+            .replace(crate::timelines::media_time(fire.at_ns));
+        // `timeline.set` stores only actions this version knows, so a stored cue has one.
+        let result = match c.action.0.clone() {
+            Some(action) => self.action(&by.0, &by.1, action, wake),
+            None => Err(ProtocolError::invalid_argument(
+                "action",
+                "is not an action this version knows",
+            )),
+        };
+        self.cue_at = outer;
+        self.subscribers.emit(
+            &Event::TimelineCueFired {
+                timeline_id: timeline_id.clone(),
+                cue: u32::try_from(cue).unwrap_or(u32::MAX),
+                pass,
+                at_ms: c.at_ms,
+                error: result.err(),
+            },
+            wake,
+        );
+    }
+
+    /// Fires every playing timeline's cues due by now, in the order they fall due
+    /// across timelines, and emits each loop and end (ADR-0115). A cue that plays a
+    /// timeline starts it at the cue's time, so its first cues are due at once: they
+    /// run in the next round, up to [`crate::timelines::MAX_ROUNDS`] rounds a tick. A
+    /// round's loops and ends are sent after its cues have fired. Returns when the next
+    /// cue or pass boundary falls due, if any timeline plays: no sooner than
+    /// [`crate::timelines::CAPPED_WAIT_NS`] from now when every round ran with cues due,
+    /// so cues that keep starting each other can't spin the ticker.
+    fn timeline_tick(&mut self, wake: &mut Vec<Waker>) -> Option<jstream_media::MediaTime> {
+        use crate::timelines::{Step, schedule};
+        let mut capped = true;
+        for _ in 0..crate::timelines::MAX_ROUNDS {
+            let now_ns = crate::timelines::ns(self.live.now());
+            let mut due = Vec::new();
+            let mut steps = Vec::new();
+            for id in self.timelines.ids() {
+                let Some((scene_id, info)) = self
+                    .graph
+                    .state()
+                    .timeline(&id)
+                    .map(|(scene, info)| (scene.id().clone(), info.clone()))
+                else {
+                    continue;
+                };
+                let timeline = schedule(&info);
+                let Some(by) = self
+                    .timelines
+                    .get(&id)
+                    .map(|playing| (playing.client_id.clone(), playing.request_id.clone()))
+                else {
+                    continue;
+                };
+                let pass_before = self.timelines.get(&id).map_or(0, |playing| playing.pass);
+                let Some((fires, step)) = self.timelines.advance(&id, &timeline, now_ns) else {
+                    continue;
+                };
+                for fire in fires {
+                    due.push((id.clone(), fire, info.clone(), by.clone()));
+                }
+                let (change, playing, position_ms, pass) = match step {
+                    Some(Step::Looped { pass, position_ms }) => (
+                        jstream_protocol::TimelineChange::Looped,
+                        true,
+                        position_ms,
+                        pass,
+                    ),
+                    Some(Step::Ended { position_ms }) => (
+                        jstream_protocol::TimelineChange::Ended,
+                        false,
+                        position_ms,
+                        pass_before,
+                    ),
+                    None => continue,
+                };
+                steps.push(Event::TimelineChanged {
+                    timeline_id: id.clone(),
+                    scene_id,
+                    change,
+                    playing,
+                    position_ms,
+                    pass,
+                });
+            }
+            let idle = due.is_empty();
+            // In time order across timelines; a sort that keeps each timeline's order.
+            due.sort_by_key(|(_, fire, ..)| fire.at_ns);
+            for (id, fire, info, by) in due {
+                self.run_cue(&id, &schedule(&info), &fire, &by, wake);
+            }
+            for step in steps {
+                self.subscribers.emit(&step, wake);
+            }
+            if idle {
+                capped = false;
+                break;
+            }
+        }
+        let next = self
+            .timelines
+            .ids()
+            .into_iter()
+            .filter_map(|id| {
+                let (_, info) = self.graph.state().timeline(&id)?;
+                self.timelines.next_due(&id, &schedule(info))
+            })
+            .min()?;
+        let next = if capped {
+            next.max(crate::timelines::ns(self.live.now()) + crate::timelines::CAPPED_WAIT_NS)
+        } else {
+            next
+        };
+        Some(crate::timelines::media_time(next))
+    }
+
+    /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
+    /// cues fire when they fall due.
+    fn start_ticker(&mut self) {
+        if !self.timelines.is_empty() && !self.ticking {
+            self.ticking = spawn_live_ticker(self.shared.clone());
+        }
+    }
+
+    /// Stops the timelines the collection no longer holds, after a batch, undo or redo
+    /// deleted them or their scene, with `timeline.changed` `removed`.
+    fn reconcile_timelines(&mut self, wake: &mut Vec<Waker>) {
+        for id in self.timelines.ids() {
+            if self.graph.state().timeline(&id).is_some() {
+                continue;
+            }
+            if let Some(playing) = self.timelines.stop(&id) {
+                self.subscribers.emit(
+                    &Event::TimelineChanged {
+                        timeline_id: id,
+                        scene_id: playing.scene_id,
+                        change: jstream_protocol::TimelineChange::Removed,
+                        playing: false,
+                        position_ms: 0,
+                        pass: playing.pass,
+                    },
+                    wake,
+                );
+            }
+        }
+    }
+
+    /// Lets go of each placed scene's keyframe the collection no longer holds, after a
+    /// batch, undo or redo deleted the scene or the keyframe scene (ADR-0116), with
+    /// `scene.keyframe_changed` for it.
+    fn reconcile_keyframes(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        wake: &mut Vec<Waker>,
+    ) {
+        let state = self.graph.state();
+        let gone: Vec<SceneId> = self
+            .placed_keyframes
+            .iter()
+            .filter(|(scene_id, keyframe_id)| {
+                state
+                    .scene(keyframe_id)
+                    .is_none_or(|keyframe| keyframe.variant_of() != Some(*scene_id))
+            })
+            .map(|(scene_id, _)| scene_id.clone())
+            .collect();
+        for scene_id in gone {
+            self.placed_keyframes.remove(&scene_id);
+            self.subscribers.emit(
+                &Event::SceneKeyframeChanged {
+                    scene_id,
+                    keyframe_id: None,
+                    client_id: client_id.clone(),
+                    request_id: Some(request_id.clone()),
+                },
+                wake,
+            );
+        }
+    }
+
+    /// `scene.set_keyframe` (ADR-0116): draws scene `scene_id` through `keyframe_id`
+    /// wherever another scene places it. When program draws it, the change plays as a
+    /// Move of preset `preset_id` (the default when `None`) from what is on screen to
+    /// program as now drawn, pairing each item with itself, as `item.show` plays an
+    /// item's effect; a transition in flight is retargeted from where it is.
+    fn set_keyframe(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        scene_id: SceneId,
+        keyframe_id: Option<SceneId>,
+        preset_id: Option<jstream_protocol::TransitionPresetId>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(&scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.to_string(),
+            })?;
+        if scene.variant_of().is_some() {
+            return Err(ProtocolError::invalid_argument(
+                "scene_id",
+                "is a keyframe scene: name the scene it is a keyframe of",
+            ));
+        }
+        if let Some(keyframe_id) = &keyframe_id {
+            let keyframe = state
+                .scene(keyframe_id)
+                .ok_or_else(|| ProtocolError::NotFound {
+                    entity: EntityKind::Scene,
+                    id: keyframe_id.to_string(),
+                })?;
+            if keyframe.variant_of() != Some(&scene_id) {
+                return Err(ProtocolError::invalid_argument(
+                    "keyframe_id",
+                    "is not a keyframe scene of scene_id",
+                ));
+            }
+        }
+        let preset_id = match preset_id {
+            Some(preset_id) => preset_id,
+            None => state.default_preset().clone(),
+        };
+        let Some(preset) = state.preset(&preset_id) else {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Transition,
+                id: preset_id.to_string(),
+            });
+        };
+        // Only a Move or a Fade animates a switch within the scene; any other kind (a
+        // cut, a stinger, a pack's) switches at once.
+        let animates = matches!(
+            preset.kind(),
+            jstream_protocol::FADE | jstream_protocol::MOVE
+        );
+        let run = animates
+            .then(|| preset_run(&self.graph, &preset_id))
+            .flatten();
+        if self.placed_keyframes.get(&scene_id) == keyframe_id.as_ref() {
+            return Ok(());
+        }
+        let now = self.action_now();
+        // A scene program doesn't draw changes nothing on screen, so it starts no run,
+        // and a transition in flight keeps its own. Nor does the scene on program itself,
+        // or one of its keyframe scenes: there it draws as itself, not through the track.
+        let program = self
+            .studio
+            .program()
+            .filter(|program| {
+                let state = self.graph.state();
+                *state.family_of(program) != scene_id && state.draws(program, &scene_id)
+            })
+            .cloned();
+        let started = match (program, run) {
+            (Some(program), Some(run)) => {
+                Some((self.screen_now(&program, &run, now), program, run))
+            }
+            _ => None,
+        };
+        match &keyframe_id {
+            Some(keyframe_id) => {
+                self.placed_keyframes
+                    .insert(scene_id.clone(), keyframe_id.clone());
+            }
+            None => {
+                self.placed_keyframes.remove(&scene_id);
+            }
+        }
+        self.refresh_shown();
+        if let Some(((from, shared), program, mut run)) = started {
+            let to_camera = transition::camera_of(&self.graph, &program);
+            let from_camera = shared.unwrap_or(None);
+            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                run.pairs = false;
+            }
+            self.studio.switch(
+                program.clone(),
+                Some(transition::Running {
+                    from,
+                    to: program,
+                    start: now,
+                    run,
+                    by_item: true,
+                    from_camera,
+                }),
+            );
+        }
+        self.redraw();
+        self.subscribers.emit(
+            &Event::SceneKeyframeChanged {
+                scene_id,
+                keyframe_id,
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            wake,
+        );
         Ok(())
     }
 
@@ -3633,6 +4092,43 @@ impl State {
                 self.trigger_motion(&item_id, modifier_id.as_deref())?;
                 return Ok(CallResult::action());
             }
+            Action::TimelinePlay { timeline_id } => {
+                self.timeline_play(client_id, request_id, &timeline_id, None, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::TimelineSeek { timeline_id, at_ms } => {
+                self.timeline_play(client_id, request_id, &timeline_id, Some(at_ms), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::TimelineStop { timeline_id } => {
+                self.timeline_stop(&timeline_id, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::SceneSetKeyframe {
+                scene_id,
+                keyframe_id,
+                preset_id,
+            } => {
+                self.set_keyframe(
+                    client_id,
+                    request_id,
+                    scene_id,
+                    keyframe_id,
+                    preset_id,
+                    wake,
+                )?;
+                return Ok(CallResult::action());
+            }
+            Action::SourceRestart { source_id } => {
+                if self.graph.state().source(&source_id).is_none() {
+                    return Err(ProtocolError::NotFound {
+                        entity: EntityKind::Source,
+                        id: source_id.to_string(),
+                    });
+                }
+                self.live.restart(&source_id);
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }) => {
@@ -3706,6 +4202,20 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
+                    timelines: self
+                        .timelines
+                        .report(crate::timelines::ns(self.live.now()), |id| {
+                            let (_, info) = self.graph.state().timeline(id)?;
+                            Some(crate::timelines::schedule(info))
+                        }),
+                    keyframes: self
+                        .placed_keyframes
+                        .iter()
+                        .map(|(scene_id, keyframe_id)| jstream_protocol::PlacedKeyframe {
+                            scene_id: scene_id.clone(),
+                            keyframe_id: keyframe_id.clone(),
+                        })
+                        .collect(),
                 },
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
@@ -3759,7 +4269,7 @@ impl State {
         if from_scene.as_ref() == Some(&scene_id) {
             return Ok(());
         }
-        let now = self.live.now();
+        let now = self.action_now();
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
@@ -3870,7 +4380,7 @@ impl State {
                 .map_err(action_field)?;
             return Ok(());
         }
-        let now = self.live.now();
+        let now = self.action_now();
         let program = self
             .studio
             .program()
@@ -3968,12 +4478,15 @@ impl State {
         };
         let Self {
             graph,
+            shown,
             frames,
             frame_versions,
             live,
             studio,
             ..
         } = self;
+        // As it is drawn: with its live settings and its placed keyframes (ADR-0116).
+        let graph: &Graph = shown.as_ref().unwrap_or(graph);
         let running = studio.running().unwrap_or(&probe);
         let assets = live.filter_assets();
         // Not a plan of the program: what it looks at is not reached, so a source the
@@ -4331,7 +4844,16 @@ impl State {
     fn refresh_shown(&mut self) -> bool {
         let settings = self.gestures.settings();
         let had = self.shown.is_some();
-        self.shown = (!settings.is_empty()).then(|| self.graph.with_values(&settings));
+        self.shown = match (settings.is_empty(), self.placed_keyframes.is_empty()) {
+            (true, true) => None,
+            (false, true) => Some(self.graph.with_values(&settings)),
+            (true, false) => Some(self.graph.with_placed_keyframes(&self.placed_keyframes)),
+            (false, false) => Some(
+                self.graph
+                    .with_values(&settings)
+                    .with_placed_keyframes(&self.placed_keyframes),
+            ),
+        };
         had || self.shown.is_some()
     }
 
@@ -4419,6 +4941,12 @@ impl State {
         for event in self.gestures.due(now) {
             self.subscribers.emit(&event, wake);
         }
+        let cues = self.timeline_tick(wake).map(|due| {
+            let wait = crate::timelines::ns(due)
+                .saturating_sub(crate::timelines::ns(self.live.now()))
+                .max(0);
+            Instant::now() + Duration::from_nanos(u64::try_from(wait).unwrap_or(0))
+        });
         let render = &self.render;
         if self
             .gestures
@@ -4427,22 +4955,24 @@ impl State {
             self.publish_live();
         }
         let release = self.gestures.releasing().then(|| now + RELEASE_POLL);
-        let next = match (self.gestures.next_due(), release) {
-            (Some(a), Some(b)) => Some(a.min(b)),
-            (a, b) => a.or(b),
-        };
+        let next = [self.gestures.next_due(), release, cues]
+            .into_iter()
+            .flatten()
+            .min();
         if next.is_some() && !self.ticking {
             self.ticking = spawn_live_ticker(self.shared.clone());
         }
         next
     }
 
-    /// Brings the program mixer in line with the collection's audio, the audio sources'
-    /// inputs included.
+    /// Brings the program mixer in line with the collection's audio as drawn (the open
+    /// gestures' settings and the placed scenes' switched keyframes, ADR-0116, so a child
+    /// a switched keyframe hides is not heard), the audio sources' inputs included.
     fn route_audio(&mut self) {
         let inputs = self.audio.inputs();
+        let drawn = self.shown.as_ref().unwrap_or(&self.graph);
         self.routing
-            .sync(self.graph.state(), self.studio.program(), &inputs);
+            .sync(drawn.state(), self.studio.program(), &inputs);
     }
 
     /// Emits a `meters.tick` if the program mixer runs, first routing any audio source
@@ -4452,7 +4982,8 @@ impl State {
             self.route_audio();
         }
         let inputs = self.audio.inputs();
-        let meters = self.routing.meters(self.graph.state(), &inputs);
+        let drawn = self.shown.as_ref().unwrap_or(&self.graph);
+        let meters = self.routing.meters(drawn.state(), &inputs);
         drop(inputs);
         if let Some((sources, buses)) = meters {
             self.subscribers
@@ -4796,8 +5327,16 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
 /// `inherit` takes the preset's `unmatched`, or no animation when its kind has none (a
 /// `cut`, a `stinger`, a pack's). `None` when the preset lasts no time.
 fn item_run(graph: &Graph) -> Option<transition::Run> {
+    preset_run(graph, graph.state().default_preset())
+}
+
+/// [`item_run`] with preset `preset_id`: `None` for one with no length, or none.
+fn preset_run(
+    graph: &Graph,
+    preset_id: &jstream_protocol::TransitionPresetId,
+) -> Option<transition::Run> {
     let state = graph.state();
-    let preset_id = state.default_preset().clone();
+    let preset_id = preset_id.clone();
     let preset = state.preset(&preset_id)?;
     if preset.duration_ms() == 0 {
         return None;

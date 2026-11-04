@@ -69,6 +69,17 @@ impl Graph {
         self.apply_with_running(edits, expected_rev, &BTreeSet::new())
     }
 
+    /// A copy of the graph whose placed scenes draw through `keyframes` (keyframe
+    /// tracks, ADR-0116): each scene ID to the keyframe scene of it that its placements
+    /// draw. Studio state, not a revision: no undo step, no inverse, and a pair that no
+    /// longer names a scene and one of its keyframe scenes is ignored.
+    #[must_use]
+    pub fn with_placed_keyframes(&self, keyframes: &BTreeMap<SceneId, SceneId>) -> Graph {
+        let mut copy = self.clone();
+        copy.state.placed_keyframes = keyframes.clone();
+        copy
+    }
+
     /// A copy of the graph with `values` applied to its state and its revision kept: the
     /// collection as the engine draws it while live values of sources' settings are open
     /// (ADR-0091). Nothing about it is a revision: no undo step, no inverse. A value
@@ -408,6 +419,9 @@ fn apply_edit(
     if let Some(applied) = crate::camera::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::timeline::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate {
             scene_id,
@@ -431,6 +445,7 @@ fn apply_edit(
                 camera: None,
                 camera_motion: Vec::new(),
                 camera_follow: None,
+                timelines: BTreeMap::new(),
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
@@ -536,6 +551,7 @@ fn apply_edit(
             }
             // After its items, which a follow camera names.
             inverse.extend(crate::camera::restore(&scene));
+            inverse.extend(crate::timeline::restore(&scene));
             Ok(inverse)
         }
         Edit::SceneReorder { scene_id, index } => {

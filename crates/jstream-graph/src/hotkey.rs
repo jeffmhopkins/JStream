@@ -71,15 +71,20 @@ fn exists(state: &State, entity: EntityKind, id: &str) -> bool {
         EntityKind::Encoder => state.encoders.keys().any(|e| e.as_str() == id),
         EntityKind::Transition => state.transitions.presets.keys().any(|p| p.as_str() == id),
         EntityKind::Item => state.item(&jstream_protocol::ItemId::new(id)).is_some(),
+        EntityKind::Timeline => state
+            .timeline(&jstream_protocol::TimelineId::new(id))
+            .is_some(),
         _ => false,
     }
 }
 
-/// Removes every binding whose action names an item the collection no longer has
-/// (ADR-0101): `item.remove`, and the deletes that take items with them (`scene.delete`,
-/// `source.delete`), drop the bindings of `item.show`, `item.hide` and `item.toggle`
-/// naming those items. Returns the edits that restore them, ordered by chord, to run
-/// after the items are back, and records each removed binding in `removed`.
+/// Removes every binding whose action names an item or a timeline the collection no
+/// longer has (ADR-0101, ADR-0115): `item.remove`, and the deletes that take items with
+/// them (`scene.delete`, `source.delete`), drop the bindings of `item.show`, `item.hide`
+/// and `item.toggle` naming those items, and `timeline.delete` and `scene.delete` those
+/// of `timeline.play`, `timeline.stop` and `timeline.seek` naming its timelines.
+/// Returns the edits that restore them, ordered by chord, to run after the items and
+/// timelines are back, and records each removed binding in `removed`.
 pub(crate) fn remove_missing_items(
     state: &mut State,
     removed: &mut Vec<HotkeyBinding>,
@@ -88,10 +93,16 @@ pub(crate) fn remove_missing_items(
         .hotkeys
         .iter()
         .filter(|(_, action)| {
-            action.named_objects().iter().any(|&(entity, id)| {
-                entity == EntityKind::Item
-                    && state.item(&jstream_protocol::ItemId::new(id)).is_none()
-            })
+            action
+                .named_objects()
+                .iter()
+                .any(|&(entity, id)| match entity {
+                    EntityKind::Item => state.item(&jstream_protocol::ItemId::new(id)).is_none(),
+                    EntityKind::Timeline => state
+                        .timeline(&jstream_protocol::TimelineId::new(id))
+                        .is_none(),
+                    _ => false,
+                })
         })
         .map(|(chord, _)| chord.clone())
         .collect();

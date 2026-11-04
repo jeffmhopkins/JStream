@@ -109,6 +109,7 @@ pub async fn load(control: &dyn Control) -> Result<Snapshot, String> {
         QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            ..
         } => (program_scene, preview_scene),
         other => return Err(unexpected("studio.get", other.name())),
     };
