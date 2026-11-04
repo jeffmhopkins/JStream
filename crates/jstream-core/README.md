@@ -251,7 +251,9 @@ state machine. Contents:
   to its placement, crop and opacity after any live value (`apply`: position, size,
   rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
   placement, crop rounded and never below 0, opacity clamped to 0 to 1; a 3D model's drawn layer,
-  already placed in its pixels, stays put). The item's
+  already placed in its pixels, stays put). An item whose effects run over the canvas
+  (ADR-0106) moves inside its canvas-sized layer, which stays over the canvas, also in
+  a transition, where that layer takes only the motion's opacity. The item's
   stored values never change. A shot with motion anywhere (`Shot::moves`) changes with
   time (`Shot::changes_with_time`), as a running transition does, so a preview stream
   sends it each frame too. During a transition each track

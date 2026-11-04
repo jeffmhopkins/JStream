@@ -416,6 +416,19 @@ impl Boxed {
         }
     }
 
+    /// What `by`, an item's motion, moves inside its layer: its crop, cut there, and over
+    /// the canvas (ADR-0106) its placement too, since that layer stays where it is and
+    /// [`Self::around`] drops the box. Else the rest moves the box where it is placed.
+    fn moved_inside(
+        &self,
+        by: &jstream_anim::Offsets,
+        placement: Placement,
+        crop: Crop,
+    ) -> (Placement, Crop) {
+        let (moved, crop, _) = motion::apply(by, placement, crop, OPAQUE);
+        (if self.canvas { moved } else { placement }, crop)
+    }
+
     /// Where the item is drawn inside its layer: centred at the box's planned size,
     /// flat and unrotated, with `geometry`'s fit and flips, so the effects see the
     /// cropped, fitted box in its own frame (ADR-0050 §7).
@@ -495,8 +508,9 @@ struct ItemBox {
     placement: Placement,
     crop: Crop,
     boxed: Boxed,
-    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, the rest
-    /// moves the box where it is placed.
+    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, and the rest
+    /// moves the box where it is placed, except over the canvas (ADR-0106), where they
+    /// move the item inside its layer ([`Boxed::moved_inside`]).
     motion: motion::Motion,
 }
 
@@ -747,6 +761,21 @@ impl Shot {
     /// redraws a still filtered picture too.
     pub(crate) fn changes_with_time(&self) -> bool {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
+    }
+
+    /// Whether `image` is the layer of an item whose effects run over the canvas
+    /// (ADR-0106).
+    fn is_canvas_box(&self, image: &GpuKey) -> bool {
+        // A track or layer draws a box through its chain's output, `Filtered`; its
+        // `ItemBox` is the layer the item is drawn into first (#1125 review N16).
+        let owner = match image {
+            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
+            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
+            _ => return false,
+        };
+        self.boxes
+            .get(&owner)
+            .is_some_and(|boxed| boxed.boxed.canvas)
     }
 
     /// Whether an item this shot draws has a motion modifier: in a pass, a chain
@@ -1010,11 +1039,11 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, _, moved)| {
+                .map(|(key, track, _, moved)| {
                     let by = moved.offsets(track, elapsed_ms, at, |item| self.shown_at(item));
                     track
                         .sample(elapsed_ms, canvas)
-                        .map(|end| motion::apply_endpoint(&by, end))
+                        .map(|end| moved_track(self.is_canvas_box(key), &by, end))
                 })
                 .collect()
         })
@@ -4392,9 +4421,8 @@ fn draw_box(
         boxed.placement,
         boxed.crop,
     );
-    // Its motion's crop is cut here; the rest moves the box where it is placed.
     let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item));
-    let (_, crop, _) = motion::apply(&by, placement, crop, OPAQUE);
+    let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
         .geometry_of(placement, crop)
@@ -4537,7 +4565,11 @@ fn fill_items<'a>(
             let by = layer
                 .motion
                 .offsets(track, elapsed, at, |item| shot.shown_at(item));
-            let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
+            let sampled = moved_track(
+                shot.is_canvas_box(&layer.image),
+                &by,
+                track.sample(elapsed, size)?,
+            );
             return Some(Item {
                 image: cache.get(&layer.image)?,
                 placement: Placement::Geometry(sampled.geometry),
@@ -4572,6 +4604,20 @@ fn fill_items<'a>(
             depth_run: 0,
         })
     }));
+}
+
+/// A track's sampled endpoint moved by `by`, its item's motion. A canvas-space layer
+/// (ADR-0106) stays over the canvas: its item moves inside it ([`draw_box`]), so only
+/// the layer's opacity takes the motion here.
+fn moved_track(canvas_box: bool, by: &jstream_anim::Offsets, sampled: Endpoint) -> Endpoint {
+    if canvas_box {
+        Endpoint {
+            opacity: by.opacity_of(sampled.opacity),
+            ..sampled
+        }
+    } else {
+        motion::apply_endpoint(by, sampled)
+    }
 }
 
 /// Replaces `items` with `transition`'s tracks sampled at `at`, in drawing order. A
@@ -4615,7 +4661,8 @@ fn fill_tracks<'a>(
                     return None;
                 }
                 let by = moved.offsets(track, elapsed, at, |item| shot.shown_at(item));
-                let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
+                let sampled =
+                    moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
                 Some(Item {
                     image: cache.get(key)?,
                     placement: Placement::Geometry(sampled.geometry),
@@ -4993,6 +5040,66 @@ pub(crate) mod tests {
         );
         assert_eq!(inside.size.width.get(), 50.0);
         assert!(inside.flip_v, "the item's own flip");
+    }
+
+    /// Motion on an item whose effects run over the canvas (ADR-0106, ADR-0099) moves
+    /// the item inside its layer, which stays over the canvas, on a steady frame and
+    /// during a switch alike; a box's layer moves where it is placed and only cuts the
+    /// crop inside (#1125 review B8).
+    #[test]
+    fn motion_moves_a_canvas_space_item_inside_its_layer() {
+        use jstream_protocol::{Canvas, ItemGeometry, Size, Vec2};
+        let placed = ItemGeometry::try_new(
+            Vec2::new(500.0, 300.0).expect("finite"),
+            Size::try_new(100.0, 50.0).expect("positive"),
+        )
+        .expect("valid");
+        let by = jstream_anim::Offsets {
+            x: 40.0,
+            opacity: 0.5,
+            crop: [2.0, 0.0, 0.0, 0.0],
+            ..jstream_anim::Offsets::IDENTITY
+        };
+        let canvas = super::Boxed::over_canvas(
+            Canvas {
+                width: 1920,
+                height: 1080,
+            },
+            None,
+        )
+        .expect("finite");
+        let (moved, crop) = canvas.moved_inside(&by, Placement::Geometry(placed), Crop::NONE);
+        let Placement::Geometry(moved) = moved else {
+            panic!("a geometry");
+        };
+        assert_eq!(moved.center.x.get(), 540.0, "moved inside the layer");
+        assert_eq!(crop.left, 2);
+        let inside = canvas.inside(&moved).expect("inside");
+        assert_eq!(inside.center.x.get(), 540.0);
+
+        let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
+        let (kept, crop) = boxed.moved_inside(&by, Placement::Geometry(placed), Crop::NONE);
+        assert_eq!(
+            kept,
+            Placement::Geometry(placed),
+            "the box moves where placed"
+        );
+        assert_eq!(crop.left, 2);
+
+        let at = super::Endpoint {
+            geometry: canvas.around(&placed).expect("around"),
+            crop: Crop::NONE,
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+        };
+        let layer = super::moved_track(true, &by, at);
+        assert_eq!(layer.geometry, at.geometry, "the canvas layer stays put");
+        assert_eq!(layer.opacity, 0.5, "and takes the motion's opacity");
+        let track = super::moved_track(false, &by, at);
+        assert_eq!(
+            track.geometry.center.x.get(),
+            at.geometry.center.x.get() + 40.0
+        );
     }
 
     fn placed(source: SourceRef, placement: Placement) -> Placed {
