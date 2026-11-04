@@ -198,8 +198,9 @@ pub enum Edit {
     /// the defaults, then `item.reorder` to its old stacking position (unless it was on
     /// top), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,
     /// `item.set_transition` if its transition settings were not the default,
-    /// `item.set_locked` if it was locked (since 0.71), and the placement edits that
-    /// write each dropped override back.
+    /// `item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its
+    /// effects run in canvas space (since 0.76), and the placement edits that write each
+    /// dropped override back.
     #[serde(rename = "item.remove")]
     ItemRemove {
         /// The item to remove.
@@ -967,6 +968,20 @@ pub enum Edit {
         /// Whether its canvas box is locked.
         locked: bool,
     },
+    /// Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is
+    /// placed (`box`, the default), or over the canvas after it is placed (`canvas`), so
+    /// a mask or a gradient lines up with the canvas however the item is moved, scaled,
+    /// turned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`
+    /// and a keyframe doesn't override it; a keyframe's overridden effects run in the
+    /// item's space. Items are added with `box`. Inverse: `item.set_effects_space` with
+    /// the previous value.
+    #[serde(rename = "item.set_effects_space")]
+    ItemSetEffectsSpace {
+        /// The item to change.
+        item_id: ItemId,
+        /// Where its effects run.
+        space: EffectsSpace,
+    },
     /// Changes some of an audio source's settings (ADR-0028): the fields sent change,
     /// the others keep their values, and sending none is `invalid_argument`. A source
     /// without audio is `invalid_argument` on `source_id`. A `scene` source has no fader
@@ -1152,6 +1167,7 @@ impl Edit {
             Edit::SceneSetTransitions { .. } => "scene.set_transitions",
             Edit::ItemSetTransition { .. } => "item.set_transition",
             Edit::ItemSetLocked { .. } => "item.set_locked",
+            Edit::ItemSetEffectsSpace { .. } => "item.set_effects_space",
         }
     }
 }
@@ -1562,6 +1578,24 @@ pub enum Action {
         /// The pack ID.
         pack: String,
     },
+    /// Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is
+    /// `null` or left out. Shared values are named JSON values the engine holds for pages and agents
+    /// to read: never saved, never `rev`, and not an edit, so a value that changes often
+    /// fills no undo history. Every client gets `values.changed` when it changes; setting
+    /// the value a name already has, or removing a name that has none, changes nothing
+    /// and sends nothing. Fails with `invalid_argument` at `name` for a name outside the
+    /// rules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`
+    /// for a value over 16 KiB as compact JSON, and at `name` when the store already
+    /// holds 256 names and this is a new one.
+    #[serde(rename = "values.set")]
+    ValuesSet {
+        /// The value's name, such as `status.text`.
+        name: String,
+        /// The value. `null`, or leaving it out, removes the value. Inside a value, `null`
+        /// is an ordinary JSON value.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1603,6 +1637,7 @@ impl Action {
             Action::CodecDelete { .. } => "codec.delete",
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
+            Action::ValuesSet { .. } => "values.set",
         }
     }
 
@@ -1652,7 +1687,8 @@ impl Action {
             | Action::CodecDownload { .. }
             | Action::CodecDelete { .. }
             | Action::PackWrite { .. }
-            | Action::PackDelete { .. } => vec![],
+            | Action::PackDelete { .. }
+            | Action::ValuesSet { .. } => vec![],
         }
     }
 
@@ -1725,6 +1761,23 @@ impl Action {
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
             | Action::PrivacySet { .. } => None,
+            // Bindable, but checked as the call would be, so a saved binding never fails
+            // every press on its name or size.
+            Action::ValuesSet { name, value } => {
+                if crate::check_value_name(name, "name").is_err() {
+                    Some((
+                        "name",
+                        "a value's name is dotted segments of a-z, 0-9 and `_`, at most 64 bytes",
+                    ))
+                } else if value
+                    .as_ref()
+                    .is_some_and(|value| crate::check_value_size(value, "value").is_err())
+                {
+                    Some(("value", "a value is at most 16 KiB as JSON"))
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -1945,6 +1998,37 @@ impl Crop {
         right: 0,
         bottom: 0,
     };
+}
+
+/// Where an item's effects run (ADR-0106, since 0.76).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum EffectsSpace {
+    /// Over the item's cropped, fitted box, in its own frame, before it is placed
+    /// (ADR-0065 §5): an effect turns, scales and flips with its item.
+    #[default]
+    Box,
+    /// Over the canvas, after the item is placed: the item is drawn where it is on a
+    /// transparent canvas-sized layer, the effects run over that layer, and the layer is
+    /// drawn over the scene with the item's opacity and blend. A canvas-sized mask
+    /// lines up with the canvas whatever the item's transform.
+    Canvas,
+}
+
+impl EffectsSpace {
+    /// Whether this is the default, `box`.
+    pub fn is_box(&self) -> bool {
+        *self == EffectsSpace::Box
+    }
+
+    /// Its wire name (`box`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            EffectsSpace::Box => "box",
+            EffectsSpace::Canvas => "canvas",
+        }
+    }
 }
 
 /// How an item composites onto what is below it (ADR-0023 §1, register D13).

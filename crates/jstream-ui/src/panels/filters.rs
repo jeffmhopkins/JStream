@@ -27,10 +27,10 @@ use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Edit, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory,
-    KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, OverrideField,
-    ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId, SourceInfo,
-    SourceKind,
+    Edit, EffectsSpace, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId,
+    KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState,
+    OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId,
+    SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -611,14 +611,15 @@ fn owner_foot(owner: &FilterOwner) -> &'static str {
     }
 }
 
-/// Whether a filter of `kind` would hold a reference: a setting that names a scene, a
-/// source, a bus or an asset. A master or output filter can't hold one yet (ADR-0080),
-/// so the Add filter dialog won't add such a kind to those chains.
+/// Whether a filter of `kind` would hold a reference the delete checks follow: a
+/// setting that names a scene, a source or a bus. A master or output filter can't hold
+/// one yet (ADR-0080), so the Add filter dialog won't add such a kind to those chains.
+/// A file (an asset setting, such as Apply LUT's) is not one: any chain may name it.
 pub fn refers(kind: &KindDescriptor) -> bool {
     kind.params.iter().any(|p| {
         matches!(
             p.ty,
-            ParamType::Scene | ParamType::Source { .. } | ParamType::Bus | ParamType::Asset { .. }
+            ParamType::Scene | ParamType::Source { .. } | ParamType::Bus
         )
     })
 }
@@ -1278,6 +1279,7 @@ pub fn Chains(
             }
         }
     };
+    let owner_of_space = owner.clone();
     let effects = matches!(
         owner,
         FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
@@ -1332,11 +1334,66 @@ pub fn Chains(
             </div>
         }
     };
+    let space = match &owner_of_space {
+        // Not under a keyframe's effects: the space belongs to the item in every scene
+        // (ADR-0106), where the panel says a keyframe's effects are its own.
+        FilterOwner::Item { item_id } if video => {
+            Some(view! { <EffectsSpaceCheck item_id=item_id.clone() /> })
+        }
+        _ => None,
+    };
     view! {
         <div class="filter-chains" class:in-place=in_place>
             {video.then(|| chain(FilterChain::Video))}
             {audio.then(|| chain(FilterChain::Audio))}
+            {space}
         </div>
+    }
+}
+
+/// An item's "Over the canvas" check under its effects (ADR-0106): on, the effects
+/// run after the item is placed, so a mask lines up with the canvas however the item
+/// is moved or flipped; off, they run over its box and move with it.
+#[component]
+fn EffectsSpaceCheck(item_id: ItemId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let dialogs = expect_context::<FilterDialogs>();
+    let canvas = {
+        let item_id = item_id.clone();
+        Memo::new(move |_| {
+            studio.collection.with(|c| {
+                c.as_ref()
+                    .and_then(|c| c.item(&item_id))
+                    .is_some_and(|(_, item)| item.effects_space == EffectsSpace::Canvas)
+            })
+        })
+    };
+    let toggle = move |event: leptos::ev::Event| {
+        let space = if event_target_checked(&event) {
+            EffectsSpace::Canvas
+        } else {
+            EffectsSpace::Box
+        };
+        if let Some(s) = session.get() {
+            let edits = vec![Edit::ItemSetEffectsSpace {
+                item_id: item_id.clone(),
+                space,
+            }];
+            dialogs.sent(&edits);
+            studio.apply(&s, edits);
+        }
+    };
+    view! {
+        <label class="check effects-space" title="Run the effects after the item is placed, over the canvas, so a mask lines up with the canvas however the item is moved or flipped">
+            <input
+                type="checkbox"
+                class="inline-check"
+                prop:checked=move || canvas.get()
+                on:change=toggle
+            />
+            "Over the canvas"
+        </label>
     }
 }
 
@@ -2520,7 +2577,8 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 .map(|p| p.id.clone())
         })
     });
-    // A master or output filter can't hold a reference yet (ADR-0080).
+    // A master or output filter can't hold a scene, source or bus reference yet
+    // (ADR-0080); it may name a file.
     let stage = matches!(owner, FilterOwner::Master | FilterOwner::Output { .. });
     let referring =
         Memo::new(move |_| stage && descriptor.with(|d| d.as_ref().is_some_and(refers)));
@@ -2742,7 +2800,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         let refer_note = referring.get().then(|| {
             view! {
                 <p class="add-note">
-                    "A filter on an output can’t use a scene, a source or a file yet."
+                    "A filter on an output can’t use a scene, a source or a bus yet."
                 </p>
             }
         });
@@ -3154,6 +3212,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3210,6 +3269,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>, variant_of: Option<&str>| SceneInfo {
             overrides: Vec::new(),
@@ -3303,6 +3363,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3488,6 +3549,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
             let items = match variant_of {
@@ -3737,8 +3799,9 @@ mod tests {
         assert_eq!(own_source(&master), SourceId::new(""));
     }
 
-    /// A kind whose settings name a scene, a source, a bus or an asset refers; the Add
-    /// filter dialog keeps it off the master's and outputs' chains (ADR-0080).
+    /// A kind whose settings name a scene, a source or a bus refers; the Add filter
+    /// dialog keeps it off the master's and outputs' chains (ADR-0080). One that names
+    /// only a file (Apply LUT) doesn't.
     #[test]
     fn a_kind_with_a_reference_setting_refers() {
         let kind = |params| KindDescriptor {
@@ -3767,6 +3830,14 @@ mod tests {
             "audio",
             "Audio",
             ParamType::Bus,
+            Value::Null
+        )])));
+        assert!(!refers(&kind(vec![param(
+            "lut",
+            "LUT file",
+            ParamType::Asset {
+                accept: vec!["cube".into(), "png".into()],
+            },
             Value::Null
         )])));
     }

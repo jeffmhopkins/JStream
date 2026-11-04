@@ -22,15 +22,15 @@ use jstream_platform::media::{
 use jstream_platform::nv12::bgra_to_nv12;
 use jstream_platform::{
     Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    CursorCapture, PlatformError, VideoSurface,
+    CursorCapture, PlatformError, PointerPosition, VideoSurface,
 };
 use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, define_class, msg_send};
 use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType};
 use objc2_core_graphics::{
-    CGMainDisplayID, CGPreflightScreenCaptureAccess, CGRequestScreenCaptureAccess,
-    kCGColorSpaceSRGB,
+    CGDisplayBounds, CGEvent, CGMainDisplayID, CGPreflightScreenCaptureAccess,
+    CGRequestScreenCaptureAccess, kCGColorSpaceSRGB,
 };
 use objc2_core_media::CMSampleBuffer;
 use objc2_core_video::{
@@ -176,7 +176,7 @@ impl Capture for ScreenCaptureKitCapture {
         // Off-screen windows too, so a window on another Space can be captured.
         let content = shareable_content(false)?;
         let (displays, windows) = arrays(&content);
-        let (filter, what) = match wanted {
+        let (filter, what, display) = match wanted {
             Wanted::Display(id) => {
                 let display = displays
                     .iter()
@@ -185,7 +185,7 @@ impl Capture for ScreenCaptureKitCapture {
                         kind: "display",
                         id: display_id(id).as_str().to_owned(),
                     })?;
-                (display_filter(&display), format!("display {id}"))
+                (display_filter(&display), format!("display {id}"), Some(id))
             }
             Wanted::Window(id) => {
                 let window = windows
@@ -195,12 +195,13 @@ impl Capture for ScreenCaptureKitCapture {
                         kind: "window",
                         id: window_id(id).as_str().to_owned(),
                     })?;
-                (window_filter(&window), format!("window {id}"))
+                (window_filter(&window), format!("window {id}"), None)
             }
         };
         Ok(Box::new(SckStream::start(
             &filter,
             what,
+            display,
             shows_cursor(options.cursor),
         )?))
     }
@@ -412,6 +413,9 @@ struct Shared {
     failure: OnceLock<PlatformError>,
     /// The display or window, for messages.
     what: String,
+    /// The newest frame's size, width in the high 32 bits and height in the low, 0 before
+    /// the first: what [`CaptureStream::pointer`] scales to.
+    size: AtomicU64,
 }
 
 impl Shared {
@@ -535,6 +539,9 @@ impl Ivars {
         else {
             return Ok(None);
         };
+        self.shared
+            .size
+            .store((u64::from(w) << 32) | u64::from(h), Ordering::Relaxed);
         let bytes = locked.bytes(stride, height)?;
         let mut out = self.output(w, h)?;
         out.set_pts(pts);
@@ -597,6 +604,9 @@ struct SckStream {
     /// The serial queue the output's callbacks run on.
     queue: DispatchRetained<DispatchQueue>,
     shared: Arc<Shared>,
+    /// The captured display's ID, for [`CaptureStream::pointer`]; `None` for a window,
+    /// whose place on the screen the stream doesn't follow.
+    display: Option<u32>,
 }
 
 // SAFETY: the stream, its output and its queue are touched after `start` only by `Drop`,
@@ -614,7 +624,12 @@ impl std::fmt::Debug for SckStream {
 }
 
 impl SckStream {
-    fn start(filter: &SCContentFilter, what: String, cursor: bool) -> Result<Self, PlatformError> {
+    fn start(
+        filter: &SCContentFilter,
+        what: String,
+        display: Option<u32>,
+        cursor: bool,
+    ) -> Result<Self, PlatformError> {
         let size = filter_size(filter).ok_or_else(|| PlatformError::DeviceLost {
             what: what.clone(),
             reason: "it has no area to capture".into(),
@@ -626,6 +641,7 @@ impl SckStream {
             skipped: AtomicU64::new(0),
             failure: OnceLock::new(),
             what,
+            size: AtomicU64::new(0),
         });
         let output = Output::new(Arc::clone(&shared));
         let queue = DispatchQueue::new("org.jstream.screencapturekit", None);
@@ -657,6 +673,7 @@ impl SckStream {
             output,
             queue,
             shared,
+            display,
         };
         completed("SCStream startCapture", ANSWER_TIMEOUT, |handler| {
             // SAFETY: the stream is live and configured; it copies the handler and calls
@@ -682,6 +699,25 @@ impl CaptureStream for SckStream {
             frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
             frames_undecodable: 0,
         }
+    }
+
+    /// A display's: the pointer's location from a fresh `CGEvent` and the display's
+    /// bounds, both in global points, scaled to the newest frame's pixels. Neither call
+    /// waits (R-RT-002), and neither needs a permission beyond Screen Recording. `None`
+    /// for a window, whose place on the screen isn't followed yet.
+    fn pointer(&self) -> Option<PointerPosition> {
+        let display = self.display?;
+        let packed = self.shared.size.load(Ordering::Relaxed);
+        let size = FrameSize::new((packed >> 32) as u32, packed as u32).ok()?;
+        let event = CGEvent::new(None)?;
+        let at = CGEvent::location(Some(&event));
+        let bounds = CGDisplayBounds(display);
+        PointerPosition::in_frame(
+            (at.x, at.y),
+            (bounds.origin.x, bounds.origin.y),
+            (bounds.size.width, bounds.size.height),
+            size,
+        )
     }
 }
 

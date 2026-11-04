@@ -15,7 +15,34 @@
 #         every `planned` and `review` item (`docs progress` lists the ones without); a
 #         `hardware` item without it needs its run. Drop it when the item is `done`.
 #         ROADMAP.md#endgame has the order they land in.
+# release: the `[[release]]` an item first ships in. A shipped release (one with a `tag`)
+#         holds only merged items; an item that is merged but not yet tagged belongs to
+#         the next release. Items no release is gathering yet leave it out.
+# gate:   true when the release waits for the item; set only with `release`.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
+
+[[release]]
+id = "alpha.1"
+version = "0.1.0-alpha.1"
+goal = "The first portable Windows build: scenes, sources, mixing, streaming, recording and the virtual camera, driven from the UI or an agent"
+tag = "v0.1.0-alpha.1"
+
+[[release]]
+id = "alpha.2"
+version = "0.1.0-alpha.2"
+goal = "Fixes and UI work on the first build"
+tag = "v0.1.0-alpha.2"
+
+[[release]]
+id = "alpha.3"
+version = "0.1.0-alpha.3"
+goal = "Fixes, compositor blend modes and capture pickers"
+tag = "v0.1.0-alpha.3"
+
+[[release]]
+id = "alpha.4"
+version = "0.1.0-alpha.4"
+goal = "A functional alpha for building layered, animated scenes over MCP on Windows"
 
 [[milestone]]
 id = "M0"
@@ -59,6 +86,7 @@ id = "R1"
 milestone = "M0"
 title = "Workspace, CI checks and the review gate"
 status = "done"
+release = "alpha.1"
 prs = [3, 6, 7, 8]
 
 [[item]]
@@ -66,6 +94,7 @@ id = "R2"
 milestone = "M0"
 title = "Docs checker: check, verify, for, back-references"
 status = "done"
+release = "alpha.1"
 prs = [9, 10, 11, 13, 14, 15]
 
 [[item]]
@@ -73,6 +102,7 @@ id = "R3"
 milestone = "M0"
 title = "lint-deps and governance checks"
 status = "done"
+release = "alpha.1"
 prs = [16, 17]
 
 [[item]]
@@ -80,6 +110,7 @@ id = "R4"
 milestone = "M0"
 title = "Foundation crates: types, media, protocol, control"
 status = "done"
+release = "alpha.1"
 prs = [19, 23, 27]
 
 [[item]]
@@ -87,6 +118,7 @@ id = "S1"
 milestone = "M0"
 title = "Spike S1: GPU interop"
 status = "done"
+release = "alpha.1"
 prs = [18, 52]
 
 [[item]]
@@ -94,6 +126,7 @@ id = "S2"
 milestone = "M0"
 title = "Spike S2: virtual camera"
 status = "done"
+release = "alpha.1"
 prs = [25, 52]
 
 [[item]]
@@ -101,6 +134,7 @@ id = "S3"
 milestone = "M0"
 title = "Spike S3: clock and drift"
 status = "done"
+release = "alpha.1"
 prs = [24, 53]
 
 [[item]]
@@ -108,6 +142,7 @@ id = "C7"
 milestone = "M0"
 title = "Spike S4: CEF browser source"
 status = "done"
+release = "alpha.1"
 prs = [178, 190]
 
 [[item]]
@@ -115,6 +150,7 @@ id = "I3"
 milestone = "M0"
 title = "docs log and docs review"
 status = "done"
+release = "alpha.1"
 prs = [145]
 
 [[item]]
@@ -122,6 +158,7 @@ id = "H7"
 milestone = "M0"
 title = "Docs stamp conflicts (merge-main, ADR-0042)"
 status = "done"
+release = "alpha.1"
 prs = [181, 182, 187]
 
 [[item]]
@@ -129,6 +166,7 @@ id = "H6"
 milestone = "M0"
 title = "Doc follow-ups (#102)"
 status = "done"
+release = "alpha.1"
 prs = [230]
 
 # M1a
@@ -138,6 +176,7 @@ id = "L1"
 milestone = "M1a"
 title = "Capture, compositor, MF encode, FLV and RTMPS pipeline"
 status = "done"
+release = "alpha.1"
 prs = [58, 61, 66, 68, 111, 118]
 
 [[item]]
@@ -145,6 +184,7 @@ id = "L2"
 milestone = "M1a"
 title = "Engine, daemon, CLI and MCP first cut"
 status = "done"
+release = "alpha.1"
 prs = [33, 35, 47, 65, 70]
 
 [[item]]
@@ -152,6 +192,7 @@ id = "L3"
 milestone = "M1a"
 title = "video.snapshot and stats.tick"
 status = "done"
+release = "alpha.1"
 prs = [113, 121]
 
 [[item]]
@@ -159,6 +200,7 @@ id = "I1"
 milestone = "M1a"
 title = "MCP over HTTP"
 status = "done"
+release = "alpha.1"
 prs = [153]
 
 [[item]]
@@ -166,6 +208,7 @@ id = "A1"
 milestone = "M1a"
 title = "Outputs in the collection"
 status = "done"
+release = "alpha.1"
 prs = [142]
 
 [[item]]
@@ -173,6 +216,7 @@ id = "A2a"
 milestone = "M1a"
 title = "Credential store (Windows)"
 status = "done"
+release = "alpha.1"
 prs = [141]
 
 [[item]]
@@ -180,6 +224,7 @@ id = "A2b"
 milestone = "M1a"
 title = "Stream key actions"
 status = "done"
+release = "alpha.1"
 prs = [142]
 
 [[item]]
@@ -187,6 +232,7 @@ id = "A5"
 milestone = "M1a"
 title = "Outputs in CLI and mock"
 status = "done"
+release = "alpha.1"
 prs = [166]
 
 [[item]]
@@ -194,6 +240,7 @@ id = "A3"
 milestone = "M1a"
 title = "Daemon goes live on Windows"
 status = "done"
+release = "alpha.1"
 prs = [226]
 note = "the maintainer waived the Windows 11 Pro N run: there is no N-edition VM, and #333 stays open to keep the gap on record"
 
@@ -202,6 +249,7 @@ id = "A6"
 milestone = "M1a"
 title = "Daemon --collection and audit log"
 status = "done"
+release = "alpha.1"
 prs = [232]
 
 [[item]]
@@ -209,6 +257,7 @@ id = "A4"
 milestone = "M1a"
 title = "Go-live runbook and smoke"
 status = "hardware"
+release = "alpha.1"
 prs = [234]
 note = "the go-live smoke and graceful stop (item 11 of the Windows hardware pass); its live YouTube steps are #337"
 
@@ -217,6 +266,7 @@ id = "E3a"
 milestone = "M1a"
 title = "GPU capture frames"
 status = "done"
+release = "alpha.1"
 prs = [173]
 
 [[item]]
@@ -224,6 +274,7 @@ id = "E3b"
 milestone = "M1a"
 title = "Render takes GPU frames"
 status = "done"
+release = "alpha.1"
 prs = [219]
 
 [[item]]
@@ -231,6 +282,7 @@ id = "Y1"
 milestone = "M1a"
 title = "jstream-youtube crate"
 status = "done"
+release = "alpha.1"
 prs = [167]
 
 [[item]]
@@ -238,6 +290,7 @@ id = "Y2"
 milestone = "M1a"
 title = "OAuth token store"
 status = "done"
+release = "alpha.1"
 prs = [169]
 
 [[item]]
@@ -245,6 +298,7 @@ id = "YA"
 milestone = "M1a"
 title = "ADR-0041 one sign-in"
 status = "done"
+release = "alpha.1"
 prs = [214]
 
 [[item]]
@@ -252,6 +306,7 @@ id = "Y3"
 milestone = "M1a"
 title = "YouTube in the engine"
 status = "done"
+release = "alpha.1"
 prs = [223]
 
 [[item]]
@@ -259,6 +314,7 @@ id = "A6b"
 milestone = "M1a"
 title = "Daemon YouTube wiring"
 status = "hardware"
+release = "alpha.1"
 prs = [312]
 note = "#312 landed with wave/m1-2 (#545); sign-in needs the OAuth client (ADR-0058); Windows run #337"
 needs = ["maintainer", "hardware"]
@@ -270,6 +326,7 @@ id = "B4"
 milestone = "M1b"
 title = "Kind descriptors and settings"
 status = "done"
+release = "alpha.1"
 prs = [155]
 
 [[item]]
@@ -277,6 +334,7 @@ id = "B3"
 milestone = "M1b"
 title = "Canvas and item geometry"
 status = "done"
+release = "alpha.1"
 prs = [183]
 
 [[item]]
@@ -284,6 +342,7 @@ id = "B8"
 milestone = "M1b"
 title = "Audit log"
 status = "done"
+release = "alpha.1"
 prs = [171]
 
 [[item]]
@@ -291,6 +350,7 @@ id = "B2"
 milestone = "M1b"
 title = "Per-client undo and redo"
 status = "done"
+release = "alpha.1"
 prs = [176, 198, 203, 239]
 
 [[item]]
@@ -298,6 +358,7 @@ id = "B5"
 milestone = "M1b"
 title = "References and clones"
 status = "done"
+release = "alpha.1"
 prs = [196]
 
 [[item]]
@@ -305,6 +366,7 @@ id = "B9"
 milestone = "M1b"
 title = "delete.plan and blockers"
 status = "done"
+release = "alpha.1"
 prs = [197]
 
 [[item]]
@@ -312,6 +374,7 @@ id = "B1"
 milestone = "M1b"
 title = "Collection persistence"
 status = "done"
+release = "alpha.1"
 prs = [205]
 
 [[item]]
@@ -319,6 +382,7 @@ id = "B6"
 milestone = "M1b"
 title = "Groups and item.move"
 status = "done"
+release = "alpha.1"
 prs = [184]
 
 [[item]]
@@ -326,6 +390,7 @@ id = "B10"
 milestone = "M1b"
 title = "Program scene switching"
 status = "done"
+release = "alpha.1"
 prs = [201]
 
 [[item]]
@@ -333,6 +398,7 @@ id = "B6-f"
 milestone = "M1b"
 title = "Groups in mock and CLI"
 status = "done"
+release = "alpha.1"
 prs = [210]
 
 [[item]]
@@ -340,6 +406,7 @@ id = "B6-r"
 milestone = "M1b"
 title = "scene.create role"
 status = "done"
+release = "alpha.1"
 prs = [211]
 
 [[item]]
@@ -347,6 +414,7 @@ id = "B7"
 milestone = "M1b"
 title = "Opacity, blend, filters"
 status = "done"
+release = "alpha.1"
 prs = [252]
 
 [[item]]
@@ -354,6 +422,7 @@ id = "C6"
 milestone = "M1b"
 title = "Nested scene rendering"
 status = "done"
+release = "alpha.1"
 prs = [147]
 
 [[item]]
@@ -361,6 +430,7 @@ id = "C4a"
 milestone = "M1b"
 title = "Video device trait"
 status = "done"
+release = "alpha.1"
 prs = [158]
 
 [[item]]
@@ -368,6 +438,7 @@ id = "C4b"
 milestone = "M1b"
 title = "Media Foundation webcam backend"
 status = "done"
+release = "alpha.1"
 prs = [177, 225, 227]
 
 [[item]]
@@ -375,6 +446,7 @@ id = "C4c"
 milestone = "M1b"
 title = "Webcam source (CPU path, MJPEG on Windows, paired audio)"
 status = "hardware"
+release = "alpha.1"
 prs = [654, 658, 726]
 note = "landed with wave/m1-3 (#754); a Windows run with a webcam and its paired microphone is still pending (#673 covers the MJPEG webcam)"
 
@@ -383,6 +455,7 @@ id = "C1a"
 milestone = "M1b"
 title = "Sources crate: color, image"
 status = "done"
+release = "alpha.1"
 prs = [179, 217]
 
 [[item]]
@@ -390,6 +463,7 @@ id = "C1b"
 milestone = "M1b"
 title = "Sources render live"
 status = "done"
+release = "alpha.1"
 prs = [222]
 
 [[item]]
@@ -397,6 +471,7 @@ id = "C2"
 milestone = "M1b"
 title = "Text source"
 status = "done"
+release = "alpha.1"
 prs = [221]
 
 [[item]]
@@ -404,6 +479,7 @@ id = "C5"
 milestone = "M1b"
 title = "Audio sources"
 status = "hardware"
+release = "alpha.1"
 prs = [238]
 note = "the WASAPI device tests on real devices (#778, item 18 of the Windows hardware pass)"
 
@@ -412,6 +488,7 @@ id = "C3"
 milestone = "M1b"
 title = "Display and window capture sources"
 status = "done"
+release = "alpha.1"
 prs = [365]
 note = "#365 landed with wave/m1-2 (#545); its Windows run passed (#378)"
 
@@ -420,6 +497,7 @@ id = "C8"
 milestone = "M1b"
 title = "Browser source (CEF)"
 status = "hardware"
+release = "alpha.1"
 prs = [283, 289, 298, 326]
 note = "the Windows runs #335 (steps 1 to 4) and #336 passed; #341 passed except its refused-request count (2, not 1), so page_check needs to name the refused URLs, then a rerun; Ctrl-C with CEF running skips the graceful stop (#436), a fix to build, then #335's step 5 runs again"
 needs = ["build", "hardware"]
@@ -429,6 +507,7 @@ id = "D1"
 milestone = "M1b"
 title = "Live mixer inputs"
 status = "done"
+release = "alpha.1"
 prs = [149, 199]
 
 [[item]]
@@ -436,6 +515,7 @@ id = "D3"
 milestone = "M1b"
 title = "Loudness meters"
 status = "done"
+release = "alpha.1"
 prs = [152]
 
 [[item]]
@@ -443,6 +523,7 @@ id = "D7a"
 milestone = "M1b"
 title = "Filter kernels"
 status = "done"
+release = "alpha.1"
 prs = [159]
 
 [[item]]
@@ -450,6 +531,7 @@ id = "D2"
 milestone = "M1b"
 title = "Buses and send matrix"
 status = "done"
+release = "alpha.1"
 prs = [192]
 
 [[item]]
@@ -457,6 +539,7 @@ id = "D4"
 milestone = "M1b"
 title = "No-allocation test"
 status = "done"
+release = "alpha.1"
 prs = [191]
 
 [[item]]
@@ -464,6 +547,7 @@ id = "D7b"
 milestone = "M1b"
 title = "Filter chains in the mixer"
 status = "done"
+release = "alpha.1"
 prs = [231]
 
 [[item]]
@@ -471,6 +555,7 @@ id = "V0"
 milestone = "M1b"
 title = "Video filter chain runtime"
 status = "done"
+release = "alpha.4"
 prs = [595, 607, 626, 712, 717, 718, 730, 971]
 note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; effect-pack kinds are drawn, with the packs folder watched by the engine (#971). No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
 needs = ["build"]
@@ -480,6 +565,7 @@ id = "D5"
 milestone = "M1b"
 title = "Audio in the protocol"
 status = "done"
+release = "alpha.1"
 prs = [240]
 
 [[item]]
@@ -487,6 +573,7 @@ id = "D6"
 milestone = "M1b"
 title = "when_shown activity gain"
 status = "done"
+release = "alpha.1"
 prs = [299]
 
 [[item]]
@@ -494,6 +581,7 @@ id = "E1"
 milestone = "M1b"
 title = "Render snapshots, GPU lifetime"
 status = "done"
+release = "alpha.1"
 prs = [172, 215]
 
 [[item]]
@@ -501,6 +589,7 @@ id = "F1"
 milestone = "M1b"
 title = "fMP4 muxer"
 status = "done"
+release = "alpha.1"
 prs = [151]
 
 [[item]]
@@ -508,6 +597,7 @@ id = "F2a"
 milestone = "M1b"
 title = "Recording file sink"
 status = "done"
+release = "alpha.1"
 prs = [156]
 
 [[item]]
@@ -515,6 +605,7 @@ id = "F2b"
 milestone = "M1b"
 title = "Record output kind"
 status = "done"
+release = "alpha.1"
 prs = [170]
 
 [[item]]
@@ -522,6 +613,7 @@ id = "F3"
 milestone = "M1b"
 title = "Encoder profiles and sharing"
 status = "done"
+release = "alpha.1"
 prs = [208]
 
 [[item]]
@@ -529,6 +621,7 @@ id = "I2"
 milestone = "M1b"
 title = "Live values"
 status = "done"
+release = "alpha.1"
 prs = [244]
 
 [[item]]
@@ -536,6 +629,7 @@ id = "V4"
 milestone = "M1b"
 title = "Scene filter chains and item effects"
 status = "done"
+release = "alpha.4"
 prs = [802, 813, 815, 823, 824, 897, 921, 944, 968]
 note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968)"
 
@@ -544,6 +638,7 @@ id = "D9"
 milestone = "M1b"
 title = "Audio monitoring: a bus's monitor device and tap point"
 status = "hardware"
+release = "alpha.1"
 prs = [801, 816, 822]
 note = "ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream"
 needs = ["hardware"]
@@ -555,6 +650,7 @@ id = "G1"
 milestone = "M1c"
 title = "vcam protocol crate"
 status = "done"
+release = "alpha.1"
 prs = [144]
 
 [[item]]
@@ -562,6 +658,7 @@ id = "G2"
 milestone = "M1c"
 title = "vcam media source DLL"
 status = "hardware"
+release = "alpha.1"
 prs = [174, 195, 200, 229]
 note = "the pacing rerun (#777, with item 6 of the Windows hardware pass)"
 
@@ -570,6 +667,7 @@ id = "G3a"
 milestone = "M1c"
 title = "vcam producer (engine side)"
 status = "done"
+release = "alpha.1"
 prs = [194]
 
 [[item]]
@@ -577,6 +675,7 @@ id = "G3b"
 milestone = "M1c"
 title = "VirtualCam output kind"
 status = "done"
+release = "alpha.1"
 prs = [213, 297]
 
 [[item]]
@@ -584,6 +683,7 @@ id = "G3c"
 milestone = "M1c"
 title = "--register-vcam"
 status = "hardware"
+release = "alpha.1"
 prs = [235, 565]
 note = "Windows run (#563)"
 
@@ -592,6 +692,7 @@ id = "G3d"
 milestone = "M1c"
 title = "Virtual camera in the UI and the desktop app"
 status = "done"
+release = "alpha.1"
 prs = [316]
 note = "its Windows run passed (#390)"
 
@@ -600,6 +701,7 @@ id = "P1"
 milestone = "M1c"
 title = "Portable Windows zip"
 status = "done"
+release = "alpha.1"
 prs = [271]
 
 # M1d
@@ -609,6 +711,7 @@ id = "H0"
 milestone = "M1d"
 title = "RTMP reconnect, rotating logs and crash reports"
 status = "done"
+release = "alpha.1"
 prs = [126, 127, 131]
 
 [[item]]
@@ -616,6 +719,7 @@ id = "H1"
 milestone = "M1d"
 title = "N-edition detection"
 status = "done"
+release = "alpha.1"
 prs = [148]
 
 [[item]]
@@ -623,6 +727,7 @@ id = "H2"
 milestone = "M1d"
 title = "Deny duplicate crate versions"
 status = "done"
+release = "alpha.1"
 prs = [157]
 
 [[item]]
@@ -630,6 +735,7 @@ id = "H3"
 milestone = "M1d"
 title = "Weekly sweep job"
 status = "done"
+release = "alpha.1"
 prs = [160, 165]
 
 [[item]]
@@ -637,6 +743,7 @@ id = "H4"
 milestone = "M1d"
 title = "Flaky shutdown tests"
 status = "done"
+release = "alpha.1"
 prs = [150]
 
 [[item]]
@@ -644,6 +751,7 @@ id = "H5"
 milestone = "M1d"
 title = "Server hardening"
 status = "done"
+release = "alpha.1"
 prs = [140]
 
 [[item]]
@@ -651,6 +759,7 @@ id = "F4"
 milestone = "M1d"
 title = "Keyframe on demand"
 status = "done"
+release = "alpha.1"
 prs = [146]
 
 [[item]]
@@ -658,6 +767,7 @@ id = "Q1"
 milestone = "M1d"
 title = "Fuzz and property tests"
 status = "done"
+release = "alpha.1"
 prs = [277]
 
 [[item]]
@@ -665,6 +775,7 @@ id = "Q2"
 milestone = "M1d"
 title = "Headless end-to-end test"
 status = "done"
+release = "alpha.1"
 prs = [269]
 
 [[item]]
@@ -672,6 +783,7 @@ id = "H8"
 milestone = "M1d"
 title = "Hardware acceleration by default, with GPU fallback and device-loss recovery"
 status = "hardware"
+release = "alpha.1"
 prs = [437, 568, 569, 580, 604, 708, 829]
 note = "#437 on main; the encoder's software fallback (#568), the mid-run GPU capture fallback (#569, #580), device-loss recovery (#604) and sessions after a fallback (#708) landed with wave/m1-3 (#754); landed with wave/m1-5 (#877): a full hardware session limit failing output.start with hardware_session_limit instead of falling back (#829, #443 case 2, protocol 0.44); Windows runs: the mid-run fallback (#576) and a forced TDR (#620); #734's webcam restart fixed by #796 in the same landing; open follow-up #443 (#667 fixed by #672 and #694)"
 needs = ["hardware"]
@@ -692,6 +804,7 @@ id = "U0"
 milestone = "M2"
 title = "Leptos UI skeleton"
 status = "done"
+release = "alpha.1"
 prs = [250]
 
 [[item]]
@@ -699,6 +812,7 @@ id = "U2a"
 milestone = "M2"
 title = "ADR-0044 pairing"
 status = "done"
+release = "alpha.1"
 prs = [248]
 
 [[item]]
@@ -706,6 +820,7 @@ id = "U2"
 milestone = "M2"
 title = "Serve the UI"
 status = "done"
+release = "alpha.1"
 prs = [246, 247]
 
 [[item]]
@@ -713,6 +828,7 @@ id = "U2b"
 milestone = "M2"
 title = "Device pairing"
 status = "done"
+release = "alpha.1"
 prs = [265, 288]
 
 [[item]]
@@ -720,6 +836,7 @@ id = "U3a"
 milestone = "M2"
 title = "Scenes, sources, properties"
 status = "done"
+release = "alpha.1"
 prs = [256]
 
 [[item]]
@@ -727,6 +844,7 @@ id = "U3b"
 milestone = "M2"
 title = "Outputs and go-live panel"
 status = "done"
+release = "alpha.1"
 prs = [254]
 
 [[item]]
@@ -734,6 +852,7 @@ id = "U3c"
 milestone = "M2"
 title = "Mixer panel"
 status = "done"
+release = "alpha.1"
 prs = [308]
 
 [[item]]
@@ -741,6 +860,7 @@ id = "U4"
 milestone = "M2"
 title = "Canvas editing"
 status = "done"
+release = "alpha.1"
 prs = [255, 302]
 
 [[item]]
@@ -748,6 +868,7 @@ id = "U4p"
 milestone = "M2"
 title = "Live preview on canvas"
 status = "hardware"
+release = "alpha.1"
 prs = [302]
 note = "the canvas's H.264 preview path on Windows (#380)"
 
@@ -756,6 +877,7 @@ id = "U1"
 milestone = "M2"
 title = "Preview stream"
 status = "done"
+release = "alpha.1"
 prs = [251]
 
 [[item]]
@@ -763,6 +885,7 @@ id = "U5"
 milestone = "M2"
 title = "Tauri desktop app"
 status = "done"
+release = "alpha.1"
 prs = [258]
 
 [[item]]
@@ -770,6 +893,7 @@ id = "Q3"
 milestone = "M2"
 title = "UI end-to-end tests"
 status = "done"
+release = "alpha.1"
 prs = [309]
 
 [[item]]
@@ -777,6 +901,7 @@ id = "Q4"
 milestone = "M2"
 title = "Performance benchmarks"
 status = "done"
+release = "alpha.1"
 prs = [361]
 
 [[item]]
@@ -784,6 +909,7 @@ id = "Q5"
 milestone = "M2"
 title = "Threat model"
 status = "done"
+release = "alpha.1"
 prs = [358]
 
 [[item]]
@@ -791,6 +917,7 @@ id = "T1"
 milestone = "M2"
 title = "Studio mode and transitions"
 status = "hardware"
+release = "alpha.1"
 prs = [260]
 note = "#260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029)"
 
@@ -799,6 +926,7 @@ id = "T1u"
 milestone = "M2"
 title = "Studio-mode UI"
 status = "done"
+release = "alpha.1"
 prs = [304]
 note = "#304 landed with wave/m1-3 (#754)"
 
@@ -807,6 +935,7 @@ id = "E2"
 milestone = "M2"
 title = "Video mixes"
 status = "done"
+release = "alpha.1"
 prs = [259]
 
 [[item]]
@@ -814,6 +943,7 @@ id = "E2b"
 milestone = "M2"
 title = "Privacy screen and encoder sharing key"
 status = "done"
+release = "alpha.2"
 prs = [317, 804, 894]
 note = "the encoder owner key and cost reporting (#317) landed with wave/m1-3 (#754); the privacy screen (#317, #804) was removed at the maintainer's request, ADR-0080 (#894)"
 
@@ -822,6 +952,7 @@ id = "D8"
 milestone = "M2"
 title = "Master and output audio chains"
 status = "done"
+release = "alpha.1"
 prs = [249, 303]
 
 [[item]]
@@ -829,6 +960,7 @@ id = "D8p"
 milestone = "M2"
 title = "Audio chain protocol fields"
 status = "done"
+release = "alpha.1"
 prs = [303]
 
 [[item]]
@@ -836,6 +968,7 @@ id = "C9"
 milestone = "M2"
 title = "Media file source"
 status = "hardware"
+release = "alpha.1"
 prs = [245, 322, 875]
 note = "the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass"
 needs = ["hardware"]
@@ -845,6 +978,7 @@ id = "W1"
 milestone = "M2"
 title = "Audio waveform and spectrum sources"
 status = "done"
+release = "alpha.1"
 prs = [315, 460, 463, 466]
 
 [[item]]
@@ -852,6 +986,7 @@ id = "B11"
 milestone = "M2"
 title = "Folders and labels"
 status = "done"
+release = "alpha.1"
 prs = [323]
 note = "#323 landed with wave/m1-3 (#754)"
 
@@ -860,6 +995,7 @@ id = "K1"
 milestone = "M2"
 title = "Keyframe scenes, folders, organisation metadata and hotkeys"
 status = "done"
+release = "alpha.4"
 prs = [319, 720, 941, 947, 970, 985]
 note = "hotkeys #319 landed with wave/m1-2 (#545); organisation metadata #323 landed with wave/m1-3 (#754); keyframe scenes part 1, in the protocol, graph and engine (#720, protocol 0.39), landed with wave/m1-4 (#810); live values on a keyframe scene (protocol 0.53, #941) and overrides of a group's children (protocol 0.55, #947) and a Move of an unflattened group's children inside its layer (#948) are built; then the UI (#846, #970): the canvas's live values on a keyframe, and a group's children overridden from their rows and the Inspector; keyframe overrides of an item's effects (ADR-0088, protocol 0.63, #985), in the protocol, graph, engine and the Filters panel"
 
@@ -868,6 +1004,7 @@ id = "K2"
 milestone = "M2"
 title = "Keyframe scenes: model and evaluator"
 status = "done"
+release = "alpha.1"
 prs = [350]
 
 [[item]]
@@ -884,6 +1021,7 @@ id = "B12"
 milestone = "M2"
 title = "Source sizes as runtime state (source.sizes)"
 status = "done"
+release = "alpha.1"
 prs = [806, 826]
 note = "ADR-0022 decision 4: the source.sizes query and source.size_changed event with the engine's sizes of stored frames and live sources (#806, protocol 0.40) and capture sources' sizes from the render thread (#826, #805) landed with wave/m1-5 (#877); it unblocks crop by dragging (CV-08), size in % (IN-03) and native-size placement"
 
@@ -892,6 +1030,7 @@ id = "C2b"
 milestone = "M2"
 title = "Crisp text at any item scale"
 status = "done"
+release = "alpha.1"
 prs = [781]
 note = "#749: ADR-0073 (agent tier, accepted) draws a source at the density its most enlarged item needs, and the text kind draws at it; built in #781, landed with wave/m1-4 (#810)"
 
@@ -902,6 +1041,7 @@ id = "F5"
 milestone = "M3"
 title = "Enhanced RTMP (HEVC/AV1)"
 status = "done"
+release = "alpha.1"
 prs = [163]
 
 [[item]]
@@ -909,6 +1049,7 @@ id = "E3c"
 milestone = "M3"
 title = "Encode from GPU frames"
 status = "done"
+release = "alpha.1"
 prs = [325]
 
 [[item]]
@@ -916,6 +1057,7 @@ id = "E3d"
 milestone = "M3"
 title = "Composite to NV12 on the GPU"
 status = "done"
+release = "alpha.1"
 prs = [280]
 
 [[item]]
@@ -923,6 +1065,7 @@ id = "F6"
 milestone = "M3"
 title = "HEVC and AV1 encode"
 status = "done"
+release = "alpha.1"
 prs = [364]
 note = "#364 landed with wave/m1-2 (#545); its Windows run passed (#366); choosing HEVC or AV1 from a client is F6b"
 
@@ -931,6 +1074,7 @@ id = "X1"
 milestone = "M3"
 title = "Full 3D transforms and WGSL effect packs"
 status = "done"
+release = "alpha.1"
 prs = [359, 368, 611, 622, 624, 643, 687, 629]
 note = "effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), the mip chains built from the crop and rebuilt once per change (#687), and part 3, accepting 3D at protocol 0.34 (#629), landed with wave/m3-3 (#786)"
 
@@ -939,6 +1083,7 @@ id = "3D1"
 milestone = "M3"
 title = "3D transforms: rendering ADR and spike"
 status = "done"
+release = "alpha.1"
 prs = [360]
 
 [[item]]
@@ -946,8 +1091,9 @@ id = "3D2"
 milestone = "M3"
 title = "3D scenes with a camera"
 status = "done"
-prs = [1038, 1044, 1053, 1110]
-note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110)"
+release = "alpha.4"
+prs = [1038, 1044, 1053, 1110, 1122]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110); depth of field, a focus distance and blur on the camera (ADR-0108, protocol 0.77, #1122)"
 
 [[item]]
 id = "3D3"
@@ -990,8 +1136,8 @@ id = "MAC1"
 milestone = "M3"
 title = "macOS platform crate"
 status = "planned"
-prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093]
-note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); the rest of the crate to build"
+prs = [511, 513, 533, 543, 554, 566, 570, 583, 586, 589, 599, 608, 618, 625, 639, 646, 1093, 1135]
+note = "ADR-0063 accepted (#511); crate part 1 (#513); VideoToolbox H.264/HEVC encoder, part 2 (#533); AudioToolbox AAC-LC encoder, part 3 (#543); ScreenCaptureKit display and window capture with the Screen Recording permission check, part 4 (#554); Keychain store for stream keys and OAuth tokens, part 5 (#566); Core Audio devices and input recording, part 6 (#570); Microphone permission check and the daemon's embedded Info.plist, part 7 (#583); Core Audio output playback, part 8 (#586); all landed with wave/m3-2 (#663); with wave/m3-3 (#786): the list of processes Core Audio knows, part 9 (#589); desktop and application audio through Core Audio process taps, part 10 (#599); AVFoundation webcams behind the Camera permission, part 11 (#608); VideoToolbox H.264/HEVC decoder on CPU frames (#618); media files through AVFoundation's asset reader (#625); the daemon live on macOS (#639); spike S6, IOSurface and Metal interop and its synchronisation, for ADR-0063 decision 8 (#646, its Mac run in #648); a one-command install that builds JStream on a tester's Mac and runs it from Terminal (#1093); per-thread CPU for the performance profile (#1135); the rest of the crate to build"
 needs = ["build"]
 
 [[item]]
@@ -999,8 +1145,8 @@ id = "LNX1"
 milestone = "M3"
 title = "Linux codec path and platform crate"
 status = "planned"
-prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830, 835, 682, 1016]
-note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); the engine's capture per source, which starts each source with its own restore token, forgets it when the source is deleted and honours `show_cursor` (#682, protocol 0.36); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); with wave/m3-5 (#854): VA-API HEVC encode (#830) and its hardening (#835), still to run on Intel or AMD hardware; the daemon goes live on the Linux backends, with stream keys in LinuxSecrets and OpenH264 taking the compositor's RGBA frames (#1016); the rest of the codec path to build"
+prs = [481, 490, 509, 510, 572, 598, 606, 652, 593, 612, 603, 617, 610, 685, 689, 634, 694, 830, 835, 682, 1016, 1103]
+note = "ADR-0060 accepted (#481); crate part 1 (#490); portal and PipeWire screen capture (#509); VA-API H.264 encode (#510); these landed with wave/m3-2 (#663); with wave/m3-3 (#786): ALSA audio input and output (#572); portal restore tokens per source (#598); DMA-BUF capture frames imported into Vulkan (#606); VA-API H.264 encode from the Vulkan device's NV12 encode targets (#652); PipeWire audio input, output and loopback (#593); the engine's capture per source, which starts each source with its own restore token, forgets it when the source is deleted and honours `show_cursor` (#682, protocol 0.36); with wave/m3-4 (#827): PipeWire processing on the real-time data loop (#612); V4L2 webcams and capture cards (#603); multi-planar V4L2 capture (#617); the pointer as PipeWire cursor metadata or left out, platform only (#610), on the CPU and DMA-BUF paths; the source's show_cursor setting (protocol 0.36, #682) has the OS draw the pointer when it's on and leave it out when it's off (WGC leaves it out too, with #682, and ScreenCaptureKit with #685), and the engine doesn't draw the pointer; webcams paired with their microphones and the Linux backend set choosing PipeWire or ALSA (#689); stream keys and OAuth tokens in the Secret Service, else a 0600 file, ADR-0071, not yet used by an app (#634); capture copies and NV12 submits ordered on the context's queue (#694); with wave/m3-5 (#854): VA-API HEVC encode (#830) and its hardening (#835), still to run on Intel or AMD hardware; the daemon goes live on the Linux backends, with stream keys in LinuxSecrets and OpenH264 taking the compositor's RGBA frames (#1016); a one-command install that builds JStream on a tester's Linux machine, with browser sources and an app-menu entry (#1103); the rest of the codec path to build"
 needs = ["build", "hardware"]
 
 [[item]]
@@ -1044,6 +1190,7 @@ id = "CL2"
 milestone = "M3"
 title = "A too_large error for oversized plugin state"
 status = "done"
+release = "alpha.4"
 prs = [794, 981]
 note = "ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly"
 
@@ -1052,5 +1199,230 @@ id = "X2"
 milestone = "M3"
 title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
 status = "hardware"
+release = "alpha.4"
+gate = true
 prs = [1034, 1048, 1050, 1052, 1064, 1085]
 note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
+
+[[item]]
+id = "AG1"
+milestone = "M3"
+title = "MCP prompts only for what undo can't take back (destructiveHint)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1055]
+
+[[item]]
+id = "AG2"
+milestone = "M3"
+title = "Agents reach the desktop app: jstream.exe --mcp with a token file, and Connect an agent docs"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1091]
+
+[[item]]
+id = "AG3"
+milestone = "M3"
+title = "Layering and reflection guidance for agents in MCP"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1079]
+
+[[item]]
+id = "TM1"
+milestone = "M3"
+title = "Timer source that keeps counting through edits, with a restart counter"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1039,  1117]
+
+[[item]]
+id = "BR1"
+milestone = "M3"
+title = "A reloading browser page stays transparent until its new document paints"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1095]
+
+[[item]]
+id = "MO1"
+milestone = "M3"
+title = "Native motion: ADR-0099's model and keyframe tracks"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1074]
+
+[[item]]
+id = "MO2"
+milestone = "M3"
+title = "Native motion: continuous wiggle, oscillate and drift on items, drawn each frame (item.set_motion)"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1125]
+note = "Passed review (protocol 0.81); waits its turn in the protocol queue"
+needs = ["build"]
+
+[[item]]
+id = "MO3"
+milestone = "M3"
+title = "A one-shot shake that a hotkey fires and that decays"
+status = "planned"
+release = "alpha.4"
+gate = true
+prs = []
+note = "Built on MO2's motion and HK1's hotkeys; pushes after both merge"
+needs = ["build"]
+
+[[item]]
+id = "MO4"
+milestone = "M3"
+title = "Audio-reactive bindings: ADR-0100 and its model"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1076]
+
+[[item]]
+id = "MO5"
+milestone = "M3"
+title = "Audio-reactive motion modifiers drawn from the render loop"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1149]
+note = "A draft stacked on MO2"
+needs = ["build"]
+
+[[item]]
+id = "HK1"
+milestone = "M3"
+title = "Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101)"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1082]
+note = "Passed review (protocol 0.80); waits its turn in the protocol queue"
+needs = ["build"]
+
+[[item]]
+id = "FS1"
+milestone = "M3"
+title = "Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch)"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1080]
+note = "Protocol 0.82; back in review after its protocol renumber"
+needs = ["build"]
+
+[[item]]
+id = "PA1"
+milestone = "M3"
+title = "Page API part 1: ADR-0102 and shared values (values.set, values.list)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1077,  1127]
+
+[[item]]
+id = "PA2"
+milestone = "M3"
+title = "Page API part 2: window.jstream with clock, visibility, scenes and values"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1146]
+needs = ["build"]
+
+[[item]]
+id = "PF1"
+milestone = "M3"
+title = "Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1087]
+
+[[item]]
+id = "PS1"
+milestone = "M3"
+title = "A hidden browser page rests while no mix draws it"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1100]
+
+[[item]]
+id = "PS2"
+milestone = "M3"
+title = "Software compositing: a nested scene drawn once a frame, and blur taps bounded lower"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1106]
+
+[[item]]
+id = "CB1"
+milestone = "M3"
+title = "Blend in sRGB-encoded space, so HTML overlays match a browser (normal_srgb, additive_srgb)"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1109]
+
+[[item]]
+id = "CB2"
+milestone = "M3"
+title = "Item effects after placement, over the canvas"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1111]
+
+[[item]]
+id = "CB3"
+milestone = "M3"
+title = "Opacity above 1 as a gain, so additive items can add more than their source"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1104]
+note = "Protocol 0.83; back in review after its renumber"
+needs = ["build"]
+
+[[item]]
+id = "CH1"
+milestone = "M3"
+title = "File filters such as Apply LUT on the program and output chains"
+status = "done"
+release = "alpha.4"
+gate = true
+prs = [1134]
+
+[[item]]
+id = "LB1"
+milestone = "M3"
+title = "A local web browser source's first load passes on Linux"
+status = "review"
+release = "alpha.4"
+gate = true
+prs = [1094]
+needs = ["build"]
+
+[[item]]
+id = "RL4"
+milestone = "M3"
+title = "Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows"
+status = "planned"
+release = "alpha.4"
+gate = true
+prs = []
+note = "Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile"
+needs = ["build",  "hardware"]

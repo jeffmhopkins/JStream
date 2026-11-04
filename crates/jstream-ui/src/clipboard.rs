@@ -380,6 +380,12 @@ fn place_edits(
                 locked: true,
             });
         }
+        if !item.effects_space.is_box() {
+            edits.push(Edit::ItemSetEffectsSpace {
+                item_id: item_id.clone(),
+                space: item.effects_space,
+            });
+        }
         let owner = FilterOwner::Item {
             item_id: item_id.clone(),
         };
@@ -553,6 +559,7 @@ mod tests {
             blend: Default::default(),
             transition: Default::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         }
     }
 
@@ -609,6 +616,7 @@ mod tests {
         };
         a.visible = false;
         a.locked = true;
+        a.effects_space = jstream_protocol::EffectsSpace::Canvas;
         a.opacity = Finite32::new(0.5).expect("finite");
         a.effects = vec![blur()];
         let mut kf = scene("kf", Vec::new());
@@ -783,6 +791,10 @@ mod tests {
                     item_id: "item1".into(),
                     locked: true,
                 },
+                Edit::ItemSetEffectsSpace {
+                    item_id: "item1".into(),
+                    space: jstream_protocol::EffectsSpace::Canvas,
+                },
                 Edit::FilterAdd {
                     owner: FilterOwner::Item {
                         item_id: "item1".into(),
@@ -880,6 +892,7 @@ mod tests {
                 Edit::ItemSetCrop { .. } => "crop",
                 Edit::ItemSetVisible { .. } => "hidden",
                 Edit::ItemSetLocked { locked: true, .. } => "locked",
+                Edit::ItemSetEffectsSpace { .. } => "canvas space",
                 Edit::FilterAdd { .. } => "effect",
                 other => panic!("{other:?}"),
             })
@@ -898,6 +911,7 @@ mod tests {
                 "crop",
                 "hidden",
                 "locked",
+                "canvas space",
                 "effect",
                 "item"
             ]

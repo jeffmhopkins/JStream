@@ -29,7 +29,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `keeps_time(old, new)` says whether a source built from `new` in place of one running
   with `old` keeps the old one's time zero, so its `at` runs on instead of starting from
   zero; the engine asks before it builds a source again for a settings change. The
-  default is `false`; the `timer` kind keeps it unless `mode` or `duration` changed.
+  default is `false`; the `timer` kind keeps it unless `mode`, `duration` or `restart`
+  changed.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
@@ -238,10 +239,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   start and stops at 99:59:59 (99:59 written `mm:ss`). `format` writes them `auto`
   (`mm:ss`, or `h:mm:ss` from an hour), `mm:ss` (minutes past an hour keep counting) or
   `hh:mm:ss`. Both count on the media clock from the source's time zero, its `at`, and
-  `keeps_time` keeps that zero through every change but `mode` and `duration`, so the
-  engine, which builds a source again for any change and any new density, keeps the
-  count going when the look is edited or the item resized; `mode` and `duration` are
-  the settings that aren't live. A `clock` shows the wall-clock time of day
+  `keeps_time` keeps that zero through every change but `mode`, `duration` and
+  `restart`, so the engine, which builds a source again for any change and any new
+  density, keeps the count going when the look is edited or the item resized. `restart`
+  (#1040) is a counter whose value means nothing: changing it, to any other number,
+  starts the count again at the same `mode` and `duration`, in one edit (and its undo
+  starts it again too). `mode`, `duration` and `restart` are the settings that aren't
+  live. A `clock` shows the wall-clock time of day
   (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
   machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone
   found for the machine it shows UTC; an unknown name is a setting error). Every frame
@@ -256,7 +260,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   date, and `frame` only hands out the one drawn last; `next_change` is the value's next
   second (a clock's next wall-clock second, or minute without seconds), `at` itself while
   the painter hasn't caught up, and `None` once a countdown ends or a stopwatch stops.
-  Every setting but `font`, `mode` and `duration` is live, and it draws at a density as
+  Every setting but `font`, `mode`, `duration` and `restart` is live, and it draws at a density as
   `text` does.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
@@ -377,6 +381,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `restart_on_show` (live, default off) reloads the page each time the program shows it
   again (`show`), so an HTML graphic or stinger plays its entrance every time. It is
   transparent while it reloads, never the end of its previous run.
+  While no mix draws the source (`set_drawn(false)`) its page is hidden
+  (`BrowserPage::set_hidden`), so it stops painting and its animation frames stop; its
+  scripts and audio go on, throttled as a background tab's. Its frames keep the last
+  paint until it is drawn again (#1071).
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
@@ -556,7 +564,8 @@ one size and changes within a second, that `frame` hands out what the painter dr
 `next_change` asks for a paint while it is out of date, that a countdown stops changing
 at its end, that an `end_text` too wide for the limits fails `create` and `update`, that
 a frame its padding takes past the limits names `end_text` rather than `text`, a
-density, a live update that keeps the count, which changes keep the time zero, and an
+density, a live update that keeps the count, which changes keep the time zero (a
+change of `restart` doesn't), and an
 unknown time zone; its unit tests check the values in every mode and format, the times
 they change at, and the candidates the box is measured by. The unit tests check the shape's distances (a
 rectangle's, a pill's corner, an ellipse's axes) and premultiplied mixing. The scope's unit tests check the

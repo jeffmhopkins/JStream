@@ -1001,6 +1001,8 @@ fn camera(position: (f32, f32, f32), target: (f32, f32, f32), fov: f32) -> Scene
         fov_deg: Finite32::new(fov).expect("finite"),
         roll_deg: Finite32::ZERO,
         depth_sort: true,
+        focus_px: None,
+        blur_px: Finite32::ZERO,
     }
 }
 
@@ -1167,4 +1169,304 @@ fn golden_camera_items_draw_far_to_near() {
         [30, 200, 60],
         "stacking order puts the far item on top"
     );
+}
+
+/// Mean linear light, in code-value units (0 to 255), and its standard deviation over
+/// the canvas pixels `keep` selects. Linear, since the blur averages light: averaging
+/// code values would read a correct blur as brighter.
+fn luminance_stats(snapshot: &Snapshot, keep: impl Fn(u32, u32) -> bool) -> (f32, f32) {
+    let linear = |c: u8| {
+        let v = f32::from(c) / 255.0;
+        let l = if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        };
+        l * 255.0
+    };
+    let mut values = Vec::new();
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if keep(x, y) {
+                let p = snapshot.pixel(x, y).expect("inside");
+                values.push((linear(p[0]) + linear(p[1]) + linear(p[2])) / 3.0);
+            }
+        }
+    }
+    let n = values.len() as f32;
+    let mean = values.iter().sum::<f32>() / n;
+    let var = values.iter().map(|v| (v - mean) * (v - mean)).sum::<f32>() / n;
+    (mean, var.sqrt())
+}
+
+/// How many pixels of row `y` between `x0` and `x1` are part way between the background
+/// and the item: the width of the item's edge there.
+fn edge_width(snapshot: &Snapshot, y: u32, x0: u32, x1: u32, inside: f32) -> usize {
+    let background = 255.0 * (f32::from(BACKGROUND[0]) / 255.0).powf(2.2);
+    (x0..x1)
+        .filter(|&x| {
+            let p = snapshot.pixel(x, y).expect("inside");
+            let l = (f32::from(p[0]) + f32::from(p[1]) + f32::from(p[2])) / 3.0;
+            let l = 255.0 * (l / 255.0).powf(2.2);
+            l > background + 0.15 * (inside - background)
+                && l < inside - 0.15 * (inside - background)
+        })
+        .count()
+}
+
+/// ADR-0108 decisions 2 to 4: an item on the focus plane draws as it does without depth
+/// of field; one off it loses its pattern's contrast but keeps its mean colour, and its
+/// edge softens over about the blur's diameter.
+#[test]
+fn golden_dof_blurs_by_distance_from_the_focus_plane() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    // 300 px in front of the camera: about 55 × 44 canvas pixels around the centre.
+    let items = [geometry(
+        (120.0, 68.0),
+        (100.0, 80.0),
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        None,
+    )];
+    let sharp_camera = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(sharp_camera), &image, Crop::NONE);
+
+    let focused_camera = SceneCamera {
+        focus_px: Finite32::new(300.0),
+        blur_px: Finite32::new(12.0).expect("finite"),
+        ..sharp_camera
+    };
+    let focused = draw_seen(compositor, &items, Some(focused_camera), &image, Crop::NONE);
+    let mut most = 0;
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            let (a, b) = (
+                sharp.pixel(x, y).expect("in"),
+                focused.pixel(x, y).expect("in"),
+            );
+            most = most.max((0..3).map(|c| a[c].abs_diff(b[c])).max().unwrap_or(0));
+        }
+    }
+    assert!(
+        most <= 2,
+        "in focus, the item draws as without depth of field: {most}"
+    );
+
+    // Focused at 100 px, the item 300 px away blurs by 12 · 200 / 300 = 8 px.
+    let defocused_camera = SceneCamera {
+        focus_px: Finite32::new(100.0),
+        ..focused_camera
+    };
+    let blurred = draw_seen(
+        compositor,
+        &items,
+        Some(defocused_camera),
+        &image,
+        Crop::NONE,
+    );
+    let inner = |x: u32, y: u32| (105..=135).contains(&x) && (58..=78).contains(&y);
+    let (sharp_mean, sharp_spread) = luminance_stats(&sharp, inner);
+    let (blurred_mean, blurred_spread) = luminance_stats(&blurred, inner);
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof inner: sharp {sharp_mean:.1} ± {sharp_spread:.1}, blurred {blurred_mean:.1} ± {blurred_spread:.1}"
+    );
+    assert!(
+        blurred_spread < 0.5 * sharp_spread,
+        "the pattern blurs: {blurred_spread} against {sharp_spread}"
+    );
+    assert!(
+        (blurred_mean - sharp_mean).abs() < 8.0,
+        "the blur keeps the mean: {blurred_mean} against {sharp_mean}"
+    );
+    // The right edge, near x = 147, across row 68.
+    let sharp_edge = edge_width(&sharp, 68, 125, 175, sharp_mean);
+    let soft_edge = edge_width(&blurred, 68, 125, 175, blurred_mean);
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof edge: sharp {sharp_edge} px, blurred {soft_edge} px"
+    );
+    assert!(
+        sharp_edge <= 3,
+        "a sharp edge is a pixel or two: {sharp_edge}"
+    );
+    assert!(
+        (7..=20).contains(&soft_edge),
+        "a blur of 8 px softens the edge over about its diameter: {soft_edge}"
+    );
+}
+
+/// ADR-0108 decision 2: of two items, the one on the focus plane stays sharp and the one
+/// behind it blurs, in one scene.
+#[test]
+fn golden_dof_only_the_item_off_focus_blurs() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    let items = [
+        // Behind, on the left; in front, at the focus, on the right.
+        geometry((70.0, 68.0), (90.0, 90.0), 0.0, 0.0, 0.0, -300.0, None),
+        geometry((175.0, 68.0), (50.0, 50.0), 0.0, 0.0, 0.0, 0.0, None),
+    ];
+    let base = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(base), &image, Crop::NONE);
+    let dof = SceneCamera {
+        focus_px: Finite32::new(300.0),
+        blur_px: Finite32::new(16.0).expect("finite"),
+        ..base
+    };
+    let got = draw_seen(compositor, &items, Some(dof), &image, Crop::NONE);
+    // The far item, 600 px away, blurs by 16 · 300 / 600 = 8 px; the near one not at all.
+    // On the canvas, the far item covers about x 94 to 119 and the near one 137 to 164.
+    let far = |x: u32, y: u32| (100..=113).contains(&x) && (63..=73).contains(&y);
+    let near = |x: u32, y: u32| (141..=160).contains(&x) && (58..=78).contains(&y);
+    let (_, far_sharp) = luminance_stats(&sharp, far);
+    let (_, far_got) = luminance_stats(&got, far);
+    let (_, near_sharp) = luminance_stats(&sharp, near);
+    let (_, near_got) = luminance_stats(&got, near);
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof two items: far {far_sharp:.1} -> {far_got:.1}, near {near_sharp:.1} -> {near_got:.1}"
+    );
+    assert!(far_got < 0.6 * far_sharp, "the far item blurs");
+    assert!(
+        (near_got - near_sharp).abs() < 1.0,
+        "the near item stays sharp"
+    );
+}
+
+/// The pixels just outside a blurred item in `rows`, as a share of the item's light over
+/// the background: the largest such share among pixels with a background neighbour,
+/// which is small where the blur falls off softly and large where its edge is cut.
+fn hardest_edge(snapshot: &Snapshot, rows: std::ops::Range<u32>) -> f32 {
+    let linear = |c: u8| srgb_channel_to_linear(f32::from(c) / 255.0);
+    let background = linear(BACKGROUND[0]);
+    let lift = |x: u32, y: u32| {
+        let p = snapshot.pixel(x, y).expect("inside");
+        ((linear(p[0]) + linear(p[1]) + linear(p[2])) / 3.0 - background) / (1.0 - background)
+    };
+    let mut hardest: f32 = 0.0;
+    for y in rows.start.max(1)..rows.end.min(HEIGHT - 1) {
+        for x in 1..WIDTH - 1 {
+            let here = lift(x, y);
+            let beside = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)];
+            if beside.iter().any(|&(bx, by)| lift(bx, by) < 0.002) {
+                hardest = hardest.max(here);
+            }
+        }
+    }
+    hardest
+}
+
+/// ADR-0108 decision 4 (#1122 review N1): every vertex of a tilted plane is pushed out by
+/// its largest blur and no fragment blurs more, so the far edge falls off to the
+/// background with no hard cut. Fails with each vertex pushed by its own blur, or with the
+/// blur past the edge uncapped (both cut at about 0.18).
+#[test]
+fn golden_dof_a_tilted_plane_falls_off_softly() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let white = vec![255; (SOURCE * SOURCE * 4) as usize];
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &white)
+        .expect("the source uploads");
+    let items = [geometry(
+        (120.0, 68.0),
+        (100.0, 160.0),
+        0.0,
+        60.0,
+        0.0,
+        0.0,
+        None,
+    )];
+    let base = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(base), &image, Crop::NONE);
+    let dof = SceneCamera {
+        focus_px: Finite32::new(232.0),
+        blur_px: Finite32::new(64.0).expect("finite"),
+        ..base
+    };
+    let got = draw_seen(compositor, &items, Some(dof), &image, Crop::NONE);
+    // The plane's far half, above the canvas's middle, blurs by up to
+    // 64 · (369 - 232) / 369 ≈ 24 px; the near edge, at the focus, stays sharp.
+    let far = 0..HEIGHT / 2;
+    let (sharp_edge, got_edge) = (hardest_edge(&sharp, far.clone()), hardest_edge(&got, far));
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof tilted edge: sharp {sharp_edge:.3}, blurred {got_edge:.3}"
+    );
+    assert!(
+        sharp_edge > 0.5,
+        "the sharp plane has a hard edge: {sharp_edge}"
+    );
+    assert!(
+        got_edge < 0.1,
+        "the blurred plane falls off softly: {got_edge}"
+    );
+}
+
+/// ADR-0108 decision 2 (#1122 review N2): the blur follows each fragment's own distance,
+/// so a tilted plane focused at its near end stays sharp there and blurs along itself:
+/// the far band loses its pattern's contrast, the near band keeps it.
+#[test]
+fn golden_dof_a_tilted_plane_blurs_along_itself() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let rgba = pattern(SOURCE);
+    let image = opened
+        .compositor
+        .upload_rgba8(SOURCE, SOURCE, &rgba)
+        .expect("the pattern uploads");
+    let items = [geometry(
+        (120.0, 68.0),
+        (100.0, 160.0),
+        0.0,
+        60.0,
+        0.0,
+        0.0,
+        None,
+    )];
+    let base = camera((120.0, 68.0, 300.0), (120.0, 68.0, 0.0), 45.0);
+    let compositor = &mut opened.compositor;
+    let sharp = draw_seen(compositor, &items, Some(base), &image, Crop::NONE);
+    let dof = SceneCamera {
+        focus_px: Finite32::new(232.0),
+        blur_px: Finite32::new(24.0).expect("finite"),
+        ..base
+    };
+    let got = draw_seen(compositor, &items, Some(dof), &image, Crop::NONE);
+    // The near end, at the focus, is at the bottom of the canvas; the far end, about
+    // 370 px away, blurs by about 24 · 138 / 370 ≈ 9 px. Each band stays inside the plane.
+    let near = |x: u32, y: u32| (100..=140).contains(&x) && (89..=94).contains(&y);
+    let far = |x: u32, y: u32| (105..=135).contains(&x) && (52..=58).contains(&y);
+    let (_, near_sharp) = luminance_stats(&sharp, near);
+    let (_, near_got) = luminance_stats(&got, near);
+    let (_, far_sharp) = luminance_stats(&sharp, far);
+    let (_, far_got) = luminance_stats(&got, far);
+    let _ = writeln!(
+        std::io::stderr(),
+        "dof tilted: near {near_sharp:.1} -> {near_got:.1}, far {far_sharp:.1} -> {far_got:.1}"
+    );
+    assert!(far_got < 0.5 * far_sharp, "the far band blurs");
+    assert!(near_got > 0.8 * near_sharp, "the near band stays sharp");
 }

@@ -10,6 +10,8 @@
 // Platform-independent, so they are tested on every platform.
 #[cfg(any(windows, test))]
 mod id;
+#[cfg(windows)]
+mod pointer;
 #[cfg(any(windows, test))]
 pub(crate) mod ring;
 #[cfg(windows)]

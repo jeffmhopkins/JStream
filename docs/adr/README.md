@@ -113,9 +113,15 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0097](0097-agents-write-effect-packs.md) | Agents write effect packs over the protocol and MCP | accepted | maintainer |  |
 | [ADR-0098](0098-mcp-destructive-hint-for-what-undo-cant-take-back.md) | MCP's destructiveHint marks only what undo can't take back | accepted | agent |  |
 | [ADR-0099](0099-native-motion-modifiers-and-timelines.md) | Native motion: one animation clock, motion modifiers and timelines | accepted | maintainer |  |
+| [ADR-0100](0100-audio-reactive-motion-modifiers.md) | Audio-reactive bindings are a motion modifier kind that follows a bus or a source | accepted | agent |  |
 | [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
 | [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 | [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
+| [ADR-0106](0106-item-effects-in-canvas-space.md) | An item's effects can run over the canvas, after it is placed | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
+| [ADR-0108](0108-camera-depth-of-field.md) | Depth of field for scene cameras | accepted | agent |  |
 | [ADR-0109](0109-review-pass-carries-across-base-merges.md) | A review pass carries across merges of the base branch | accepted | maintainer |  |
+| [ADR-0110](0110-mcp-values-tool-naming.md) | Shared values reach MCP through one values tool | accepted | agent |  |
+| [ADR-0111](0111-camera-up-at-the-poles.md) | A scene camera's up at either pole | accepted | agent |  |
+| [ADR-0112](0112-assignable-camera-zoom-bindings.md) | Assignable zoom bindings for a follow-cursor camera, heard while another app has the focus | accepted | maintainer |  |
 <!-- @generated end adr-index -->

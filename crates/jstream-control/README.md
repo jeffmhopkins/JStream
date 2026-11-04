@@ -161,7 +161,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) take
     video filters, and audio filters on the master and an output that carries audio,
-    and their filters no scene or source reference; a scene and an item (ADR-0065) take video filters only, and
+    and their filters no scene, source or bus reference, though a file (an asset) is allowed, as the graph allows it; a scene and an item (ADR-0065) take video filters only, and
     `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
     copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
@@ -261,6 +261,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
   as an engine that watches no packs folder answers them
   ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;
+- `values.set` and `values.list` as the engine runs them
+  ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7): the same
+  name, size and 256-name checks, `values.changed` only when something changed, and no
+  `rev`;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
