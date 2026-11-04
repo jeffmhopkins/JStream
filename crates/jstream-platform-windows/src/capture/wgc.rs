@@ -15,7 +15,7 @@ use jstream_platform::media::{
 use jstream_platform::nv12::{bgra_to_nv12, even_size};
 use jstream_platform::{
     Capture, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    CursorCapture, GpuContext, PlatformError, VideoSurface,
+    CursorCapture, GpuContext, PlatformError, PointerPosition, VideoSurface,
 };
 use windows::Foundation::TypedEventHandler;
 use windows::Graphics::Capture::{
@@ -47,6 +47,7 @@ use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows::core::{IInspectable, Interface, Ref};
 
 use super::id::{monitor_id, parse_monitor, parse_window, window_id};
+use super::pointer::Target;
 use super::targets;
 use crate::clock::timebase;
 use crate::com::{MtaUsage, OsResult};
@@ -396,6 +397,9 @@ struct Shared {
     /// Frames replaced in the mailbox, plus, on the GPU path, frames dropped because
     /// every slot of the ring was held.
     skipped: AtomicU64,
+    /// The newest published frame's size, width in the high 32 bits and height in the
+    /// low, 0 before the first: what [`CaptureStream::pointer`] scales to.
+    size: AtomicU64,
 }
 
 impl Shared {
@@ -718,6 +722,11 @@ fn on_frame(
     }
     match converted? {
         Some(out) => {
+            if let (Ok(w), Ok(h)) = (u32::try_from(content.Width), u32::try_from(content.Height)) {
+                shared
+                    .size
+                    .store((u64::from(w) << 32) | u64::from(h), Ordering::Relaxed);
+            }
             if let Some(old) = shared.mailbox.put(out) {
                 shared.skipped.fetch_add(1, Ordering::Relaxed);
                 // A GPU frame just drops, which frees its slot.
@@ -741,6 +750,8 @@ struct WgcStream {
     session: GraphicsCaptureSession,
     pool: Direct3D11CaptureFramePool,
     item: GraphicsCaptureItem,
+    /// What is captured, for [`CaptureStream::pointer`].
+    target: Target,
     frame_token: Option<i64>,
     closed_token: Option<i64>,
     /// The frame handler's state, shared with the handler, which WinRT may release
@@ -789,6 +800,7 @@ impl WgcStream {
             failure: OnceLock::new(),
             captured: AtomicU64::new(0),
             skipped: AtomicU64::new(0),
+            size: AtomicU64::new(0),
         });
         let converter = Arc::new(Mutex::new(Some(Converter {
             device,
@@ -801,6 +813,10 @@ impl WgcStream {
             session,
             pool,
             item,
+            target: match resolved.source {
+                Source::Monitor(h) => Target::monitor(h),
+                Source::Window(h) => Target::window(h),
+            },
             frame_token: None,
             closed_token: None,
             converter: Arc::clone(&converter),
@@ -874,6 +890,15 @@ impl CaptureStream for WgcStream {
             frames_skipped: self.shared.skipped.load(Ordering::Relaxed),
             frames_undecodable: 0,
         }
+    }
+
+    /// Read from the OS ([`pointer`](super::pointer)): the cursor's position and the
+    /// target's bounds, scaled to the newest frame.
+    fn pointer(&self) -> Option<PointerPosition> {
+        let packed = self.shared.size.load(Ordering::Relaxed);
+        let (w, h) = ((packed >> 32) as u32, packed as u32);
+        let size = FrameSize::new(w, h).ok()?;
+        self.target.pointer(size)
     }
 }
 

@@ -79,6 +79,21 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
+    /// A shared value changed (0.78, ADR-0102 decision 7): a `values.set` gave it a new
+    /// value, or removed it. Not collection state, so it carries no `rev`.
+    #[serde(rename = "values.changed")]
+    ValuesChanged {
+        /// The value's name.
+        name: String,
+        /// Its new value. Omitted when it was removed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen, so the engine never sends it.
     #[serde(rename = "privacy.changed")]
@@ -281,6 +296,7 @@ impl Event {
             Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
+            Event::ValuesChanged { .. } => Some("values.changed"),
             Event::Unknown => None,
         }
     }

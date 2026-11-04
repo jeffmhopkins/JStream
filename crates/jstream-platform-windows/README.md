@@ -119,6 +119,13 @@ The code is ported from spikes S1 to S3. This first cut has:
     `IsCursorCaptureEnabled` off (`Metadata` draws it in: WGC can't send it apart). Both
     are best effort: builds without these settings keep their defaults, so the pointer
     stays drawn in there.
+  - **Where the pointer is** (`capture/pointer.rs`, `CaptureStream::pointer`): read from
+    the OS when asked, since WGC doesn't send it: `GetCursorPos`, and the display's
+    `GetMonitorInfoW` area or the window's `DWMWA_EXTENDED_FRAME_BOUNDS`, with the
+    calling thread made per-monitor DPI aware (v2) for those calls only, so all three
+    are in physical pixels. The point is scaled to the newest frame's size, which the
+    frame handler records. `None` before the first frame, on a secure desktop, or once
+    the target has gone. None of the calls waits.
   - **End of a capture:** when the window closes or the display goes away, `latest`
     returns `DeviceLost` from then on. A failure in the frame handler ends the capture
     the same way, with its error. A panic there is caught and reported as `InvalidState`

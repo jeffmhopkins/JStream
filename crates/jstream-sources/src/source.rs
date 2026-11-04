@@ -45,6 +45,14 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// Whether any mix draws the source now: the program, a video mix or a preview
+    /// (#1071). The engine says so when it changes. A kind that costs something to keep
+    /// drawing (a `browser` page) can rest while it isn't drawn; the default does
+    /// nothing. A source starts drawn.
+    fn set_drawn(&mut self, drawn: bool) {
+        let _ = drawn;
+    }
+
     /// The source's sound, for the engine to mix while the program shows the source: a
     /// `media` file's audio, decoded on the media clock. `None`, the default, for a kind
     /// without such sound. A kind whose audio plays whether or not it is shown (a

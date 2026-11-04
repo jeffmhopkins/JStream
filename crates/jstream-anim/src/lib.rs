@@ -17,18 +17,39 @@
 //!   (a parent and its variants) and gives its two ends ([`Step`]). Interpolation and
 //!   easing are ADR-0029's transition sampler's; the plan only supplies the ends.
 //!
+//! - Motion ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
+//!   [`Modifier`]s that wiggle, oscillate or drift an item's properties, [`evaluate`]d as
+//!   pure functions of the animation time into [`Offsets`], which [`Offsets::blend`]
+//!   mixes across a keyframe move; and [`Timeline`]s of timed [`Cue`]s, whose
+//!   [`Timeline::due`] gives each cue's exact fire time on the animation clock.
+//! - Audio-reactive modifiers
+//!   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): [`Kind::Audio`]
+//!   follows a measure of a bus or a source through an [`Envelope`] the evaluator keeps,
+//!   and [`evaluate_with`] takes each one's level.
+//!
 //! The geometry, crop and effects types are type parameters, so this crate doesn't
 //! depend on `jstream-protocol`: the graph instantiates it with the protocol's
 //! `ItemGeometry` and `Crop`, and its own filter chains.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md, docs/adr/0099-native-motion-modifiers-and-timelines.md, docs/adr/0100-audio-reactive-motion-modifiers.md
 
 #![forbid(unsafe_code)]
 
+mod audio;
 mod keyframe;
+mod modifier;
 mod switch;
+mod timeline;
 
+pub use audio::{Audio, Curve, Envelope, HIGH_HZ, LOW_HZ, MAX_ENVELOPE_MS, MIN_DB, Measure};
 pub use keyframe::{
     Field, InvalidValue, Inverse, Keyframe, Override, Props, RestoreConflict, Value,
 };
+pub use modifier::{
+    Clock, InvalidModifier, Kind, MAX_MODIFIERS, Modifier, Offsets, Property, Shape, check_list,
+    evaluate, evaluate_with,
+};
 pub use switch::{Motion, Step, plan_switch};
+pub use timeline::{
+    Cue, CueAction, Fire, InvalidTimeline, Looping, MAX_CUES, MAX_DURATION_MS, Position, Timeline,
+};

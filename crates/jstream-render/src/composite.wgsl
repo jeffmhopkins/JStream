@@ -29,6 +29,16 @@
 // edges. 2: an imported texture of sRGB code values already multiplied by alpha (a
 // browser page), read raw: divided by alpha, decoded, and multiplied by alpha again.
 // 3: an opaque import (a captured frame), decoded by the sampler, its alpha read as 1.
+//
+// `dof` is the scene camera's depth of field (ADR-0108): x the focus distance as a `w`,
+// y the far blur in pixels, 0 without one, and z the shape's largest blur, which its
+// corners take. A fragment at `w` is blurred over a disc of radius
+// blur * |w - focus| / w, at most z and MAX_BLUR: under half a pixel it takes the one
+// sample above; otherwise it averages a spiral of taps over the disc, each read at the
+// mip level of the taps' spacing (through explicit gradients, which a branch allows),
+// and its edge coverage widens to clamp(d / (2r) + 0.5, 0, 1), the vertices having been
+// pushed out by z so the soft edge rasterizes. Past the polygon's edge `w` runs on
+// beyond its corners', so without the cap at z the blur there would outgrow the push.
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -41,6 +51,8 @@ struct VsOut {
     @location(6) @interpolate(flat) e3: vec3<f32>,
     @location(7) @interpolate(flat) e4: vec3<f32>,
     @location(8) @interpolate(flat) uv_bounds: vec4<f32>,
+    @location(9) depth_w: f32,
+    @location(10) @interpolate(flat) dof: vec3<f32>,
 }
 
 @vertex
@@ -56,6 +68,7 @@ fn vs(
     @location(8) e3: vec3<f32>,
     @location(9) e4: vec3<f32>,
     @location(10) uv_bounds: vec4<f32>,
+    @location(11) dof: vec3<f32>,
 ) -> VsOut {
     var out: VsOut;
     out.clip = vec4<f32>(pos * w, 0.0, w);
@@ -68,6 +81,8 @@ fn vs(
     out.e3 = e3;
     out.e4 = e4;
     out.uv_bounds = uv_bounds;
+    out.depth_w = w;
+    out.dof = dof;
     return out;
 }
 
@@ -85,28 +100,62 @@ fn edge(e: vec3<f32>, at: vec2<f32>) -> f32 {
 @group(0) @binding(0) var tex: texture_2d<f32>;
 @group(0) @binding(1) var samp: sampler;
 
+// The largest blur radius, in pixels: MAX_BLUR_PX.
+const MAX_BLUR: f32 = 64.0;
+// Taps over a defocused fragment's disc, and the golden angle that spirals them.
+const TAPS: u32 = 16u;
+const GOLDEN: f32 = 2.39996323;
+
 // The item's premultiplied linear colour at this fragment, coverage and opacity applied.
 fn source(in: VsOut) -> vec4<f32> {
+    // Uniform control flow: the derivatives and the one-sample read come first.
+    let ddx_uv = dpdx(in.uv);
+    let ddy_uv = dpdy(in.uv);
     let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
-    let c = textureSample(tex, samp, uv);
-    var rgb = c.rgb;
-    var alpha = c.a;
-    if in.mode > 2.5 {
-        alpha = 1.0;
-    } else if in.mode > 1.5 {
-        // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
-        let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
-        rgb = srgb_to_linear(straight) * c.a;
-    } else if in.mode > 0.5 {
-        rgb = c.rgb * c.a;
+    var colour = decode(textureSample(tex, samp, uv), in.mode);
+    var r = 0.0;
+    if in.dof.y > 0.0 && in.depth_w > 0.0 {
+        r = min(in.dof.y * abs(in.depth_w - in.dof.x) / in.depth_w, min(in.dof.z, MAX_BLUR));
+    }
+    if r >= 0.5 {
+        // A spiral of taps, turned per pixel so the pattern doesn't show as structure.
+        let spacing = r * 0.443;
+        let turn = fract(52.9829189 * fract(dot(in.clip.xy, vec2<f32>(0.06711056, 0.00583715))));
+        let gx = ddx_uv * max(spacing, 1.0);
+        let gy = ddy_uv * max(spacing, 1.0);
+        var sum = vec4<f32>(0.0);
+        for (var i = 0u; i < TAPS; i = i + 1u) {
+            let radius = r * sqrt((f32(i) + 0.5) / f32(TAPS));
+            let angle = f32(i) * GOLDEN + turn * 6.28318531;
+            let off = vec2<f32>(cos(angle), sin(angle)) * radius;
+            let at = clamp(in.uv + ddx_uv * off.x + ddy_uv * off.y, in.uv_bounds.xy, in.uv_bounds.zw);
+            sum = sum + decode(textureSampleGrad(tex, samp, at, gx, gy), in.mode);
+        }
+        colour = sum / f32(TAPS);
     }
     let at = in.clip.xy;
     let d = min(
         min(min(edge(in.e0, at), edge(in.e1, at)), min(edge(in.e2, at), edge(in.e3, at))),
         edge(in.e4, at),
     );
-    let coverage = clamp(d + 0.5, 0.0, 1.0);
-    return vec4<f32>(rgb, alpha) * (in.opacity * coverage);
+    let coverage = clamp(d / (2.0 * max(r, 0.5)) + 0.5, 0.0, 1.0);
+    return colour * (in.opacity * coverage);
+}
+
+// A filtered sample as premultiplied linear colour, by the item's alpha `mode`.
+fn decode(c: vec4<f32>, mode: f32) -> vec4<f32> {
+    var rgb = c.rgb;
+    var alpha = c.a;
+    if mode > 2.5 {
+        alpha = 1.0;
+    } else if mode > 1.5 {
+        // Premultiplied code values: a filtered texel keeps rgb <= a, up to rounding.
+        let straight = select(vec3<f32>(0.0), min(c.rgb / c.a, vec3<f32>(1.0)), c.a > 0.0);
+        rgb = srgb_to_linear(straight) * c.a;
+    } else if mode > 0.5 {
+        rgb = c.rgb * c.a;
+    }
+    return vec4<f32>(rgb, alpha);
 }
 
 @fragment
@@ -204,4 +253,35 @@ fn fs_difference(in: VsOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_exclusion(in: VsOut) -> @location(0) vec4<f32> {
     return blended(in, EXCLUSION);
+}
+
+// Source-over and additive mixed in sRGB-encoded values, as a web browser blends
+// (ADR-0105): the straight colours are encoded, composited premultiplied in that space,
+// and the result decoded. Below 0 is clamped for the encoding; above 1 is kept (the
+// curve continues), so an additive gain still brightens.
+fn encoded_composite(in: VsOut, additive: bool) -> vec4<f32> {
+    let s = source(in);
+    let b = textureLoad(backdrop, vec2<i32>(in.clip.xy), 0);
+    let cs = linear_to_srgb(max(unpremultiply(s), vec3<f32>(0.0)));
+    let cb = linear_to_srgb(max(unpremultiply(b), vec3<f32>(0.0)));
+    let alpha = s.a + b.a - s.a * b.a;
+    var under = b.a * (1.0 - s.a);
+    if additive {
+        under = b.a;
+    }
+    let mixed = cs * s.a + cb * under;
+    if alpha <= 0.0 {
+        return vec4<f32>(0.0);
+    }
+    return vec4<f32>(srgb_to_linear(mixed / alpha) * alpha, alpha);
+}
+
+@fragment
+fn fs_normal_srgb(in: VsOut) -> @location(0) vec4<f32> {
+    return encoded_composite(in, false);
+}
+
+@fragment
+fn fs_additive_srgb(in: VsOut) -> @location(0) vec4<f32> {
+    return encoded_composite(in, true);
 }

@@ -12,10 +12,10 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-anim/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-anim", "docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-anim", "docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision", "docs/adr/0099-native-motion-modifiers-and-timelines.md#decision", "docs/adr/0100-audio-reactive-motion-modifiers.md#decision"]
 -->
 
-Layer-0 model of keyframe scenes
+Layer-0 model of keyframe scenes and native motion
 ([ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md), on
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §2): what a variant of a scene
 stores, what its items look like, and what a switch between two keyframes of one scene
@@ -53,9 +53,56 @@ Contents:
   (visible, different), `Appear`, `Disappear` or `Hidden`. It doesn't interpolate:
   ADR-0029's transition sampler does, from these ends.
 
-**Tests** (in `keyframe.rs` and `switch.rs`): live follow of absent fields, each
+- Motion ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
+  `Modifier` is one motion modifier on an item: a `Property` (`x`, `y`, `scale`,
+  `rotation`, `tilt`, `turn`, `opacity`, the four crop edges), a `Kind` (`Wiggle`:
+  seeded smooth noise with octaves; `Oscillate`: a sine, triangle, square or saw `Shape`
+  with period and phase; `Drift`: a rate, optionally wrapping; `Audio`, below) and a `Clock` (the
+  animation time, or time since the item was shown). `check_list` refuses more than
+  `MAX_MODIFIERS`, duplicate or empty IDs and out-of-range parameters. `evaluate` sums an
+  item's modifiers at one moment into `Offsets`, without allocating, so the render
+  thread calls it per item per frame: positions, angles and crop add, scale and opacity
+  multiply. `Offsets::blend` mixes two sides' outputs across a keyframe move, which keeps
+  every wave's phase.
+- Audio-reactive modifiers
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): `Kind::Audio`
+  holds an `Audio`: a `Measure` (`Level`, `Peak`, `Onset`, or a `Band` between two
+  frequencies), a dB floor and ceiling, attack and release times, a `Curve` (`linear`,
+  `ease_in`, `ease_out`, `ease_in_out`, none overshooting) and a `from`..`to` range in
+  the property's unit. `Audio::normalize` maps a measure onto `0..=1` in dB (an onset as
+  it is), `Envelope::advance` follows it with one-pole attack and release smoothing that
+  doesn't depend on the frame rate, and `Audio::value` bends and maps the envelope.
+  What is heard (a bus or a source) and its measuring stay outside this crate: the
+  evaluator keeps an `Envelope` per item and modifier and hands each level to
+  `evaluate_with` by modifier ID. `evaluate` and `value_at` read an audio modifier as
+  silence, its `from`.
+- `Timeline`: cues sorted by time, a duration and a `Looping` (`Once`, `Loop`, or `Range`:
+  an intro, then a loop). `check` refuses unsorted, unreachable or too many cues and bad
+  bounds. `due` gives the cues that fire in a window of the animation clock, each with
+  its exact time (`Fire`), so the control thread fires every cue once a pass however it
+  ticks; `position` gives the pass and time; `seek` gives the cues to run on a jump to a
+  pass and time: the last state per `CueAction::state_key` in play order, earlier passes
+  and a range's intro included, without events. An unchecked zero-length loop never
+  plays, and a modifier whose unchecked parameters give a non-finite value (a period
+  that isn't positive or is tiny, a zero wrap, a NaN) gives 0, so bad input can't spin
+  or put NaN on the render thread.
+
+**Tests** (in `keyframe.rs`, `switch.rs`, `modifier.rs`, `audio.rs` and `timeline.rs`): live follow of absent fields, each
 write and clear inverse, the no-op clear, refused opacities, reset and its restore,
 drop and restore, a refused restore changing nothing, the wire names, every `Motion`
 case, ends between two keyframes and in reverse, ends following the parent's current
 values, and pairing by item. And a seeded walk of 5000 random writes, clears, resets,
 drops and restores, each of which must undo exactly and leave no empty override.
+For motion: each waveform's landmarks, period and phase, wrapping drifts, a seeded wiggle
+that stays within its amplitude with no jump between frames and stays precise days in,
+how `evaluate` adds, multiplies and skips disabled modifiers, the shown clock, blending,
+every refused parameter, an unchecked bad period and other unchecked input (a tiny
+period, a zero wrap, NaN and infinite parameters) giving 0, an oscillator unchanged
+three days in; for audio, each curve's ends, clamping and lack of overshoot, the dB map
+and its clamps, onsets, the range and its inversion, attack and release time
+constants, zero times, ignored bad steps, the same envelope at 30 and 120 frames a
+second, every refused parameter, and audio modifiers read by ID, as silence when unheard;
+and for timelines a six-cue sequence fired once each under uneven ticks,
+loops, a range loop's intro and repeats, `Once` ending, seeks within a pass and into
+later passes, unchecked zero-length loops that never spin, every refused timeline, and 200 random timelines whose cues fire the same under random ticks
+as in one window.

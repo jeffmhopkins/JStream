@@ -76,6 +76,10 @@ The `pack` tool does (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
 [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
 WGSL of an effect pack, which loads at once, and `pack.list` names the client that
 last wrote each pack, so a person can see that an agent installed GPU code.
+The `values` tool does (`values.set`, `values.list`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)): an agent sets the
+shared values that browser source pages will read (ADR-0102 part 2), such as a counter
+or a status line.
 For the same reason an `output.create` or
 `output.set_target` with a `youtube { broadcast_id }` target, in a group tool or in
 `batch`, is refused with `invalid_argument` before it is sent (a `generic` RTMP(S)
@@ -83,7 +87,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -114,7 +118,8 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
 today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
-disk that undo never reaches), `pairing` and `ui_settings`. `history` stays
+disk that undo never reaches), `pairing`, `ui_settings` and `values` (whose values a
+browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
 `live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
@@ -174,7 +179,9 @@ canvas space by an unflipped group around it and added at a low opacity because
 blending is linear, 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
-above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
+above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
+(`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (time-based animation on the wall clock so separate pages agree, with
