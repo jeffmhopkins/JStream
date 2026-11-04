@@ -86,7 +86,16 @@ frame of the page's rate (ADR-0095). Dropping the page closes it.
   so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
   as the file page's, and inside an opted-in HTML page as the HTML page's: there the
   opt-in covers every opaque frame, not only the page's own documents. A request with no initiator is one the browser started (the
-  source's own load, a reload) and is judged as the source's own. The check reads the
+  source's own load, a reload) and is judged as the source's own. CEF on Linux names
+  the opaque origin `null` instead for the source's own first load (#1069), so a
+  main-frame load the helper started, to the source's own web origin with a `null`
+  initiator while the main frame hasn't left it, counts as started by the browser
+  (`check_main_frame_from`). The helper marks the URL it loads (`expect_own_load`): the
+  location when the page opens, the page's URL when it reloads it, and the target when
+  that load is redirected, as CEF asks again for a redirect's target. Only a `GET` of the
+  marked URL takes the mark (`take_own_load`), so any other `null` main-frame load, such
+  as a sandboxed frame a third-party frame made navigating the top, stays opaque, even
+  while a reload is pending. The check reads the
   host Chromium has already canonicalised, so it can't catch a public name that
   resolves to a local address, whether fixed (`*.nip.io`) or by DNS rebinding.
   Chromium's Local Network Access checks are meant to: they ask the page's permission
