@@ -1,20 +1,14 @@
 #!/bin/bash
 # JStream for macOS, built from source in one command: checks the Mac, installs what the
 # build needs (Apple's Command Line Tools, Rust, pinned UI tools), builds the web UI and
-# the daemon, and installs a signed JStream.app in ~/Applications. Running it again
-# updates it. For testers:
+# the daemon, and installs them with a launcher, ~/Applications/JStream.command, that
+# opens in Terminal. Running it again updates it. For testers:
 #
 #   curl -fsSL https://raw.githubusercontent.com/jeffmhopkins/JStream/main/scripts/mac/install.sh | bash
 #
-# Options (after `bash -s --` when piped):
-#   --ref <ref>     build this tag, branch or commit (default: the newest release tag that
-#                   has this installer, else main)
-#   --source <dir>  build this checkout as it is, without cloning or fetching (CI, developers)
-#   --adhoc         sign ad hoc instead of with the local signing identity (CI); macOS then
-#                   asks for every permission again after each update
-#   --no-open       don't open JStream when done
-#   --uninstall     remove JStream.app, the build folder and the signing identity; add
-#                   --purge to remove the collection, token and logs too
+# Nothing is signed beyond what the linker does, and there is no app bundle (ADR-0063 §13
+# leaves packaging and signing for later): JStream runs from Terminal, so macOS attributes
+# its permission prompts to Terminal (ADR-0063 §11), and those grants survive updates.
 #
 # Docs: docs/runbooks/mac-testing.md#script
 #
@@ -22,9 +16,23 @@
 
 set -euo pipefail
 
+usage() {
+    cat <<'EOF_USAGE'
+JStream for macOS: builds JStream from source and installs ~/Applications/JStream.command.
+
+  curl -fsSL https://raw.githubusercontent.com/jeffmhopkins/JStream/main/scripts/mac/install.sh | bash -s -- [options]
+
+  --ref <ref>     build this tag, branch or commit (default: the newest release tag that
+                  has this installer, else main)
+  --source <dir>  build this checkout as it is, without cloning or fetching (CI, developers)
+  --no-open       don't start JStream when done
+  --uninstall     remove JStream.command and the build folder; add --purge to remove
+                  your scenes, token and logs too
+  -h, --help      show this
+EOF_USAGE
+}
+
 REPO_URL=https://github.com/jeffmhopkins/JStream.git
-BUNDLE_ID=io.github.jeffmhopkins.jstream
-SIGNING_NAME="JStream Local Signing"
 # The floor (ADR-0063 §2) and the release process taps need (§4).
 MIN_MACOS=14
 TAPS_MACOS=14.2
@@ -32,8 +40,10 @@ TAPS_MACOS=14.2
 MIN_FREE_GB=15
 
 BUILD_DIR="${JSTREAM_BUILD_DIR:-$HOME/Library/Application Support/JStream-build}"
-APP_DIR="${JSTREAM_APP_DIR:-$HOME/Applications}"
-APP="$APP_DIR/JStream.app"
+# What the launcher runs: the daemon, the built UI and the launcher script.
+INSTALL_DIR="$BUILD_DIR/install"
+LAUNCHER_DIR="${JSTREAM_APP_DIR:-$HOME/Applications}"
+LAUNCHER="$LAUNCHER_DIR/JStream.command"
 # The daemon's data folder on macOS (jstream-platform's `paths::data_dir`).
 DATA_DIR="$HOME/Library/Application Support/JStream"
 
@@ -85,12 +95,6 @@ check_mac() {
     free_gb=$(df -g "$HOME" | awk 'NR == 2 { print $4 }')
     if [ -n "$free_gb" ] && [ "$free_gb" -lt "$MIN_FREE_GB" ]; then
         warn "only ${free_gb} GB free: the first build needs about ${MIN_FREE_GB} GB"
-    fi
-}
-
-check_not_running() {
-    if pgrep -f "$APP/Contents/" >/dev/null 2>&1; then
-        die "JStream is running: quit it (JStream menu › Quit), then run this again"
     fi
 }
 
@@ -229,6 +233,14 @@ ui_tools() {
 build() {
     step "Building (the first build takes a while; updates are much faster)"
     local started=$SECONDS
+    # The pinned toolchain, by name: rustup 1.28.0 stopped installing it on the first
+    # cargo call, and rustup before 1.28 needs the name. Its components and targets then
+    # come from rust-toolchain.toml on the first cargo call.
+    local channel
+    channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")
+    [ -n "$channel" ] || die "no channel in $SRC/rust-toolchain.toml"
+    rustup toolchain install --profile minimal "$channel"
+    rustup target add --toolchain "$channel" wasm32-unknown-unknown
     (cd "$SRC" && cargo fetch --locked)
     UI_DIST="$BUILD_DIR/ui-dist"
     rm -rf "$UI_DIST"
@@ -239,174 +251,78 @@ build() {
     note "built in $(((SECONDS - started) / 60)) min $(((SECONDS - started) % 60)) s"
 }
 
-# JStream.app: an AppleScript applet (a real app macOS attributes the permission prompts
-# to), the daemon beside it, the UI and the launcher script in Resources.
-make_app() {
-    step "Making JStream.app"
-    local stage="$BUILD_DIR/stage" version
-    version=$(version_of)
-    rm -rf "$stage"
-    mkdir -p "$stage"
-    local app="$stage/JStream.app"
-    osacompile -s -o "$app" "$SRC/scripts/mac/JStream.applescript"
-    local contents="$app/Contents"
-    cp "$DAEMON" "$contents/MacOS/jstream-daemon"
-    cp -R "$UI_DIST" "$contents/Resources/ui"
-    install -m 0755 "$SRC/scripts/mac/start-daemon.sh" "$contents/Resources/start-daemon.sh"
-    make_icon "$contents/Resources/applet.icns"
-    # Newer applets name an icon in Assets.car, which would win over applet.icns.
-    rm -f "$contents/Resources/Assets.car"
-    local plist="$contents/Info.plist" key
-    set_plist() {
-        /usr/libexec/PlistBuddy -c "Delete :$1" "$plist" >/dev/null 2>&1 || true
-        /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$plist"
-    }
-    /usr/libexec/PlistBuddy -c "Delete :CFBundleIconName" "$plist" >/dev/null 2>&1 || true
-    set_plist CFBundleIdentifier "$BUNDLE_ID"
-    set_plist CFBundleName JStream
-    set_plist CFBundleDisplayName JStream
-    set_plist CFBundleShortVersionString "$version"
-    set_plist CFBundleVersion "$version"
-    set_plist LSMinimumSystemVersion "$MIN_MACOS.0"
-    # The same usage strings as the daemon's embedded Info.plist (ADR-0063 §11).
-    for key in NSCameraUsageDescription NSMicrophoneUsageDescription NSAudioCaptureUsageDescription; do
-        set_plist "$key" "$(/usr/libexec/PlistBuddy -c "Print :$key" "$SRC/apps/jstream-daemon/Info.plist")"
-    done
-    plutil -lint -s "$plist" || die "the app's Info.plist doesn't parse"
-    STAGED_APP=$app
-    note "JStream $version"
-}
-
-make_icon() {
-    local out=$1 png="$SRC/apps/jstream-desktop/icons/icon.png" set="$BUILD_DIR/stage/JStream.iconset" size
-    mkdir -p "$set"
-    for size in 16 32 128 256; do
-        sips -z "$size" "$size" "$png" --out "$set/icon_${size}x${size}.png" >/dev/null
-    done
-    for size in 16 32 128; do
-        sips -z $((size * 2)) $((size * 2)) "$png" --out "$set/icon_${size}x${size}@2x.png" >/dev/null
-    done
-    iconutil -c icns -o "$out" "$set" || warn "couldn't make the app icon: it keeps the default one"
-    rm -rf "$set"
-}
-
-# The local signing identity: a self-signed code-signing certificate in the login
-# keychain, made once. Every build is signed with it, so the permissions macOS ties to
-# the signature survive updates.
-signing_identity() {
-    if [ -n "$ADHOC" ]; then
-        IDENTITY=-
-        return
+check_not_running() {
+    if pgrep -f "$INSTALL_DIR/jstream-daemon" >/dev/null 2>&1; then
+        die "JStream is running: press Ctrl-C in its Terminal window (or close it), then run this again"
     fi
-    step "Signing identity"
-    if security find-identity -v -p codesigning 2>/dev/null | grep -q "\"$SIGNING_NAME\""; then
-        note "using \"$SIGNING_NAME\""
-        IDENTITY=$SIGNING_NAME
-        return
-    fi
-    note "making \"$SIGNING_NAME\" in your login keychain: macOS asks for your password to"
-    note "trust it, and may ask whether codesign can use its key (choose Always Allow)"
-    local tmp keychain
-    tmp=$(mktemp -d)
-    keychain=$(security default-keychain -d user | sed -e 's/^[[:space:]]*"//' -e 's/"[[:space:]]*$//')
-    cat >"$tmp/openssl.cnf" <<EOF
-[req]
-distinguished_name = dn
-prompt = no
-x509_extensions = ext
-[dn]
-CN = $SIGNING_NAME
-[ext]
-basicConstraints = critical, CA:false
-keyUsage = critical, digitalSignature
-extendedKeyUsage = critical, codeSigning
-EOF
-    # macOS's own LibreSSL: its PKCS#12 encryption is one `security import` reads.
-    if /usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$tmp/openssl.cnf" \
-        -keyout "$tmp/key.pem" -out "$tmp/cert.pem" >/dev/null 2>&1 &&
-        /usr/bin/openssl pkcs12 -export -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
-            -name "$SIGNING_NAME" -out "$tmp/id.p12" -passout pass:jstream >/dev/null 2>&1 &&
-        security import "$tmp/id.p12" -k "$keychain" -P jstream -T /usr/bin/codesign >/dev/null &&
-        security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$tmp/cert.pem"; then
-        IDENTITY=$SIGNING_NAME
-        note "made"
-    else
-        warn "couldn't make the signing identity: signing ad hoc, so macOS asks for permissions again after each update"
-        IDENTITY=-
-    fi
-    rm -rf "$tmp"
 }
 
-sign_app() {
-    step "Signing JStream.app"
-    codesign --force --sign "$IDENTITY" --identifier "$BUNDLE_ID.daemon" \
-        "$STAGED_APP/Contents/MacOS/jstream-daemon"
-    codesign --force --sign "$IDENTITY" "$STAGED_APP"
-    codesign --verify --deep --strict "$STAGED_APP" || die "the signed app doesn't verify"
-    if [ "$IDENTITY" = - ]; then note "signed ad hoc"; else note "signed with \"$IDENTITY\""; fi
-}
-
-install_app() {
+install_files() {
     step "Installing"
-    mkdir -p "$APP_DIR"
     check_not_running
-    rm -rf "$APP"
-    mv "$STAGED_APP" "$APP"
-    rm -rf "$BUILD_DIR/stage"
-    note "$APP"
+    local staged="$BUILD_DIR/install.new"
+    rm -rf "$staged"
+    mkdir -p "$staged"
+    cp "$DAEMON" "$staged/jstream-daemon"
+    cp -R "$UI_DIST" "$staged/ui"
+    install -m 0755 "$SRC/scripts/mac/jstream.sh" "$staged/jstream.sh"
+    install -m 0644 "$SRC/scripts/mac/clipboard.js" "$staged/clipboard.js"
+    rm -rf "$INSTALL_DIR"
+    mv "$staged" "$INSTALL_DIR"
+    # A double-clickable launcher: Finder opens a .command file in Terminal.
+    mkdir -p "$LAUNCHER_DIR"
+    printf '#!/bin/bash\nexec "%s/jstream.sh"\n' "$INSTALL_DIR" >"$LAUNCHER"
+    chmod 0755 "$LAUNCHER"
+    note "$LAUNCHER (JStream $(version_of))"
 }
 
 done_message() {
-    cat <<EOF
+    cat <<EOF_DONE
 
-JStream is installed: $APP
+JStream is installed. To start it, open JStream.command from your Applications folder
+(or Spotlight). It runs in a Terminal window: keep that window open while you use
+JStream, and press Ctrl-C there (or close the window) to stop it.
 
-Open it from your Applications folder (or Spotlight). It starts JStream, copies your
-access token to the clipboard and opens JStream in your browser. When the browser asks
-you to sign in, paste the token as the password (any user name), then click Connect
-with the Token field left empty.
+It opens JStream in your browser with your access token on the clipboard for two
+minutes. When the browser asks you to sign in, paste the token as the password (any
+user name), then click Connect with the Token field left empty.
+
 The first time you add a screen, camera, microphone or desktop audio, macOS asks for
-permission. A screen recording permission takes effect once JStream restarts.
+permission for Terminal, which runs JStream. Screen recording takes effect once you
+restart JStream. Saving a stream key may ask for your login keychain password after
+each update.
 
 Your scenes, token and logs:  $DATA_DIR
 To update:                    run the same command again
-To remove:                    the same command with --uninstall at the end:
-                              curl -fsSL <installer URL> | bash -s -- --uninstall
-EOF
+To remove:                    the same command with  bash -s -- --uninstall  at the end
+EOF_DONE
 }
 
 uninstall() {
     step "Removing JStream"
     check_not_running
-    rm -rf "$APP" "$BUILD_DIR"
-    note "removed $APP and $BUILD_DIR"
-    if security find-certificate -c "$SIGNING_NAME" >/dev/null 2>&1; then
-        while security find-certificate -c "$SIGNING_NAME" >/dev/null 2>&1; do
-            security delete-identity -c "$SIGNING_NAME" >/dev/null 2>&1 ||
-                security delete-certificate -c "$SIGNING_NAME" >/dev/null 2>&1 || break
-        done
-        note "removed the signing identity \"$SIGNING_NAME\""
-    fi
-    tccutil reset All "$BUNDLE_ID" >/dev/null 2>&1 || true
+    rm -rf "$LAUNCHER" "$BUILD_DIR"
+    note "removed $LAUNCHER and $BUILD_DIR"
     if [ -n "$PURGE" ]; then
         rm -rf "$DATA_DIR"
         note "removed $DATA_DIR (scenes, token and logs)"
     else
         note "kept $DATA_DIR (scenes, token and logs); --purge removes it"
     fi
+    note "Terminal keeps the permissions you gave it: remove them in System Settings ›"
+    note "Privacy & Security if you no longer want them"
 }
 
 main() {
-    REF="" SOURCE_DIR="" ADHOC="" OPEN=1 UNINSTALL="" PURGE=""
+    REF="" SOURCE_DIR="" OPEN=1 UNINSTALL="" PURGE=""
     while [ $# -gt 0 ]; do
         case "$1" in
             --ref) REF=${2:?--ref needs a tag, branch or commit}; shift ;;
             --source) SOURCE_DIR=${2:?--source needs a folder}; shift ;;
-            --adhoc) ADHOC=1 ;;
             --no-open) OPEN="" ;;
             --uninstall) UNINSTALL=1 ;;
             --purge) PURGE=1 ;;
-            -h | --help) sed -n '2,22p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+            -h | --help) usage; exit 0 ;;
             *) die "unknown option: $1 (try --help)" ;;
         esac
         shift
@@ -426,12 +342,9 @@ main() {
     source_tree
     ui_tools
     build
-    make_app
-    signing_identity
-    sign_app
-    install_app
+    install_files
     done_message
-    if [ -n "$OPEN" ]; then open "$APP"; fi
+    if [ -n "$OPEN" ]; then open "$LAUNCHER"; fi
 }
 
 main "$@"

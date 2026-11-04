@@ -467,7 +467,12 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
 
 /// The reason a value isn't the `want` reference a parameter takes: it names the
 /// reference's shape, since a first try is often a bare path or id (#1021).
-fn not_a_reference(want: &str) -> String {
+///
+/// `want` is a reference's `type` tag: `"asset"`, `"scene"`, `"source"` or `"bus"`.
+/// Sources share it for the checks they repeat after the graph has validated their
+/// settings, so both give the same reason (#1081).
+#[must_use]
+pub fn not_a_reference(want: &str) -> String {
     match want {
         "asset" => "must be an asset reference or null: an object such as \
                     `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/file.png\"}` \
