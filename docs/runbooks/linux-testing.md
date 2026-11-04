@@ -35,9 +35,8 @@ password (through `sudo`) at most twice:
 2. **To make Chromium's sandbox helper setuid root**, for browser sources, on systems that
    restrict user namespaces, such as Ubuntu 24.04 and later.
 
-When it finishes, JStream starts. It copies your access token to the clipboard (for two
-minutes) and opens
-JStream in your browser. When the browser asks you to sign in, paste the token as the
+When it finishes, JStream starts. It copies your access token to the clipboard for two
+minutes and opens JStream in your browser. When the browser asks you to sign in, paste the token as the
 password (any user name will do), then click Connect with the Token field left empty.
 Later, open JStream from your app menu, or run `jstream`. JStream has no window of its
 own: it keeps running until you choose **Stop JStream** (right-click its menu entry) or
