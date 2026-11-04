@@ -322,3 +322,120 @@ fn garbage_is_an_error_not_a_panic() {
         assert!(load(bytes, &mut Files::default()).is_err(), "{bytes:?}");
     }
 }
+
+#[test]
+fn an_attribute_of_another_length_or_a_vec3_tangent_is_refused() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    doc["accessors"][1]["count"] = json!(2);
+    let err = load_glb(&doc, &bin).expect_err("a short NORMAL");
+    assert!(err.0.contains("another length"), "{err:?}");
+    let (mut doc, bin) = triangle(json!({}), true);
+    // The normals' VEC3 accessor named as the tangents.
+    doc["meshes"][0]["primitives"][0]["attributes"]["TANGENT"] = json!(1);
+    let err = load_glb(&doc, &bin).expect_err("a VEC3 TANGENT");
+    assert!(err.0.contains("has 3 components, not 4"), "{err:?}");
+}
+
+#[test]
+fn a_hierarchy_that_fans_out_is_stopped_early() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    // Each node names the next one twice: 2^20 instances of the last.
+    let mut nodes: Vec<Value> = (0..20)
+        .map(|i| json!({ "children": [i + 1, i + 1] }))
+        .collect();
+    nodes.push(json!({ "mesh": 0 }));
+    doc["nodes"] = json!(nodes);
+    let started = std::time::Instant::now();
+    let err = load_glb(&doc, &bin).expect_err("refused");
+    assert!(err.0.contains("node instances"), "{err:?}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+#[test]
+fn an_accessor_past_the_caps_is_refused_before_it_is_read() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    // No buffer view: all zeros, which would allocate count elements.
+    doc["accessors"][0] =
+        json!({ "componentType": 5126, "count": 1_000_000_000u64, "type": "VEC3" });
+    let err = load_glb(&doc, &bin).expect_err("refused");
+    assert!(err.0.contains("more than a model may hold"), "{err:?}");
+}
+
+/// Counts decodes, to show the texture cap stops before decoding the 65th.
+#[derive(Default)]
+struct Counting(usize);
+
+impl Resources for Counting {
+    fn read(&mut self, uri: &str) -> Result<Vec<u8>, LoadError> {
+        Err(LoadError(format!("no file {uri}")))
+    }
+
+    fn decode(&mut self, _: &[u8], _: &str) -> Result<(u32, u32, Vec<u8>), LoadError> {
+        self.0 += 1;
+        Ok((2, 2, vec![9; 16]))
+    }
+}
+
+#[test]
+fn the_texture_cap_stops_before_decoding_past_it() {
+    let (mut doc, mut bin) = triangle(json!({}), true);
+    let image_at = bin.len();
+    bin.extend([7, 7, 7, 7]);
+    let views = doc["bufferViews"].as_array_mut().expect("an array");
+    views.push(json!({ "buffer": 0, "byteOffset": image_at, "byteLength": 4 }));
+    let image_view = views.len() - 1;
+    doc["buffers"][0]["byteLength"] = json!(bin.len());
+    let n = 65;
+    doc["images"] = json!(
+        (0..n)
+            .map(|_| json!({ "bufferView": image_view }))
+            .collect::<Vec<_>>()
+    );
+    doc["textures"] = json!((0..n).map(|i| json!({ "source": i })).collect::<Vec<_>>());
+    doc["materials"] = json!(
+        (0..n)
+            .map(|i| json!({ "pbrMetallicRoughness": { "baseColorTexture": { "index": i } } }))
+            .collect::<Vec<_>>()
+    );
+    let primitive = doc["meshes"][0]["primitives"][0].clone();
+    doc["meshes"][0]["primitives"] = json!(
+        (0..n)
+            .map(|i| {
+                let mut p = primitive.clone();
+                p["material"] = json!(i);
+                p
+            })
+            .collect::<Vec<_>>()
+    );
+    let mut counting = Counting::default();
+    let err = load(&glb(&doc, &bin), &mut counting).expect_err("refused");
+    assert!(err.0.contains("more than 64 textures"), "{err:?}");
+    assert_eq!(counting.0, 64);
+}
+
+#[test]
+fn a_file_uri_stays_below_the_models_folder() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    let mut files = Files(vec![("parts/mesh.bin".into(), bin)]);
+    doc["buffers"][0]["uri"] = json!("parts/mesh.bin");
+    let json = serde_json::to_vec(&doc).expect("serialises");
+    assert!(load(&json, &mut files).is_ok());
+    for uri in [
+        "../mesh.bin",
+        "parts/../../mesh.bin",
+        "/etc/passwd",
+        "C:/Windows/win.ini",
+        "C:mesh.bin",
+        "%2E%2E/mesh.bin",
+        "parts\\mesh.bin",
+        "CON",
+    ] {
+        doc["buffers"][0]["uri"] = json!(uri);
+        let json = serde_json::to_vec(&doc).expect("serialises");
+        let err = load(&json, &mut files).expect_err(uri);
+        assert!(
+            err.0.contains("not a file beside the model"),
+            "{uri}: {err:?}"
+        );
+    }
+}

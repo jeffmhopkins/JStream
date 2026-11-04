@@ -199,8 +199,8 @@ fn a_gltf_cant_reach_outside_its_root() {
     };
     assert!(
         matches!(
-            err,
-            SourceError::AssetEscapesRoot { .. } | SourceError::AssetRead { .. }
+            &err,
+            SourceError::Model { reason, .. } if reason.contains("`..`")
         ),
         "{err:?}"
     );

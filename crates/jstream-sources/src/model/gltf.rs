@@ -11,9 +11,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use jstream_media::model::{
-    AlphaMode, MAX_TEXTURE_SIDE, Material, Model, ModelTexture, ModelVertex, Primitive,
-    TextureColor, TextureRef, compute_tangents,
+    AlphaMode, MAX_MODEL_BYTES, MAX_TEXTURE_SIDE, MAX_TEXTURES, MAX_TRIANGLES, Material, Model,
+    ModelTexture, ModelVertex, Primitive, TextureColor, TextureRef, VERTEX_BYTES, compute_tangents,
 };
+use jstream_protocol::{AssetRoot, check_asset_path};
 use serde::Deserialize;
 
 /// Extensions the loader understands. Any other the file *requires* is refused.
@@ -340,6 +341,9 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
         material_list: Vec::new(),
         primitives: Vec::new(),
         ignored: &mut ignored,
+        triangles: 0,
+        bytes: 0,
+        visits: 0,
     };
     let roots: Vec<usize> = match doc
         .scene
@@ -415,7 +419,13 @@ fn read_uri(uri: &str, resources: &mut dyn Resources) -> Result<Vec<u8>> {
             "`{uri}` is not a file beside the model"
         )));
     }
-    resources.read(&percent_decode(uri))
+    let path = percent_decode(uri);
+    // A file the model names is relative to it and stays below its folder: no `..`, no
+    // absolute or drive path, no `:` and no device name, whatever root the model is in.
+    check_asset_path(AssetRoot::Collection, &path).map_err(|reason| {
+        LoadError::new(format!("`{uri}` is not a file beside the model: {reason}"))
+    })?;
+    resources.read(&path)
 }
 
 fn percent_decode(uri: &str) -> String {
@@ -585,7 +595,21 @@ struct Builder<'a> {
     material_list: Vec<Material>,
     primitives: Vec<Primitive>,
     ignored: &'a mut Ignored,
+    /// What the model holds so far, checked against ADR-0107's caps as it grows, so a
+    /// file that would pass them only after building something huge is stopped early.
+    triangles: usize,
+    bytes: u64,
+    /// Node instances visited: a hierarchy that names the same children many times fans
+    /// out, and every instance of every mesh costs time even when it adds nothing.
+    visits: usize,
 }
+
+/// The most node instances a scene may expand to.
+const MAX_NODE_VISITS: usize = 100_000;
+
+/// The most elements an accessor may hold: a list of the most triangles a model may have,
+/// with room for a strip's two leading indices.
+const MAX_ACCESSOR_COUNT: usize = 3 * MAX_TRIANGLES + 2;
 
 /// How deep a node hierarchy may go: a cycle in a malformed file stops here.
 const MAX_DEPTH: usize = 64;
@@ -596,6 +620,12 @@ impl Builder<'_> {
             return Err(LoadError::new(
                 "the node hierarchy is deeper than 64, or has a cycle",
             ));
+        }
+        self.visits += 1;
+        if self.visits > MAX_NODE_VISITS {
+            return Err(LoadError::new(format!(
+                "the scene expands to more than {MAX_NODE_VISITS} node instances"
+            )));
         }
         let node = self
             .doc
@@ -668,6 +698,36 @@ impl Builder<'_> {
             };
             if p.attributes.contains_key("JOINTS_0") {
                 self.ignored.0.insert("skins");
+            }
+            // Every attribute has one element per vertex.
+            for (name, data, n) in [
+                ("NORMAL", &normal_data, 3),
+                ("TANGENT", &tangent_data, 4),
+                ("TEXCOORD_0", &uv_data, 2),
+                ("COLOR_0", &color_data, 4),
+            ] {
+                if data.as_ref().is_some_and(|d| d.len() != count * n) {
+                    return Err(LoadError::new(format!(
+                        "a primitive of mesh {index} has a {name} of another length than its POSITION"
+                    )));
+                }
+            }
+            let triangles = order.len() / 3;
+            // Flat normals give each corner its own vertex, so count the larger.
+            let vertices = count.max(order.len());
+            let bytes = vertices as u64 * VERTEX_BYTES + order.len() as u64 * 4;
+            self.triangles = self.triangles.saturating_add(triangles);
+            self.bytes = self.bytes.saturating_add(bytes);
+            if self.triangles > MAX_TRIANGLES {
+                return Err(LoadError::new(format!(
+                    "the model has more than {MAX_TRIANGLES} triangles"
+                )));
+            }
+            if self.bytes > MAX_MODEL_BYTES {
+                return Err(LoadError::new(format!(
+                    "the model takes more than {} MiB",
+                    MAX_MODEL_BYTES / (1024 * 1024)
+                )));
             }
             if order.iter().any(|&i| i as usize >= count) {
                 return Err(LoadError::new(format!(
@@ -753,7 +813,8 @@ impl Builder<'_> {
 
     /// The raw components of an accessor, as `f64`, `components` per element: what every
     /// other read is built on.
-    fn read(&self, index: usize, components: usize) -> Result<Vec<f64>> {
+    /// A VEC3 is read where `components` is 4 only when `widen` (`COLOR_0`'s RGB).
+    fn read(&self, index: usize, components: usize, widen: bool) -> Result<Vec<f64>> {
         let accessor = self
             .doc
             .accessors
@@ -771,7 +832,7 @@ impl Builder<'_> {
             "VEC4" => 4,
             other => return Err(LoadError::new(format!("accessor {index} is a {other}"))),
         };
-        if have != components && !(components == 4 && have == 3) {
+        if have != components && !(widen && components == 4 && have == 3) {
             return Err(LoadError::new(format!(
                 "accessor {index} has {have} components, not {components}"
             )));
@@ -786,6 +847,12 @@ impl Builder<'_> {
                 )));
             }
         };
+        if accessor.count > MAX_ACCESSOR_COUNT {
+            return Err(LoadError::new(format!(
+                "accessor {index} has {} elements, more than a model may hold",
+                accessor.count
+            )));
+        }
         let Some(view_index) = accessor.buffer_view else {
             // No view: all zeros, as the spec says.
             return Ok(vec![0.0; accessor.count * have]);
@@ -850,7 +917,10 @@ impl Builder<'_> {
     }
 
     fn floats(&self, index: usize, components: usize) -> Result<Vec<f32>> {
-        let values = self.read(index, components)?;
+        self.finite(index, self.read(index, components, false)?)
+    }
+
+    fn finite(&self, index: usize, values: Vec<f64>) -> Result<Vec<f32>> {
         if values.iter().any(|v| !v.is_finite()) {
             return Err(LoadError::new(format!(
                 "accessor {index} holds a value that isn't finite"
@@ -862,7 +932,7 @@ impl Builder<'_> {
     /// `COLOR_0`, as RGBA: a VEC3 gains alpha 1.
     fn colors(&self, index: usize) -> Result<Vec<f32>> {
         let have = self.doc.accessors.get(index).map(|a| a.kind.as_str());
-        let values = self.floats(index, 4)?;
+        let values = self.finite(index, self.read(index, 4, true)?)?;
         if have == Some("VEC3") {
             return Ok(values
                 .chunks_exact(3)
@@ -873,7 +943,11 @@ impl Builder<'_> {
     }
 
     fn indices(&self, index: usize) -> Result<Vec<u32>> {
-        Ok(self.read(index, 1)?.into_iter().map(|v| v as u32).collect())
+        Ok(self
+            .read(index, 1, false)?
+            .into_iter()
+            .map(|v| v as u32)
+            .collect())
     }
 
     fn material(&mut self, index: Option<usize>) -> Result<usize> {
@@ -960,6 +1034,11 @@ impl Builder<'_> {
         if let Some(&built) = self.texture_of.get(&(image, srgb)) {
             return Ok(Some(TextureRef { texture: built }));
         }
+        if self.textures.len() >= MAX_TEXTURES {
+            return Err(LoadError::new(format!(
+                "the model has more than {MAX_TEXTURES} textures"
+            )));
+        }
         let def = self
             .doc
             .images
@@ -992,6 +1071,14 @@ impl Builder<'_> {
         };
         let texture = ModelTexture::new(width, height, rgba, color)
             .map_err(|err| LoadError::new(format!("image {image}: {err}")))?;
+        let texture_bytes: u64 = texture.levels().iter().map(|l| l.len() as u64).sum();
+        self.bytes = self.bytes.saturating_add(texture_bytes);
+        if self.bytes > MAX_MODEL_BYTES {
+            return Err(LoadError::new(format!(
+                "the model takes more than {} MiB",
+                MAX_MODEL_BYTES / (1024 * 1024)
+            )));
+        }
         let built = self.textures.len();
         self.textures.push(texture);
         self.texture_of.insert((image, srgb), built);

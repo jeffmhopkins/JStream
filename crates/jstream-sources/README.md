@@ -198,9 +198,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `TEXCOORD_0`), `KHR_materials_unlit` and `KHR_materials_emissive_strength`, with
   normals and tangents made where the file has none. Skins, morph targets, animations,
   cameras and lights are ignored with an `info` log; a required extension it doesn't
-  know, sparse accessors and a URL are errors, `SourceError::Model` naming the file.
-  Images decode as the `image` kind decodes them, within the same `Limits`, and over
-  4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
+  know, sparse accessors and a URL are errors, `SourceError::Model` naming the file. A
+  file the model names must pass `check_asset_path` as a relative path (no `..`, no
+  absolute or drive path, no `:`, no device name), whatever root the model is under, so
+  it stays below the model's folder. Every attribute must have one element per vertex,
+  and a `TANGENT` must be a VEC4. ADR-0107's caps are checked while the model is built,
+  not after: triangles and bytes as each primitive is added, textures before each image
+  is decoded, an accessor's count (at most 3 × 2,000,000 + 2) before it is read, and at
+  most 100,000 node instances, so a hierarchy that names the same children many times
+  stops early. Images decode as the `image` kind decodes them, within the same
+  `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
   longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
@@ -547,7 +554,7 @@ features off.
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built
 by the test, node transforms and mirroring, materials and textures, refused extensions,
-URLs and overflowing accessors) and the `model` kind (`model/tests.rs`: shapes, live
+URLs and overflowing accessors, attributes of another length and VEC3 tangents, a fanning hierarchy, an accessor past the caps, the texture cap before decoding, and file URIs that would leave the model's folder) and the `model` kind (`model/tests.rs`: shapes, live
 looks, the stand-in's size, buffers read beside a file and not outside its root), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
