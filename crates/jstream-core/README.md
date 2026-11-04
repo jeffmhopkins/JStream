@@ -1654,8 +1654,8 @@ program's or a preview's (`LiveSources::end_looks`), so one no mix draws costs n
 while something else re-plans every frame; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
-them ahead on a thread of its own, so the plan's `frame` calls under the lock never
-draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
+calls under the lock never draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
@@ -2695,7 +2695,8 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
-each live source for a frame it already has. The snapshot compositor belongs to the snapshot
+each live source for a frame it already has, apart from one catch-up paint of a painter
+a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
