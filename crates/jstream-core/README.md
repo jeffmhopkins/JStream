@@ -1740,7 +1740,8 @@ step. `values.set` checks the name and size with the protocol's
 shared checks and the 256-name limit, changes nothing on a refusal, and emits
 `values.changed` only when the value really changed. It is not in the activity or audit
 log, as `live.set` isn't: it carries data and may come many times a second.
-`values.list` reads them by name.
+`values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
+*Page API* under [Snapshots](#snapshots)).
 
 <a id="preview-streams"></a>
 ## Preview streams
