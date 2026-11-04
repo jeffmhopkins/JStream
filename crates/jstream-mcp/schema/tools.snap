@@ -58,7 +58,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -95,12 +95,12 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
       },
-      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `bus`, `canvas`, `encoder`, `filter`, `folder`, `hotkey`, `item`, `label`, `output`, `scene`, `send`, `source`, `transition`, `video_mix` tools take as `op`. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture you opened with the `live` tool's `live.set`. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Applies one or more edits atomically, as one undo step: either all of them apply or none does, and the state `rev` goes up by exactly one. The edits are those the `bus`, `canvas`, `encoder`, `filter`, `folder`, `hotkey`, `item`, `label`, `output`, `scene`, `send`, `source`, `transition`, `video_mix` tools take as `op`, except `output.delete` and `output.set_target`, which can remove a stream key and go through the `output` tool. Actions and queries can't be batched. Pass `expected_rev` to apply only if nobody changed the state since you read it, and `idempotency_key` to make a retry safe, and `ends_gesture` to commit a gesture you opened with the `live` tool's `live.set`. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Action": {
@@ -1156,7 +1156,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -2736,6 +2736,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept\nwith the collection, as OBS's is: a client doesn't let a locked item be dragged,\nresized or turned on its canvas, but the engine still applies every edit to it,\nso the Inspector, the menus and a script can change it. It belongs to the item,\nnot to a placement, so it takes no `scene_id` and a keyframe doesn't override\nit. Items are added unlocked. Inverse: `item.set_locked` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to lock or unlock."
+                  },
+                  "locked": {
+                    "description": "Whether its canvas box is locked.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "item.set_locked",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "locked"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -3628,6 +3651,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "jpeg",
                 "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
                 "type": "string"
+              },
+              {
+                "const": "png",
+                "description": "One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a\nscreenshot rather than a moving picture. An older server refuses the name.",
+                "type": "string"
               }
             ]
           },
@@ -4088,7 +4116,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -4678,7 +4706,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -5016,7 +5044,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -5389,7 +5417,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -6760,7 +6788,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -8340,6 +8368,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept\nwith the collection, as OBS's is: a client doesn't let a locked item be dragged,\nresized or turned on its canvas, but the engine still applies every edit to it,\nso the Inspector, the menus and a script can change it. It belongs to the item,\nnot to a placement, so it takes no `scene_id` and a keyframe doesn't override\nit. Items are added unlocked. Inverse: `item.set_locked` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to lock or unlock."
+                  },
+                  "locked": {
+                    "description": "Whether its canvas box is locked.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "item.set_locked",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "locked"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -9232,6 +9283,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "jpeg",
                 "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
                 "type": "string"
+              },
+              {
+                "const": "png",
+                "description": "One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a\nscreenshot rather than a moving picture. An older server refuses the name.",
+                "type": "string"
               }
             ]
           },
@@ -9719,12 +9775,12 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -10315,7 +10371,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -10627,6 +10683,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept\nwith the collection, as OBS's is: a client doesn't let a locked item be dragged,\nresized or turned on its canvas, but the engine still applies every edit to it,\nso the Inspector, the menus and a script can change it. It belongs to the item,\nnot to a placement, so it takes no `scene_id` and a keyframe doesn't override\nit. Items are added unlocked. Inverse: `item.set_locked` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to lock or unlock."
+                  },
+                  "locked": {
+                    "description": "Whether its canvas box is locked.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "item.set_locked",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "locked"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
                 "properties": {
                   "scene_id": {
@@ -10709,7 +10788,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -10884,7 +10963,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -11945,7 +12024,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -13525,6 +13604,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept\nwith the collection, as OBS's is: a client doesn't let a locked item be dragged,\nresized or turned on its canvas, but the engine still applies every edit to it,\nso the Inspector, the menus and a script can change it. It belongs to the item,\nnot to a placement, so it takes no `scene_id` and a keyframe doesn't override\nit. Items are added unlocked. Inverse: `item.set_locked` with the previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to lock or unlock."
+                  },
+                  "locked": {
+                    "description": "Whether its canvas box is locked.",
+                    "type": "boolean"
+                  },
+                  "type": {
+                    "const": "item.set_locked",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "locked"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -14412,6 +14514,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "jpeg",
                 "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+                "type": "string"
+              },
+              {
+                "const": "png",
+                "description": "One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a\nscreenshot rather than a moving picture. An older server refuses the name.",
                 "type": "string"
               }
             ]
@@ -15372,7 +15479,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -15391,6 +15498,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "jpeg",
                 "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+                "type": "string"
+              },
+              {
+                "const": "png",
+                "description": "One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a\nscreenshot rather than a moving picture. An older server refuses the name.",
                 "type": "string"
               }
             ]
@@ -15550,7 +15662,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16066,7 +16178,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16188,7 +16300,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": true,
         "readOnlyHint": false
@@ -16603,7 +16715,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16664,7 +16776,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false
@@ -16990,7 +17102,7 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
-        "destructiveHint": true,
+        "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,
         "readOnlyHint": false

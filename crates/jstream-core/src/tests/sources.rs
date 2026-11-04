@@ -240,6 +240,141 @@ fn an_enlarged_text_item_draws_its_source_at_a_density() {
     assert_eq!(sizes(), (extent, extent), "at its own size again");
 }
 
+/// A `timer`'s settings as the graph completes them: its kind's defaults under `patch`.
+fn timer_settings(patch: &Settings) -> Settings {
+    let registry = jstream_sources::Registry::builtin();
+    let mut full = Settings(
+        registry
+            .descriptor("timer")
+            .expect("the timer kind")
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect(),
+    );
+    full.0.extend(patch.0.clone());
+    full
+}
+
+/// What a `timer` built from `patch` draws `at_ms` after its time zero, at `density`.
+fn timer_frame(patch: &Settings, density: f32, at_ms: i64) -> Vec<u8> {
+    let at = jstream_media::MediaTime::new(at_ms, Timebase::MILLIS);
+    let mut timer = jstream_sources::Registry::builtin()
+        .create(
+            "timer",
+            &timer_settings(patch),
+            &jstream_sources::Context::default(),
+        )
+        .expect("a timer");
+    timer.set_density(density);
+    timer.painter().expect("a painter").paint(at);
+    let video = timer.frame(at).expect("a frame");
+    crate::snapshot::Frame::from_video(video, 0)
+        .expect("RGBA")
+        .pixels()
+}
+
+/// What the program mix shows for the timer `t`, once every build is done.
+fn timer_shown(engine: &Engine) -> Vec<u8> {
+    assert!(engine.settle_sources(), "the sources were built in time");
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .frame(&SourceId::new("t"))
+        .map(|frame| frame.pixels())
+        .expect("the timer is shown")
+}
+
+/// Waits for the sources thread to paint the timer `t` as `want`.
+fn timer_reaches(engine: &Engine, want: &[u8], what: &str) {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while timer_shown(engine) != want {
+        assert!(Instant::now() < deadline, "{what}");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+/// #1027: the engine builds a source again for every settings change and every new
+/// density, and a `timer` built again for its look or for a resized item keeps counting
+/// from its time zero, painted for that time before its first plan shows it. A change
+/// of its `mode` or `duration` starts it again.
+#[test]
+fn a_timer_keeps_counting_through_a_style_change_and_a_density() {
+    use jstream_protocol::{Finite32, ItemTransform, Vec2};
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let white = settings(&[("mode", json!("stopwatch")), ("color", json!("#ffffffff"))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("t", "timer", white.clone()),
+            add("a", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(timer_shown(&engine), timer_frame(&white, 1.0, 0), "00:00");
+
+    clock.advance(3_000);
+    timer_reaches(&engine, &timer_frame(&white, 1.0, 3_000), "00:03");
+
+    let red = settings(&[("mode", json!("stopwatch")), ("color", json!("#ff0000ff"))]);
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("color", json!("#ff0000ff"))]),
+        }),
+    )
+    .expect("restyled");
+    assert_ne!(timer_frame(&red, 1.0, 3_000), timer_frame(&red, 1.0, 0));
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&red, 1.0, 3_000),
+        "still 00:03 in red, from its first plan"
+    );
+
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetTransform {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            transform: ItemTransform {
+                position: Vec2::new(0.0, 0.0).expect("finite"),
+                scale: Vec2::new(2.0, 2.0).expect("finite"),
+                rotation_deg: Finite32::new(0.0).expect("finite"),
+            },
+        }),
+    )
+    .expect("scaled");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&red, 2.0, 3_000),
+        "still 00:03, drawn at twice the pixels"
+    );
+
+    clock.advance(2_000);
+    timer_reaches(&engine, &timer_frame(&red, 2.0, 5_000), "00:05");
+
+    let countdown = settings(&[("mode", json!("countdown")), ("color", json!("#ff0000ff"))]);
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("mode", json!("countdown"))]),
+        }),
+    )
+    .expect("a countdown");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 2.0, 0),
+        "a new mode starts again: 05:00"
+    );
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen

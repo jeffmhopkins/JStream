@@ -30,7 +30,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
-  at each start; `vcam_status`, whether the camera is registered and current.
+  at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
+  on); `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
@@ -38,7 +39,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
-  projector windows the UI opens, and shutdown.
+  projector windows the UI opens, the project's links it hands to the system browser
+  (`links.rs`, which builds and is tested everywhere), and shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -57,7 +59,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
-dumps (only a panic writes a report, as in the daemon), MCP and the token for outside clients, and browser sources in a default build
+dumps (only a panic writes a report, as in the daemon), pairing remote browsers, and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder
 ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
@@ -84,6 +86,8 @@ Closing the window stops the engine.
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
 | `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
+| `--mcp` | Let agents in: listen on `127.0.0.1:4455` with the data folder's `token` file, and serve MCP at `/mcp` (see **Agents** below). Off by default. |
+| `--port <port>` | With `--mcp`, the port instead of 4455. Without `--mcp` it is refused. |
 
 **Browser sources** need the `cef` feature (`cargo run -p jstream-desktop --features
 cef`) and the sandboxed browser helper in the `browser` folder beside `jstream.exe` (or
@@ -126,6 +130,18 @@ folder, and its log `logs\cef.log`.
 - **When it can't start** (no data folder, Media Foundation missing, the collection
   file unreadable, no UI bundle), the window shows what went wrong and the log has the
   details. An unknown command-line argument is shown the same way.
+- **Agents (`--mcp`).** The app then lets outside clients in as the daemon does
+  ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)): it listens on
+  `127.0.0.1:4455` (or `--port`), takes its token from `token` in the data folder,
+  created user-only the first time and reused after
+  (`jstream_server::token_file`, [jstream-server › Purpose](../../crates/jstream-server/README.md#purpose)),
+  and serves MCP's streamable-HTTP transport at `http://127.0.0.1:4455/mcp`. An MCP client
+  launches `jstream-cli.exe --url ws://127.0.0.1:4455 mcp` from the same folder with
+  `JSTREAM_TOKEN_FILE` naming that file, or posts to `/mcp` with the token as a bearer
+  token ([Getting started › Connect an agent](../../docs/GETTING-STARTED.md#agents)). The
+  window uses the same token. The log names the endpoint and the token file, never the
+  token. A port in use stops the start with a page that says to pass `--port`. Pairing
+  stays off.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager) and start it.
 - **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
@@ -144,9 +160,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
   picks, behind a 32-byte random token made at each start and kept only in memory: no
-  token file, and no other client can connect. MCP is off. The server accepts the
+  token file, and no other client can connect. MCP is off. With `--mcp`
+  (`host::Agents`) the server binds `127.0.0.1` on a fixed port (`--port`, 4455 by
+  default), takes the token from
+  the data folder's token file through `jstream_server::token_file`, the daemon's
+  code, so it has the same checks (user-only, refused otherwise), and turns MCP on
+  (`ServerConfig::mcp`), so agents and the CLI connect with that file. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. The engine serves only the webview, so the server pairs no device
+  token. The window needs no pairing and pairing remote browsers isn't offered yet
+  ([Purpose](#purpose)), so the server pairs no device
   (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
   answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
   pairing page or device cookie
@@ -198,8 +220,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   window opens only for one of the UI's projector pages (`?projector=`, the UI's
   `projector.rs`): another window of the app with the same rules and script, starting
   on `about:blank` as a window handed back to `window.open` must, placed and sized as
-  the page asked, and full screen when it asked for that (`&full=1`). Every other new
-  window is refused, and a projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
+  the page asked, and full screen when it asked for that (`&full=1`). A link to one of
+  the project's own pages on GitHub (`links.rs`: the repository's URL from the
+  workspace's `repository`, or a path, query or fragment under it written only with
+  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu and About dialog
+  link to) opens in the system browser, through Explorer with the URL as one argument,
+  and never in the window. So a page can make the app start one OS process, Explorer,
+  for those URLs only; no comma, backslash, quote, space or percent escape can reach
+  Explorer's command line. Every other new window is refused, and a
+  projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
   no capabilities, so the API is the only way in.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page

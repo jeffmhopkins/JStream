@@ -301,3 +301,40 @@ test('a double click on the canvas tools selects nothing under them', async ({ p
   await expect(seed).toHaveClass(/selected/);
   await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(1);
 });
+
+test('a locked item is selected but not moved, as OBS\'s lock does', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await expect(outline(page)).toBeVisible();
+  const row = page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' });
+  const lock = row.getByRole('button', { name: 'Lock Backdrop' });
+  await row.hover();
+  const at = await rev(page);
+  await lock.click();
+  await expect.poll(() => rev(page)).toBe(at + 1);
+  await expect(lock).toHaveAttribute('aria-pressed', 'true');
+
+  // A drag selects it and leaves it where it was: no handles, and the readout says why.
+  const before = await corners(page);
+  const from = await onScreen(page, 960, 540);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + 120, from.y + 80, { steps: 4 });
+  await page.mouse.up();
+  await expect(row).toHaveClass(/selected/);
+  await expect(readout(page)).toHaveText('640 × 360 · locked');
+  await expectCorners(page, before);
+  // Arrow keys leave it too.
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(200);
+  expect(await rev(page)).toBe(at + 1);
+  await expectCorners(page, before);
+
+  // The item menu's Lock is checked, and unlocks it.
+  await row.locator('.row-main').click({ button: 'right' });
+  const entry = page.getByRole('menuitemcheckbox', { name: 'Lock', exact: true });
+  await expect(entry).toHaveAttribute('aria-checked', 'true');
+  await entry.click();
+  await expect.poll(() => rev(page)).toBe(at + 2);
+  await expect(lock).toHaveAttribute('aria-pressed', 'false');
+  await expect(readout(page)).toHaveText('640 × 360');
+});

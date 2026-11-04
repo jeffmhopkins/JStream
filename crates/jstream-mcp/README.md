@@ -33,8 +33,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   less the people-only `youtube.*` and `plugin.*` ops (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
-  `batch`, which carries their edits, is open-world too), and the decoding of tool
-  arguments into protocol calls, which refuses an output edit with a `youtube` target.
+  `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
+  actions that don't make a tool destructive), and the decoding of tool arguments into
+  protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
+  `OUTPUT_ONLY_EDITS` that can remove a stream key.
 - **Events** (`events.rs`): the `events` tool's feed, one event subscription pumped into
   a bounded, numbered buffer, beside the newest `stats.tick` and `meters.tick`; a
   `live.changed` may be merged into an unread one of its gesture, and `youtube.*`
@@ -104,8 +106,17 @@ Every tool carries MCP `annotations`, derived from its ops' classes
 ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), with every hint
 written out because the spec's defaults call a tool destructive and open-world. A tool
 of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool is
-`destructiveHint` when it has an action, a history call or a `delete`/`remove` edit, as
-`batch` is; `canvas`, whose edits only change, is not. `openWorldHint` is true for the
+`destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
+history call
+([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
+today `device`, `history`, `output`, `pairing` and `ui_settings`. `history` stays
+destructive because an undo past an `output.create` or `output.set_target` removes a
+stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch`, `studio.set_preview`, `live.set`,
+`live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
+shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+`output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
+back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
+either. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
 server, and `source`, whose `browser` kind loads any http or https page set as its `url`
 (or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
@@ -130,6 +141,7 @@ server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s
 U1). Tested by `annotations_follow_what_each_tool_can_do`,
+`reversible_actions_name_actions`, `batch_refuses_edits_that_can_remove_a_key`,
 `output_tool_marks_remote_rejection_text`, `capture_tool_marks_window_titles_as_remote_text` and
 `instructions_mark_remote_text_and_tools_carry_annotations`.
 
@@ -139,18 +151,26 @@ type, boxes that don't fit their text. It says what a broadcast designer would: 
 title-safe area, alignment and spacing, a `backdrop` source rather than a flat colour,
 `shape` sources sized to their boxes for plates, pills, circles and gradients, the
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
-recipes for a lower third and a ticker (`scroll` with a negative speed and a `gap_x`),
-grouping a multi-part graphic as a nested scene whose item's
+recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
+a countdown or clock (`timer`, one size whatever it shows), grouping a multi-part graphic as a nested scene whose item's
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
-keyframe variants and blend modes (`item.set_blend`), 3D sets through
+keyframe variants and blend modes (`item.set_blend`), layering by role
+(#1062): background, light sources, the light they throw and the foreground as separate
+layers, additive for light and normal for matter, masks drawn as `image_mask` or
+`scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
+surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
+canvas space by an unflipped group around it and added at a low opacity because
+blending is linear, 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
-source's `html` (and falling back to them where no browser is available), and checking
+source's `html` (time-based animation on the wall clock so separate pages agree, with
+subtle ambient motion and streaks that move less per frame than their length, and falling back to the built-in kinds where no browser is
+available), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.
@@ -165,8 +185,8 @@ place it is sent ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 The `ui_settings` tool (protocol 0.52) is the same:
 [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)'s server answers it,
 so an agent can read or change the UI's kept settings, such as the web UI's dock, and
-gets `unsupported` from a session with no server in front. Being an action's tool, it is
-`destructiveHint`.
+gets `unsupported` from a session with no server in front. `ui_settings.set` replaces a
+person's settings whole, so the tool is `destructiveHint`.
 
 ### MCP revisions
 

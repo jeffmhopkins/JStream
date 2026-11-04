@@ -53,7 +53,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
@@ -131,7 +131,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-types` | IDs, math (Vec/Mat/Transform3D), color, rational time, units | no |
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-aac` | JStream's AAC-LC encoder, Linux's AAC path ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), within [ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)'s limits): MPEG-2 AAC LC tools only, encode only; `f32` samples in, raw access units and the `AudioSpecificConfig` out. `jstream-platform-linux` puts it behind `AudioEncoder` | no |
-| 0 | `jstream-anim` | Keyframe-scene model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md)): a variant's overrides and their inverses, effective values over the live parent, and the switch plan between keyframes; generic over geometry, no dependencies | no |
+| 0 | `jstream-anim` | Keyframe-scene and motion model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md), [ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)): a variant's overrides and their inverses, effective values over the live parent, the switch plan between keyframes, motion modifiers and timelines; generic over geometry, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
@@ -181,7 +181,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
 │                          camera?, filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
-│                              effects[] (video filters), transition }
+│                              effects[] (video filters), transition, locked }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
@@ -497,7 +497,7 @@ every mix runs at the base rate divided by an integer.
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
 | Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264 or JPEG) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264, JPEG, or PNG for a screenshot) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
@@ -762,7 +762,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0037](adr/0037-kind-descriptors-for-transitions-and-plugins.md)),
   `transition.set_default` sets the default, `scene.set_transitions` sets a scene's
   `transition_in` and `transition_out`, and `item.set_transition` an item's transition
-  settings. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
+  settings. `item.set_locked` (0.71, [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md))
+  locks an item's canvas box, an editing aid clients honour and the engine never
+  enforces. `scene.switch` takes an optional `preset_id`, and the `studio.changed` it
   causes names the preset it ran and how long the transition lasts (0 for a cut).
   `state.get` reports the presets and the default under `transitions`, and `kind.list`
   the transition kinds.
@@ -868,7 +870,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `source_id`: the UI's projector of a source), for the calling session,
   scaled down, at most `fps` pictures a second and only when the mix changes (as it
   does throughout a running transition), in H.264
-  when the platform has an encoder and JPEG otherwise; `preview.unsubscribe` or the
+  when the platform has an encoder and JPEG otherwise, or in PNG for a client that asks
+  for it alone to take a screenshot (0.71,
+  [ADR-0096](adr/0096-item-lock-and-png-preview-frames.md)); `preview.unsubscribe` or the
   session's end closes it. Each frame is a fixed 32-byte header (channel, codec,
   keyframe, size, presentation time, `rev`) and the picture, and every hop that queues
   frames drops up to the next keyframe when full, so a slow client still decodes what
@@ -954,10 +958,13 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
-  from its ops (`readOnlyHint` for queries only; `destructiveHint` for actions, history
-  calls and deletes; `openWorldHint` for `output`, `source`, whose `browser` kind loads
-  any web page, and `batch`), so a client can ask the user before an agent retargets an
-  output, sets its key, goes live, points a browser source at a page or deletes. Text
+  from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
+  action undo can't take back or a history call, today `device`, `history`, `output`,
+  `pairing` and `ui_settings`;
+  `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
+  `batch`), so a client can ask the user before an agent retargets an output, sets its
+  key, goes live, steps through undo or points a browser source at a page, and lets
+  undoable edits, deletes included, through ([ADR-0098](adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)). Text
   from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), or in a window's `name` in
   `capture.targets` (its title or, on macOS, its application's name, set by the
@@ -986,9 +993,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   are readable over the protocol (`activity.list`, ADR-0083) for the UI's Agent activity
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
-  finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker
-  and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, 3D sets through a scene camera, and checking each step with `video.snapshot`), since what an agent
+  finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
+  countdown and grouping recipes, fitting boxes to text, animating with keyframe
+  scenes, layering light, masks and reflections, 3D sets through a scene camera, and
+  checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).
 
@@ -1265,7 +1273,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `jstream-graph`, which checks a loaded collection as it checks edits. A field added
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
-  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
+  `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
   valid at the same `schema_version`. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) bumped it instead, each with a
   migration that refuses the new field in an older file. `jstream-core`

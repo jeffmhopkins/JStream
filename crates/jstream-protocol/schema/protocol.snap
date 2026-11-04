@@ -2188,7 +2188,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default, and the\nplacement edits that write each dropped override back.",
+          "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -3764,6 +3764,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "item_id",
             "transition"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Locks or unlocks an item (ADR-0096, since 0.71). A lock is an editing aid kept\nwith the collection, as OBS's is: a client doesn't let a locked item be dragged,\nresized or turned on its canvas, but the engine still applies every edit to it,\nso the Inspector, the menus and a script can change it. It belongs to the item,\nnot to a placement, so it takes no `scene_id` and a keyframe doesn't override\nit. Items are added unlocked. Inverse: `item.set_locked` with the previous value.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item to lock or unlock."
+            },
+            "locked": {
+              "description": "Whether its canvas box is locked.",
+              "type": "boolean"
+            },
+            "type": {
+              "const": "item.set_locked",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "item_id",
+            "locked"
           ],
           "type": "object"
         },
@@ -5443,6 +5466,10 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/ItemId",
           "description": "The item's ID."
         },
+        "locked": {
+          "description": "Whether its canvas box is locked (ADR-0096, since 0.71): see\n[`Edit::ItemSetLocked`](crate::Edit::ItemSetLocked). Omitted while unlocked, so\nmissing (also from an older server) parses as unlocked.",
+          "type": "boolean"
+        },
         "opacity": {
           "$ref": "#/$defs/Finite32",
           "default": 1.0,
@@ -6738,6 +6765,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "jpeg",
           "description": "One baseline JPEG per frame, every one a keyframe. The fallback when the engine\nhas no H.264 encoder or the client can't decode H.264.",
+          "type": "string"
+        },
+        {
+          "const": "png",
+          "description": "One PNG per frame, every one a keyframe (ADR-0096, since 0.71): lossless, for a\nscreenshot rather than a moving picture. An older server refuses the name.",
           "type": "string"
         }
       ]
@@ -9590,5 +9622,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.70"
+  "title": "JStream protocol 0.71"
 }
