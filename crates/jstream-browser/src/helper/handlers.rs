@@ -6,6 +6,7 @@
 
 use std::os::raw::c_int;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use cef::*;
 
@@ -405,7 +406,11 @@ wrap_request_handler! {
             let initiator = request_initiator
                 .map(|origin| origin.to_string())
                 .filter(|origin| !origin.is_empty());
-            Some(PageResources::new(self.page.clone(), initiator))
+            Some(PageResources::new(
+                self.page.clone(),
+                initiator,
+                Arc::new(AtomicBool::new(false)),
+            ))
         }
     }
 }
@@ -416,6 +421,10 @@ wrap_resource_request_handler! {
         // The origin of the document making the request (CEF's `request_initiator`), or
         // `None` for one the browser itself started.
         initiator: Option<String>,
+        // Whether this request is the main-frame load the helper started (the page's
+        // first load or a reload it asked for), which its redirects keep (#1069). Shared
+        // by the handler's clones, as CEF holds it by reference.
+        own_load: Arc<AtomicBool>,
     }
 
     impl ResourceRequestHandler {
@@ -433,8 +442,10 @@ wrap_resource_request_handler! {
             let page = &self.page.0;
             let main_frame = request.resource_type() == ResourceType::MAIN_FRAME;
             let verdict = if main_frame {
+                let own_load = page.policy.take_own_load();
+                self.own_load.store(own_load, Ordering::Release);
                 page.policy
-                    .check_main_frame_from(&url, self.initiator.as_deref())
+                    .check_main_frame_from(&url, self.initiator.as_deref(), own_load)
             } else {
                 page.policy.check_from(&url, self.initiator.as_deref())
             };
@@ -479,8 +490,11 @@ wrap_resource_request_handler! {
             let main_frame =
                 request.is_some_and(|r| r.resource_type() == ResourceType::MAIN_FRAME);
             let verdict = if main_frame {
-                page.policy
-                    .check_main_frame_from(&target, self.initiator.as_deref())
+                page.policy.check_main_frame_from(
+                    &target,
+                    self.initiator.as_deref(),
+                    self.own_load.load(Ordering::Acquire),
+                )
             } else {
                 page.policy.check_from(&target, self.initiator.as_deref())
             };

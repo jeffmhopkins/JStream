@@ -638,6 +638,8 @@ impl PageShared {
             *reloading = true;
             self.host.send(&ToEngine::Reloading { page: self.id });
             drop(reloading);
+            // The reload's main-frame load is the helper's own (#1069).
+            self.policy.expect_own_load();
             browser.0.reload();
         } else {
             // No browser yet: its first load is the start the engine waits for.

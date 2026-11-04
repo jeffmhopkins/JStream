@@ -35,10 +35,13 @@
 //!     the page's own;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own. CEF on Linux names
-//!     `null` instead for the source's own first load (#1069), so a main-frame load of the
-//!     source's own web origin with an opaque initiator, before the main frame has left
+//!     `null` instead for the source's own first load (#1069), so the one main-frame load
+//!     the helper started (the page's first load, or a reload it asked for), to the
+//!     source's own web origin with an opaque initiator before the main frame has left
 //!     it, counts as one the browser started
-//!     ([`check_main_frame_from`](RequestPolicy::check_main_frame_from)).
+//!     ([`check_main_frame_from`](RequestPolicy::check_main_frame_from)). Any other
+//!     opaque main-frame load, such as a sandboxed frame navigating the top, stays
+//!     opaque and is refused local access.
 //!
 //!   Every other origin from the internet is refused. CEF can't tell one opaque origin
 //!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
@@ -80,6 +83,9 @@ pub struct RequestPolicy {
     /// opaque origin is no longer the file or blank page's
     /// ([`main_frame_to`](Self::main_frame_to)).
     left_home: AtomicBool,
+    /// Whether the next main-frame load is one the helper started: the page's first load,
+    /// or a reload it asked for ([`expect_own_load`](Self::expect_own_load)).
+    own_load: AtomicBool,
     denied: AtomicU64,
 }
 
@@ -164,6 +170,7 @@ impl RequestPolicy {
             home,
             home_local,
             left_home: AtomicBool::new(false),
+            own_load: AtomicBool::new(true),
             denied: AtomicU64::new(0),
         }
     }
@@ -186,17 +193,39 @@ impl RequestPolicy {
         verdict
     }
 
-    /// [`check_from`](Self::check_from) for a request that loads the main frame. CEF on
-    /// Linux names the opaque origin (`null`) as the initiator of the source's own first
-    /// load, which the browser started (#1069). So a main-frame load of the source's own
-    /// web origin with an opaque initiator, while the main frame hasn't left that origin,
-    /// is judged as one the browser started: still refused when the location is from the
-    /// internet and its source didn't opt in.
-    pub fn check_main_frame_from(&self, url: &str, initiator: Option<&str>) -> Verdict {
-        let own_load = initiator == Some("null")
+    /// Marks the next main-frame load as one the helper started: called before a reload.
+    /// A new policy starts marked, for the page's first load.
+    pub fn expect_own_load(&self) {
+        self.own_load.store(true, Ordering::Release);
+    }
+
+    /// Takes the mark [`expect_own_load`](Self::expect_own_load) set: whether this
+    /// main-frame load is the one the helper started. Every main-frame load takes it, so
+    /// only the first after the page opens or the helper reloads it gets `true`; a
+    /// redirect of that load keeps the answer its load got.
+    pub fn take_own_load(&self) -> bool {
+        self.own_load.swap(false, Ordering::AcqRel)
+    }
+
+    /// [`check_from`](Self::check_from) for a request that loads the main frame, where
+    /// `own_load` is what [`take_own_load`](Self::take_own_load) said for it. CEF on Linux
+    /// names the opaque origin (`null`) as the initiator of the source's own first load,
+    /// which the browser started (#1069). So the load the helper started, to the source's
+    /// own web origin with an opaque initiator while the main frame hasn't left that
+    /// origin, is judged as one the browser started: still refused when the location is
+    /// from the internet and its source didn't opt in. Any other main-frame load with an
+    /// opaque initiator, such as a sandboxed frame navigating the top, stays opaque.
+    pub fn check_main_frame_from(
+        &self,
+        url: &str,
+        initiator: Option<&str>,
+        own_load: bool,
+    ) -> Verdict {
+        let browser_started = own_load
+            && initiator == Some("null")
             && !self.left_home.load(Ordering::Acquire)
             && matches!(&self.home, Home::Web(Some(own)) if Origin::parse(url).as_ref() == Some(own));
-        self.check_from(url, if own_load { None } else { initiator })
+        self.check_from(url, if browser_started { None } else { initiator })
     }
 
     /// Whether `initiator` (an origin, as for [`check_from`](Self::check_from)) may make
@@ -714,67 +743,112 @@ mod tests {
 
     /// #1069: CEF on Linux names `null` as the initiator of the source's own first load.
     /// A local web source still loads, and so does an opted-in one; a source from the
-    /// internet, another local origin, a subresource and a load after the main frame left
-    /// home are still judged by their opaque origin.
+    /// internet, another local origin, a subresource, a main-frame load the helper didn't
+    /// start and a load after the main frame left home are still judged by their opaque
+    /// origin.
     #[test]
     fn a_local_source_s_own_first_load_with_a_null_initiator_is_allowed() {
         let local = RequestPolicy::for_location(&PageLocation::Web(
             "http://127.0.0.1:8767/sky.html".into(),
         ));
+        // The first load is the helper's own.
+        let own = local.take_own_load();
+        assert!(own);
         assert_eq!(
-            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null")),
+            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null"), own),
             Verdict::Allow
         );
-        // A reload, or another page of the same origin, while still home.
+        // Its redirect within the origin keeps that answer; to another local origin it
+        // is not the source's own load.
         assert_eq!(
-            local.check_main_frame_from("http://127.0.0.1:8767/other.html", Some("null")),
+            local.check_main_frame_from("http://127.0.0.1:8767/index.html", Some("null"), own),
             Verdict::Allow
         );
-        // Another local origin, and a subresource, are not the source's own load.
-        assert!(deny(
-            local.check_main_frame_from("http://127.0.0.1:9000/", Some("null"))
-        ));
+        assert!(deny(local.check_main_frame_from(
+            "http://127.0.0.1:9000/",
+            Some("null"),
+            own
+        )));
+        // A subresource with an opaque initiator is not a load the browser started.
         assert!(deny(
             local.check_from("http://127.0.0.1:8767/a.png", Some("null"))
         ));
-        // Once the main frame has left for the web, `null` is the web's.
+
+        // B1 of #1094's review: a second opaque main-frame load, such as a sandboxed
+        // frame a third-party frame made navigating the top, is no longer the helper's.
+        let second = local.take_own_load();
+        assert!(!second);
+        assert!(deny(local.check_main_frame_from(
+            "http://127.0.0.1:8767/api/reset",
+            Some("null"),
+            second
+        )));
+        // A reload the helper asks for is its own again, once.
+        local.expect_own_load();
+        let reload = local.take_own_load();
+        assert_eq!(
+            local.check_main_frame_from("http://127.0.0.1:8767/sky.html", Some("null"), reload),
+            Verdict::Allow
+        );
+        assert!(!local.take_own_load());
+
+        // Once the main frame has left for the web, `null` is the web's, even for a load
+        // the helper started.
         local.main_frame_to("https://example.com/");
+        local.expect_own_load();
+        let own = local.take_own_load();
         assert!(deny(local.check_main_frame_from(
             "http://127.0.0.1:8767/sky.html",
-            Some("null")
+            Some("null"),
+            own
         )));
 
         // A named initiator is judged as before.
         let named =
             RequestPolicy::for_location(&PageLocation::Web("http://localhost:3000/".into()));
         assert_eq!(
-            named.check_main_frame_from("http://localhost:3000/", Some("http://localhost:3000")),
+            named.check_main_frame_from(
+                "http://localhost:3000/",
+                Some("http://localhost:3000"),
+                false
+            ),
             Verdict::Allow
         );
 
-        // An opted-in LAN name.
+        // A LAN address whose source opted in: its own first load passes, and a later
+        // opaque load to it doesn't.
         let opted = RequestPolicy::for_page(&PageSpec {
-            location: PageLocation::Web("http://widgets.example:8080/".into()),
+            location: PageLocation::Web("http://192.168.1.10:8080/".into()),
             size: jstream_media::FrameSize::new(16, 16).expect("size"),
             fps: 30,
             css: String::new(),
             local_network: true,
         });
+        let own = opted.take_own_load();
         assert_eq!(
-            opted.check_main_frame_from("http://widgets.example:8080/", Some("null")),
+            opted.check_main_frame_from("http://192.168.1.10:8080/", Some("null"), own),
             Verdict::Allow
         );
+        let later = opted.take_own_load();
+        assert!(deny(opted.check_main_frame_from(
+            "http://192.168.1.10:8080/",
+            Some("null"),
+            later
+        )));
 
         // A source from the internet gains nothing: its own load isn't local anyway, and a
         // local target from it stays refused.
         let web = RequestPolicy::for_location(&PageLocation::Web("https://example.com/".into()));
+        let own = web.take_own_load();
         assert_eq!(
-            web.check_main_frame_from("https://example.com/", Some("null")),
+            web.check_main_frame_from("https://example.com/", Some("null"), own),
             Verdict::Allow
         );
-        assert!(deny(
-            web.check_main_frame_from("http://127.0.0.1/", Some("null"))
-        ));
+        assert!(deny(web.check_main_frame_from(
+            "http://127.0.0.1/",
+            Some("null"),
+            own
+        )));
     }
 
     /// #347: a page from the internet can't reach this computer or the local network.
