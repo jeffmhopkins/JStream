@@ -1081,13 +1081,16 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
         .map_err(|err| invalid(at, "geometry", err.to_string()))
 }
 
-/// Rejects an opacity outside [0, 1] (ADR-0023 §1).
+/// Rejects an opacity outside [0, `MAX_OPACITY`] (ADR-0023 §1, #1101).
 fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
-    if !(0.0..=1.0).contains(&opacity.get()) {
-        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    if !(0.0..=jstream_protocol::MAX_OPACITY).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 4"));
     }
     Ok(())
 }
+
+// The keyframe store checks overrides against its own copy of the limit.
+const _: () = assert!(jstream_protocol::MAX_OPACITY == jstream_anim::MAX_OPACITY);
 
 fn check_canvas_side(value: u32, at: usize, name: &str) -> Result<(), ProtocolError> {
     if value == 0 || value > MAX_CANVAS_EDGE {

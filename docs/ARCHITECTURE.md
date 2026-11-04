@@ -312,7 +312,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   output that carries audio an audio chain, and their filters can't hold a scene,
   source or bus reference yet; from 0.79 they may name a file (an asset), so a LUT
   grades the program or one output. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
-  multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
+  multiplier in [0, 1], and above 1, up to 4, a gain on its light, #1101) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
   browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
@@ -660,7 +660,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
-  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.82 a
+  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.84 a
   modifier can be a one-shot `impulse` on the `triggered` clock, which the action
   `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
   the program scene.
@@ -840,7 +840,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Queries** (`state.get` → state + `rev`, the canvas included, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list` (protocol 0.13), `video_mix.list`
   (protocol 0.28), `video.snapshot` → the program mix (not a video mix) as a PNG in the
-  JSON result, longest side at most 1280, with the layout `rev`; `kind.list` and
+  JSON result, longest side at most 1280, with the layout `rev`; `video.frames` (protocol
+  0.82) → a frame sheet, several such pictures taken at an interval and tiled into one
+  PNG, which the action `scene.switch_and_watch` also answers with, from a switch on; `kind.list` and
   `kind.describe` (protocol 0.8) → the kinds the engine describes, each with a generated settings
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
@@ -1027,7 +1029,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the state `rev` they show. The `video` tool's `video.snapshot` result leads with an
   image content block (`image/png`, the protocol result's base64), the only copy of the
   PNG: the protocol `Response` it also carries as text and as `structuredContent` has a
-  short placeholder in `png`, so the image doesn't flood the agent's context.
+  short placeholder in `png`, so the image doesn't flood the agent's context. Motion
+  has its own image: a frame sheet, several pictures taken at an interval and tiled in
+  time order into one PNG, from `video.frames` or, starting with a switch, from the
+  `scene` tool's `scene.switch_and_watch` (#1061), sent the same way.
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
@@ -1114,7 +1119,8 @@ under a studio rig fixed to the camera, or unlit; the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane.
-Opacity is a straight multiplier in `[0, 1]`. The blend is the item's mode
+Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
+light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
 src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
 target under the item, and overlay, difference, exclusion, `normal_srgb` and
@@ -1212,7 +1218,7 @@ is on screen: the control thread samples the running plan at the switch time wit
 same function, so both threads agree on it without the render thread keeping any
 state. Rotation, tilt and turn take the shortest way round. The easing curves are one
 shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
-are clamped to a hard range: opacity to `[0, 1]`, crop to `[0, source size]`, size to
+are clamped to a hard range: opacity to `[0, 4]`, crop to `[0, source size]`, size to
 `≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
 
 **S1 result**, on a Ryzen 9 8945HS with Radeon 780M (driver 32.0.22029.9039), a

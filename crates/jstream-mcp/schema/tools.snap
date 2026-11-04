@@ -490,6 +490,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+                "properties": {
+                  "count": {
+                    "description": "How many pictures, 2 to 16.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "delay_ms": {
+                    "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "interval_ms": {
+                    "description": "The time between two pictures, in milliseconds, at least 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "preset_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset to use, overriding the scenes' and the default."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on program."
+                  },
+                  "type": {
+                    "const": "scene.switch_and_watch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "count",
+                  "interval_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
                 "properties": {
                   "scene_id": {
@@ -595,7 +644,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.82: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -1530,7 +1579,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -1538,7 +1587,7 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "opacity": {
                     "$ref": "#/$defs/Finite32",
-                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                    "description": "From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]\n(its light that many times over)."
                   },
                   "scene_id": {
                     "anyOf": [
@@ -3789,7 +3838,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "triggered",
-                "description": "From when `item.trigger_motion` last fired it, since 0.82 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
                 "type": "string"
               }
             ]
@@ -3900,7 +3949,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A one-shot decaying shake, since 0.82 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
                     "$ref": "#/$defs/Finite32",
@@ -6742,6 +6791,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+                "properties": {
+                  "count": {
+                    "description": "How many pictures, 2 to 16.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "delay_ms": {
+                    "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "interval_ms": {
+                    "description": "The time between two pictures, in milliseconds, at least 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "preset_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset to use, overriding the scenes' and the default."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on program."
+                  },
+                  "type": {
+                    "const": "scene.switch_and_watch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "count",
+                  "interval_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
                 "properties": {
                   "scene_id": {
@@ -6847,7 +6945,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.82: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -7782,7 +7880,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -7790,7 +7888,7 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "opacity": {
                     "$ref": "#/$defs/Finite32",
-                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                    "description": "From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]\n(its light that many times over)."
                   },
                   "scene_id": {
                     "anyOf": [
@@ -10041,7 +10139,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "triggered",
-                "description": "From when `item.trigger_motion` last fired it, since 0.82 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
                 "type": "string"
               }
             ]
@@ -10152,7 +10250,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A one-shot decaying shake, since 0.82 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
                     "$ref": "#/$defs/Finite32",
@@ -11376,7 +11474,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "triggered",
-                "description": "From when `item.trigger_motion` last fired it, since 0.82 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
                 "type": "string"
               }
             ]
@@ -11487,7 +11585,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A one-shot decaying shake, since 0.82 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
                     "$ref": "#/$defs/Finite32",
@@ -12104,7 +12202,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -12112,7 +12210,7 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "opacity": {
                     "$ref": "#/$defs/Finite32",
-                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                    "description": "From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]\n(its light that many times over)."
                   },
                   "scene_id": {
                     "anyOf": [
@@ -12399,7 +12497,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.82: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -13076,6 +13174,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+                "properties": {
+                  "count": {
+                    "description": "How many pictures, 2 to 16.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "delay_ms": {
+                    "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "interval_ms": {
+                    "description": "The time between two pictures, in milliseconds, at least 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "preset_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset to use, overriding the scenes' and the default."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on program."
+                  },
+                  "type": {
+                    "const": "scene.switch_and_watch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "count",
+                  "interval_ms"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on preview, the scene studio mode prepares before it goes on program\nwith `scene.switch`. Preview is runtime state like program: it changes no `rev`,\nis never undone, and emits `studio.changed`. It never affects what an output\nshows unless the output's mix is the preview mix. Setting the scene already on\npreview succeeds and emits nothing. Fails with `not_found` for a scene not in\nthe collection.",
                 "properties": {
                   "scene_id": {
@@ -13181,7 +13328,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.82: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -14116,7 +14263,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by\n`opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items\nare added at 1. Inverse: `item.set_opacity` with the previous value.",
+                "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -14124,7 +14271,7 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "opacity": {
                     "$ref": "#/$defs/Finite32",
-                    "description": "The alpha multiplier, from 0 (invisible) to 1 (as the source draws it)."
+                    "description": "From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]\n(its light that many times over)."
                   },
                   "scene_id": {
                     "anyOf": [
@@ -16371,7 +16518,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "triggered",
-                "description": "From when `item.trigger_motion` last fired it, since 0.82 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
                 "type": "string"
               }
             ]
@@ -16482,7 +16629,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A one-shot decaying shake, since 0.82 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
                     "$ref": "#/$defs/Finite32",
@@ -18228,7 +18375,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Finite32": {
@@ -18726,6 +18873,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "`scene.switch`, then a frame sheet of the program mix from the switch on (since\n0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a\nstinger's cover or a keyframe move as it plays, from one call. The switch is made\nas `scene.switch` makes it, and emits what it emits; the answer comes once the\nlast picture is drawn, as a `scene.switch_and_watch` result. Switching to the\nscene already on program still takes the sheet. Fails as `scene.switch` does,\nbefore switching with `invalid_argument` past the [`FrameStrip`] limits.",
+                "properties": {
+                  "count": {
+                    "description": "How many pictures, 2 to 16.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "delay_ms": {
+                    "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "interval_ms": {
+                    "description": "The time between two pictures, in milliseconds, at least 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "preset_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TransitionPresetId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The preset to use, overriding the scenes' and the default."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to put on program."
+                  },
+                  "type": {
+                    "const": "scene.switch_and_watch",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "count",
+                  "interval_ms"
                 ],
                 "type": "object"
               },
@@ -19711,8 +19907,14 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query). A query only reads. A `video.snapshot` result leads with the PNG as an image content block; its JSON `png` field only names that block. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `video` operation: set `op.type` to one of `video.snapshot` (query), `video.frames` (query). A query only reads. A `video.snapshot` or `video.frames` result leads with the PNG as an image content block; its JSON `png` field only names that block. `video.frames` takes `count` pictures `interval_ms` apart (of the program mix, or `scene_id`'s scene alone) and tiles them left to right, top to bottom, in time order; `frames[i].at_ms` is when tile `i` was taken. Use it to check motion: a transition, a stinger, an animated page. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
+        "$defs": {
+          "SceneId": {
+            "description": "A scene in the collection.",
+            "type": "string"
+          }
+        },
         "additionalProperties": false,
         "properties": {
           "op": {
@@ -19728,6 +19930,50 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A frame sheet (since 0.82, #1061): `count` pictures of the program mix, or of\n`scene_id`'s scene alone, `interval_ms` apart, tiled into one PNG so motion can be\nchecked in one call. The first is taken `delay_ms` after the call. The answer\ncomes once the last picture is drawn, so the call takes at least `delay_ms +\n(count - 1) × interval_ms`. Each picture is what that mix or scene shows at that\nmoment, as `video.snapshot` draws it: a running transition where it is then,\neach source's latest frame, and nothing for a display, window or camera capture.\nA scene off program shows what its preview stream would. Fails with\n`invalid_argument` past the [`FrameStrip`] limits, and `not_found` for a scene not\nin the collection, at the call or when a picture is due. To watch a switch from\nits start, use `scene.switch_and_watch`.",
+                "properties": {
+                  "count": {
+                    "description": "How many pictures, 2 to 16.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "delay_ms": {
+                    "description": "How long to wait before the first picture, in milliseconds. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "interval_ms": {
+                    "description": "The time between two pictures, in milliseconds, at least 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene to show alone. Omitted for the program mix."
+                  },
+                  "type": {
+                    "const": "video.frames",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "count",
+                  "interval_ms"
                 ],
                 "type": "object"
               }

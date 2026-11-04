@@ -151,7 +151,7 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
-    /// A one-shot decaying shake, since 0.82 (#1107):
+    /// A one-shot decaying shake, since 0.84 (#1107):
     /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
     /// the start of its clock, until `duration_ms`, and 0 after. Usually on the
     /// `triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.
@@ -191,7 +191,7 @@ pub enum MotionClock {
     /// so it starts fresh each time it is shown. While it isn't shown, and in a scene
     /// or source preview, the modifier is at its start.
     Shown,
-    /// From when `item.trigger_motion` last fired it, since 0.82 (#1107). Until it is
+    /// From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is
     /// fired, and in a scene or source preview, the modifier contributes nothing.
     Triggered,
     /// A clock this version of the protocol doesn't know, from a newer server, so a

@@ -183,7 +183,8 @@ with no inverse. The engine draws open gestures' source settings through it
   A geometry's `flip_h` and `flip_v` are part of it, so they are stored, undone and
   persisted with it (the collection file writes them only when set).
   `item.set_opacity` (optionally addressed by `scene_id`, like the placement edits) and
-  `item.add`'s `opacity` accept 0 to 1; `item.set_blend` and `item.add`'s `blend`
+  `item.add`'s `opacity` accept 0 to `MAX_OPACITY` (4; above 1 a gain on the item's
+  light, #1101), as do keyframe overrides; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
   ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
   [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by
@@ -428,7 +429,7 @@ collection (`state.get`, with the folders and labels in their orders, `scene.lis
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
 unknown kind), and `delete.plan` (`plan.rs`,
-[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status` and `video.snapshot` read runtime state), and fails only with
+[ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status`, `video.snapshot` and `video.frames` read runtime state), and fails only with
 `not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
 target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items

@@ -798,9 +798,9 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             Batch::single(Edit::ItemSetOpacity {
                 item_id: ItemId::new("i1"),
                 scene_id: None,
-                opacity: finite(1.5),
+                opacity: finite(4.5),
             }),
-            invalid("edits.0.opacity", "must be from 0 to 1"),
+            invalid("edits.0.opacity", "must be from 0 to 4"),
         ),
         (
             Batch::single(Edit::ItemAdd {
@@ -812,7 +812,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 opacity: Some(finite(-0.5)),
                 blend: None,
             }),
-            invalid("edits.0.opacity", "must be from 0 to 1"),
+            invalid("edits.0.opacity", "must be from 0 to 4"),
         ),
         (
             Batch::single(Edit::ItemSetGeometry {

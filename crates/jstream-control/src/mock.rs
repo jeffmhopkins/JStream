@@ -2952,8 +2952,8 @@ fn check_motion_list(
 
 /// Rejects an opacity outside [0, 1], as `jstream-graph` does.
 fn check_opacity(opacity: Finite32, at: usize) -> Result<(), ProtocolError> {
-    if !(0.0..=1.0).contains(&opacity.get()) {
-        return Err(invalid(at, "opacity", "must be from 0 to 1"));
+    if !(0.0..=jstream_protocol::MAX_OPACITY).contains(&opacity.get()) {
+        return Err(invalid(at, "opacity", "must be from 0 to 4"));
     }
     Ok(())
 }

@@ -108,14 +108,15 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// The actions that change only what JStream shows or measures, so another call puts
 /// back what they changed and they send nothing new off the machine (ADR-0098; a
 /// `scene.switch` does change what a running stream shows): switching the program or
-/// preview scene, showing or hiding an item (ADR-0101: the opposite action brings the
+/// preview scene (`scene.switch_and_watch` too, which only adds a frame sheet of it),
+/// showing or hiding an item (ADR-0101: the opposite action brings the
 /// picture back, though in a keyframe a hide's new override stays until
 /// `item.clear_override`), a live value and its cancel, the loudness meter's reset, a fired motion (#1107, which
 /// stills itself) and a preview stream (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 11] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 12] = [
     "audio.reset_loudness",
     "item.hide",
     "item.show",
@@ -126,6 +127,7 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 11] = [
     "preview.subscribe",
     "preview.unsubscribe",
     "scene.switch",
+    "scene.switch_and_watch",
     "studio.set_preview",
 ];
 
@@ -594,8 +596,23 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
     if ops.iter().any(|(op, _)| op.name == "video.snapshot") {
         // The schema says `png` is base64; over MCP it is moved out (#124 review N1).
         description.push_str(
-            " A `video.snapshot` result leads with the PNG as an image content block; its \
-             JSON `png` field only names that block.",
+            " A `video.snapshot` or `video.frames` result leads with the PNG as an image \
+             content block; its JSON `png` field only names that block. `video.frames` \
+             takes `count` pictures `interval_ms` apart (of the program mix, or \
+             `scene_id`'s scene alone) and tiles them left to right, top to bottom, in \
+             time order; `frames[i].at_ms` is when tile `i` was taken. Use it to check \
+             motion: a transition, a stinger, an animated page.",
+        );
+    }
+    if ops
+        .iter()
+        .any(|(op, _)| op.name == "scene.switch_and_watch")
+    {
+        description.push_str(
+            " `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet \
+             of the program mix from the switch on, in one call, so you can see a \
+             transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its \
+             result leads with the sheet as an image content block.",
         );
     }
     if ops.iter().any(|(op, _)| op.name == "output.start") {
