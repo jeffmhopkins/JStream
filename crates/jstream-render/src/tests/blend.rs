@@ -189,6 +189,62 @@ fn every_mode_matches_the_reference() {
     }
 }
 
+/// #1101 review B1: a gain keeps an item's anti-aliased edge. At a fringe pixel the
+/// alpha is the opacity's (at most 1) times the coverage, as at opacity 1, not clamped
+/// back to opaque.
+#[test]
+fn a_gain_keeps_the_edge_coverage() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let white = solid(compositor, 16, 16, [255, 255, 255, 255]);
+    // A 3D item: its polygon's edges cross pixels part way (ADR-0050 decision 6).
+    let finite = |v: f32| Finite32::new(v).expect("finite");
+    let turned = Placement::Geometry(ItemGeometry {
+        turn_deg: finite(40.0),
+        perspective_px: Some(finite(200.0)),
+        ..ItemGeometry::try_new(
+            Vec2::new(16.0, 16.0).expect("finite"),
+            Size::try_new(24.0, 24.0).expect("positive"),
+        )
+        .expect("valid")
+    });
+    let clear = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 0.0,
+    };
+    let mut alphas = |opacity: f32| {
+        let items = [blended(&white, turned, opacity, BlendMode::Normal)];
+        let shot = render(compositor, (32, 32), clear, &items);
+        (0..32)
+            .flat_map(|y| (0..32).map(move |x| (x, y)))
+            .map(|(x, y)| shot.pixel(x, y).expect("inside")[3])
+            .collect::<Vec<u8>>()
+    };
+    let at_one = alphas(1.0);
+    let fringe: Vec<usize> = (0..at_one.len())
+        .filter(|&i| (32..=223).contains(&at_one[i]))
+        .collect();
+    assert!(
+        fringe.len() >= 4,
+        "a turned item has a soft edge: {at_one:?}"
+    );
+    for opacity in [2.0, jstream_protocol::MAX_OPACITY] {
+        let gained = alphas(opacity);
+        for &i in &fringe {
+            assert!(
+                gained[i].abs_diff(at_one[i]) <= TOLERANCE,
+                "pixel {i} at {opacity}: alpha {}, at 1: {}",
+                gained[i],
+                at_one[i]
+            );
+        }
+    }
+}
+
 /// #1101: opacity above 1 is a gain on the item's light. An additive item adds that
 /// many times its light; a normal one is drawn brighter and covers the backdrop no more
 /// than fully.

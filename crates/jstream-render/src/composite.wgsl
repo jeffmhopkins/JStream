@@ -108,8 +108,9 @@ fn source(in: VsOut) -> vec4<f32> {
         edge(in.e4, at),
     );
     let coverage = clamp(d + 0.5, 0.0, 1.0);
-    let gain = in.opacity * coverage;
-    return vec4<f32>(rgb * gain, alpha * min(gain, 1.0));
+    // Coverage scales both; only the opacity's own alpha is held to 1, so an edge's
+    // fringe stays as soft at any gain (ADR-0050 decision 6).
+    return vec4<f32>(rgb * in.opacity * coverage, alpha * min(in.opacity, 1.0) * coverage);
 }
 
 @fragment
