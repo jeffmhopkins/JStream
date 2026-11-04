@@ -143,12 +143,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   quarter second, as the scope sources do, and a non-finite sample as silence. For an
   audio motion modifier ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)),
   `raw` gives the latest window's level, peak and onset before any fall
-  (`RawMeasure`), and `band(low_hz, high_hz)` the spectrum between two frequencies as an
+  (`RawMeasure`), `measure_levels` measures without the FFT for a caller that reads
+  only those, and `band(low_hz, high_hz)` the spectrum between two frequencies as an
   amplitude: the square root of its bins' summed power, scaled so a full-scale sine in
   the band reads 1, a band narrower than a bin reading the bin it falls in. Tests
   measure a 1 kHz tone, then silence, a window with NaN and infinite samples, and a
   half-scale sine read at its amplitude by a band around it and not by one away from
-  it, an inverted or NaN band reading 0, with its raw level, peak and onset.
+  it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
+  measure hearing the level with no spectrum.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless

@@ -126,7 +126,7 @@ Contents ([Design](#design) explains the choices):
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields and switching kind, an
-  audio row's fields and measure switch, tested natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  audio row's fields, measure switch and what it hears, tested natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
@@ -418,7 +418,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   while they differ from the defaults; not shown in a keyframe, whose items switch as
   the parent's), Motion (folded, with the modifier count as its hint: a row per motion
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, or audio:
-  what it hears, the program mix or a bus, what it follows, level, peak, beat or a band,
+  what it hears, the program mix or a bus (or a source set elsewhere, shown as itself
+  until a bus or the program mix is picked), what it follows, level, peak, beat or a band,
   and its curve, ADR-0100), that kind's fields, when its time starts (in step, or when
   shown; not for audio), an On check and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,

@@ -128,6 +128,18 @@ impl AudioMeter {
     /// Measures `scope`'s latest window at `ms`, a millisecond clock that only counts
     /// up. Allocates nothing.
     pub fn measure(&mut self, scope: &AudioScope, ms: u64) -> &Metered {
+        self.measure_with(scope, ms, true)
+    }
+
+    /// Measures `scope`'s latest window at `ms` as [`measure`](Self::measure) does, but
+    /// without its spectrum: the levels, onset and waveform only, with no FFT. Its bands
+    /// fall, and [`band`](Self::band) reads 0 until a full measure. For a caller that
+    /// reads only the levels (ADR-0100 decision 4).
+    pub fn measure_levels(&mut self, scope: &AudioScope, ms: u64) -> &Metered {
+        self.measure_with(scope, ms, false)
+    }
+
+    fn measure_with(&mut self, scope: &AudioScope, ms: u64, spectrum: bool) -> &Metered {
         let (written, rate) = scope.latest(&mut self.window);
         if written != self.seen {
             self.seen = written;
@@ -173,7 +185,7 @@ impl AudioMeter {
             *sample = self.window[n * WINDOW / METER_BANDS].clamp(-1.0, 1.0);
         }
 
-        let transformed = heard && {
+        let transformed = spectrum && heard && {
             for ((x, &s), &w) in self.input.iter_mut().zip(&self.window).zip(&self.hann) {
                 *x = s * w;
             }
@@ -307,6 +319,13 @@ mod tests {
         meter.measure(&scope, 16 + STILL_MS);
         assert_eq!(meter.raw(), RawMeasure::default());
         assert_eq!(meter.band(800.0, 1200.0), 0.0);
+
+        // A levels-only measure hears the same level and runs no FFT.
+        let mut levels = AudioMeter::new();
+        scope.push(48_000, &samples);
+        levels.measure_levels(&scope, 16 + STILL_MS + 16);
+        assert!((levels.raw().level - 0.5 / 2f32.sqrt()).abs() < 0.01);
+        assert_eq!(levels.band(800.0, 1200.0), 0.0, "no spectrum");
     }
 
     /// A non-finite sample is heard as silence, so every value stays finite.

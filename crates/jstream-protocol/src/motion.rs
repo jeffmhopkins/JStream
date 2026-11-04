@@ -132,7 +132,7 @@ pub enum MotionMeasure {
     Band,
     /// A measure this version of the protocol doesn't know, from a newer server. Never
     /// sent; the engine refuses it in an edit with `invalid_argument` and draws a stored
-    /// one as silence.
+    /// one as still.
     #[serde(other)]
     #[schemars(skip)]
     Unknown,

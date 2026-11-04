@@ -104,6 +104,12 @@ impl Bindings {
     /// Records `item`'s audio modifiers in `motion` that hear a scope in `heard`. A
     /// modifier whose scope isn't found (the collection changed since the scopes were
     /// found) is left out, so it reads as silence until the next plan.
+    ///
+    /// One shot can draw an item through two motion lists with the same modifier ID: a
+    /// keyframe Move's two sides, or a keyframe in one mix and its parent in another.
+    /// They share one envelope (ADR-0100 decision 4 keys it by item and ID), and the
+    /// first list recorded decides what it hears and measures and its dB map and times;
+    /// each side's own curve and range still map it.
     pub(crate) fn record(&mut self, item: &ItemId, motion: &[MotionModifier], heard: &HeardScopes) {
         for modifier in motion {
             let Some(hearing) = hearing(modifier) else {
@@ -165,12 +171,31 @@ impl Bindings {
     }
 }
 
+/// A meter of the [`Follower`]'s, for one heard scope.
+#[derive(Debug)]
+struct Meter {
+    /// The scope's address. The follower never holds the scope itself: the shot's
+    /// bindings do, and the shot is reclaimed off the render thread, so no scope's last
+    /// reference is ever dropped there (R-RT-003). While a binding names it, no other
+    /// scope can have its address.
+    scope: usize,
+    /// Whether a `band` binding hears it, so that its spectrum is worth measuring
+    /// (ADR-0100 decision 4).
+    spectrum: bool,
+    meter: Box<AudioMeter>,
+}
+
+/// `scope`'s address, which names its meter.
+fn address(scope: &Arc<AudioScope>) -> usize {
+    Arc::as_ptr(scope) as usize
+}
+
 /// The render thread's half: a meter per heard scope and an envelope per item and
 /// modifier, advanced once a tick ([`Follower::follow`]).
 #[derive(Debug, Default)]
 pub(crate) struct Follower {
-    /// Each heard scope's meter, by the scope's address, with the tick it last measured.
-    meters: Vec<(Arc<AudioScope>, Box<AudioMeter>)>,
+    /// Each heard scope's meter.
+    meters: Vec<Meter>,
     /// Each binding's envelope, by item and modifier ID.
     envelopes: BTreeMap<ItemId, Vec<(String, Envelope)>>,
     /// The tick it last followed, so a second call for the same tick changes nothing.
@@ -202,14 +227,26 @@ impl Follower {
         self.last = Some(now);
         let ms = (now.as_secs_f64() * 1000.0).max(0.0) as u64;
         self.keep(bindings);
-        for (scope, meter) in &mut self.meters {
-            meter.measure(scope, ms);
+        // Each scope once, through the first binding that names it.
+        for meter in &mut self.meters {
+            let Some(binding) = bindings
+                .all()
+                .map(|(_, _, binding)| binding)
+                .find(|binding| address(&binding.scope) == meter.scope)
+            else {
+                continue;
+            };
+            if meter.spectrum {
+                meter.meter.measure(&binding.scope, ms);
+            } else {
+                meter.meter.measure_levels(&binding.scope, ms);
+            }
         }
         for (item, id, binding) in bindings.all() {
-            let Some((_, meter)) = self
+            let Some(Meter { meter, .. }) = self
                 .meters
                 .iter()
-                .find(|(scope, _)| Arc::ptr_eq(scope, &binding.scope))
+                .find(|meter| meter.scope == address(&binding.scope))
             else {
                 continue;
             };
@@ -233,25 +270,32 @@ impl Follower {
     }
 
     /// Makes a meter for each scope and an envelope for each binding `bindings` names
-    /// that it has none for, and drops the ones it no longer names.
+    /// that it has none for, drops the ones it no longer names, and marks each meter
+    /// whose scope a `band` binding hears.
     fn keep(&mut self, bindings: &Bindings) {
-        let named = |scope: &Arc<AudioScope>| {
+        let named = |scope: usize| {
             bindings
                 .all()
-                .any(|(_, _, binding)| Arc::ptr_eq(&binding.scope, scope))
+                .any(|(_, _, binding)| address(&binding.scope) == scope)
         };
-        if self.meters.iter().any(|(scope, _)| !named(scope)) {
-            self.meters.retain(|(scope, _)| named(scope));
+        if self.meters.iter().any(|meter| !named(meter.scope)) {
+            self.meters.retain(|meter| named(meter.scope));
         }
         for (_, _, binding) in bindings.all() {
-            if !self
-                .meters
-                .iter()
-                .any(|(scope, _)| Arc::ptr_eq(scope, &binding.scope))
-            {
-                self.meters
-                    .push((Arc::clone(&binding.scope), Box::new(AudioMeter::new())));
+            let scope = address(&binding.scope);
+            if !self.meters.iter().any(|meter| meter.scope == scope) {
+                self.meters.push(Meter {
+                    scope,
+                    spectrum: false,
+                    meter: Box::new(AudioMeter::new()),
+                });
             }
+        }
+        for meter in &mut self.meters {
+            meter.spectrum = bindings.all().any(|(_, _, binding)| {
+                matches!(binding.audio.measure, Measure::Band { .. })
+                    && address(&binding.scope) == meter.scope
+            });
         }
         let stale = self
             .envelopes
@@ -396,6 +440,65 @@ mod tests {
         follower.follow(&bindings, at_ms(16 + 400));
         let released = bindings.level(&item, "level").expect("level");
         assert!(released < 0.05, "{released}");
+    }
+
+    /// ADR-0100 decision 4: the FFT runs only for a scope a `band` binding hears.
+    #[test]
+    fn a_scope_only_levels_hear_is_measured_without_its_spectrum() {
+        let scopes = AudioScopes::new();
+        let heard: HeardScopes = Arc::new(heard_scopes(&scopes, [Hearing::Program]));
+        let item = ItemId::new("itm_light");
+        let plan = |measure| {
+            let mut bindings = Bindings::default();
+            bindings.record(&item, &[light("pulse", None, measure)], &heard);
+            bindings
+        };
+        let levels = plan(MotionMeasure::Level);
+        let mut follower = Follower::default();
+        follower.follow(&levels, at_ms(0));
+        tone(scopes.program());
+        follower.follow(&levels, at_ms(16));
+        assert!(levels.level(&item, "pulse").expect("level") > 0.9);
+        let [meter] = follower.meters.as_slice() else {
+            panic!("one meter: {:?}", follower.meters);
+        };
+        assert!(!meter.spectrum);
+        assert_eq!(meter.meter.band(800.0, 1200.0), 0.0, "no FFT ran");
+
+        // A band binding on the same scope turns its spectrum on.
+        let band = plan(MotionMeasure::Band);
+        tone(scopes.program());
+        follower.follow(&band, at_ms(32));
+        assert!(follower.meters[0].spectrum);
+        assert!(follower.meters[0].meter.band(800.0, 1200.0) > 0.99);
+    }
+
+    /// One item drawn through two lists that share a modifier ID (a keyframe and its
+    /// parent) follows the first list's input, in one envelope.
+    #[test]
+    fn the_first_list_recorded_decides_what_a_shared_id_hears() {
+        let scopes = AudioScopes::new();
+        let heard: HeardScopes = Arc::new(heard_scopes(
+            &scopes,
+            [Hearing::Program, Hearing::Bus(BusId::new("music"))],
+        ));
+        let item = ItemId::new("itm_light");
+        let mut bindings = Bindings::default();
+        bindings.record(&item, &[light("pulse", None, MotionMeasure::Level)], &heard);
+        bindings.record(
+            &item,
+            &[light("pulse", Some("music"), MotionMeasure::Peak)],
+            &heard,
+        );
+        let mut follower = Follower::default();
+        follower.follow(&bindings, at_ms(0));
+        tone(scopes.program());
+        follower.follow(&bindings, at_ms(16));
+        assert!(
+            bindings.level(&item, "pulse").expect("level") > 0.9,
+            "the program's"
+        );
+        assert_eq!(follower.meters.len(), 1);
     }
 
     #[test]

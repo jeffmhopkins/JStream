@@ -14,7 +14,7 @@ use crate::app::SessionContext;
 use crate::store::Studio;
 use jstream_control::protocol::{
     BusId, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve, MotionKind,
-    MotionMeasure, MotionModifier, MotionProperty, MotionShape, SceneId,
+    MotionMeasure, MotionModifier, MotionProperty, MotionShape, SceneId, SourceId,
 };
 use leptos::prelude::*;
 
@@ -327,6 +327,47 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
     Some(next)
 }
 
+/// What the Hears select shows for an audio `kind`: empty for the program mix, a bus's
+/// ID, or `source:` and the ID of a source it hears instead.
+pub fn hears_value(kind: &MotionKind) -> String {
+    match kind {
+        MotionKind::Audio {
+            audio_source: Some(source),
+            ..
+        } => format!("source:{}", source.as_str()),
+        MotionKind::Audio {
+            audio: Some(bus), ..
+        } => bus.as_str().to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// An audio `kind` hearing what the Hears select's `value` names ([`hears_value`]):
+/// picking the program mix or a bus stops it hearing a source. `None` when it isn't
+/// audio or already hears that.
+pub fn with_hears(kind: &MotionKind, value: &str) -> Option<MotionKind> {
+    if hears_value(kind) == value {
+        return None;
+    }
+    let mut kind = kind.clone();
+    let MotionKind::Audio {
+        audio,
+        audio_source,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    match value.strip_prefix("source:") {
+        Some(source) => *audio_source = Some(SourceId::new(source)),
+        None => {
+            *audio_source = None;
+            *audio = (!value.is_empty()).then(|| BusId::new(value));
+        }
+    }
+    Some(kind)
+}
+
 /// An audio `kind` measuring `measure` instead: a band gets a bass band to start from,
 /// and any other measure drops the band's edges. `None` when it isn't audio or already
 /// measures that.
@@ -560,25 +601,35 @@ pub fn MotionSection(
                             <select
                                 aria-label="What it hears"
                                 title="The program mix as the outputs hear it, or one bus after its fader"
-                                prop:value=move || at().and_then(|m| match m.kind {
-                                    MotionKind::Audio { audio, .. } => {
-                                        Some(audio.map_or_else(String::new, |b| b.as_str().to_owned()))
-                                    }
-                                    _ => None,
-                                }).unwrap_or_default()
+                                prop:value=move || at().map(|m| hears_value(&m.kind)).unwrap_or_default()
                                 on:change=move |event| {
                                     let value = event_target_value(&event);
-                                    let next = (!value.is_empty()).then(|| BusId::new(value));
-                                    change(n, &|m| match &mut m.kind {
-                                        MotionKind::Audio { audio, .. } if *audio != next => {
-                                            *audio = next.clone();
+                                    change(n, &|m| match with_hears(&m.kind, &value) {
+                                        Some(kind) => {
+                                            m.kind = kind;
                                             true
                                         }
-                                        _ => false,
+                                        None => false,
                                     });
                                 }
                             >
                                 <option value="">"Program mix"</option>
+                                // A source set over MCP or the API shows as itself, so
+                                // the select never claims a bus the engine isn't hearing.
+                                {move || at().and_then(|m| match m.kind {
+                                    MotionKind::Audio { audio_source: Some(source), .. } => {
+                                        let name = studio.collection.with(|c| {
+                                            c.as_ref()
+                                                .and_then(|c| c.sources.iter().find(|s| s.source_id == source))
+                                                .map(|s| s.name.clone())
+                                        });
+                                        let label = name.unwrap_or_else(|| source.as_str().to_owned());
+                                        Some(view! {
+                                            <option value=format!("source:{}", source.as_str())>{format!("Source: {label}")}</option>
+                                        })
+                                    }
+                                    _ => None,
+                                })}
                                 {move || studio.collection.with(|c| {
                                     c.as_ref()
                                         .map(|c| c.buses.clone())
@@ -812,15 +863,31 @@ mod tests {
             kind,
             ..with_added(&[]).expect("room")[0].clone()
         };
-        for kind in [light, band, beat] {
+        for kind in [light.clone(), band, beat] {
             assert_eq!(
                 jstream_control::protocol::check_motion(&[row(kind.clone())]),
                 Ok(()),
                 "{kind:?}"
             );
         }
+        // What it hears: a source set elsewhere shows as itself, and picking a bus or
+        // the program mix stops it hearing the source (#1149 review N2).
+        assert_eq!(hears_value(&light), "");
+        let bus = with_hears(&light, "bus_music").expect("switched");
+        assert_eq!(hears_value(&bus), "bus_music");
+        let mut heard = bus.clone();
+        if let MotionKind::Audio { audio_source, .. } = &mut heard {
+            *audio_source = Some(SourceId::new("src_mic"));
+        }
+        assert_eq!(hears_value(&heard), "source:src_mic");
+        assert_eq!(with_hears(&heard, "source:src_mic"), None);
+        let back = with_hears(&heard, "bus_music").expect("switched");
+        assert_eq!(back, bus, "the source goes, the bus stays");
+        let program = with_hears(&heard, "").expect("switched");
+        assert_eq!(hears_value(&program), "");
         let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
         assert_eq!(with_measure(&wiggle, MotionMeasure::Band), None);
+        assert_eq!(with_hears(&wiggle, "bus_music"), None);
         let pushed = with_kind(&wiggle, "Audio", MotionProperty::X).expect("switched");
         assert_eq!(kind_name(&pushed), "Audio");
     }

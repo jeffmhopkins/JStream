@@ -277,9 +277,14 @@ state machine. Contents:
   (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
   (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
   loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
-  scope is first heard, never while it is steady) and advances each modifier's
+  scope is first heard, never while it is steady), running the FFT only for a scope a
+  `band` binding hears (`measure_levels` otherwise), and advances each modifier's
   envelope by the tick's media time, per item and modifier ID, so every pass and mix of
-  the tick reads the same level. Each binding holds that level as an atomic, which the
+  the tick reads the same level. The follower names a meter by its scope's address and
+  measures through the shot's binding, never holding a scope itself, so no scope's last
+  reference drops on the render thread (R-RT-003). An item drawn through two lists that
+  share a modifier ID (a keyframe and its parent) shares one envelope, and the first
+  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
   draw paths read by item and ID without allocating. A modifier with nothing heard, a
   preview shot (no follower) and the program mix while no output runs read silence,
   the modifier's `from`.
@@ -2098,7 +2103,8 @@ brings the mixer in line with the collection under the collection lock:
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
-  `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
+  `spectrum` drawing it), or an item's or keyframe override's `audio` motion modifier
+  hears (`heard_by_motion`, ADR-0100), keeps a scope in the engine's `AudioScopes`, and the others
   are dropped (`AudioScopes::retain`). The live sources do this before they queue the
   edit's builds, and the sync again: a source drawing a new bus then finds its scope,
   and one still being built from settings from before the edit can't make a dropped
@@ -2114,7 +2120,8 @@ brings the mixer in line with the collection under the collection lock:
   goes to the program stage's audio sources thread, which plays it (see *Bus
   monitors*);
 - the source scopes (#459): every source a `waveform` or `spectrum` draws through its
-  `audio_source` (`jstream_sources::drawn_source`) keeps a scope too
+  `audio_source` (`jstream_sources::drawn_source`), or an `audio` motion modifier
+  hears through its own, keeps a scope too
   (`AudioScopes::retain_sources`), listed in the same `ScopeTaps` after the buses. It
   is fed from the source's mixer input (`Mixer::input_block`: after its filters,
   fader, mute and activity gain, before its sends, the point ADR-0028 gives a
