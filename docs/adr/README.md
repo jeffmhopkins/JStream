@@ -118,4 +118,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0104](0104-network-listener-over-tls.md) | Devices on the network reach JStream over TLS, with a self-signed certificate they pin | accepted | maintainer |  |
 | [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
+| [ADR-0109](0109-review-pass-carries-across-base-merges.md) | A review pass carries across merges of the base branch | accepted | maintainer |  |
 <!-- @generated end adr-index -->
