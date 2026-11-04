@@ -765,9 +765,11 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
 - `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
   `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
   of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
-  radius: it runs at the smallest working scale of 1, 2, 4 or 8 that keeps radius /
-  scale at 16 or less, so a box downsample reads at most 64 texels a texel and each
-  blur pass at most 33. It uses three scratch layers. The frame's edges clamp, so they
+  radius: it runs at the smallest working scale of 1, 2, 4, 8 or 16 that keeps radius /
+  scale at 8 or less, so a box downsample reads at most 64 texels a texel and each
+  blur pass at most 17. The bound is low for software rasterizers, which pay for every
+  load: a radius of 12 runs at half scale, about a sixth of the loads at full scale
+  (#1070). It uses three scratch layers. The frame's edges clamp, so they
   don't darken. The area's edge is hard (no feather), and the blur inside it still
   reads pixels just outside it.
 - `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are

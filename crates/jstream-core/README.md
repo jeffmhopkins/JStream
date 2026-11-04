@@ -1346,13 +1346,15 @@ place. A frame without either chain draws as before, with no extra layer. The ed
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
 stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
-of its mix in order. Their filters hold no references (the graph refuses one), so none
-reads a scene or an asset.
+of its mix in order. Their filters hold no scene, source or bus reference (the graph
+refuses one), so none reads a scene, but one may read a file: the asset sync below
+lists the master's and outputs' video filters with the rest, and `plan_stages` hands
+each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1370,7 +1372,11 @@ pass after the chains of the sources it places and the scenes it nests, so a cha
 that masks with a scene of filtered sources sees them filtered this frame. The scene is
 drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
 canvas size), and those passes run once per frame with the chains, before any mix
-draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+draws; `claim_layers` keeps their layers too. That layer is the one a mix nesting the
+same scene at depth 1 draws into, so a mix pass whose layer the chains already drew
+this frame reads it as it is instead of drawing it again (`Chains::reuse`, #1070): a
+group shown both as itself and through a `scene` source's chain, as a reflection is,
+costs one pass. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
 scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
 a failed nested pass does, and the chains after it don't run that tick. The graph
