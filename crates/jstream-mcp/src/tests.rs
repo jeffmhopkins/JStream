@@ -7,8 +7,8 @@ use crate::stdio::block_on;
 use crate::{LEGACY_VERSIONS, MODERN_VERSION, serve_stdio};
 use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockControl, MockEngine};
 use jstream_protocol::{
-    Call, CallResult, ClientId, DropCounts, Event, Hello, OutputId, Query, QueryResult, RequestId,
-    Response, Rev, Welcome, json_schema,
+    Action, ActionResult, Call, CallResult, ClientId, DropCounts, Event, FrameSheet, Hello,
+    OutputId, Query, QueryResult, RequestId, Response, Rev, SheetFrame, Welcome, json_schema,
 };
 use serde_json::{Value, json};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -1052,7 +1052,8 @@ fn video_snapshot_on_the_mock_is_an_engine_error() {
     assert_eq!(tool_error(&result)["code"], "internal");
 }
 
-/// A session that answers `video.snapshot` with a given base64 PNG and delegates the rest.
+/// A session that answers `video.snapshot`, `video.frames` and `scene.switch_and_watch`
+/// with a given base64 PNG and delegates the rest.
 struct PngSession {
     inner: MockControl,
     engine: MockEngine,
@@ -1082,7 +1083,37 @@ impl Control for PngSession {
             };
             return Box::pin(std::future::ready(Ok(response)));
         }
-        self.inner.call(call)
+        let sheet = || FrameSheet {
+            width: 1,
+            height: 1,
+            columns: 2,
+            rows: 1,
+            tile_width: 1,
+            tile_height: 1,
+            frames: vec![SheetFrame {
+                at_ms: 0,
+                rev: Rev(3),
+            }],
+            png: self.png.clone(),
+        };
+        let result = match &call {
+            Call::Query {
+                query: Query::VideoFrames { .. },
+            } => CallResult::Query {
+                result: QueryResult::VideoFrames { sheet: sheet() },
+            },
+            Call::Action {
+                action: Action::SceneSwitchAndWatch { .. },
+            } => CallResult::Action {
+                result: Some(ActionResult::SceneSwitchAndWatch { sheet: sheet() }),
+            },
+            _ => return self.inner.call(call),
+        };
+        let response = Response {
+            id: RequestId::new("req_sheet"),
+            result,
+        };
+        Box::pin(std::future::ready(Ok(response)))
     }
 
     fn events(&self) -> EventStream {
@@ -1095,6 +1126,12 @@ impl Control for PngSession {
 /// Runs `video.snapshot` through a server whose engine answers with `png`, after an
 /// `initialize`, and returns the reply's `result`.
 fn snapshot_result(png: &str) -> Value {
+    image_result(png, "video", json!({"type": "video.snapshot"}))
+}
+
+/// Runs `op` on `tool` through a server whose engine answers the image calls with
+/// `png`, after an `initialize`, and returns the reply's `result`.
+fn image_result(png: &str, tool: &str, op: Value) -> Value {
     let engine = MockEngine::new();
     let control = Arc::new(PngSession {
         inner: engine.connect(),
@@ -1118,7 +1155,7 @@ fn snapshot_result(png: &str) -> Value {
         "jsonrpc": "2.0",
         "id": 2,
         "method": "tools/call",
-        "params": {"name": "video", "arguments": {"op": {"type": "video.snapshot"}}}
+        "params": {"name": tool, "arguments": {"op": op}}
     });
     let mut reply: Value =
         serde_json::from_str(&block_on(server.handle(&call.to_string())).expect("call"))
@@ -1147,6 +1184,37 @@ fn video_snapshot_result_leads_with_an_image_block() {
         result["structuredContent"]["result"]["result"]["type"],
         "video.snapshot"
     );
+}
+
+/// A frame sheet, from `video.frames` or `scene.switch_and_watch`, leads with its image
+/// too, and its JSON keeps the frames' times (#1061).
+#[test]
+fn a_frame_sheet_leads_with_an_image_block() {
+    let calls = [
+        (
+            "video",
+            json!({"type": "video.frames", "count": 2, "interval_ms": 100}),
+            "video.frames",
+        ),
+        (
+            "scene",
+            json!({"type": "scene.switch_and_watch", "scene_id": "scn_1", "count": 2, "interval_ms": 100}),
+            "scene.switch_and_watch",
+        ),
+    ];
+    for (tool, op, name) in calls {
+        let result = image_result("iVBORw0KGgo=", tool, op);
+        assert_eq!(result["isError"], false, "{result}");
+        assert_eq!(result["content"][0]["type"], "image", "{name}");
+        assert_eq!(result["content"][0]["data"], "iVBORw0KGgo=", "{name}");
+        let answer = &result["structuredContent"]["result"]["result"];
+        assert_eq!(answer["type"], name);
+        assert_eq!(
+            answer["png"],
+            "<in the image content block: 12 bytes of base64>"
+        );
+        assert_eq!(answer["frames"][0]["at_ms"], 0, "{name}");
+    }
 }
 
 /// A noise-like frame compresses badly, so its base64 is large. It must reach the agent

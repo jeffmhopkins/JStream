@@ -751,10 +751,12 @@ impl Compositor {
                     detail: format!("item {index} was made by another compositor"),
                 });
             }
-            if !item.opacity.is_finite() || !(0.0..=1.0).contains(&item.opacity) {
+            if !item.opacity.is_finite()
+                || !(0.0..=jstream_protocol::MAX_OPACITY).contains(&item.opacity)
+            {
                 return Err(RenderError::Invalid {
                     what: "opacity",
-                    detail: format!("{} is not a finite value in 0..=1", item.opacity),
+                    detail: format!("{} is not a finite value in 0..=4", item.opacity),
                 });
             }
             self.blends.steps(item.blend)?;

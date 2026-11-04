@@ -16,6 +16,7 @@ mod error;
 mod event;
 mod filter;
 mod finite;
+mod frames;
 mod geometry;
 mod history;
 mod hotkey;
@@ -49,7 +50,7 @@ pub use audio::{
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, SceneRole, SourceKind, Vec2,
+    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
@@ -65,6 +66,9 @@ pub use event::{
 };
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
+pub use frames::{
+    FrameSheet, FrameStrip, MAX_SHEET_FRAMES, MAX_SHEET_SPAN_MS, MIN_SHEET_INTERVAL_MS, SheetFrame,
+};
 pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
     FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_BLUR_PX,

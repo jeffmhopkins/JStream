@@ -14,6 +14,7 @@ use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
 use crate::finite::Finite32;
+use crate::frames::FrameStrip;
 use crate::geometry::{ItemGeometry, SceneCamera};
 use crate::hotkey::Chord;
 use crate::id::{
@@ -300,9 +301,13 @@ pub enum Edit {
         /// Whether the item is drawn. Items are visible when added.
         visible: bool,
     },
-    /// Changes how transparent an item is drawn (ADR-0023 §1): its alpha is multiplied by
-    /// `opacity` after crop and fit. A value outside 0 to 1 is `invalid_argument`. Items
-    /// are added at 1. Inverse: `item.set_opacity` with the previous value.
+    /// Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are
+    /// multiplied by `opacity` after crop and fit. Above 1 (since 0.83, #1101) it is a
+    /// gain on the item's light: its premultiplied colour is multiplied by the opacity
+    /// while its alpha is multiplied by 1, so an `additive` item adds more light than its
+    /// source draws, and an item in another mode is drawn brighter. A value outside 0 to
+    /// [`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:
+    /// `item.set_opacity` with the previous value.
     #[serde(rename = "item.set_opacity")]
     ItemSetOpacity {
         /// The item to change.
@@ -310,7 +315,8 @@ pub enum Edit {
         /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
-        /// The alpha multiplier, from 0 (invisible) to 1 (as the source draws it).
+        /// From 0 (invisible) through 1 (as the source draws it) to [`MAX_OPACITY`]
+        /// (its light that many times over).
         opacity: Finite32,
     },
     /// Changes how an item composites onto what is below it (ADR-0023 §1). A mode the
@@ -1436,6 +1442,24 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preset_id: Option<TransitionPresetId>,
     },
+    /// `scene.switch`, then a frame sheet of the program mix from the switch on (since
+    /// 0.82, #1061), as `video.frames` takes one: so an agent sees a transition, a
+    /// stinger's cover or a keyframe move as it plays, from one call. The switch is made
+    /// as `scene.switch` makes it, and emits what it emits; the answer comes once the
+    /// last picture is drawn, as a `scene.switch_and_watch` result. Switching to the
+    /// scene already on program still takes the sheet. Fails as `scene.switch` does,
+    /// before switching with `invalid_argument` past the [`FrameStrip`] limits.
+    #[serde(rename = "scene.switch_and_watch")]
+    SceneSwitchAndWatch {
+        /// The scene to put on program.
+        scene_id: SceneId,
+        /// The preset to use, overriding the scenes' and the default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        preset_id: Option<TransitionPresetId>,
+        /// When to take the pictures, counted from the switch.
+        #[serde(flatten)]
+        strip: FrameStrip,
+    },
     /// Puts a scene on preview, the scene studio mode prepares before it goes on program
     /// with `scene.switch`. Preview is runtime state like program: it changes no `rev`,
     /// is never undone, and emits `studio.changed`. It never affects what an output
@@ -1668,6 +1692,7 @@ impl Action {
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
             Action::SceneSwitch { .. } => "scene.switch",
+            Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::UiSettingsSet { .. } => "ui_settings.set",
@@ -1699,6 +1724,11 @@ impl Action {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+            }
+            | Action::SceneSwitchAndWatch {
+                scene_id,
+                preset_id,
+                ..
             } => {
                 let mut named = vec![(EntityKind::Scene, scene_id.as_str())];
                 if let Some(preset_id) = preset_id {
@@ -1760,6 +1790,11 @@ impl Action {
             Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
+            )),
+            Action::SceneSwitchAndWatch { .. } => Some((
+                "type",
+                "`scene.switch_and_watch` can't be bound: its frame sheet answers only the \
+                 session that sends it; bind `scene.switch`",
             )),
             Action::LiveSet { .. } | Action::LiveCancel { .. } => Some((
                 "type",
@@ -2072,6 +2107,10 @@ impl Crop {
         bottom: 0,
     };
 }
+
+/// The highest item opacity `item.set_opacity`, `item.add` and a keyframe override
+/// accept (since 0.83, #1101). Above 1 an opacity is a gain on the item's light.
+pub const MAX_OPACITY: f32 = 4.0;
 
 /// Where an item's effects run (ADR-0106, since 0.76).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]

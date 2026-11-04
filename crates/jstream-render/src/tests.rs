@@ -658,7 +658,7 @@ fn bad_opacity_and_short_images_are_refused() {
     let scene = Scene {
         canvas: FrameSize::new(1, 1).unwrap(),
         background: Color::BLACK,
-        items: &[item(&image, Placement::IDENTITY, Crop::NONE, 2.0)],
+        items: &[item(&image, Placement::IDENTITY, Crop::NONE, 4.5)],
     };
     assert!(matches!(
         opened.compositor.render(&scene, false),

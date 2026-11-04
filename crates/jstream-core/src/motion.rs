@@ -21,7 +21,7 @@ use std::sync::Arc;
 use jstream_anim::{Modifier, Offsets};
 use jstream_graph::Item as GraphItem;
 use jstream_media::MediaTime;
-use jstream_protocol::{Finite32, ItemId, Size, Vec2};
+use jstream_protocol::{Finite32, ItemId, MAX_OPACITY, Size, Vec2};
 use jstream_render::transition::{Endpoint, Track};
 use jstream_render::{Crop, Placement};
 
@@ -149,7 +149,13 @@ pub(crate) fn apply(
         right: edge(crop.right, by.crop[2]),
         bottom: edge(crop.bottom, by.crop[3]),
     };
-    (placement, crop, by.opacity_of(opacity))
+    (placement, crop, opacity_of(by, opacity))
+}
+
+/// `opacity` multiplied by `by`'s factor, within 0 and [`MAX_OPACITY`]: an opacity above
+/// 1 is a gain on the item's light (#1101), so motion keeps it rather than clamp it to 1.
+pub(crate) fn opacity_of(by: &Offsets, opacity: f32) -> f32 {
+    (opacity * by.opacity).clamp(0.0, MAX_OPACITY)
 }
 
 /// A track's endpoint moved by `by`: [`apply`] on its box, crop and opacity.
@@ -298,6 +304,24 @@ mod tests {
             Size::try_new(40.0, 20.0).expect("size"),
         )
         .expect("geometry")
+    }
+
+    /// An opacity above 1, a gain on the item's light (#1101), stays one under motion:
+    /// motion multiplies it and keeps it within 0 and `MAX_OPACITY`, never clamping it to 1.
+    #[test]
+    fn motion_keeps_an_opacity_gain() {
+        let by = Offsets {
+            opacity: 1.5,
+            ..Offsets::IDENTITY
+        };
+        assert_eq!(opacity_of(&by, 2.0), 3.0);
+        assert_eq!(opacity_of(&by, 3.0), MAX_OPACITY);
+        let fade = Offsets {
+            opacity: 0.5,
+            ..Offsets::IDENTITY
+        };
+        assert_eq!(opacity_of(&fade, 2.0), 1.0);
+        assert_eq!(opacity_of(&fade, -1.0), 0.0);
     }
 
     #[test]
