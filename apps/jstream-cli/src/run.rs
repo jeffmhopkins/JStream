@@ -533,6 +533,7 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
         QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            ..
         } => {
             for (label, scene) in [("program", program_scene), ("preview", preview_scene)] {
                 match scene {

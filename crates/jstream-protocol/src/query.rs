@@ -3,6 +3,7 @@
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
+use crate::timeline::{PlayingTimeline, TimelineInfo};
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
@@ -542,6 +543,10 @@ pub enum QueryResult {
         /// collection has no scene, and by a server older than 0.30.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         preview_scene: Option<SceneId>,
+        /// The timelines playing (ADR-0114, since 0.87), ordered by ID, each with where
+        /// it is now. Omitted when none is.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        timelines: Vec<PlayingTimeline>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
@@ -971,6 +976,10 @@ pub struct SceneInfo {
     /// Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_follow: Option<CameraFollow>,
+    /// Its timelines (ADR-0114, since 0.87), ordered by ID: timed cues that
+    /// `timeline.play` runs. Omitted when it has none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timelines: Vec<TimelineInfo>,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,

@@ -511,7 +511,8 @@ impl Server {
              its key and goes live, on `history`, whose undo can remove a stream key \
              redo doesn't restore, on `pack`, whose writes and deletes change files on \
              disk that undo doesn't reach, on `values`, whose shared values a browser \
-             source page given them may send off the machine, and on `device`, \
+             source page given them may send off the machine, on `timeline`, whose \
+             cues may set those values, and on `device`, \
              `pairing` and `ui_settings`; every other edit, a delete included, is undone with \
              `history`. `openWorldHint` is on \
              `output`, on `source`, whose `browser` kind loads any http or https page, or \

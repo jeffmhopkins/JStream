@@ -408,6 +408,9 @@ fn apply_edit(
     if let Some(applied) = crate::camera::apply(state, edit, at) {
         return applied;
     }
+    if let Some(applied) = crate::timeline::apply(state, edit, at) {
+        return applied;
+    }
     match edit {
         Edit::SceneCreate {
             scene_id,
@@ -431,6 +434,7 @@ fn apply_edit(
                 camera: None,
                 camera_motion: Vec::new(),
                 camera_follow: None,
+                timelines: BTreeMap::new(),
                 items: Vec::new(),
                 variant_of: None,
                 overrides: crate::model::Overrides::new(),
@@ -536,6 +540,7 @@ fn apply_edit(
             }
             // After its items, which a follow camera names.
             inverse.extend(crate::camera::restore(&scene));
+            inverse.extend(crate::timeline::restore(&scene));
             Ok(inverse)
         }
         Edit::SceneReorder { scene_id, index } => {

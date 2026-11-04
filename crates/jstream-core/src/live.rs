@@ -672,6 +672,20 @@ impl LiveSources {
         self.worker.now()
     }
 
+    /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0114):
+    /// [`Source::restart`] on its running instance, at its own time now. A source with no
+    /// running instance has nothing to restart.
+    pub(crate) fn restart(&mut self, source_id: &SourceId) {
+        let now = self.now();
+        if let Some(running) = self
+            .entries
+            .get_mut(source_id)
+            .and_then(|entry| entry.running.as_mut())
+        {
+            running.source.restart(since(now, running.start));
+        }
+    }
+
     /// Draws each source in `scales` ([`Shot::scales`](crate::snapshot::Shot::scales))
     /// at the density its most enlarged item needs to stay sharp (ADR-0073), for a kind
     /// that draws at a density. Drawing again can take as long as building, so it is a

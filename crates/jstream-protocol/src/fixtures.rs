@@ -6,6 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::ActivityEntry;
+use crate::{PlayingTimeline, TimelineChange, TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
 use crate::SceneOptions;
 use crate::{
     Action, Batch, BlendMode, Blocker, Call, CallResult, Canvas, ChainCost, ClientId,
@@ -565,6 +566,14 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+        },
+        // A timeline, then its delete (ADR-0114).
+        Edit::TimelineSet {
+            scene_id: SceneId::new("scn_1"),
+            timeline: volley(),
+        },
+        Edit::TimelineDelete {
+            timeline_id: TimelineId::new("tl_volley"),
         },
     ];
     // Every blend mode, each of which the engine draws (ADR-0082).
@@ -1336,7 +1345,105 @@ pub(crate) fn actions() -> Vec<Action> {
             item_id: ItemId::new("itm_1"),
             modifier_id: None,
         },
+        // Timelines (ADR-0114).
+        Action::TimelinePlay {
+            timeline_id: TimelineId::new("tl_volley"),
+        },
+        Action::TimelineSeek {
+            timeline_id: TimelineId::new("tl_volley"),
+            at_ms: 1500,
+        },
+        Action::TimelineStop {
+            timeline_id: TimelineId::new("tl_volley"),
+        },
+        Action::SourceRestart {
+            source_id: SourceId::new("src_1"),
+        },
     ]
+}
+
+/// A timeline that runs a sequence of cues and loops a range of it (ADR-0114).
+fn volley() -> TimelineInfo {
+    let show = |at_ms: u32, item: &str| TimelineCue {
+        at_ms,
+        action: Action::ItemShow {
+            item_id: ItemId::new(item),
+            scene_id: None,
+        },
+    };
+    TimelineInfo {
+        timeline_id: TimelineId::new("tl_volley"),
+        name: "Volley".into(),
+        duration_ms: 4000,
+        looping: TimelineLoop::Range {
+            from_ms: 1500,
+            to_ms: 3300,
+        },
+        cues: vec![
+            TimelineCue {
+                at_ms: 0,
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_2"),
+                    preset_id: None,
+                },
+            },
+            show(1500, "itm_1"),
+            TimelineCue {
+                at_ms: 1950,
+                action: Action::ItemTriggerMotion {
+                    item_id: ItemId::new("itm_1"),
+                    modifier_id: None,
+                },
+            },
+            TimelineCue {
+                at_ms: 2400,
+                action: Action::SourceRestart {
+                    source_id: SourceId::new("src_1"),
+                },
+            },
+            TimelineCue {
+                at_ms: 2850,
+                action: Action::ValuesSet {
+                    name: "status.text".into(),
+                    value: Some(json!("Fire")),
+                },
+            },
+            TimelineCue {
+                at_ms: 3000,
+                action: Action::TimelinePlay {
+                    timeline_id: TimelineId::new("tl_other"),
+                },
+            },
+        ],
+    }
+}
+
+/// A short timeline that toggles an item, repeating as `looping` says.
+fn pulse(looping: TimelineLoop) -> TimelineInfo {
+    TimelineInfo {
+        timeline_id: TimelineId::new(match looping {
+            TimelineLoop::Loop => "tl_pulse",
+            _ => "tl_once",
+        }),
+        name: String::new(),
+        duration_ms: 500,
+        looping,
+        cues: vec![
+            TimelineCue {
+                at_ms: 0,
+                action: Action::ItemToggle {
+                    item_id: ItemId::new("itm_1"),
+                    scene_id: None,
+                },
+            },
+            TimelineCue {
+                at_ms: 250,
+                action: Action::TimelineStop {
+                    timeline_id: TimelineId::new("tl_volley"),
+                },
+            },
+        ],
+    }
 }
 
 /// A two-item drag: one item moved, the other cropped.
@@ -2030,6 +2137,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_out: None,
                     camera_motion: Vec::new(),
                     camera_follow: None,
+                    timelines: vec![volley(), pulse(TimelineLoop::Loop), pulse(TimelineLoop::Once)],
                     items: item_infos(),
                     folder: Some(FolderId::new("fld_shows")),
                     meta: scene_meta(),
@@ -2050,6 +2158,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_out: None,
                     camera_motion: Vec::new(),
                     camera_follow: None,
+                    timelines: Vec::new(),
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
@@ -2067,6 +2176,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_out: Some(TransitionPresetId::new("cut")),
                     camera_motion: Vec::new(),
                     camera_follow: None,
+                    timelines: Vec::new(),
                     items: vec![],
                     folder: None,
                     meta: Default::default(),
@@ -2159,10 +2269,17 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::StudioGet {
             program_scene: Some(SceneId::new("scn_2")),
             preview_scene: Some(SceneId::new("scn_1")),
+            timelines: vec![PlayingTimeline {
+                timeline_id: TimelineId::new("tl_volley"),
+                scene_id: SceneId::new("scn_1"),
+                position_ms: 2100,
+                pass: 1,
+            }],
         },
         QueryResult::StudioGet {
             program_scene: None,
             preview_scene: None,
+            timelines: Vec::new(),
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
@@ -2489,6 +2606,40 @@ pub(crate) fn events() -> Vec<Event> {
         value: None,
         client_id: ClientId::new("cli_2"),
         request_id: None,
+    });
+    for (change, playing, position_ms, pass) in [
+        (TimelineChange::Started, true, 0, 0),
+        (TimelineChange::Sought, true, 1500, 0),
+        (TimelineChange::Looped, true, 1500, 1),
+        (TimelineChange::Stopped, false, 2100, 1),
+        (TimelineChange::Ended, false, 4000, 0),
+        (TimelineChange::Removed, false, 0, 0),
+    ] {
+        events.push(Event::TimelineChanged {
+            timeline_id: TimelineId::new("tl_volley"),
+            scene_id: SceneId::new("scn_1"),
+            change,
+            playing,
+            position_ms,
+            pass,
+        });
+    }
+    events.push(Event::TimelineCueFired {
+        timeline_id: TimelineId::new("tl_volley"),
+        cue: 1,
+        pass: 0,
+        at_ms: 1500,
+        error: None,
+    });
+    events.push(Event::TimelineCueFired {
+        timeline_id: TimelineId::new("tl_volley"),
+        cue: 1,
+        pass: 1,
+        at_ms: 1500,
+        error: Some(ProtocolError::NotFound {
+            entity: EntityKind::Timeline,
+            id: "tl_other".into(),
+        }),
     });
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {

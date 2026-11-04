@@ -345,7 +345,7 @@ impl MediaSource {
     }
 
     /// Starts the timeline again from `timeline` at clock time `at`.
-    fn restart(&mut self, at: i64, timeline: i64) {
+    fn restart_at(&mut self, at: i64, timeline: i64) {
         self.set_timing(Timing {
             clock: at,
             timeline,
@@ -422,7 +422,14 @@ impl Source for MediaSource {
 
     fn show(&mut self, at: MediaTime) {
         if self.play.restart_on_show && self.player.is_some() {
-            self.restart(micros(at).unwrap_or(0).max(0), 0);
+            self.restart_at(micros(at).unwrap_or(0).max(0), 0);
+        }
+    }
+
+    /// Plays the file from its start (`source.restart`).
+    fn restart(&mut self, at: MediaTime) {
+        if self.player.is_some() {
+            self.restart_at(micros(at).unwrap_or(0).max(0), 0);
         }
     }
 

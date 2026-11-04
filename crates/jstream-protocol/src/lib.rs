@@ -38,6 +38,7 @@ mod profile;
 mod query;
 mod schema;
 mod settings;
+mod timeline;
 mod transition;
 mod values;
 mod version;
@@ -84,8 +85,8 @@ pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
 pub use id::{
     BusId, ClientId, DeviceId, EncoderProfileId, FilterId, FolderId, GestureId, IdempotencyKey,
-    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TransitionPresetId,
-    VideoMixId,
+    ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
+    TransitionPresetId, VideoMixId,
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
@@ -131,6 +132,10 @@ pub use query::{
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
+pub use timeline::{
+    MAX_CUES, MAX_TIMELINE_ID_LEN, MAX_TIMELINE_MS, MAX_TIMELINE_NAME_LEN, MAX_TIMELINES,
+    PlayingTimeline, TimelineChange, TimelineCue, TimelineInfo, TimelineLoop, check_timeline_id,
+};
 pub use transition::{
     CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
     MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,

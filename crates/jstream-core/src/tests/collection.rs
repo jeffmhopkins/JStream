@@ -242,6 +242,7 @@ fn a_loaded_collection_puts_its_first_scene_on_program() {
         QueryResult::StudioGet {
             program_scene,
             preview_scene,
+            ..
         } => {
             assert_eq!(program_scene, Some(SceneId::new("a")));
             assert_eq!(preview_scene, Some(SceneId::new("a")));

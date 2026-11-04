@@ -1087,6 +1087,7 @@ mod tests {
                 options: Default::default(),
                 camera_motion: Vec::new(),
                 camera_follow: None,
+                timelines: Vec::new(),
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
                 transition_in: None,
                 transition_out: None,
@@ -1115,6 +1116,7 @@ mod tests {
             name: id.into(),
             camera_motion: Vec::new(),
             camera_follow: None,
+            timelines: Vec::new(),
             items,
             ..c.scenes[0].clone()
         };

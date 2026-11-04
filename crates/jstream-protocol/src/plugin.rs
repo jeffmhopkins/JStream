@@ -157,6 +157,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("canvas.set_size", Class(E)),
     ("hotkey.set", Class(E)),
     ("hotkey.clear", Class(E)),
+    ("timeline.set", N),
+    ("timeline.delete", N),
     ("output.create", N),
     ("output.set_target", N),
     ("output.set_path", N),
@@ -222,6 +224,14 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.toggle", Class(E)),
     // Moves an item for a moment, as `item.set_motion` sets how it moves (#1107).
     ("item.trigger_motion", Class(E)),
+    // A timeline's cues run actions, `scene.switch` and `values.set` among them, that
+    // the edit class alone can't (ADR-0114), so writing or playing one is "never" until a
+    // PR decides which class may. Restarting a source changes what is on air, as a
+    // switch does.
+    ("timeline.play", N),
+    ("timeline.stop", N),
+    ("timeline.seek", N),
+    ("source.restart", Class(L)),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).

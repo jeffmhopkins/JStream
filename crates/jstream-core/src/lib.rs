@@ -56,6 +56,7 @@ mod snapshot;
 mod studio;
 #[cfg(test)]
 mod tests;
+mod timelines;
 mod transition;
 mod values;
 mod youtube;

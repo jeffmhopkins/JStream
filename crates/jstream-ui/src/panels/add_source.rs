@@ -1018,6 +1018,7 @@ mod tests {
             camera: None,
             camera_motion: Vec::new(),
             camera_follow: None,
+            timelines: Vec::new(),
         }
     }
 

@@ -309,6 +309,11 @@ impl Source for BrowserSource {
         }
     }
 
+    /// Loads the page again (`source.restart`).
+    fn restart(&mut self, _: MediaTime) {
+        self.page.reload();
+    }
+
     /// Hides the page while nothing draws it, so it stops painting (#1071), and shows it
     /// again when something does.
     fn set_drawn(&mut self, drawn: bool) {

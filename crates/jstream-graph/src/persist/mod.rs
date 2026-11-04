@@ -21,7 +21,7 @@ use jstream_protocol::{
     FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
     ItemTransform, ItemTransition, LabelId, MotionModifier, OutputId, OutputKind, ProtocolError,
     Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind, SourceMeta, TransitionPresetId, VideoMix, VideoMixId,
+    SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 5;
+pub const SCHEMA_VERSION: u32 = 6;
 
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
@@ -50,7 +50,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] =
-    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5];
+    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -128,6 +128,18 @@ fn v4_to_v5(value: &mut Value) -> Result<(), String> {
     for scene in scenes.into_iter().flatten() {
         if scene.get("camera_motion").is_some() || scene.get("camera_follow").is_some() {
             return Err("a version 4 scene has no `camera_motion` or `camera_follow`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 6 adds a scene's timelines (`scenes[].timelines`, ADR-0114). A version 5 file
+/// has none, so it upgrades unchanged; one there is refused, as version 5 refused it.
+fn v5_to_v6(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        if scene.get("timelines").is_some() {
+            return Err("a version 5 scene has no `timelines`".into());
         }
     }
     Ok(())
@@ -321,6 +333,10 @@ struct FileScene {
     /// whose item has left the scene, which is inert.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     camera_follow: Option<CameraFollow>,
+    /// Its timelines (ADR-0114, schema_version 6), ordered by ID; omitted when it has
+    /// none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    timelines: Vec<TimelineInfo>,
     /// The scene it is a keyframe scene of (ADR-0024 §2); omitted for any other scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     variant_of: Option<SceneId>,
@@ -626,6 +642,7 @@ impl Graph {
                         .camera_follow
                         .clone()
                         .filter(|f| scene.items.iter().any(|item| item.id == f.item_id)),
+                    timelines: scene.timelines.values().cloned().collect(),
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
                         .overrides
@@ -1335,6 +1352,18 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 Edit::SceneSetCameraFollow {
                     scene_id: scene.id.clone(),
                     follow: scene.camera_follow.clone(),
+                },
+            ));
+        }
+    }
+    // Before the hotkeys, which may name them.
+    for scene in &file.scenes {
+        for timeline in &scene.timelines {
+            edits.push((
+                format!("timeline `{}`", timeline.timeline_id),
+                Edit::TimelineSet {
+                    scene_id: scene.id.clone(),
+                    timeline: timeline.clone(),
                 },
             ));
         }
