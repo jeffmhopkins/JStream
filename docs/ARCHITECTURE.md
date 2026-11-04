@@ -664,6 +664,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   modifier can be a one-shot `impulse` on the `triggered` clock, which the action
   `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
   the program scene.
+  Since 0.86 a modifier can follow a bus or a source's audio
+  ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -713,7 +715,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   a live value and a keyframe override ([ADR-0094](adr/0094-scene-cameras.md),
   protocol 0.70). Its camera's `focus_px` and `blur_px` give it a depth of field
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
-  `scene.set_camera_motion` gives the camera motion modifiers, and
+  `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
+  which a camera can't hear), and
   `scene.set_camera_follow` a camera that glides after the pointer over a display or
   window capture, each set on the family's scene; the action `scene.zoom_camera` steps
   a follow camera's live zoom, with no `rev` change
@@ -1054,7 +1057,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, continuous motion with `item.set_motion` and one-shot jolts that
+  scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
+  and one-shot jolts that
   `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent

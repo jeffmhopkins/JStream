@@ -169,12 +169,15 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
   `MAX_MOTION_ID_LEN` (64), `check_motion`, the list check every implementation
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
-  ([Motion](#motion)).
+  ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
+  and `MotionCurve`, follows a bus or a source
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
   the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
-  which checks a camera's list as `check_motion` checks an item's; `CameraFollow`, a
+  which checks a camera's list as `check_motion` checks an item's and refuses an
+  `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
   `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
   `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
@@ -286,7 +289,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.85 because of
+`PROTOCOL_VERSION` is 0.86 because of the `audio` motion kind and its `MotionMeasure`
+and `MotionCurve` ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md));
+0.85 because of
 `scene.set_camera_motion`, `scene.set_camera_follow`, the action `scene.zoom_camera`,
 `SceneInfo.camera_motion` and `SceneInfo.camera_follow`
 ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)); 0.84 because of `item.trigger_motion`, the `impulse` motion kind
@@ -2047,10 +2052,12 @@ after 1.0:
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
-  property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
+  `MotionCurve`, 0.86): a later kind or property won't break a 0.81 client's
+  `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
-  clock are such values: a 0.81 client reads them as `Unknown`. `CameraProperty` (ADR-0113, 0.85) has the
+  clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
+  (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
@@ -2087,6 +2094,23 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` until `duration_ms`, then
   0: `frequency_hz` in `(0, 60]`, `decay_per_s` 0 to 1000, `duration_ms` 1 to
   3 600 000). Amplitudes are 0 to 100 000, rates within ±100 000.
+- **`audio`** (since 0.86,
+  [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)) follows what it
+  hears instead of a clock: the program mix (the master after its filters, as the
+  outputs hear it), a bus named by `audio` after its fader, or a source named by
+  `audio_source` after its own filters, fader, mute and follow, as a `spectrum` source
+  with the same settings would draw. Its `measure` is `level` (the default, RMS),
+  `peak`, `onset` (1 on a jump of the level above its recent average, else 0) or `band`
+  (the spectrum between `low_hz` and `high_hz`, both `20..=20000` and only with `band`,
+  as an amplitude). The measure in dBFS from `floor_db` (default -60, at least -90) to
+  `ceiling_db` (default 0, at most 0, above the floor) maps onto 0 to 1, an onset as it
+  is; that is followed with `attack_ms` (default 10) and `release_ms` (default 250),
+  each `0..=10000`, bent by `curve` (`linear`, the default, `ease_in`, `ease_out` or
+  `ease_in_out`, none overshooting), and mapped onto `from` (default 0) to `to`
+  (default 1), each within ±100 000 and `to` below `from` to invert. Silence is `from`,
+  and so is everything the engine doesn't hear: while no output runs the program mix
+  is silent, and a preview reads every audio modifier as silence. Its `clock` is
+  ignored.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

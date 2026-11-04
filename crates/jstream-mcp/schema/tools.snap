@@ -1232,6 +1232,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -4183,6 +4284,56 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -4285,6 +4436,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "type": "object"
               },
@@ -7873,6 +8125,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -10824,6 +11177,56 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -10926,6 +11329,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "type": "object"
               },
@@ -11861,6 +12365,10 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
+          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -12159,6 +12667,56 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -12261,6 +12819,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "type": "object"
               },
@@ -14596,6 +15255,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -17543,6 +18303,56 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -17645,6 +18455,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "type": "object"
               },
@@ -19398,6 +20309,10 @@ source: crates/jstream-mcp/src/tests.rs
       "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
+          },
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
@@ -19540,6 +20455,107 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "type": "object"
               },
@@ -19700,6 +20716,56 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionShape": {
             "description": "The waveform of an `oscillate` modifier.",
             "oneOf": [
@@ -19796,6 +20862,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
           },
           "TransitionPresetId": {
             "description": "A transition preset in the collection (ADR-0029).",

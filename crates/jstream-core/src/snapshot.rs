@@ -574,6 +574,9 @@ pub(crate) struct Shot {
     /// (ADR-0099), as the engine set it ([`Shot::set_shown`]). An item missing here is
     /// at its start.
     shown: BTreeMap<ItemId, MediaTime>,
+    /// Its items' audio modifiers (ADR-0100), with the level the render thread's
+    /// follower stores for each tick ([`crate::reactive`]).
+    audio: crate::reactive::Bindings,
     /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
     /// it ([`Shot::set_fired`]). A modifier never fired here is still.
     fired: motion::Fired,
@@ -701,6 +704,7 @@ impl Default for Shot {
             stages: BTreeMap::new(),
             moves: false,
             shown: BTreeMap::new(),
+            audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
         }
     }
@@ -856,6 +860,17 @@ impl Shot {
         self.shown.get(item).copied()
     }
 
+    /// Its items' audio modifiers, whose levels the render thread's follower sets once a
+    /// tick (ADR-0100).
+    pub(crate) fn audio(&self) -> &crate::reactive::Bindings {
+        &self.audio
+    }
+
+    /// The level of `item`'s audio modifier `modifier` this tick.
+    fn heard(&self, item: &ItemId, modifier: &str) -> Option<f32> {
+        self.audio.level(item, modifier)
+    }
+
     /// Sets when each item's `triggered` modifiers were last fired ([`motion::Fired`]).
     pub(crate) fn set_fired(&mut self, fired: motion::Fired) {
         self.fired = fired;
@@ -868,7 +883,9 @@ impl Shot {
         motion: &[jstream_anim::Modifier],
         at: MediaTime,
     ) -> jstream_anim::Offsets {
-        motion::offsets(motion, at, self.shown_at(item), self.fired.of(item))
+        motion::offsets(motion, at, self.shown_at(item), self.fired.of(item), |id| {
+            self.heard(item, id)
+        })
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -1122,6 +1139,7 @@ impl PartialEq for Shot {
             && self.stages == other.stages
             && self.moves == other.moves
             && self.shown == other.shown
+            && self.audio == other.audio
             && self.fired == other.fired
     }
 }
@@ -2262,6 +2280,8 @@ impl<'a> Planner<'a, '_> {
                 motion: motion::of(item),
             },
         );
+        out.audio
+            .record(item.id(), item.motion(), self.assets.motion_heard());
         self.add_chain(owner, chain, out);
         Some(boxed)
     }
@@ -2397,6 +2417,8 @@ impl<'a> Planner<'a, '_> {
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
             });
+            out.audio
+                .record(item.id(), item.motion(), self.assets.motion_heard());
         }
         path.remove(id);
     }
@@ -2442,6 +2464,8 @@ impl<'a> Planner<'a, '_> {
                     moving: None,
                     motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 });
+                out.audio
+                    .record(item.id(), item.motion(), self.assets.motion_heard());
             }
         }
         out.scenes.insert(id.clone(), placed);

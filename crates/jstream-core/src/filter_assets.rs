@@ -80,6 +80,8 @@ pub(crate) struct FilterAssets {
     sources: PackSources,
     /// The audio scope each shader source that hears audio hears, by source.
     heard: Arc<BTreeMap<SourceId, Arc<AudioScope>>>,
+    /// The audio scope each audio motion modifier hears (ADR-0100).
+    motion_heard: crate::reactive::HeardScopes,
 }
 
 impl FilterAssets {
@@ -130,6 +132,20 @@ impl FilterAssets {
     pub(crate) fn heard(&self) -> &Arc<BTreeMap<SourceId, Arc<AudioScope>>> {
         &self.heard
     }
+
+    /// These assets with `heard` as the scopes audio motion modifiers hear.
+    #[must_use]
+    pub(crate) fn with_motion_heard(self, motion_heard: crate::reactive::HeardScopes) -> Self {
+        Self {
+            motion_heard,
+            ..self
+        }
+    }
+
+    /// The scopes audio motion modifiers hear (ADR-0100).
+    pub(crate) fn motion_heard(&self) -> &crate::reactive::HeardScopes {
+        &self.motion_heard
+    }
 }
 
 impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
@@ -139,6 +155,7 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
             effects: PackEffects::default(),
             sources: PackSources::default(),
             heard: Arc::default(),
+            motion_heard: Arc::default(),
         }
     }
 }

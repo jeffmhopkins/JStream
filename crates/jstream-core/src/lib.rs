@@ -50,6 +50,7 @@ mod plugins;
 mod preview;
 mod private_file;
 mod profile;
+mod reactive;
 mod runtime;
 mod session;
 mod snapshot;

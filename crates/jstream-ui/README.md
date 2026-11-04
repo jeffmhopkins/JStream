@@ -128,7 +128,7 @@ Contents ([Design](#design) explains the choices):
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
-  and switching kind, tested
+  and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
@@ -420,10 +420,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
   the parent's), Motion (folded, with the modifier count as its hint: a row per motion
-  modifier with what it moves, how (wiggle, oscillate with its shape, drift, or shake,
-  a one-shot impulse with its length and decay), that kind's fields, when its time
-  starts (in step, when shown, or when fired), an On check, a Fire button on a row that
-  starts when fired (`item.trigger_motion` for that modifier, #1107) and Remove,
+  modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
+  one-shot impulse with its length and decay, or audio: what it hears, the program mix or
+  a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
+  picked), what it follows, level, peak, beat or a band, and its curve, ADR-0100), that
+  kind's fields, when its time starts (in step, when shown, or when fired; not for
+  audio), an On check, a Fire button on a row that starts when fired
+  (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
@@ -544,7 +547,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   offered while the scene places a display or window capture (`followable`), with the
   item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
   hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
-  Camera motion, a list of the camera's modifiers with the Inspector's kinds and fields
+  Camera motion, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. Both are draft fields, which OK sends as
   `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
