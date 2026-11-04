@@ -1,6 +1,7 @@
 //! The Help menu's links and the About dialog (docs/UI-FEATURES.md#header): the app's
 //! icon, its version and build, the protocol the engine speaks, and links to the
-//! project's pages on GitHub.
+//! project's pages on GitHub, and each installed third-party codec with its maker's
+//! notice and licence (`codec_downloads::InstalledCodecs`).
 //!
 //! The icon is the desktop app's own, `apps/jstream-desktop/icons/icon.png`, which
 //! trunk copies into the bundle as `icon.png` (`index.html`): replacing that file
@@ -9,6 +10,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::dialog::Modal;
+use crate::panels::codec_downloads::InstalledCodecs;
 use leptos::prelude::*;
 
 /// The bundle's copy of the app icon, relative to the page.
@@ -143,6 +145,7 @@ pub fn About(
                         {external(Link::LicenseApache, "")}
                     </dd>
                 </dl>
+                <InstalledCodecs />
                 <div class="about-links">
                     {external(Link::Source, "about-link")}
                     {external(Link::Documentation, "about-link")}

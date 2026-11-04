@@ -71,7 +71,7 @@ mod backend {
 
     use jstream_platform::media::Codec;
     use jstream_platform::{
-        AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, GpuContext,
+        AudioEncoder, AudioEncoderConfig, CodecDownload, CodecInfo, CodecRole, Codecs, GpuContext,
         HardwarePreference, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
         VideoEncoderConfig,
     };
@@ -80,7 +80,8 @@ mod backend {
     use crate::gpu::Shared;
     use crate::gpu::export::device_number;
     use crate::openh264::{
-        OPENH264_COMPONENT, OpenH264Store, openh264_encoder_info, wants_software,
+        Fetch, HttpsFetch, OPENH264_COMPONENT, OPENH264_DOWNLOAD_ID, OpenH264Store,
+        openh264_encoder_info, wants_software,
     };
     use crate::vaapi::VaapiEncoder;
     use crate::{VaEncoder, probe_encoders};
@@ -107,6 +108,21 @@ mod backend {
         }
     }
 
+    /// What downloads Cisco's OpenH264: HTTPS to Cisco's server unless a test gave
+    /// its own.
+    #[derive(Clone)]
+    struct Fetcher(Option<Arc<dyn Fetch + Send + Sync>>);
+
+    impl std::fmt::Debug for Fetcher {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(if self.0.is_some() {
+                "Fetcher(given)"
+            } else {
+                "Fetcher(https)"
+            })
+        }
+    }
+
     /// Codecs through VA-API (ADR-0060 §6): H.264 and HEVC encode sessions on the
     /// probe's encoders, on CPU frames, or on the GPU context's encode targets for the backend
     /// [`Codecs::on_context`] returns. And the Rust AAC-LC encoder.
@@ -116,6 +132,8 @@ mod backend {
         encoders: Result<Vec<VaEncoder>, PlatformError>,
         /// Where Cisco's OpenH264 is kept once downloaded; `None` without a data folder.
         openh264: Option<OpenH264Store>,
+        /// What downloads OpenH264 on a person's request.
+        fetch: Fetcher,
         /// On the GPU context: its state. Encoders then take its encode targets only.
         gpu: Option<Arc<Shared>>,
     }
@@ -127,6 +145,7 @@ mod backend {
             Self {
                 encoders: probe_encoders(),
                 openh264: OpenH264Store::in_data_dir(),
+                fetch: Fetcher(None),
                 gpu: None,
             }
         }
@@ -135,6 +154,31 @@ mod backend {
         pub fn with_openh264(mut self, store: OpenH264Store) -> Self {
             self.openh264 = Some(store);
             self
+        }
+
+        /// The same backend downloading OpenH264 through `fetch`, not HTTPS to Cisco's
+        /// server, for tests (R-TEST-004).
+        pub fn with_fetch(mut self, fetch: Arc<dyn Fetch + Send + Sync>) -> Self {
+            self.fetch = Fetcher(Some(fetch));
+            self
+        }
+
+        /// The OpenH264 store, for the download `id` names.
+        ///
+        /// # Errors
+        /// [`PlatformError::Unsupported`] for any other `id`, and for OpenH264 when
+        /// there is no data folder to keep it in.
+        fn store_for(&self, id: &str) -> Result<&OpenH264Store, PlatformError> {
+            if id != OPENH264_DOWNLOAD_ID {
+                return Err(PlatformError::Unsupported {
+                    what: format!("downloading the codec `{id}` (Linux downloads `openh264` only)"),
+                });
+            }
+            self.openh264
+                .as_ref()
+                .ok_or_else(|| PlatformError::Unsupported {
+                    what: "downloading OpenH264: JStream has no data folder to keep it in".into(),
+                })
         }
 
         /// The software H.264 encoder (ADR-0061): Cisco's OpenH264, if downloaded.
@@ -246,6 +290,28 @@ mod backend {
             })
         }
 
+        /// Cisco's OpenH264, when there is a data folder to keep it in (ADR-0061).
+        fn downloads(&self) -> Vec<CodecDownload> {
+            self.openh264
+                .iter()
+                .map(OpenH264Store::download_info)
+                .collect()
+        }
+
+        /// Downloads Cisco's OpenH264 from Cisco's server and checks it against the
+        /// pin (`OpenH264Store::install`). Only on a person's request (ADR-0061).
+        fn download(&self, id: &str) -> Result<(), PlatformError> {
+            let store = self.store_for(id)?;
+            match &self.fetch.0 {
+                Some(fetch) => store.install(fetch.as_ref()),
+                None => store.install(&HttpsFetch::new()?),
+            }
+        }
+
+        fn delete_download(&self, id: &str) -> Result<(), PlatformError> {
+            self.store_for(id)?.remove()
+        }
+
         /// These codecs on `context`, when it can export encode targets and a VA-API
         /// encoder runs on its device: the encoders whose render node is the context's
         /// (VA-API and Vulkan must share the GPU for the DMA-BUF to import). `Ok(None)`
@@ -272,6 +338,7 @@ mod backend {
             Ok(Some(Arc::new(Self {
                 encoders: Ok(on_device),
                 openh264: self.openh264.clone(),
+                fetch: self.fetch.clone(),
                 gpu: Some(shared),
             })))
         }

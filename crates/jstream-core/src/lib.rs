@@ -26,6 +26,7 @@ mod audio;
 mod audio_sources;
 mod audit;
 mod chain;
+mod codec_downloads;
 mod collection;
 mod drops;
 mod effect_packs;

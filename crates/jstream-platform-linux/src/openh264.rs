@@ -25,7 +25,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use jstream_platform::{PlatformError, VideoEncoder, VideoEncoderConfig};
+use jstream_platform::media::Codec;
+use jstream_platform::{CodecDownload, PlatformError, VideoEncoder, VideoEncoderConfig};
 
 use crate::dl::SystemLibrary;
 
@@ -42,6 +43,16 @@ pub const OPENH264_NOTICE: &str = "OpenH264 Video Codec provided by Cisco System
 /// Cisco's licence page for its binary, which the app links to wherever it offers the
 /// download and in its licence information.
 pub const OPENH264_LICENSE_URL: &str = "https://www.openh264.org/BINARY_LICENSE.txt";
+
+/// The ID the codec backend lists the download under (`Codecs::downloads`), and that a
+/// person's `codec.download` names.
+pub const OPENH264_DOWNLOAD_ID: &str = "openh264";
+
+/// The full text of [`OPENH264_LICENSE_URL`], as Cisco publishes it. Its condition 4
+/// asks every application that uses the binary to reproduce all of it where licensing
+/// information is presented to the user, so the app shows it beside the download offer
+/// and the installed codec.
+pub const OPENH264_LICENSE_TEXT: &str = include_str!("openh264/BINARY_LICENSE.txt");
 
 /// The largest download accepted. Cisco's Linux library is about 1 MB compressed.
 pub const MAX_DOWNLOAD_BYTES: usize = 16 << 20;
@@ -146,6 +157,21 @@ impl OpenH264Store {
         self.pin.library_sha256.is_some() && self.library_path().is_file()
     }
 
+    /// The download as the codec backend lists it: Cisco's notice and licence link,
+    /// the pinned release, and whether it is installed.
+    pub fn download_info(&self) -> CodecDownload {
+        CodecDownload {
+            id: OPENH264_DOWNLOAD_ID,
+            name: OPENH264_COMPONENT,
+            codec: Codec::H264,
+            version: version(&self.pin),
+            notice: OPENH264_NOTICE,
+            license_url: OPENH264_LICENSE_URL,
+            license_text: OPENH264_LICENSE_TEXT,
+            installed: self.is_installed(),
+        }
+    }
+
     /// Downloads the pinned release from Cisco through `fetch`, checks it and stores it.
     /// Call it only on the user's explicit request, after showing [`OPENH264_NOTICE`]
     /// and a link to [`OPENH264_LICENSE_URL`]. Blocks for the download.
@@ -180,12 +206,15 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library. Afterwards software H.264 reports not installed. Removing
+    /// Deletes the library, and any stale temporary file a write left behind (untouched
+    /// for ten minutes, and its process gone or the file a day old), but not one a write
+    /// may still be writing. Afterwards software H.264 reports not installed. Removing
     /// what isn't there succeeds.
     ///
     /// # Errors
     /// [`PlatformError::Os`] when the file exists but can't be deleted.
     pub fn remove(&self) -> Result<(), PlatformError> {
+        self.sweep_parts();
         match fs::remove_file(self.library_path()) {
             Ok(()) => Ok(()),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -244,27 +273,125 @@ impl OpenH264Store {
     }
 
     /// Writes `library` to a temporary file only the user can read, then renames it into
-    /// place, so a reader never sees half a file.
+    /// place, so a reader never sees half a file. Each write has a temporary file of its
+    /// own (this process's ID, a value for this run and a counter), so two downloads at
+    /// once, from two clients' `codec.download`, never write into one file, and none
+    /// reuses the name of a file an earlier run with the same ID left; each renames a
+    /// whole, checked library into place. A stale temporary file (another process's, or
+    /// an earlier run's with this ID) is deleted first (see
+    /// [`sweep_parts`](Self::sweep_parts)).
     fn write(&self, library: &[u8]) -> std::io::Result<()> {
+        static WRITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         fs::DirBuilder::new()
             .recursive(true)
             .mode(0o700)
             .create(&self.dir)?;
-        let part = self.dir.join(format!("{}.part", self.pin.file_name));
+        self.sweep_parts();
+        static RUN: std::sync::OnceLock<u128> = std::sync::OnceLock::new();
+        let run = RUN.get_or_init(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_nanos())
+        });
+        let n = WRITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let part = self.dir.join(format!(
+            "{}.{}.{run}.{n}.part",
+            self.pin.file_name,
+            std::process::id()
+        ));
         match fs::remove_file(&part) {
             Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e),
             _ => {}
         }
+        let result =
+            Self::write_part(&part, library).and_then(|()| fs::rename(&part, self.library_path()));
+        if result.is_err() {
+            let _ = fs::remove_file(&part);
+        }
+        result
+    }
+
+    /// Deletes the temporary files that writes left behind. `write` names each
+    /// `<library>.<process ID>.<run>.<n>.part`. Another process sharing the data folder (a
+    /// second daemon, or the CLI while the daemon downloads) may be writing one right
+    /// now, so a file is deleted only when [`part_is_stale`] says so. A file with this
+    /// process's ID counts as one whose process is gone: this process's own writes are
+    /// as quick as anyone's, so one untouched for [`PART_GRACE`] was left by an earlier
+    /// run that had the same ID (in a container the daemon is always PID 1). Best
+    /// effort: a file it can't list, read the age of or delete stays.
+    fn sweep_parts(&self) {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        let now = std::time::SystemTime::now();
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            // `<library>.<pid>.<run>.<n>.part`, an older JStream's `<library>.<pid>.<n>.part`
+            // or `<library>.part`.
+            let Some(middle) = name
+                .strip_suffix(".part")
+                .and_then(|rest| rest.strip_prefix(self.pin.file_name))
+                .filter(|m| m.is_empty() || m.starts_with('.'))
+            else {
+                continue;
+            };
+            let pid = middle
+                .strip_prefix('.')
+                .and_then(|m| m.split('.').next())
+                .and_then(|p| p.parse::<u32>().ok());
+            let Some(age) = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .map(|modified| now.duration_since(modified).unwrap_or_default())
+            else {
+                continue;
+            };
+            let running: fn(u32) -> bool = if pid == Some(std::process::id()) {
+                |_| false
+            } else {
+                process_is_running
+            };
+            if part_is_stale(pid, age, running) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    /// Writes `library` to the new file `part`, `0600`.
+    fn write_part(part: &std::path::Path, library: &[u8]) -> std::io::Result<()> {
         let mut file = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
             .mode(0o600)
-            .open(&part)?;
+            .open(part)?;
         file.write_all(library)?;
-        file.sync_all()?;
-        drop(file);
-        fs::rename(&part, self.library_path())
+        file.sync_all()
     }
+}
+
+/// How long a temporary file (another process's, or an earlier run's with this
+/// process's ID) is kept after its last write, whatever its process. A write holds the whole checked library in memory and only writes and
+/// syncs it, which takes seconds, so a file untouched this long is not being written.
+const PART_GRACE: std::time::Duration = std::time::Duration::from_secs(10 * 60);
+
+/// How long another process's temporary file is kept while a process with its ID is
+/// running. Process IDs are reused, so a running ID doesn't keep a file forever.
+const PART_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
+
+/// Whether a temporary file (another process's, or an earlier run's with this process's
+/// ID), last written `age` ago by process `pid` (`None` when its name has none), can be
+/// deleted: it is older than [`PART_GRACE`], and
+/// either no process `pid` is `running`, or it is older than [`PART_MAX_AGE`].
+fn part_is_stale(pid: Option<u32>, age: std::time::Duration, running: fn(u32) -> bool) -> bool {
+    age > PART_GRACE && (age > PART_MAX_AGE || !pid.is_some_and(running))
+}
+
+/// Whether a process with ID `pid` is running, as this process sees it in `/proc`. A
+/// process in another PID namespace looks absent; [`PART_GRACE`] covers it.
+fn process_is_running(pid: u32) -> bool {
+    pid != 0 && std::path::Path::new("/proc").join(pid.to_string()).exists()
 }
 
 fn version(pin: &OpenH264Pin) -> String {
@@ -314,7 +441,6 @@ fn check_sha256(what: &'static str, data: &[u8], pinned: &[u8; 32]) -> Result<()
 /// in line).
 pub fn wants_software(hardware_encoders: usize, config: &VideoEncoderConfig) -> bool {
     use jstream_platform::HardwarePreference;
-    use jstream_platform::media::Codec;
     config.codec == Codec::H264
         && match config.hardware {
             HardwarePreference::Avoid => true,

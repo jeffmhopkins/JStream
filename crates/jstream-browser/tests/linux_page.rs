@@ -343,3 +343,69 @@ fn a_reloaded_static_page_paints_again() {
     drop(backend);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// #1155: a new page's first load is held like a reload's, so the white Chromium can
+/// paint a new document with first never reaches the engine. Opens the page many times.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn a_new_page_never_shows_white() {
+    let helper = PathBuf::from(
+        std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
+    );
+    let dir = temp_dir("open");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, PAGE).expect("the page");
+    let backend = CefBackend::new(
+        CefConfig {
+            helper,
+            cache_root: dir.join("cef"),
+            log_file: Some(dir.join("cef.log")),
+        },
+        Arc::new(FakeClock::new(Timebase::MILLIS)),
+    );
+    backend.use_device(None);
+    let (width, height) = (64, 36);
+    let pixel = |frame: &jstream_media::VideoFrame, x: u32, y: u32| -> [u8; 4] {
+        let plane = &frame.planes()[0];
+        let at = y as usize * plane.stride() + x as usize * 4;
+        let p = &plane.data()[at..at + 4];
+        [p[0], p[1], p[2], p[3]]
+    };
+    for _ in 0..10 {
+        let page = backend
+            .open(&PageSpec {
+                location: PageLocation::File(page_file.clone()),
+                size: FrameSize::new(width, height).expect("a size"),
+                fps: 30,
+                css: DEFAULT_CSS.into(),
+                local_network: false,
+            })
+            .expect("the page opened");
+        // Every frame up to the first red one, and for a while after it, is never white.
+        let deadline = Instant::now() + PAINT_TIMEOUT;
+        let mut red_since = None;
+        loop {
+            if let Some(frame) = page.cpu_frame() {
+                assert_ne!(
+                    pixel(&frame, width * 3 / 4, height / 2),
+                    [255, 255, 255, 255],
+                    "a white frame reached the engine"
+                );
+                if red_since.is_none() && pixel(&frame, width / 4, height / 2) == [255, 0, 0, 255] {
+                    red_since = Some(Instant::now());
+                }
+            }
+            if red_since.is_some_and(|at| at.elapsed() > Duration::from_millis(400)) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no red paint within {PAINT_TIMEOUT:?}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        drop(page);
+    }
+    drop(backend);
+    let _ = std::fs::remove_dir_all(&dir);
+}

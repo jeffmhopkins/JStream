@@ -68,6 +68,11 @@ jobs:
       matrix:
         os: [ubuntu-latest]   # the Windows leg is in after-review.yml (ADR-0054)
     runs-on: ${{ matrix.os }}
+    # Line tables keep backtraces' file and line but drop the full debug info, which had
+    # grown the workspace's test build past the hosted runner's disk. Set on the job, so
+    # rust-cache keys its cache by it too.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
@@ -88,6 +93,9 @@ jobs:
           echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
       - name: Test
         run: cargo test --workspace --locked
+      - name: Disk left after the tests
+        if: always()
+        run: df -h .
 
   # Streams to a real RTMP server and decodes what it got (apps/jstream-daemon/README.md#receiver-e2e):
   # lavapipe for the GPU compositor, Cisco's OpenH264 for H.264, ffmpeg as the server and

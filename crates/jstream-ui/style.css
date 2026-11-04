@@ -869,6 +869,25 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .outputs .profiles { display: grid; gap: 0.4rem; }
 .outputs .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
 .outputs .profiles > button { justify-self: start; }
+/* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0061). */
+.codec-downloads { display: grid; gap: 0.4rem; }
+.codec-downloads:empty { display: none; }
+.codec-offer {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--raised);
+}
+.codec-offer p { margin: 0; font-size: 0.85rem; }
+.codec-offer button { justify-self: start; }
+.codec-notice { color: var(--muted); font-size: 0.8rem; }
+.codec-notice a { color: var(--link); }
+.codec-terms summary { cursor: pointer; color: var(--link); font-size: 0.8rem; }
+.codec-terms pre { max-height: 14rem; overflow: auto; margin: 0.3rem 0 0; padding: 0.4rem; white-space: pre-wrap; font-size: 0.75rem; color: var(--text-soft); background: var(--zone); border-radius: 4px; }
+.codec-installed .codec-terms { flex-basis: 100%; }
+.codec-installed { margin: 0; font-size: 0.85rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; }
 .profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .profile {
   display: flex;
@@ -1144,6 +1163,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .about-facts dd { margin: 0; overflow-wrap: anywhere; }
 .about-dialog a { color: var(--link); text-decoration: none; }
 .about-dialog a:hover, .about-dialog a:focus-visible { text-decoration: underline; }
+.about-codecs { width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
+.about-codecs-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.about-codec { display: grid; gap: 4px; }
+.about-codec-name { margin: 0; }
 .about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; }
 .plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }

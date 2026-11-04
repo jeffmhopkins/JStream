@@ -1336,6 +1336,12 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
+        Action::CodecDownload {
+            download_id: "openh264".into(),
+        },
+        Action::CodecDelete {
+            download_id: "openh264".into(),
+        },
         Action::PackWrite {
             pack: "glow".into(),
             files: vec![
@@ -1655,6 +1661,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "workspace.dock".into(),
         },
         Query::PluginList,
+        Query::CodecDownloads,
         Query::YoutubeStats,
         Query::SourceSizes,
         Query::VideoFrames {
@@ -2601,6 +2608,19 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     grant: crate::PluginGrant::default(),
                 },
             ],
+        },
+        QueryResult::CodecDownloads {
+            downloads: vec![crate::CodecDownloadInfo {
+                download_id: "openh264".into(),
+                name: "Cisco's OpenH264 (software H.264)".into(),
+                codec: crate::VideoCodec::H264,
+                version: "2.6.0".into(),
+                notice: "OpenH264 Video Codec provided by Cisco Systems, Inc.".into(),
+                license_url: "https://www.openh264.org/BINARY_LICENSE.txt".into(),
+                license_text: "About The Cisco-Provided Binary of OpenH264 Video Codec…".into(),
+                installed: false,
+                hardware_encoder: false,
+            }],
         },
     ]
 }
