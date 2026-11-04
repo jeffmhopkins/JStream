@@ -279,7 +279,7 @@ pub enum Edit {
         visible: bool,
     },
     /// Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are
-    /// multiplied by `opacity` after crop and fit. Above 1 (since 0.77, #1101) it is a
+    /// multiplied by `opacity` after crop and fit. Above 1 (since 0.79, #1101) it is a
     /// gain on the item's light: its premultiplied colour is multiplied by the opacity
     /// while its alpha is multiplied by 1, so an `additive` item adds more light than its
     /// source draws, and an item in another mode is drawn brighter. A value outside 0 to
@@ -1918,7 +1918,7 @@ impl Crop {
 }
 
 /// The highest item opacity `item.set_opacity`, `item.add` and a keyframe override
-/// accept (since 0.77, #1101). Above 1 an opacity is a gain on the item's light.
+/// accept (since 0.79, #1101). Above 1 an opacity is a gain on the item's light.
 pub const MAX_OPACITY: f32 = 4.0;
 
 /// How an item composites onto what is below it (ADR-0023 §1, register D13).

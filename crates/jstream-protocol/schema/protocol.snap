@@ -2485,7 +2485,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.77, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
+          "description": "Changes how transparent an item is drawn (ADR-0023 §1): its colour and alpha are\nmultiplied by `opacity` after crop and fit. Above 1 (since 0.79, #1101) it is a\ngain on the item's light: its premultiplied colour is multiplied by the opacity\nwhile its alpha is multiplied by 1, so an `additive` item adds more light than its\nsource draws, and an item in another mode is drawn brighter. A value outside 0 to\n[`MAX_OPACITY`] is `invalid_argument`. Items are added at 1. Inverse:\n`item.set_opacity` with the previous value.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",
@@ -10496,5 +10496,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.77"
+  "title": "JStream protocol 0.79"
 }

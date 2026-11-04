@@ -212,9 +212,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.77 because `item.set_opacity`,
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.79 because `item.set_opacity`,
   `item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101), with
-  0.76 left to a change that claimed it first; 0.75 because of the `normal_srgb` and
+  0.76 to 0.78 left to changes that claimed them first; 0.75 because of the `normal_srgb` and
   `additive_srgb` blend modes (ADR-0105); 0.74 because of `output.set_path` (#1072); 0.73
   because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -735,7 +735,7 @@ parameters), so a reader of 0.7 messages sees no change for those.
 ### Opacity, blend and filters
 
 All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha multiplier (default 1), and from
-0.77 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
+0.79 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
 `additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
