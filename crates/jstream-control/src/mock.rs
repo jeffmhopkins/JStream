@@ -1608,7 +1608,13 @@ impl Collection {
                         ));
                     }
                     (None, Some(geometry)) => geometry_view(&geometry, at)?,
-                    (transform, None) => transform.unwrap_or(ItemTransform::IDENTITY),
+                    (transform, None) => {
+                        let transform = transform.unwrap_or(ItemTransform::IDENTITY);
+                        transform
+                            .check_drawable()
+                            .map_err(|reason| invalid(at, "transform", reason))?;
+                        transform
+                    }
                 };
                 let opacity = opacity.unwrap_or(Finite32::ONE);
                 check_opacity(opacity, at)?;
@@ -1666,6 +1672,9 @@ impl Collection {
                 scene_id,
                 transform,
             } => {
+                transform
+                    .check_drawable()
+                    .map_err(|reason| invalid(at, "transform", reason))?;
                 let item = self.placement(&item_id, scene_id.as_ref(), at)?;
                 let old = set_placement(&item_id, &scene_id, item);
                 item.transform = transform;

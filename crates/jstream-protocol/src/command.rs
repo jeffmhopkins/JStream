@@ -195,7 +195,8 @@ pub enum Edit {
         /// The source the item shows.
         source_id: SourceId,
         /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The
-        /// initial legacy placement, with its 0.3 meaning.
+        /// initial legacy placement, with its 0.3 meaning, checked like
+        /// `item.set_transform`'s.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         transform: Option<ItemTransform>,
         /// The initial placement as a box on the canvas, checked like
@@ -250,7 +251,9 @@ pub enum Edit {
     /// **Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.
     /// Replaces an item's placement with a legacy one, which keeps its 0.3 meaning.
     /// Inverse: the previous placement, as `item.set_transform` if it was legacy and
-    /// `item.set_geometry` if it was a geometry.
+    /// `item.set_geometry` if it was a geometry. A transform the compositor couldn't
+    /// draw (a position coordinate past 1e15 pixels, or a scale past ±100000,
+    /// [`ItemTransform::check_drawable`]) is `invalid_argument` naming `transform`.
     #[serde(rename = "item.set_transform")]
     ItemSetTransform {
         /// The item to move.
@@ -1900,7 +1903,26 @@ impl ItemTransform {
         },
         rotation_deg: Finite32::ZERO,
     };
+
+    /// Checks that the compositor can draw it from any source (#1130): each position
+    /// coordinate within [`MAX_DRAWN_PX`](crate::MAX_DRAWN_PX), and each scale within
+    /// ±[`MAX_LEGACY_SCALE`]. A source is at most `u32::MAX` pixels a side, so every
+    /// corner then stays far inside f32's range. Returns what is wrong if it isn't.
+    pub fn check_drawable(&self) -> Result<(), &'static str> {
+        let near = |v: Finite32| v.get().abs() <= crate::MAX_DRAWN_PX;
+        if !(near(self.position.x) && near(self.position.y)) {
+            return Err("its position must be within 1e15 pixels of the origin");
+        }
+        let scale = |v: Finite32| v.get().abs() <= MAX_LEGACY_SCALE;
+        if !(scale(self.scale.x) && scale(self.scale.y)) {
+            return Err("its scale must be within -100000..=100000");
+        }
+        Ok(())
+    }
 }
+
+/// The largest scale, either way, a legacy transform takes ([`ItemTransform::check_drawable`]).
+pub const MAX_LEGACY_SCALE: f32 = 100_000.0;
 
 impl Default for ItemTransform {
     fn default() -> Self {

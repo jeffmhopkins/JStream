@@ -574,7 +574,11 @@ fn apply_edit(
                     Placement::Geometry(*geometry)
                 }
                 (transform, None) => {
-                    Placement::Legacy(transform.unwrap_or(ItemTransform::IDENTITY))
+                    let transform = transform.unwrap_or(ItemTransform::IDENTITY);
+                    transform
+                        .check_drawable()
+                        .map_err(|reason| invalid(at, "transform", reason))?;
+                    Placement::Legacy(transform)
                 }
             };
             let opacity = opacity.unwrap_or(Finite32::ONE);
@@ -625,6 +629,11 @@ fn apply_edit(
             scene_id,
             transform,
         } => {
+            // A transform the compositor couldn't draw is refused, as a geometry is
+            // (#1130).
+            transform
+                .check_drawable()
+                .map_err(|reason| invalid(at, "transform", reason))?;
             match placement_mut(state, item_id, scene_id.as_ref(), at)? {
                 // The 0.3 form overrides the same field as a geometry (ADR-0024 §2).
                 PlacementTarget::Variant(vi) => keyframe::write(

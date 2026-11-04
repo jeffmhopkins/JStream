@@ -262,7 +262,8 @@ state machine. Contents:
   item appeared (`ShownSince`) and stamps it on each program shot it publishes
   (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
   modifier stays at its start there. A legacy placement's signed scale keeps its flip,
-  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`) stays unmoved.
+  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
+  legacy transform past what `item.set_transform` takes, stays unmoved (#1130).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads

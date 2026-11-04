@@ -1231,7 +1231,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning, checked like\n`item.set_transform`'s."
                   },
                   "type": {
                     "const": "item.add",
@@ -1295,7 +1295,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry. A transform the compositor couldn't\ndraw (a position coordinate past 1e15 pixels, or a scale past ±100000,\n[`ItemTransform::check_drawable`]) is `invalid_argument` naming `transform`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -7257,7 +7257,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning, checked like\n`item.set_transform`'s."
                   },
                   "type": {
                     "const": "item.add",
@@ -7321,7 +7321,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry. A transform the compositor couldn't\ndraw (a position coordinate past 1e15 pixels, or a scale past ±100000,\n[`ItemTransform::check_drawable`]) is `invalid_argument` naming `transform`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11431,7 +11431,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning, checked like\n`item.set_transform`'s."
                   },
                   "type": {
                     "const": "item.add",
@@ -11495,7 +11495,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry. A transform the compositor couldn't\ndraw (a position coordinate past 1e15 pixels, or a scale past ±100000,\n[`ItemTransform::check_drawable`]) is `invalid_argument` naming `transform`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -13175,7 +13175,7 @@ source: crates/jstream-mcp/src/tests.rs
                         "type": "null"
                       }
                     ],
-                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning."
+                    "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `geometry`. The\ninitial legacy placement, with its 0.3 meaning, checked like\n`item.set_transform`'s."
                   },
                   "type": {
                     "const": "item.add",
@@ -13239,7 +13239,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry.",
+                "description": "**Deprecated** since 0.11 (ADR-0022), removed in 1.0: send `item.set_geometry`.\nReplaces an item's placement with a legacy one, which keeps its 0.3 meaning.\nInverse: the previous placement, as `item.set_transform` if it was legacy and\n`item.set_geometry` if it was a geometry. A transform the compositor couldn't\ndraw (a position coordinate past 1e15 pixels, or a scale past ±100000,\n[`ItemTransform::check_drawable`]) is `invalid_argument` naming `transform`.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",

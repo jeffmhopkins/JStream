@@ -218,7 +218,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.79 because of
+  reflection as the geometry's flip. `ItemTransform::check_drawable` bounds a legacy
+  transform so any source draws it: its position within `MAX_DRAWN_PX` and its scale
+  within ±`MAX_LEGACY_SCALE` (100 000, #1130). `PROTOCOL_VERSION` is 0.79 because of
   `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
   `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)),
   with 0.76 to 0.78 left to changes that claimed them first; 0.75 because of the
@@ -1922,7 +1924,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and
   sending neither stores the identity transform, its 0.3 meaning, until 1.0.
   `item.set_geometry` stores a geometry and the deprecated `item.set_transform` a
-  transform. Each one's inverse restores the previous placement in its own form.
+  transform. Each one's inverse restores the previous placement in its own form. A
+  legacy transform, from `item.add` or `item.set_transform`, must pass
+  `ItemTransform::check_drawable` (a position within 1e15 pixels and a scale within
+  ±100 000), else `invalid_argument` on `edits.N.transform` (#1130): past those, a large
+  source's corners would leave f32's range and fail the frame.
 - **Validation.** A stored geometry has a size greater than zero
   (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
   (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From

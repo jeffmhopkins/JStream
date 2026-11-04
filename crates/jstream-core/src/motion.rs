@@ -112,16 +112,23 @@ pub(crate) fn apply(
             // `item.set_geometry` refuses) leaves it where it is.
             Placement::Geometry(moved.filter(|g| drawable(*g)).unwrap_or(geometry))
         }
-        Placement::Legacy(mut transform) => {
-            transform.position[0] += by.x;
-            transform.position[1] += by.y;
+        Placement::Legacy(transform) => {
+            let mut moved = transform;
+            moved.position[0] += by.x;
+            moved.position[1] += by.y;
             // A legacy scale is signed, a negative one flipping its axis: motion scales
             // the size and keeps the flip.
             let scaled = |s: f32| s.signum() * by.scale_of(s.abs());
-            transform.scale[0] = scaled(transform.scale[0]);
-            transform.scale[1] = scaled(transform.scale[1]);
-            transform.rotation_deg += by.rotation;
-            Placement::Legacy(transform)
+            moved.scale[0] = scaled(moved.scale[0]);
+            moved.scale[1] = scaled(moved.scale[1]);
+            moved.rotation_deg += by.rotation;
+            // One `item.set_transform` would refuse (stacked scales past
+            // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130).
+            Placement::Legacy(if legacy_drawable(moved) {
+                moved
+            } else {
+                transform
+            })
         }
         // A model's drawn layer (ADR-0107) is already placed in its pixels, drawn flat
         // from the canvas's top-left; its geometry only sorts it, so motion leaves it.
@@ -206,6 +213,28 @@ impl TrackMotion {
             Track::Disappear { .. } => side(&self.from),
         }
     }
+}
+
+/// Whether a moved legacy transform is one `item.set_transform` would take: every
+/// value finite and within `ItemTransform::check_drawable`'s bounds.
+fn legacy_drawable(t: jstream_render::LegacyTransform) -> bool {
+    let finite = |v: f32| Finite32::new(v);
+    let (Some(x), Some(y), Some(sx), Some(sy), Some(rotation_deg)) = (
+        finite(t.position[0]),
+        finite(t.position[1]),
+        finite(t.scale[0]),
+        finite(t.scale[1]),
+        finite(t.rotation_deg),
+    ) else {
+        return false;
+    };
+    jstream_protocol::ItemTransform {
+        position: jstream_protocol::Vec2 { x, y },
+        scale: jstream_protocol::Vec2 { x: sx, y: sy },
+        rotation_deg,
+    }
+    .check_drawable()
+    .is_ok()
 }
 
 /// Whether a moved box is one `item.set_geometry` would take: every input within
@@ -458,5 +487,24 @@ mod tests {
         };
         assert_eq!(motion.offsets(&appear, 0.0, at(1.0), |_| None).x, 30.0);
         assert!(TrackMotion::same(ItemId::new("i"), Arc::from([])).is_still());
+    }
+
+    /// #1130: stacked scales past what `item.set_transform` takes leave a legacy
+    /// transform where it is, as they leave a box.
+    #[test]
+    fn a_legacy_transform_scaled_past_drawable_stays_as_it_is() {
+        let huge: Vec<Modifier> = (0..8)
+            .map(|n| Modifier {
+                id: format!("s{n}"),
+                ..drift(Property::Scale, 1000.0, Clock::Engine)
+            })
+            .collect();
+        let by = offsets(&huge, at(1.0), None);
+        let legacy = Placement::Legacy(LegacyTransform {
+            position: [10.0, 20.0],
+            scale: [-2.0, 3.0],
+            rotation_deg: 0.0,
+        });
+        assert_eq!(apply(&by, legacy, Crop::NONE, 1.0).0, legacy);
     }
 }

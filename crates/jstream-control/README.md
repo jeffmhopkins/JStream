@@ -128,7 +128,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     its keyframe scenes;
   - both `transform` and `geometry` on `item.add`, a geometry that is not positive or
     not finite or that the compositor can't draw (`ItemGeometry::check_drawable`; any
-    other 3D is accepted, as the engine does from protocol 0.34), and a
+    other 3D is accepted, as the engine does from protocol 0.34), a legacy transform
+    it couldn't draw (`ItemTransform::check_drawable`, #1130), and a
     canvas side of 0 or over 8192;
   - deleting a source that an item places, or a scene that a scene source or a video
     mix shows, or either while a source's settings refer to it;
