@@ -3144,11 +3144,18 @@ struct State {
     /// When each item the program mix draws was first drawn: the origin of its motion
     /// modifiers' `shown` clock (ADR-0099).
     shown_since: crate::motion::ShownSince,
+    /// When each item's `triggered` motion modifiers were last fired, by
+    /// `item.trigger_motion` (#1107): the origin of their clock.
+    fired: crate::motion::Fired,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
     /// render thread has not caught up with yet.
     gestures: Gestures,
+    /// The zoom steps `scene.zoom_camera` asked for each scene family's follow camera
+    /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
+    /// take through the parameter channel. Never stored.
+    camera_zooms: BTreeMap<SceneId, i64>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
     /// while any is open.
@@ -3494,6 +3501,31 @@ impl State {
         self.sync_sizes(wake);
     }
 
+    /// Fires `item_id`'s `triggered` motion modifiers (#1107): the one `modifier_id`
+    /// names, or all of them, from now. The program shot is planned again, so the render
+    /// thread draws the fire from its next frame.
+    fn trigger_motion(
+        &mut self,
+        item_id: &jstream_protocol::ItemId,
+        modifier_id: Option<&str>,
+    ) -> Result<(), ProtocolError> {
+        if let Some(id) = modifier_id
+            && let Err(reason) = jstream_protocol::check_motion_id(id)
+        {
+            return Err(ProtocolError::invalid_argument("modifier_id", reason));
+        }
+        if self.graph.state().item(item_id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            });
+        }
+        let now = self.live.now();
+        self.fired.fire(item_id, modifier_id, now);
+        self.publish_render();
+        Ok(())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -3530,6 +3562,10 @@ impl State {
                 self.switch(client_id, request_id, scene_id, preset_id.as_ref(), wake)?;
                 return Ok(CallResult::action());
             }
+            Action::SceneZoomCamera { scene_id, steps } => {
+                self.zoom_camera(&scene_id, steps)?;
+                return Ok(CallResult::action());
+            }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
                     self.emit_studio(client_id, request_id, None, wake);
@@ -3560,6 +3596,13 @@ impl State {
                         wake,
                     );
                 }
+                return Ok(CallResult::action());
+            }
+            Action::ItemTriggerMotion {
+                item_id,
+                modifier_id,
+            } => {
+                self.trigger_motion(&item_id, modifier_id.as_deref())?;
                 return Ok(CallResult::action());
             }
             other @ (Action::PairingStart
@@ -4043,6 +4086,7 @@ impl State {
             source_shots,
             source_copies,
             shown_since,
+            fired,
             shared,
             ..
         } = self;
@@ -4072,6 +4116,7 @@ impl State {
         }
         let shown = shown_since.update(&planning.shot.drawn_items(), now);
         planning.shot.set_shown(shown);
+        planning.shot.set_fired(fired.clone());
         render.publish(planning.shot);
         // Each previewed scene, after the program mix's plan has ended, so it reaches
         // no source: a preview never makes a source shown or heard (ADR-0028).
@@ -4280,7 +4325,39 @@ impl State {
 
     /// Publishes the gestures' live values on the render parameter channel.
     fn publish_live(&self) {
-        self.render.publish_live(self.gestures.params());
+        self.render
+            .publish_live(self.gestures.params().with_zooms(self.camera_zooms.clone()));
+    }
+
+    /// `scene.zoom_camera` (ADR-0113 §4): `steps` zoom steps for the follow camera of
+    /// `scene_id`'s family, which the render thread takes on its next frame.
+    fn zoom_camera(&mut self, scene_id: &SceneId, steps: i32) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.as_str().to_owned(),
+            })?;
+        if !(-16..=16).contains(&steps) {
+            return Err(ProtocolError::invalid_argument(
+                "steps",
+                "must be within -16..=16",
+            ));
+        }
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        if state
+            .scene(&family)
+            .and_then(|family| family.camera_follow())
+            .is_none()
+        {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` has no camera that follows the pointer"),
+            });
+        }
+        *self.camera_zooms.entry(family).or_default() += i64::from(steps);
+        self.publish_live();
+        Ok(())
     }
 
     /// Sends the `live.changed` events due at `now` and releases the committed values

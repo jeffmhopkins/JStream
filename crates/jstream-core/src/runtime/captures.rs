@@ -741,6 +741,13 @@ impl Captures for RenderCaptures {
             image,
         })
     }
+
+    fn pointer(&self, spec: &CaptureKey) -> Option<jstream_platform::PointerPosition> {
+        match &self.slots.get(spec)?.state {
+            State::Running { stream, .. } => stream.pointer(),
+            State::Starting | State::Failed { .. } => None,
+        }
+    }
 }
 
 impl Slot {

@@ -134,6 +134,15 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
+kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
+`fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
+hand-held camera. To follow the pointer over a screen capture, `scene.set_camera_follow` \
+names an item of the scene showing a `display` or `window` source: the camera glides \
+after the pointer at an angle (`yaw_deg`, `pitch_deg`), keeps the capture filling the \
+frame and, with `blur_px` above 0, focuses where it looks. `zoom` (1-4) is its resting \
+zoom; `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+Both belong to the scene's family: set them on the parent, not a keyframe scene. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
@@ -169,7 +178,11 @@ each frame from one clock, so every item, mask and nested scene showing the same
 modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
 one, and give a keyframe scene its own list (`scene_id`) to calm or quicken it across a \
 `move`. Use `clock` `shown` for motion that should start fresh each time the item is \
-shown. For lights, meters or a logo that react to the music, use an `audio` modifier \
+shown. For a one-shot jolt or shake (an impact, a kick), add an `impulse` modifier \
+(`amplitude`, `frequency_hz`, `decay_per_s`, `duration_ms`) on `clock` `triggered` and \
+fire it with `item.trigger_motion`, instead of stepping the item call by call; fire a \
+group's item to shake the group and its masks together. \
+For lights, meters or a logo that react to the music, use an `audio` modifier \
 instead of a page that fakes the beat: it follows the program mix (or a bus, `audio`, or \
 a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`high_hz`, \
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \

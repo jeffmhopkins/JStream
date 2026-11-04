@@ -644,6 +644,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to zoom: a keyframe scene zooms its family's."
+                  },
+                  "steps": {
+                    "default": 1,
+                    "description": "How many steps in; negative zooms out. Default 1.",
+                    "format": "int32",
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "scene.zoom_camera",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -1036,6 +1085,368 @@ source: crates/jstream-mcp/src/tests.rs
               }
             },
             "type": "object"
+          },
+          "CameraFollow": {
+            "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
+            "properties": {
+              "item_id": {
+                "$ref": "#/$defs/ItemId",
+                "description": "The item it follows: one of the scene's, showing a display or window capture."
+              },
+              "lean_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 9.0,
+                "description": "How far the camera leans with the pointer's speed, in degrees, from 0 (off) to 30.\nDefault 9."
+              },
+              "pitch_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": -10.0,
+                "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "smooth_ms": {
+                "default": 450,
+                "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "yaw_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 20.0,
+                "description": "The resting angle to the right of the item's normal, in degrees, within ±60.\nDefault 20."
+              },
+              "zoom": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "The resting zoom, from 1 to 4. At 1 the frame shows two thirds of the item's\nheight; at `z`, `1/z` of that. Default 1."
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "type": "object"
+          },
+          "CameraMotionModifier": {
+            "description": "One motion modifier on a scene camera: an item's [`MotionModifier`] with a camera\nproperty.",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "The clock it runs on. Default `engine`; `shown` starts when the scene starts being\ndrawn on program."
+              },
+              "enabled": {
+                "description": "Whether it runs. Default `true`, which isn't written.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/CameraProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "CameraProperty": {
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "oneOf": [
+              {
+                "const": "position_x",
+                "description": "The camera's position, x (right), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_y",
+                "description": "The camera's position, y (down), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_z",
+                "description": "The camera's position, z (toward the viewer), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_x",
+                "description": "The point it looks at, x, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_y",
+                "description": "The point it looks at, y, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_z",
+                "description": "The point it looks at, z, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "fov",
+                "description": "The vertical field of view, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "roll",
+                "description": "The roll, clockwise, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "focus",
+                "description": "The focus distance, in scene pixels; only a camera with a depth of field shows it.",
+                "type": "string"
+              },
+              {
+                "const": "blur",
+                "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              }
+            ]
           },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
@@ -2625,6 +3036,61 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "properties": {
+                  "motion": {
+                    "default": [],
+                    "description": "The new list, at most 8. Empty removes every modifier.",
+                    "items": {
+                      "$ref": "#/$defs/CameraMotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "properties": {
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CameraFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The new follow camera. Omitted removes it."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_follow",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -3810,11 +4276,16 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
               {
                 "const": "linear",
@@ -3839,7 +4310,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
               {
                 "const": "level",
@@ -3969,7 +4440,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -4066,6 +4537,41 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -7031,6 +7537,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to zoom: a keyframe scene zooms its family's."
+                  },
+                  "steps": {
+                    "default": 1,
+                    "description": "How many steps in; negative zooms out. Default 1.",
+                    "format": "int32",
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "scene.zoom_camera",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -7423,6 +7978,368 @@ source: crates/jstream-mcp/src/tests.rs
               }
             },
             "type": "object"
+          },
+          "CameraFollow": {
+            "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
+            "properties": {
+              "item_id": {
+                "$ref": "#/$defs/ItemId",
+                "description": "The item it follows: one of the scene's, showing a display or window capture."
+              },
+              "lean_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 9.0,
+                "description": "How far the camera leans with the pointer's speed, in degrees, from 0 (off) to 30.\nDefault 9."
+              },
+              "pitch_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": -10.0,
+                "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "smooth_ms": {
+                "default": 450,
+                "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "yaw_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 20.0,
+                "description": "The resting angle to the right of the item's normal, in degrees, within ±60.\nDefault 20."
+              },
+              "zoom": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "The resting zoom, from 1 to 4. At 1 the frame shows two thirds of the item's\nheight; at `z`, `1/z` of that. Default 1."
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "type": "object"
+          },
+          "CameraMotionModifier": {
+            "description": "One motion modifier on a scene camera: an item's [`MotionModifier`] with a camera\nproperty.",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "The clock it runs on. Default `engine`; `shown` starts when the scene starts being\ndrawn on program."
+              },
+              "enabled": {
+                "description": "Whether it runs. Default `true`, which isn't written.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/CameraProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "CameraProperty": {
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "oneOf": [
+              {
+                "const": "position_x",
+                "description": "The camera's position, x (right), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_y",
+                "description": "The camera's position, y (down), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_z",
+                "description": "The camera's position, z (toward the viewer), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_x",
+                "description": "The point it looks at, x, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_y",
+                "description": "The point it looks at, y, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_z",
+                "description": "The point it looks at, z, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "fov",
+                "description": "The vertical field of view, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "roll",
+                "description": "The roll, clockwise, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "focus",
+                "description": "The focus distance, in scene pixels; only a camera with a depth of field shows it.",
+                "type": "string"
+              },
+              {
+                "const": "blur",
+                "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              }
+            ]
           },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
@@ -9012,6 +9929,61 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "properties": {
+                  "motion": {
+                    "default": [],
+                    "description": "The new list, at most 8. Empty removes every modifier.",
+                    "items": {
+                      "$ref": "#/$defs/CameraMotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "properties": {
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CameraFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The new follow camera. Omitted removes it."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_follow",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -10197,11 +11169,16 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
               {
                 "const": "linear",
@@ -10226,7 +11203,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
               {
                 "const": "level",
@@ -10356,7 +11333,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -10453,6 +11430,41 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -11290,7 +12302,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.trigger_motion` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -11647,11 +12659,16 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
               {
                 "const": "linear",
@@ -11676,7 +12693,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
               {
                 "const": "level",
@@ -11806,7 +12823,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -11903,6 +12920,41 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -12784,6 +13836,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
                 "properties": {
                   "scene_id": {
@@ -13590,6 +14667,55 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to zoom: a keyframe scene zooms its family's."
+                  },
+                  "steps": {
+                    "default": 1,
+                    "description": "How many steps in; negative zooms out. Default 1.",
+                    "format": "int32",
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "scene.zoom_camera",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -13982,6 +15108,368 @@ source: crates/jstream-mcp/src/tests.rs
               }
             },
             "type": "object"
+          },
+          "CameraFollow": {
+            "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
+            "properties": {
+              "item_id": {
+                "$ref": "#/$defs/ItemId",
+                "description": "The item it follows: one of the scene's, showing a display or window capture."
+              },
+              "lean_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 9.0,
+                "description": "How far the camera leans with the pointer's speed, in degrees, from 0 (off) to 30.\nDefault 9."
+              },
+              "pitch_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": -10.0,
+                "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "smooth_ms": {
+                "default": 450,
+                "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "yaw_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 20.0,
+                "description": "The resting angle to the right of the item's normal, in degrees, within ±60.\nDefault 20."
+              },
+              "zoom": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "The resting zoom, from 1 to 4. At 1 the frame shows two thirds of the item's\nheight; at `z`, `1/z` of that. Default 1."
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "type": "object"
+          },
+          "CameraMotionModifier": {
+            "description": "One motion modifier on a scene camera: an item's [`MotionModifier`] with a camera\nproperty.",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "The clock it runs on. Default `engine`; `shown` starts when the scene starts being\ndrawn on program."
+              },
+              "enabled": {
+                "description": "Whether it runs. Default `true`, which isn't written.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/CameraProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "CameraProperty": {
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "oneOf": [
+              {
+                "const": "position_x",
+                "description": "The camera's position, x (right), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_y",
+                "description": "The camera's position, y (down), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_z",
+                "description": "The camera's position, z (toward the viewer), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_x",
+                "description": "The point it looks at, x, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_y",
+                "description": "The point it looks at, y, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_z",
+                "description": "The point it looks at, z, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "fov",
+                "description": "The vertical field of view, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "roll",
+                "description": "The roll, clockwise, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "focus",
+                "description": "The focus distance, in scene pixels; only a camera with a depth of field shows it.",
+                "type": "string"
+              },
+              {
+                "const": "blur",
+                "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              }
+            ]
           },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
@@ -15571,6 +17059,61 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "properties": {
+                  "motion": {
+                    "default": [],
+                    "description": "The new list, at most 8. Empty removes every modifier.",
+                    "items": {
+                      "$ref": "#/$defs/CameraMotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "properties": {
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CameraFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The new follow camera. Omitted removes it."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_follow",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`\nfor an empty name, a colour that isn't `#rrggbb`, or an icon checked as\n`scene.set_meta`'s. Inverse: `label.delete`.",
                 "properties": {
                   "color": {
@@ -16752,11 +18295,16 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
           "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
             "oneOf": [
               {
                 "const": "linear",
@@ -16781,7 +18329,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
               {
                 "const": "level",
@@ -16911,7 +18459,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
                 "properties": {
                   "attack_ms": {
                     "default": 10,
@@ -17008,6 +18556,41 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -18723,9 +20306,375 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "BusId": {
+            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
+            "type": "string"
+          },
+          "CameraFollow": {
+            "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
+            "properties": {
+              "item_id": {
+                "$ref": "#/$defs/ItemId",
+                "description": "The item it follows: one of the scene's, showing a display or window capture."
+              },
+              "lean_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 9.0,
+                "description": "How far the camera leans with the pointer's speed, in degrees, from 0 (off) to 30.\nDefault 9."
+              },
+              "pitch_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": -10.0,
+                "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "smooth_ms": {
+                "default": 450,
+                "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "yaw_deg": {
+                "$ref": "#/$defs/Finite32",
+                "default": 20.0,
+                "description": "The resting angle to the right of the item's normal, in degrees, within ±60.\nDefault 20."
+              },
+              "zoom": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "The resting zoom, from 1 to 4. At 1 the frame shows two thirds of the item's\nheight; at `z`, `1/z` of that. Default 1."
+              }
+            },
+            "required": [
+              "item_id"
+            ],
+            "type": "object"
+          },
+          "CameraMotionModifier": {
+            "description": "One motion modifier on a scene camera: an item's [`MotionModifier`] with a camera\nproperty.",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.86): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
+                "properties": {
+                  "attack_ms": {
+                    "default": 10,
+                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "audio": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BusId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
+                  },
+                  "audio_source": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
+                  },
+                  "ceiling_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the envelope is bent. Default `linear`."
+                  },
+                  "floor_db": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": -60.0,
+                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
+                  },
+                  "high_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
+                  },
+                  "kind": {
+                    "const": "audio",
+                    "type": "string"
+                  },
+                  "low_hz": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
+                  },
+                  "measure": {
+                    "$ref": "#/$defs/MotionMeasure",
+                    "default": "level",
+                    "description": "What it measures. Default `level`."
+                  },
+                  "release_ms": {
+                    "default": 250,
+                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "The clock it runs on. Default `engine`; `shown` starts when the scene starts being\ndrawn on program."
+              },
+              "enabled": {
+                "description": "Whether it runs. Default `true`, which isn't written.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Unique within the list: 1 to 64 bytes of ASCII letters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/CameraProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "CameraProperty": {
+            "description": "The camera property a camera motion modifier changes. Every value is added to the\ncamera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and\nblur to 0 to 64.",
+            "oneOf": [
+              {
+                "const": "position_x",
+                "description": "The camera's position, x (right), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_y",
+                "description": "The camera's position, y (down), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "position_z",
+                "description": "The camera's position, z (toward the viewer), in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_x",
+                "description": "The point it looks at, x, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_y",
+                "description": "The point it looks at, y, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "target_z",
+                "description": "The point it looks at, z, in scene pixels.",
+                "type": "string"
+              },
+              {
+                "const": "fov",
+                "description": "The vertical field of view, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "roll",
+                "description": "The roll, clockwise, in degrees.",
+                "type": "string"
+              },
+              {
+                "const": "focus",
+                "description": "The focus distance, in scene pixels; only a camera with a depth of field shows it.",
+                "type": "string"
+              },
+              {
+                "const": "blur",
+                "description": "The blur far from focus, in canvas pixels; only a camera with a focus shows it.",
+                "type": "string"
+              }
+            ]
+          },
           "Finite32": {
             "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
             "format": "float",
@@ -18739,9 +20688,108 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
           },
+          "ItemId": {
+            "description": "A scene item: one placement of a source inside a scene. Unique across scenes.",
+            "type": "string"
+          },
           "LabelId": {
             "description": "A label that sources carry (ADR-0024 §4).",
             "type": "string"
+          },
+          "MotionClock": {
+            "description": "Where a modifier's time starts.",
+            "oneOf": [
+              {
+                "const": "engine",
+                "description": "The engine's animation time: every item with the same parameters moves in step.",
+                "type": "string"
+              },
+              {
+                "const": "shown",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionCurve": {
+            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.86).",
+            "oneOf": [
+              {
+                "const": "linear",
+                "description": "As it is.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
+                "type": "string"
+              },
+              {
+                "const": "ease_out",
+                "description": "Cubic, fast at first: quiet passages already show.",
+                "type": "string"
+              },
+              {
+                "const": "ease_in_out",
+                "description": "Cubic at both ends.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMeasure": {
+            "description": "What an `audio` modifier measures of what it hears (since 0.86).",
+            "oneOf": [
+              {
+                "const": "level",
+                "description": "The RMS level of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "peak",
+                "description": "The peak absolute sample of the latest window.",
+                "type": "string"
+              },
+              {
+                "const": "onset",
+                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
+                "type": "string"
+              },
+              {
+                "const": "band",
+                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionShape": {
+            "description": "The waveform of an `oscillate` modifier.",
+            "oneOf": [
+              {
+                "const": "sine",
+                "description": "A sine: starts at 0, rising.",
+                "type": "string"
+              },
+              {
+                "const": "triangle",
+                "description": "A triangle: starts at 0, rising, straight between -1 and 1.",
+                "type": "string"
+              },
+              {
+                "const": "square",
+                "description": "A square: 1 for the first half of each period, -1 for the second.",
+                "type": "string"
+              },
+              {
+                "const": "saw",
+                "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+                "type": "string"
+              }
+            ]
           },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
@@ -18814,6 +20862,10 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               }
             ]
+          },
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
           },
           "TransitionPresetId": {
             "description": "A transition preset in the collection (ADR-0029).",
@@ -19156,6 +21208,61 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "properties": {
+                  "motion": {
+                    "default": [],
+                    "description": "The new list, at most 8. Empty removes every modifier.",
+                    "items": {
+                      "$ref": "#/$defs/CameraMotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "properties": {
+                  "follow": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CameraFollow"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The new follow camera. Omitted removes it."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "type": {
+                    "const": "scene.set_camera_follow",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets the presets a scene overrides switches with: `transition_in` when switching\ninto it, `transition_out` when switching out of it. A switch that names a preset\nwins over both, and `transition_in` wins over the other scene's `transition_out`.\nEach must name an existing preset, else `not_found`; omitted means none. Inverse:\n`scene.set_transitions` with the previous two.",
                 "properties": {
                   "scene_id": {
@@ -19270,6 +21377,30 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "count",
                   "interval_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to zoom: a keyframe scene zooms its family's."
+                  },
+                  "steps": {
+                    "default": 1,
+                    "description": "How many steps in; negative zooms out. Default 1.",
+                    "format": "int32",
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "scene.zoom_camera",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
                 ],
                 "type": "object"
               },

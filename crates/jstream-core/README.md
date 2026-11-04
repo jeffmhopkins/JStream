@@ -264,7 +264,16 @@ state machine. Contents:
   pass of the program shot, a video mix's included: the engine keeps when each drawn
   item appeared (`ShownSince`) and stamps it on each program shot it publishes
   (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
-  modifier stays at its start there. A legacy placement's signed scale keeps its flip,
+  modifier stays at its start there. The `triggered` clock (#1107) starts when
+  `item.trigger_motion` fires a modifier: the engine keeps when each item's modifiers
+  were last fired (`Fired`: all of them together, or one by ID, a modifier counting from
+  the later), forgets a fire after an hour (the longest an impulse runs), stamps the
+  fires on each program shot (`Shot::set_fired`) and plans the shot again, so the render
+  thread draws the fire from its next frame. A fire changes no `rev` and emits nothing;
+  a preview shot isn't stamped, so a `triggered` modifier adds nothing there. An item
+  with only `triggered` modifiers still counts as moving, so its shot draws each frame
+  while it waits to be fired.
+  A legacy placement's signed scale keeps its flip,
   and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
   legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
   `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
@@ -289,6 +298,21 @@ state machine. Contents:
   draw paths read by item and ID without allocating. A modifier with nothing heard, a
   preview shot (no follower) and the program mix while no output runs read silence,
   the modifier's `from`.
+- **Camera moves** (`follow.rs`,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
+  camera motion and follow camera, planned with the shot as its pass camera's
+  `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
+  box at its committed geometry, its crop, fit and flips, and the capture it shows). As a
+  pass draws, the follow camera glides after the pointer the capture reports
+  (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
+  springs of the follow-cursor mock, keeping the box filling the frame, and focuses where
+  it looks when the camera has a blur; camera motion is then added, clamped to the
+  camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
+  family), step once per frame time, and are dropped after 10 s undrawn. A transition
+  moves each end's camera the same way, so a Move into or out of a follow scene follows
+  it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
+  live-value channel carries (`LiveParams::with_zooms`); a follow camera takes the steps
+  asked for since it started. A shot whose camera moves changes with time.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -402,7 +426,7 @@ state machine. Contents:
   difference between the newest and the one from that long ago.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
-  `src/tests/transitions.rs`, `src/tests/fonts.rs`, `tests/mcp.rs`,
+  `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -781,8 +805,11 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
-  `values.set` (see [Shared values](#shared-values)), and `item.show`, `item.hide` and
-  `item.toggle`
+  `values.set` (see [Shared values](#shared-values)), `scene.zoom_camera`
+  ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
+  no undo step; it adds its steps to the family's zoom count and publishes the live
+  values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
+  and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
   `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
   `State::visible_in`): a `rev`, `state.changed` and an entry in the undo-conflict log,
@@ -1178,6 +1205,17 @@ pass in every mix that shows the program: `compose` samples each track at the fr
 time and draws the sampled items over opaque black, bottom first, the nested scenes
 they show composited first. Without a scene to draw, the primary display's capture is
 scaled to fill the canvas, which is fitted the same way, or the output is black.
+A 3D scene's camera may move on its own
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): its pass, and a
+transition's ends, carry the family's `CameraMoves`, which `compose` applies to the
+camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
+once per frame time, then the camera's motion), with the zoom steps from the live
+values. Such a shot changes with time, so it redraws each frame. Each compositor keeps
+its own springs. The preview thread draws with the captures, so its follow camera
+follows the pointer apart from the render thread, from rest. The snapshot thread draws
+with no captures (`NoCaptures`), so it gets no pointer: `video.snapshot` and a frame
+sheet show a follow camera at rest, aimed at the box's centre, though the camera's motion
+still plays.
 
 **Video chains** (`chain.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md),
 roadmap V0). Planning copies each reached source's video chain into the `Shot`: its
@@ -3181,7 +3219,11 @@ through channels it never waits on, and it takes the started streams with `try_r
 capture's frame size, only when it changes (the first frame, a resize, and none once the
 capture is no longer wanted), on another such channel (`SizeChange`), so a steady size
 sends and allocates nothing. A capture restarting after a failure or a move off the GPU
-path keeps the size it had until a frame says otherwise. The primary display is looked up when its
+path keeps the size it had until a frame says otherwise. A follow camera
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) asks a running
+capture where the pointer is (`Captures::pointer`, the stream's `CaptureStream::pointer`,
+a few OS calls that return at once on Windows and macOS, `None` elsewhere) as it draws;
+nothing keeps or sends it. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
 in Design), in the format `device_format` picks from those it lists: on the backend's

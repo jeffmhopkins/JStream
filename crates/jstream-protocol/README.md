@@ -65,17 +65,18 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
-  `scene.set_camera`, `label.create`,
+  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`, `item.show`,
+  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `scene.zoom_camera`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
+  `effect.enable`, `pack.write`, `pack.delete`, `values.set`, `item.trigger_motion`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
@@ -146,7 +147,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
-  overrides and its `camera` (since 0.70; on a keyframe scene its own override), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
+  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -165,10 +167,20 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
-  `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
-  shares ([Motion](#motion)). Since 0.84 `MotionKind::Audio`, with its `MotionMeasure`
+  `MAX_MOTION_ID_LEN` (64), `check_motion`, the list check every implementation
+  shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
+  ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
+- **Camera motion and follow** (`camera_motion.rs`, since 0.85,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
+  `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
+  the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
+  which checks a camera's list as `check_motion` checks an item's; `CameraFollow`, a
+  camera that follows the pointer over a display or window capture (its item, `zoom`,
+  `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
+  `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
+  what `scene.zoom_camera` steps by.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -276,9 +288,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.84 because of the `audio` motion kind and its `MotionMeasure`
+`PROTOCOL_VERSION` is 0.86 because of the `audio` motion kind and its `MotionMeasure`
 and `MotionCurve` ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md));
-0.83 because `item.set_opacity`,
+0.85 because of
+`scene.set_camera_motion`, `scene.set_camera_follow`, the action `scene.zoom_camera`,
+`SceneInfo.camera_motion` and `SceneInfo.camera_follow`
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)); 0.84 because of `item.trigger_motion`, the `impulse` motion kind
+and the `triggered` clock (#1107); 0.83 because `item.set_opacity`,
 `item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101);
 0.82 because of the frame
 sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.81 because of
@@ -1808,8 +1824,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
-  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
+  the plugin's own session), `live` (`scene.switch`, and `scene.zoom_camera`, which
+  changes what is on air with no undo step, ADR-0113) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
@@ -2035,9 +2052,12 @@ after 1.0:
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
-  `MotionCurve`, 0.84): a later kind or property won't break a 0.81 client's
-  `state.get`, and a 0.81 client reads an `audio` modifier as an unknown kind. `check_motion` refuses an `Unknown`
-  in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
+  `MotionCurve`, 0.86): a later kind or property won't break a 0.81 client's
+  `state.get`. `check_motion` refuses an `Unknown`
+  in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
+  clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
+  (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
@@ -2067,10 +2087,13 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 `opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
-  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
-  `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
-  100 000, rates within ±100 000.
-- **`audio`** (since 0.84,
+  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`), `drift` (a steady
+  `rate_per_s`, wrapping back to 0 past `wrap` when it has one) and, since 0.84,
+  `impulse` (a one-shot decaying shake,
+  `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` until `duration_ms`, then
+  0: `frequency_hz` in `(0, 60]`, `decay_per_s` 0 to 1000, `duration_ms` 1 to
+  3 600 000). Amplitudes are 0 to 100 000, rates within ±100 000.
+- **`audio`** (since 0.86,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)) follows what it
   hears instead of a clock: the program mix (the master after its filters, as the
   outputs hear it), a bus named by `audio` after its fader, or a source named by
@@ -2093,7 +2116,9 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source
-  preview doesn't run it: there a `shown` modifier stays at its start.
+  preview doesn't run it: there a `shown` modifier stays at its start. `triggered`
+  (since 0.84) starts each time `item.trigger_motion` fires the modifier; until then,
+  and in a preview, it adds nothing.
 - **`item.set_motion {item_id, scene_id?, motion}`** writes the whole list, and is
   undone by the same edit with the old list. Addressed to a keyframe scene, it writes
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
@@ -2103,6 +2128,15 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
   previews as it drags): each change is one undo step. `depth` is a property beyond
   ADR-0099's list, for 3D scenes.
+
+**`item.trigger_motion {item_id, modifier_id?}`** (an action, since 0.84, #1107) fires
+the item's `triggered` modifiers from now: the one `modifier_id` names, or every one when
+it is omitted. Firing a running one restarts it. A fire is runtime state like the program
+scene: no `rev`, no undo, no event. A modifier on a group's item moves the whole group,
+masks included. Firing a modifier the item doesn't hold, or one on another clock, does
+nothing, since a keyframe scene can override the list; an item not in the collection is
+`not_found`, and a malformed `modifier_id` is `invalid_argument`. Plugins need the `edit`
+class. Its `named_objects` is the item, so a hotkey binding to it goes with the item.
 
 During a scene switch a moving item keeps moving: a matched pair blends its two sides'
 motion by the transition's progress, an appearing item moves as its new scene says and a

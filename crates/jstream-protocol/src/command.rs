@@ -10,6 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
 use crate::filter::{FilterChain, FilterInfo, FilterOwner};
@@ -806,6 +807,36 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
     },
+    /// Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change
+    /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
+    /// keyframe scene, which draws its parent's, and for a list `check_camera_motion`
+    /// refuses. A scene without a camera keeps the list, which draws nothing until it has
+    /// one. Inverse: `scene.set_camera_motion` with the previous list.
+    #[serde(rename = "scene.set_camera_motion")]
+    SceneSetCameraMotion {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new list, at most 8. Empty removes every modifier.
+        #[serde(default)]
+        motion: Vec<CameraMotionModifier>,
+    },
+    /// Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the
+    /// pointer over a display or window capture in the scene. It belongs to the scene
+    /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
+    /// scene or doesn't show a display or window capture, and for a number
+    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
+    /// leaves the follow in place and inert until it is set again or an undo brings the
+    /// item back. The follow camera reads the pointer only where the program is drawn
+    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
+    /// Inverse: `scene.set_camera_follow` with the previous value.
+    #[serde(rename = "scene.set_camera_follow")]
+    SceneSetCameraFollow {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new follow camera. Omitted removes it.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        follow: Option<CameraFollow>,
+    },
     /// Adds a label, last in label order (ADR-0024 §4). Rejected with `invalid_argument`
     /// for an empty name, a colour that isn't `#rrggbb`, or an icon checked as
     /// `scene.set_meta`'s. Inverse: `label.delete`.
@@ -1181,6 +1212,8 @@ impl Edit {
             Edit::SceneSetMeta { .. } => "scene.set_meta",
             Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::SceneSetCamera { .. } => "scene.set_camera",
+            Edit::SceneSetCameraMotion { .. } => "scene.set_camera_motion",
+            Edit::SceneSetCameraFollow { .. } => "scene.set_camera_follow",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
             Edit::LabelReorder { .. } => "label.reorder",
@@ -1519,6 +1552,38 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
+    /// Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per
+    /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
+    /// edit: nothing is stored or undone, and the zoom starts again at the follow camera's
+    /// own `zoom` when it changes or the engine restarts. One step by default, so a hotkey
+    /// can run it (ADR-0112). `not_found` for a scene that doesn't exist,
+    /// `action_failed` for one without a camera that follows, and
+    /// `invalid_argument` for `steps` outside -16..=16.
+    #[serde(rename = "scene.zoom_camera")]
+    SceneZoomCamera {
+        /// The scene whose camera to zoom: a keyframe scene zooms its family's.
+        scene_id: SceneId,
+        /// How many steps in; negative zooms out. Default 1.
+        #[serde(default = "one_step")]
+        steps: i32,
+    },
+    /// Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),
+    /// since 0.84: the one `modifier_id` names, or every one on the item when it is
+    /// omitted. Each starts again from its beginning, so firing one while it runs
+    /// restarts it. The fire is runtime state like the program scene: it changes no
+    /// `rev`, is never undone and emits nothing; the item moves on every mix that draws
+    /// it. A modifier on a group's item moves the whole group. Firing a modifier the
+    /// item doesn't hold, or one on another clock, does nothing, since a keyframe scene
+    /// can override the list it fires. Fails with `not_found` for an item not in the
+    /// collection, and with `invalid_argument` for a malformed `modifier_id`.
+    #[serde(rename = "item.trigger_motion")]
+    ItemTriggerMotion {
+        /// The item whose modifiers it fires.
+        item_id: ItemId,
+        /// The modifier to fire. Omitted for every one on the `triggered` clock.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        modifier_id: Option<String>,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -1700,6 +1765,8 @@ impl Action {
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
+            Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1736,7 +1803,7 @@ impl Action {
                 }
                 named
             }
-            Action::StudioSetPreview { scene_id } => {
+            Action::StudioSetPreview { scene_id } | Action::SceneZoomCamera { scene_id, .. } => {
                 vec![(EntityKind::Scene, scene_id.as_str())]
             }
             Action::ItemShow { item_id, scene_id }
@@ -1747,6 +1814,9 @@ impl Action {
                     named.push((EntityKind::Scene, scene_id.as_str()));
                 }
                 named
+            }
+            Action::ItemTriggerMotion { item_id, .. } => {
+                vec![(EntityKind::Item, item_id.as_str())]
             }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
@@ -1845,6 +1915,8 @@ impl Action {
             | Action::ItemShow { .. }
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
+            | Action::SceneZoomCamera { .. }
+            | Action::ItemTriggerMotion { .. }
             | Action::PrivacySet { .. } => None,
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.
@@ -2273,6 +2345,11 @@ impl SceneRole {
     pub fn is_scene(&self) -> bool {
         *self == SceneRole::Scene
     }
+}
+
+/// `scene.zoom_camera`'s default: one step in.
+fn one_step() -> i32 {
+    1
 }
 
 #[cfg(test)]

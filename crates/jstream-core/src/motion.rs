@@ -13,6 +13,11 @@
 //! plans: [`ShownSince`] keeps that time per item on the control side, and each shot
 //! carries it.
 //!
+//! The `triggered` clock counts from when `item.trigger_motion` last fired a modifier
+//! (#1107): [`Fired`] keeps those times per item on the control side, and each program
+//! shot carries them, so a fire re-plans the shot and the render thread draws the
+//! impulse from the next frame.
+//!
 //! Docs: docs/adr/0099-native-motion-modifiers-and-timelines.md
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -62,21 +67,87 @@ impl ShownSince {
     }
 }
 
-/// What `motion` adds to an item at `at`, which was first shown at `shown`, if it is.
-/// `heard` gives an audio modifier's level for the tick, by modifier ID (ADR-0100,
-/// [`crate::reactive`]); one it has none for reads as silence. Allocates nothing.
+/// How long a fire is kept: the longest impulse a modifier can run, one hour. A
+/// modifier fired longer ago than that is still again, so forgetting it changes
+/// nothing drawn.
+const FIRE_KEPT_S: f64 = 3600.0;
+
+/// When each item's `triggered` modifiers were last fired (#1107): the origin of their
+/// clock. Firing every modifier of an item and firing one by ID are kept apart, and a
+/// modifier counts from the later of the two.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Fired {
+    items: BTreeMap<ItemId, Fires>,
+}
+
+/// When one item's `triggered` modifiers were last fired.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(crate) struct Fires {
+    /// When every one of them was last fired together.
+    all: Option<MediaTime>,
+    /// When each was last fired by its ID.
+    each: BTreeMap<String, MediaTime>,
+}
+
+impl Fires {
+    /// When the modifier `id` was last fired, if it was.
+    pub(crate) fn at(&self, id: &str) -> Option<MediaTime> {
+        self.all.max(self.each.get(id).copied())
+    }
+}
+
+impl Fired {
+    /// Fires `modifier`, or every modifier when it is `None`, of `item` at `now`, and
+    /// forgets every fire too old to still move anything.
+    pub(crate) fn fire(&mut self, item: &ItemId, modifier: Option<&str>, now: MediaTime) {
+        self.forget_before(now);
+        let fires = self.items.entry(item.clone()).or_default();
+        match modifier {
+            Some(id) => {
+                fires.each.insert(id.to_owned(), now);
+            }
+            None => {
+                fires.all = Some(now);
+                fires.each.clear();
+            }
+        }
+    }
+
+    /// Forgets the fires more than [`FIRE_KEPT_S`] before `now`.
+    fn forget_before(&mut self, now: MediaTime) {
+        let fresh = |at: &MediaTime| now.as_secs_f64() - at.as_secs_f64() <= FIRE_KEPT_S;
+        self.items.retain(|_, fires| {
+            fires.all = fires.all.filter(fresh);
+            fires.each.retain(|_, at| fresh(at));
+            fires.all.is_some() || !fires.each.is_empty()
+        });
+    }
+
+    /// `item`'s fires, if any are kept.
+    pub(crate) fn of(&self, item: &ItemId) -> Option<&Fires> {
+        self.items.get(item)
+    }
+}
+
+/// What `motion` adds to an item at `at`, which was first shown at `shown`, if it is,
+/// and whose `triggered` modifiers were fired as `fires` says. `heard` gives an audio
+/// modifier's level for the tick, by modifier ID (ADR-0100, [`crate::reactive`]); one it
+/// has none for reads as silence. Allocates nothing.
 pub(crate) fn offsets(
     motion: &[Modifier],
     at: MediaTime,
     shown: Option<MediaTime>,
+    fires: Option<&Fires>,
     heard: impl Fn(&str) -> Option<f32>,
 ) -> Offsets {
     if motion.is_empty() {
         return Offsets::IDENTITY;
     }
     let engine_s = at.as_secs_f64();
-    let shown_s = shown.map(|since| (engine_s - since.as_secs_f64()).max(0.0));
-    jstream_anim::evaluate_with(motion, engine_s, shown_s, |_| None, heard)
+    let since = |origin: MediaTime| (engine_s - origin.as_secs_f64()).max(0.0);
+    let shown_s = shown.map(since);
+    let fired = |id: &str| fires.and_then(|fires| fires.at(id)).map(since);
+    jstream_anim::evaluate_with(motion, engine_s, shown_s, fired, heard)
 }
 
 /// `placement`, `crop` and `opacity` moved by `by`. A legacy transform moves and turns
@@ -197,24 +268,21 @@ impl TrackMotion {
         self.from.1.is_empty() && self.to.1.is_empty()
     }
 
-    /// What it adds to `track`'s item `elapsed_ms` into the transition, at `at`: the
-    /// leaving side's alone before a pair starts to move and the arriving side's once it
-    /// has, blended by the track's eased progress in between. An appearing track takes
-    /// the arriving side's and a disappearing one the leaving side's.
+    /// What it adds to `track`'s item `elapsed_ms` into the transition, with `of` giving
+    /// what one item's modifiers add at the frame's time: the leaving side's alone
+    /// before a pair starts to move and the arriving side's once it has, blended by the
+    /// track's eased progress in between. An appearing track takes the arriving side's
+    /// and a disappearing one the leaving side's.
     pub(crate) fn offsets(
         &self,
         track: &Track,
         elapsed_ms: f32,
-        at: MediaTime,
-        shown: impl Fn(&ItemId) -> Option<MediaTime>,
-        heard: impl Fn(&ItemId, &str) -> Option<f32>,
+        of: impl Fn(&ItemId, &[Modifier]) -> Offsets,
     ) -> Offsets {
         if self.is_still() {
             return Offsets::IDENTITY;
         }
-        let side = |(item, motion): &(ItemId, Motion)| {
-            offsets(motion, at, shown(item), |id| heard(item, id))
-        };
+        let side = |(item, motion): &(ItemId, Motion)| of(item, motion);
         match track {
             Track::Pair { timing, .. } => {
                 let k = timing.progress(elapsed_ms).clamp(0.0, 1.0);
@@ -290,8 +358,13 @@ mod tests {
     }
 
     /// [`super::offsets`] with nothing heard.
-    fn offsets(motion: &[Modifier], at: MediaTime, shown: Option<MediaTime>) -> Offsets {
-        super::offsets(motion, at, shown, |_| None)
+    fn offsets(
+        motion: &[Modifier],
+        at: MediaTime,
+        shown: Option<MediaTime>,
+        fires: Option<&Fires>,
+    ) -> Offsets {
+        super::offsets(motion, at, shown, fires, |_| None)
     }
 
     fn at(secs: f64) -> MediaTime {
@@ -338,7 +411,7 @@ mod tests {
             drift(Property::CropLeft, 2.4, Clock::Engine),
             drift(Property::CropRight, -9.0, Clock::Engine),
         ];
-        let by = offsets(&motion, at(2.0), None);
+        let by = offsets(&motion, at(2.0), None, None);
         let crop = Crop {
             left: 1,
             top: 2,
@@ -379,13 +452,14 @@ mod tests {
     #[test]
     fn no_motion_changes_nothing_and_a_collapse_keeps_the_box() {
         let crop = Crop::NONE;
-        let still = offsets(&[], at(5.0), None);
+        let still = offsets(&[], at(5.0), None, None);
         let placement = Placement::Geometry(geometry());
         assert_eq!(apply(&still, placement, crop, 0.5), (placement, crop, 0.5));
         // Scale by 1 + (-1) is nothing: the box stays.
         let gone = offsets(
             &[drift(Property::Scale, -1.0, Clock::Engine)],
             at(1.0),
+            None,
             None,
         );
         assert_eq!(apply(&gone, placement, crop, 1.0).0, placement);
@@ -400,6 +474,7 @@ mod tests {
                 drift(Property::Tilt, 9.0, Clock::Engine),
             ],
             at(1.0),
+            None,
             None,
         );
         let (placement, _, _) = apply(
@@ -426,7 +501,7 @@ mod tests {
         };
         let moved = |motion: &[Modifier]| {
             let (placement, _, _) = apply(
-                &offsets(motion, at(1.0), None),
+                &offsets(motion, at(1.0), None, None),
                 Placement::Legacy(mirrored),
                 Crop::NONE,
                 1.0,
@@ -457,7 +532,7 @@ mod tests {
                 ..drift(Property::Scale, 100_000.0, Clock::Engine)
             })
             .collect();
-        let by = offsets(&huge, at(1.0), None);
+        let by = offsets(&huge, at(1.0), None, None);
         assert!(by.scale > 1e30, "{}", by.scale);
         let (placement, _, _) = apply(&by, Placement::Geometry(geometry), Crop::NONE, 1.0);
         assert_eq!(placement, Placement::Geometry(geometry));
@@ -467,8 +542,8 @@ mod tests {
     fn the_shown_clock_counts_from_when_the_item_was_first_drawn() {
         let motion = [drift(Property::X, 10.0, Clock::Shown)];
         // Never shown: at its start.
-        assert_eq!(offsets(&motion, at(30.0), None).x, 0.0);
-        assert_eq!(offsets(&motion, at(30.0), Some(at(28.5))).x, 15.0);
+        assert_eq!(offsets(&motion, at(30.0), None, None).x, 0.0);
+        assert_eq!(offsets(&motion, at(30.0), Some(at(28.5)), None).x, 15.0);
 
         let mut since = ShownSince::default();
         let a = ItemId::new("a");
@@ -517,11 +592,8 @@ mod tests {
                 Arc::from([drift(Property::X, 30.0, Clock::Engine)]),
             ),
         };
-        let x = |elapsed| {
-            motion
-                .offsets(&pair, elapsed, at(1.0), |_| None, |_, _| None)
-                .x
-        };
+        let of = |_: &ItemId, m: &[Modifier]| offsets(m, at(1.0), None, None);
+        let x = |elapsed| motion.offsets(&pair, elapsed, of).x;
         assert_eq!(x(0.0), 10.0);
         assert_eq!(x(500.0), 20.0);
         assert_eq!(x(1000.0), 30.0);
@@ -530,12 +602,7 @@ mod tests {
             effect: jstream_render::transition::Effect::Fade,
             timing,
         };
-        assert_eq!(
-            motion
-                .offsets(&appear, 0.0, at(1.0), |_| None, |_, _| None)
-                .x,
-            30.0
-        );
+        assert_eq!(motion.offsets(&appear, 0.0, of).x, 30.0);
         assert!(TrackMotion::same(ItemId::new("i"), Arc::from([])).is_still());
     }
 
@@ -549,12 +616,36 @@ mod tests {
                 ..drift(Property::Scale, 1000.0, Clock::Engine)
             })
             .collect();
-        let by = offsets(&huge, at(1.0), None);
+        let by = offsets(&huge, at(1.0), None, None);
         let legacy = Placement::Legacy(LegacyTransform {
             position: [10.0, 20.0],
             scale: [-2.0, 3.0],
             rotation_deg: 0.0,
         });
         assert_eq!(apply(&by, legacy, Crop::NONE, 1.0).0, legacy);
+    }
+
+    #[test]
+    fn a_modifier_counts_from_its_latest_fire_and_an_old_one_is_forgotten() {
+        let item = ItemId::new("i");
+        let mut fired = Fired::default();
+        fired.fire(&item, Some("jolt"), at(1.0));
+        let of = |fired: &Fired, id: &str| fired.of(&item).and_then(|f| f.at(id));
+        assert_eq!(of(&fired, "jolt"), Some(at(1.0)));
+        assert_eq!(of(&fired, "drift"), None, "only the one named");
+        // Firing all of them restarts each, and a later fire of one restarts it alone.
+        fired.fire(&item, None, at(2.0));
+        fired.fire(&item, Some("drift"), at(3.0));
+        assert_eq!(of(&fired, "jolt"), Some(at(2.0)));
+        assert_eq!(of(&fired, "drift"), Some(at(3.0)));
+        // An hour on, nothing it fired can still move, so it is forgotten.
+        fired.fire(&ItemId::new("other"), None, at(3.0 + FIRE_KEPT_S + 1.0));
+        assert_eq!(fired.of(&item), None);
+        // Drawn: a drift fired at 3 s is 50 px along half a second later.
+        let drift = [drift(Property::X, 100.0, Clock::Triggered)];
+        let mut fired = Fired::default();
+        assert_eq!(offsets(&drift, at(3.5), None, fired.of(&item)).x, 0.0);
+        fired.fire(&item, None, at(3.0));
+        assert_eq!(offsets(&drift, at(3.5), None, fired.of(&item)).x, 50.0);
     }
 }

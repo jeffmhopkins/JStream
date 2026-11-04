@@ -10,8 +10,8 @@
 use crate::apply::invalid;
 use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Modifier, Property, Shape};
 use jstream_protocol::{
-    MotionClock, MotionCurve, MotionKind, MotionMeasure, MotionModifier, MotionProperty,
-    MotionShape, ProtocolError, check_motion,
+    CameraMotionModifier, CameraProperty, MotionClock, MotionCurve, MotionKind, MotionMeasure,
+    MotionModifier, MotionProperty, MotionShape, ProtocolError, check_motion,
 };
 
 /// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
@@ -28,6 +28,26 @@ pub fn anim_modifiers(motion: &[MotionModifier]) -> Vec<Modifier> {
     motion.iter().filter_map(modifier).collect()
 }
 
+/// A scene camera's motion (ADR-0113) as `jstream-anim` evaluates it: each modifier with
+/// the camera property it adds to, the modifier itself adding to `x`, so evaluating it
+/// alone gives its value. One with a value this version doesn't know is left out.
+pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProperty, Modifier)> {
+    motion
+        .iter()
+        .filter(|m| m.property != CameraProperty::Unknown)
+        .filter_map(|m| {
+            let as_item = MotionModifier {
+                modifier_id: m.modifier_id.clone(),
+                property: MotionProperty::X,
+                kind: m.kind.clone(),
+                clock: m.clock,
+                enabled: m.enabled,
+            };
+            Some((m.property, modifier(&as_item)?))
+        })
+        .collect()
+}
+
 fn modifier(m: &MotionModifier) -> Option<Modifier> {
     Some(Modifier {
         id: m.modifier_id.clone(),
@@ -36,6 +56,7 @@ fn modifier(m: &MotionModifier) -> Option<Modifier> {
         clock: match m.clock {
             MotionClock::Engine => Clock::Engine,
             MotionClock::Shown => Clock::Shown,
+            MotionClock::Triggered => Clock::Triggered,
             _ => return None,
         },
         enabled: m.enabled,
@@ -131,6 +152,17 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             from: f64::from(from.get()),
             to: f64::from(to.get()),
         }),
+        MotionKind::Impulse {
+            amplitude,
+            frequency_hz,
+            decay_per_s,
+            duration_ms,
+        } => Kind::Impulse {
+            amplitude: f64::from(amplitude.get()),
+            frequency_hz: f64::from(frequency_hz.get()),
+            decay_per_s: f64::from(decay_per_s.get()),
+            duration_ms: f64::from(duration_ms),
+        },
         _ => return None,
     })
 }
@@ -206,19 +238,34 @@ mod tests {
                 from: f(100_000.0),
                 to: f(-100_000.0),
             },
+            MotionKind::Impulse {
+                amplitude: f(100_000.0),
+                frequency_hz: f(60.0),
+                decay_per_s: f(1000.0),
+                duration_ms: 3_600_000,
+            },
+            MotionKind::Impulse {
+                amplitude: f(0.0),
+                frequency_hz: f(f32::MIN_POSITIVE),
+                decay_per_s: f(0.0),
+                duration_ms: 1,
+            },
         ];
-        let motion: Vec<MotionModifier> = kinds
-            .iter()
-            .enumerate()
-            .map(|(n, kind)| MotionModifier {
-                modifier_id: format!("m-{n}_{}", "x".repeat(50)),
-                property: MotionProperty::ALL[n],
-                kind: kind.clone(),
-                clock: MotionClock::Shown,
-                enabled: n % 2 == 0,
-            })
-            .collect();
-        assert_eq!(check_motion(&motion), Ok(()));
-        assert_eq!(jstream_anim::check_list(&anim_modifiers(&motion)), Ok(()));
+        // More kinds than a list may hold, so they are checked as two lists.
+        for (half, kinds) in kinds.chunks(kinds.len().div_ceil(2)).enumerate() {
+            let motion: Vec<MotionModifier> = kinds
+                .iter()
+                .enumerate()
+                .map(|(n, kind)| MotionModifier {
+                    modifier_id: format!("m-{half}{n}_{}", "x".repeat(50)),
+                    property: MotionProperty::ALL[n],
+                    kind: kind.clone(),
+                    clock: [MotionClock::Shown, MotionClock::Triggered][(half + n) % 2],
+                    enabled: n % 3 == 0,
+                })
+                .collect();
+            assert_eq!(check_motion(&motion), Ok(()));
+            assert_eq!(jstream_anim::check_list(&anim_modifiers(&motion)), Ok(()));
+        }
     }
 }

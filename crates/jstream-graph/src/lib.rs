@@ -35,7 +35,7 @@ pub use model::{
     MAX_CHAIN_FILTERS, MotionList, Output, Overrides, Placement, Preset, Scene, Source, State,
     VideoMix,
 };
-pub use motion::anim_modifiers;
+pub use motion::{anim_modifiers, camera_anim_modifiers};
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
 

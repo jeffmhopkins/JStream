@@ -43,6 +43,7 @@ use jstream_sources::CaptureSpec;
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
+use crate::follow::{CameraMotion, CameraMoves, FollowPlan};
 use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
@@ -576,6 +577,9 @@ pub(crate) struct Shot {
     /// Its items' audio modifiers (ADR-0100), with the level the render thread's
     /// follower stores for each tick ([`crate::reactive`]).
     audio: crate::reactive::Bindings,
+    /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
+    /// it ([`Shot::set_fired`]). A modifier never fired here is still.
+    fired: motion::Fired,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -591,6 +595,9 @@ struct Transitioning {
     backgrounds: (Color, Color),
     /// The cameras its tracks are seen through.
     cameras: TrackCameras,
+    /// What moves the cameras of the scene it leaves and the one it shows (ADR-0113 §3):
+    /// a Move into or out of a follow camera moves with it.
+    moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
     end_ms: f32,
 }
 
@@ -698,6 +705,7 @@ impl Default for Shot {
             moves: false,
             shown: BTreeMap::new(),
             audio: crate::reactive::Bindings::default(),
+            fired: motion::Fired::default(),
         }
     }
 }
@@ -798,6 +806,27 @@ impl Shot {
                 .iter()
                 .flat_map(|t| &t.tracks)
                 .any(|(_, _, _, motion)| !motion.is_still())
+            || self.cameras_move()
+    }
+
+    /// Whether a camera it draws through moves on its own (ADR-0113): a follow camera,
+    /// or camera motion.
+    fn cameras_move(&self) -> bool {
+        let moves = |moves: &Option<Arc<CameraMoves>>| moves.as_ref().is_some_and(|m| m.moves());
+        self.cameras.values().any(|camera| moves(&camera.moves))
+            || self
+                .transition
+                .as_ref()
+                .is_some_and(|t| moves(&t.moves.0) || moves(&t.moves.1))
+    }
+
+    /// When the items of `pass` were first drawn: the earliest, the origin of its
+    /// camera's `shown` clock (ADR-0113 §1).
+    fn pass_shown(&self, pass: &Pass) -> Option<MediaTime> {
+        pass.layers
+            .iter()
+            .filter_map(|layer| self.shown_at(&layer.item))
+            .min_by(|a, b| a.as_secs_f64().total_cmp(&b.as_secs_f64()))
     }
 
     /// Every item this shot draws, in any pass or transition track: whose `shown`
@@ -840,6 +869,23 @@ impl Shot {
     /// The level of `item`'s audio modifier `modifier` this tick.
     fn heard(&self, item: &ItemId, modifier: &str) -> Option<f32> {
         self.audio.level(item, modifier)
+    }
+
+    /// Sets when each item's `triggered` modifiers were last fired ([`motion::Fired`]).
+    pub(crate) fn set_fired(&mut self, fired: motion::Fired) {
+        self.fired = fired;
+    }
+
+    /// What `item`'s `motion` adds at `at`, on its clocks as this shot knows them.
+    fn motion_at(
+        &self,
+        item: &ItemId,
+        motion: &[jstream_anim::Modifier],
+        at: MediaTime,
+    ) -> jstream_anim::Offsets {
+        motion::offsets(motion, at, self.shown_at(item), self.fired.of(item), |id| {
+            self.heard(item, id)
+        })
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -1009,9 +1055,7 @@ impl Shot {
                 .iter()
                 .map(|layer| {
                     let (item, modifiers) = &layer.motion.to;
-                    let by = motion::offsets(modifiers, at, self.shown_at(item), |id| {
-                        self.heard(item, id)
-                    });
+                    let by = self.motion_at(item, modifiers, at);
                     let (placement, crop, opacity) =
                         motion::apply(&by, layer.placement, layer.crop, layer.opacity);
                     (layer.item.clone(), placement, crop, opacity)
@@ -1033,13 +1077,8 @@ impl Shot {
             t.tracks
                 .iter()
                 .map(|(key, track, _, moved)| {
-                    let by = moved.offsets(
-                        track,
-                        elapsed_ms,
-                        at,
-                        |item| self.shown_at(item),
-                        |item, id| self.heard(item, id),
-                    );
+                    let by =
+                        moved.offsets(track, elapsed_ms, |item, m| self.motion_at(item, m, at));
                     track
                         .sample(elapsed_ms, canvas)
                         .map(|end| moved_track(self.is_canvas_box(key), &by, end))
@@ -1052,6 +1091,12 @@ impl Shot {
     #[cfg(test)]
     pub(crate) fn shown(&self) -> &BTreeMap<ItemId, MediaTime> {
         &self.shown
+    }
+
+    /// When `item`'s `triggered` modifier `id` was last fired, for tests.
+    #[cfg(test)]
+    pub(crate) fn fired_at(&self, item: &ItemId, id: &str) -> Option<MediaTime> {
+        self.fired.of(item)?.at(id)
     }
 
     /// What scene `id` places, bottom first, as it is drawn with the live values in
@@ -1095,6 +1140,7 @@ impl PartialEq for Shot {
             && self.moves == other.moves
             && self.shown == other.shown
             && self.audio == other.audio
+            && self.fired == other.fired
     }
 }
 
@@ -1338,11 +1384,19 @@ fn plan_inner(
                 transition::From::Scene(from) => planner.background(from),
                 transition::From::OnScreen(_) => Some(to),
             };
+            let moves = (
+                match &running.from {
+                    transition::From::Scene(from) => planner.camera_moves(from, &mut shot),
+                    transition::From::OnScreen(_) => None,
+                },
+                planner.camera_moves(&running.to, &mut shot),
+            );
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: planner.track_cameras(running),
+                moves,
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -1702,7 +1756,59 @@ impl<'a> Planner<'a, '_> {
                 .and_then(|parent| parent.camera().copied());
             (parent.clone(), committed)
         });
-        (own.is_some() || parent.is_some()).then_some(PassCamera { own, parent })
+        (own.is_some() || parent.is_some()).then_some(PassCamera {
+            own,
+            parent,
+            moves: None,
+        })
+    }
+
+    /// The camera motion and follow camera of the planned scene `id`'s family
+    /// (ADR-0113), `None` when it has neither. The followed item is the one the scene
+    /// draws, at its effective geometry, and its capture the one the shot places for it.
+    fn camera_moves(&mut self, id: &SceneId, out: &mut Shot) -> Option<Arc<CameraMoves>> {
+        let state = self.state;
+        let (scene, _) = self.drawn(id)?;
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        let parent = state.scene(&family)?;
+        let motion = CameraMotion::of(parent.camera_motion());
+        let follow = parent.camera_follow().cloned();
+        if motion.is_still() && follow.is_none() {
+            return None;
+        }
+        let follow = follow.and_then(|follow| {
+            let item = self
+                .items_of(id)
+                .into_iter()
+                .find(|item| item.id() == &follow.item_id)?;
+            let GraphPlacement::Geometry(geometry) = item.placement() else {
+                return None;
+            };
+            let c = item.crop();
+            let capture = state.source(item.source_id()).and_then(|source| {
+                match self.shown(source, out)? {
+                    SourceRef::Capture(spec) => Some(spec),
+                    SourceRef::Filtered(source) => {
+                        match &out.chains.get(&ChainOwner::Source(source))?.input {
+                            GpuKey::Capture(spec) => Some(spec.clone()),
+                            _ => None,
+                        }
+                    }
+                    _ => None,
+                }
+            });
+            Some(FollowPlan::new(
+                follow,
+                geometry,
+                [c.left, c.top, c.right, c.bottom],
+                capture,
+            ))
+        });
+        Some(Arc::new(CameraMoves {
+            family,
+            motion,
+            follow,
+        }))
     }
 
     /// The cameras `running`'s tracks are seen through (ADR-0094 decision 7).
@@ -2366,7 +2472,8 @@ impl<'a> Planner<'a, '_> {
         if let Some(background) = self.background(id) {
             out.backgrounds.insert(id.clone(), background);
         }
-        if let Some(camera) = self.camera(id) {
+        if let Some(mut camera) = self.camera(id) {
+            camera.moves = self.camera_moves(id, out);
             out.cameras.insert(id.clone(), camera);
         }
         if let Some(chain) = self.scene_chain(id) {
@@ -2575,6 +2682,8 @@ struct PassCamera {
     own: Option<SceneCamera>,
     /// For a keyframe scene, its parent and the parent's committed camera.
     parent: Option<(SceneId, Option<SceneCamera>)>,
+    /// Its family's camera motion and follow camera (ADR-0113), when it has either.
+    moves: Option<Arc<CameraMoves>>,
 }
 
 impl PassCamera {
@@ -3114,6 +3223,10 @@ pub(crate) struct LiveParams {
     /// Live cameras (ADR-0094), by the scene whose `scene.set_camera` set them: `None`
     /// is a live removal.
     cameras: BTreeMap<SceneId, Option<SceneCamera>>,
+    /// The zoom steps `scene.zoom_camera` asked for each scene family's follow camera
+    /// since the engine started (ADR-0113 §4), in (negative: out). A follow camera takes
+    /// the steps asked for since it started.
+    zooms: BTreeMap<SceneId, i64>,
 }
 
 /// One item's live values: its own, and those addressed to each keyframe scene.
@@ -3237,7 +3350,22 @@ impl LiveParams {
                 fields.crop = cut;
             }
         }
-        Self { items, cameras }
+        Self {
+            items,
+            cameras,
+            zooms: BTreeMap::new(),
+        }
+    }
+
+    /// With `zooms` as the zoom steps asked for each scene family's follow camera.
+    pub(crate) fn with_zooms(mut self, zooms: BTreeMap<SceneId, i64>) -> Self {
+        self.zooms = zooms;
+        self
+    }
+
+    /// The zoom steps asked for `family`'s follow camera.
+    pub(crate) fn zooms(&self, family: &SceneId) -> i64 {
+        self.zooms.get(family).copied().unwrap_or(0)
     }
 
     /// The camera `pass` draws through, with live cameras applied as
@@ -3821,6 +3949,17 @@ pub(crate) struct CaptureFrame<'a> {
     pub(crate) image: CaptureImage<'a>,
 }
 
+impl CaptureFrame<'_> {
+    /// Its width and height, in pixels.
+    pub(crate) fn size(&self) -> (f32, f32) {
+        let size = match self.image {
+            CaptureImage::Rgba { size, .. } => size,
+            CaptureImage::Gpu(frame) => frame.info().size,
+        };
+        (size.width() as f32, size.height() as f32)
+    }
+}
+
 /// Where a [`CaptureFrame`]'s pixels are.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum CaptureImage<'a> {
@@ -3880,6 +4019,13 @@ pub(crate) trait Captures {
     /// The latest frame of `spec`'s capture; `None` before its first frame, or when it
     /// isn't running.
     fn frame(&self, spec: &CaptureKey) -> Option<CaptureFrame<'_>>;
+
+    /// Where the pointer is over `spec`'s capture, on its newest frame
+    /// (`CaptureStream::pointer`), for a follow camera (ADR-0113); `None` when it doesn't
+    /// say. Never blocks.
+    fn pointer(&self, _spec: &CaptureKey) -> Option<jstream_platform::PointerPosition> {
+        None
+    }
 }
 
 /// No captures, for `video.snapshot` and tests.
@@ -3974,6 +4120,8 @@ pub(crate) fn compose_metered(
         readback,
     } = to;
     let canvas = shot.canvas()?;
+    // A follow camera no frame has drawn for a while starts again at rest.
+    chains.cameras().sweep(at);
     let uploads = Instant::now();
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
@@ -4040,7 +4188,7 @@ pub(crate) fn compose_metered(
         compositor,
         (&mut *cache, &mut *chains, &mut *meter),
         shot,
-        live,
+        (live, captures),
         at,
     );
     meter.phase_since(Phase::Chains, chaining);
@@ -4152,7 +4300,7 @@ pub(crate) fn compose_metered(
                 (cache, chains),
                 (shot, pass),
                 (at, canvas),
-                live,
+                (live, captures),
             );
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
@@ -4162,7 +4310,14 @@ pub(crate) fn compose_metered(
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
         let clear = match (root, tracks) {
             (_, Some(transition)) => {
-                fill_tracks(&mut items, (cache, chains), (shot, transition), canvas, at);
+                fill_tracks(
+                    &mut items,
+                    (cache, chains),
+                    (shot, transition),
+                    canvas,
+                    at,
+                    (live, captures),
+                );
                 transition.background(at)
             }
             (Some(root), None) => {
@@ -4171,7 +4326,7 @@ pub(crate) fn compose_metered(
                     (cache, chains),
                     (shot, root),
                     (at, canvas),
-                    live,
+                    (live, captures),
                 );
                 root.background
             }
@@ -4302,7 +4457,7 @@ fn run_chains(
     compositor: &mut Compositor,
     (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     shot: &Shot,
-    live: &LiveParams,
+    (live, captures): (&LiveParams, &dyn Captures),
     at: MediaTime,
 ) -> Result<(), RenderError> {
     if !chains.begin(compositor, cache, &shot.chains, &shot.stages) {
@@ -4344,7 +4499,7 @@ fn run_chains(
                     (&*cache, &*chains),
                     (shot, pass),
                     (at, canvas),
-                    live,
+                    (live, captures),
                 );
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
@@ -4398,9 +4553,7 @@ fn draw_box(
         boxed.placement,
         boxed.crop,
     );
-    let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item), |id| {
-        shot.heard(&boxed.item, id)
-    });
+    let by = shot.motion_at(&boxed.item, &boxed.motion, at);
     let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
@@ -4514,10 +4667,26 @@ fn fill_items<'a>(
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
     (shot, pass): (&Shot, &Pass),
     (at, canvas): (MediaTime, FrameSize),
-    live: &LiveParams,
+    (live, captures): (&LiveParams, &dyn Captures),
 ) {
     let size = [canvas.width() as f32, canvas.height() as f32];
-    let camera = live.camera(pass);
+    let camera = live.camera(pass).map(|base| {
+        match pass
+            .camera
+            .as_ref()
+            .and_then(|camera| camera.moves.as_deref())
+        {
+            Some(moves) => moves.apply(
+                base,
+                (at, shot.pass_shown(pass)),
+                shot.canvas,
+                captures,
+                &mut chains.cameras(),
+                live.zooms(&moves.family),
+            ),
+            None => base,
+        }
+    });
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
         if chains.failed(&layer.image) {
@@ -4525,13 +4694,9 @@ fn fill_items<'a>(
         }
         if let Some((start, track)) = &layer.moving {
             let elapsed = transition::elapsed_ms(*start, at);
-            let by = layer.motion.offsets(
-                track,
-                elapsed,
-                at,
-                |item| shot.shown_at(item),
-                |item, id| shot.heard(item, id),
-            );
+            let by = layer
+                .motion
+                .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
             let sampled = moved_track(
                 shot.is_canvas_box(&layer.image),
                 &by,
@@ -4551,9 +4716,7 @@ fn fill_items<'a>(
         let (placement, crop) = live.apply(layer);
         // Its motion moves it on top of its live values (ADR-0099).
         let (item, modifiers) = &layer.motion.to;
-        let by = motion::offsets(modifiers, at, shot.shown_at(item), |id| {
-            shot.heard(item, id)
-        });
+        let by = shot.motion_at(item, modifiers, at);
         let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
         let (placement, crop) = match &layer.boxed {
             Some(boxed) => {
@@ -4597,9 +4760,29 @@ fn fill_tracks<'a>(
     (shot, transition): (&Shot, &Transitioning),
     canvas: FrameSize,
     at: MediaTime,
+    (live, captures): (&LiveParams, &dyn Captures),
 ) {
     let elapsed = transition::elapsed_ms(transition.start, at);
     let size = [canvas.width() as f32, canvas.height() as f32];
+    // Each end's camera as it moves this frame, a follow camera's included.
+    let mut cameras = transition.cameras;
+    let moved = |moves: &Option<Arc<CameraMoves>>, camera: Option<SceneCamera>, shown| {
+        let (Some(moves), Some(camera)) = (moves, camera) else {
+            return camera;
+        };
+        Some(moves.apply(
+            camera,
+            (at, shown),
+            shot.canvas,
+            captures,
+            &mut chains.cameras(),
+            live.zooms(&moves.family),
+        ))
+    };
+    cameras.ends = (
+        moved(&transition.moves.0, cameras.ends.0, None),
+        moved(&transition.moves.1, cameras.ends.1, Some(transition.start)),
+    );
     items.clear();
     items.extend(
         transition
@@ -4609,13 +4792,7 @@ fn fill_tracks<'a>(
                 if chains.failed(key) {
                     return None;
                 }
-                let by = moved.offsets(
-                    track,
-                    elapsed,
-                    at,
-                    |item| shot.shown_at(item),
-                    |item, id| shot.heard(item, id),
-                );
+                let by = moved.offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
                 let sampled =
                     moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
                 Some(Item {
@@ -4625,7 +4802,7 @@ fn fill_tracks<'a>(
                     opacity: sampled.opacity,
                     blend: sampled.blend,
                     visible: true,
-                    camera: transition.cameras.camera(track, *seen, elapsed),
+                    camera: cameras.camera(track, *seen, elapsed),
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
                 })
@@ -5523,6 +5700,7 @@ pub(crate) mod tests {
                 pairs: false,
                 overlay_run: 1,
             },
+            moves: (None, None),
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));

@@ -432,6 +432,9 @@ struct Running {
 #[derive(Default)]
 pub(crate) struct Chains {
     running: BTreeMap<ChainOwner, Vec<Running>>,
+    /// The follow cameras the scenes it draws glide through (ADR-0113 §3): state the
+    /// frames carry, like a stateful filter's.
+    cameras: std::cell::RefCell<crate::follow::Cameras>,
     /// The owners whose chain failed to draw this frame, which draw nothing.
     failed: BTreeSet<ChainOwner>,
     /// The items whose effects layer failed to be made or drawn and has been logged, so
@@ -690,6 +693,11 @@ impl Chains {
 
     pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
         self.box_warned.remove(owner);
+    }
+
+    /// The follow cameras of the scenes this context draws (ADR-0113 §3).
+    pub(crate) fn cameras(&self) -> std::cell::RefMut<'_, crate::follow::Cameras> {
+        self.cameras.borrow_mut()
     }
 
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
