@@ -127,7 +127,8 @@ It ran 27 s with no frame showing past the screen's edge.
 - **Easier:**
   - a camera sways, drifts or breathes with no keys, on the same modifiers items use;
   - the follow-cursor shot is one setting on a 3D scene with a display capture in it, and
-    its zoom is a hotkey, a wheel chord or an agent's action.
+    its zoom is a hotkey or an agent's action (and a wheel chord once ADR-0112's
+    wheel keys land).
 - **Harder:**
   - for the first time a scene's picture depends on state the render thread carries from
     frame to frame. Two engines given the same edits and the same pointer path draw the
