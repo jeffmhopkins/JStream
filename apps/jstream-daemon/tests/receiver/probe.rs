@@ -66,6 +66,28 @@ impl Receiver {
         }
     }
 
+    /// The seconds of video the receiver has written so far: the span of the video
+    /// packets' times in its file. The file is still growing, so a torn last tag is
+    /// expected; ffprobe's exit status is ignored and the packets it read count.
+    pub fn received_seconds(&self) -> f64 {
+        let Ok(output) = Command::new("ffprobe")
+            .args(["-v", "quiet", "-select_streams", "v:0", "-show_entries"])
+            .args(["packet=pts_time", "-of", "csv=p=0"])
+            .arg(&self.file)
+            .output()
+        else {
+            return 0.0;
+        };
+        let times: Vec<f64> = String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .filter_map(|line| line.trim().trim_end_matches(',').parse().ok())
+            .collect();
+        match (times.first(), times.last()) {
+            (Some(first), Some(last)) => last - first,
+            _ => 0.0,
+        }
+    }
+
     /// Waits for the receiver to finish its file after the publisher hung up.
     pub fn finish(mut self) -> PathBuf {
         let deadline = Instant::now() + Duration::from_secs(20);
