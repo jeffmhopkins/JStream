@@ -1188,10 +1188,12 @@ state like the program scene: no `rev`, never undone or saved, listed by `studio
   beside the open gestures' live settings. The snapshot planner (`Planner::nested`)
   draws a placed scene through the view `view_id(scene, keyframe)`, unless the placing
   scene's own keyframe overrides an item in its tree, which keeps drawing it. Audio
-  activity (`reachable`) follows the same view, so a child the keyframe hides is silent.
+  activity (`reachable`) follows the same view, so a child the keyframe hides is silent:
+  `route_audio` and the meters read the drawn copy, not the collection.
 - **A switch** (`set_keyframe`) checks the scene, keyframe and preset, and does nothing
   when the scene already shows that keyframe. When program draws the scene
-  (`State::draws`) and isn't the scene itself, and the preset (the default one when
+  (`State::draws`) and isn't the scene itself or one of its keyframe scenes
+  (`State::family_of`), where it draws as itself, and the preset (the default one when
   none is named) is a `move` or `fade`, it takes what is on screen (`screen_now`),
   switches, and runs the transition from that screen to program as now drawn, as
   `item.show` does; `preset_run` builds it. It then redraws and sends

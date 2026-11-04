@@ -2247,7 +2247,8 @@ combination.
   keyframe scene (`keyframe_id` omitted).
 - **Drawing:** where the placing scene is drawn through a keyframe of its own that
   overrides an item in the placed scene's tree, that keyframe draws it; otherwise the
-  switched one does. A switched scene on program itself draws its own values.
+  switched one does. A switched scene on program itself, or through one of its own
+  keyframe scenes, draws as that scene, not through the switch.
 - **On program**, a switch with a `move` or `fade` preset (the default preset when
   `preset_id` is omitted) plays as a Move from what is on screen, each item paired with
   itself; any other kind switches at once.

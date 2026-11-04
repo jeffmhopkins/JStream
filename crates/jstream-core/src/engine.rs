@@ -3936,11 +3936,15 @@ impl State {
         }
         let now = self.action_now();
         // A scene program doesn't draw changes nothing on screen, so it starts no run,
-        // and a transition in flight keeps its own.
+        // and a transition in flight keeps its own. Nor does the scene on program itself,
+        // or one of its keyframe scenes: there it draws as itself, not through the track.
         let program = self
             .studio
             .program()
-            .filter(|program| **program != scene_id && self.graph.state().draws(program, &scene_id))
+            .filter(|program| {
+                let state = self.graph.state();
+                *state.family_of(program) != scene_id && state.draws(program, &scene_id)
+            })
             .cloned();
         let started = match (program, run) {
             (Some(program), Some(run)) => {
@@ -4917,12 +4921,14 @@ impl State {
         next
     }
 
-    /// Brings the program mixer in line with the collection's audio, the audio sources'
-    /// inputs included.
+    /// Brings the program mixer in line with the collection's audio as drawn (the open
+    /// gestures' settings and the placed scenes' switched keyframes, ADR-0116, so a child
+    /// a switched keyframe hides is not heard), the audio sources' inputs included.
     fn route_audio(&mut self) {
         let inputs = self.audio.inputs();
+        let drawn = self.shown.as_ref().unwrap_or(&self.graph);
         self.routing
-            .sync(self.graph.state(), self.studio.program(), &inputs);
+            .sync(drawn.state(), self.studio.program(), &inputs);
     }
 
     /// Emits a `meters.tick` if the program mixer runs, first routing any audio source
@@ -4932,7 +4938,8 @@ impl State {
             self.route_audio();
         }
         let inputs = self.audio.inputs();
-        let meters = self.routing.meters(self.graph.state(), &inputs);
+        let drawn = self.shown.as_ref().unwrap_or(&self.graph);
+        let meters = self.routing.meters(drawn.state(), &inputs);
         drop(inputs);
         if let Some((sources, buses)) = meters {
             self.subscribers

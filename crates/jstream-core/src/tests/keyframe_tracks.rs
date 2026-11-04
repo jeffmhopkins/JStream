@@ -331,3 +331,204 @@ fn an_unflattened_placed_scene_moves_its_children_inside_its_layer() {
         .collect();
     assert_eq!(moving, [("g1".to_owned(), 150.0, 100.0)]);
 }
+
+/// The program mixer follows a switched keyframe: a `when_shown` child the keyframe hides
+/// goes silent, and is heard again when the scene switches back (#1171 B1). The engine
+/// routes audio from the collection as drawn, which carries the switched keyframes.
+#[test]
+fn a_child_the_switched_keyframe_hides_is_not_heard() {
+    use crate::audio::{MasterMetering, MixerHandles, ScopeTaps};
+    use jstream_audio::{Mixer, MixerConfig};
+    use jstream_media::{AudioFormat, ChannelLayout, SampleFormat};
+    use std::sync::Arc;
+
+    let clip = jstream_protocol::KindDescriptor {
+        kind_id: "clip".into(),
+        category: jstream_protocol::KindCategory::Source,
+        name: "Clip".into(),
+        version: 1,
+        video: true,
+        audio: true,
+        max_outset_px: None,
+        params: vec![],
+    };
+    let engine = Engine::new().with_extra_kinds(vec![clip]);
+    let control = connected(&engine);
+    let mut mixer = Mixer::new(MixerConfig::default()).expect("mixer");
+    let format = AudioFormat::new(48_000, ChannelLayout::Stereo, SampleFormat::F32Interleaved)
+        .expect("format");
+    let (_producer, input) = mixer.add_input(format).expect("input");
+    let (_metering, meters) = MasterMetering::new(48_000).expect("meters");
+    let _detach = engine.attach_mixer(MixerHandles {
+        control: mixer.control(),
+        master: mixer.bus(),
+        meters,
+        scopes: engine.audio_scopes(),
+        taps: Arc::new(ScopeTaps::default()),
+        wanted: Arc::default(),
+    });
+    // `p` goes on program as the first scene; it places group `g`, whose child `g1`
+    // plays the clip, and `g`'s keyframe `gk` hides `g1`.
+    let list = vec![
+        create("p"),
+        Edit::SceneCreate {
+            scene_id: SceneId::new("g"),
+            name: "G".into(),
+            role: Some(SceneRole::Group),
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("clip"),
+            name: "Clip".into(),
+            kind: SourceKind::Builtin {
+                kind: "clip".into(),
+            },
+            settings: Settings::default(),
+            duplicated_from: None,
+        },
+        Edit::SourceCreate {
+            source_id: SourceId::new("sg"),
+            name: "G".into(),
+            kind: SourceKind::Scene {
+                scene_id: SceneId::new("g"),
+            },
+            settings: Settings::default(),
+            duplicated_from: None,
+        },
+        add("g", "g1", "clip"),
+        variant("gk", "g"),
+        Edit::ItemSetVisible {
+            item_id: ItemId::new("g1"),
+            scene_id: Some(SceneId::new("gk")),
+            visible: false,
+        },
+        add("p", "pg", "sg"),
+    ];
+    block_on(control.call(Call::Batch(edits(list)))).expect("applies");
+    engine.set_audio_input(SourceId::new("clip"), input.clone());
+    assert_eq!(input.activity_gain(), 1.0, "shown on program through g");
+
+    assert_eq!(act(&control, "g", Some("gk"), None), Ok(()));
+    assert_eq!(input.activity_gain(), 0.0, "the switched keyframe hides g1");
+    assert_eq!(act(&control, "g", None, None), Ok(()));
+    assert_eq!(input.activity_gain(), 1.0, "g's own values show it again");
+}
+
+/// The scenes switched to a keyframe, from `studio.get`.
+fn switched(control: &dyn Control) -> Vec<(String, String)> {
+    let Ok(QueryResult::StudioGet { keyframes, .. }) = query(control, Query::StudioGet) else {
+        panic!("not studio.get");
+    };
+    keyframes
+        .into_iter()
+        .map(
+            |PlacedKeyframe {
+                 scene_id,
+                 keyframe_id,
+             }| { (scene_id.to_string(), keyframe_id.to_string()) },
+        )
+        .collect()
+}
+
+fn set(scene: &str, keyframe: Option<&str>) -> Action {
+    Action::SceneSetKeyframe {
+        scene_id: SceneId::new(scene),
+        keyframe_id: keyframe.map(SceneId::new),
+        preset_id: None,
+    }
+}
+
+/// On a scene already on program, or one of its keyframe scenes, the scene draws as
+/// itself, so a switch with a Move preset starts no transition.
+#[test]
+fn a_switch_on_the_program_family_starts_no_move() {
+    let (engine, control) = three_tracks();
+    block_on(control.call(Call::Batch(edits(vec![Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new("move"),
+        name: "Move".into(),
+        kind: "move".into(),
+        duration_ms: 400,
+        easing: Easing::Linear,
+        settings: Settings::default(),
+    }]))))
+    .expect("applies");
+    block_on(control.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("gk"),
+            preset_id: None,
+        },
+    }))
+    .expect("switch");
+    act(&control, "g", Some("gk"), Some("move")).expect("g to gk");
+    assert!(
+        engine.render_hub().load().shot().tracks().is_none(),
+        "no Move"
+    );
+    assert_eq!(switched(&control), [("g".to_owned(), "gk".to_owned())]);
+}
+
+/// A timeline cue switches a track, and a seek runs only the last switch of each scene
+/// before where it starts (a state keyed by the scene, ADR-0116 decision 5).
+#[test]
+fn cues_switch_tracks_and_a_seek_keeps_the_last_for_each_scene() {
+    use jstream_protocol::{TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
+    let (_engine, control) = three_tracks();
+    let cues = vec![
+        TimelineCue::new(0, &set("g", Some("gk"))),
+        TimelineCue::new(100, &set("g", None)),
+        TimelineCue::new(5_000, &set("h", Some("hk"))),
+        TimelineCue::new(9_000, &set("j", Some("jk"))),
+    ];
+    block_on(control.call(Call::Batch(edits(vec![Edit::TimelineSet {
+        scene_id: SceneId::new("p"),
+        timeline: TimelineInfo {
+            timeline_id: TimelineId::new("t"),
+            name: String::new(),
+            duration_ms: 10_000,
+            looping: TimelineLoop::Once,
+            cues,
+        },
+    }]))))
+    .expect("applies");
+    let timeline_id = TimelineId::new("t");
+    block_on(control.call(Call::Action {
+        action: Action::TimelinePlay {
+            timeline_id: timeline_id.clone(),
+        },
+    }))
+    .expect("play");
+    assert_eq!(switched(&control), [("g".to_owned(), "gk".to_owned())]);
+    block_on(control.call(Call::Action {
+        action: Action::TimelineSeek {
+            timeline_id: timeline_id.clone(),
+            at_ms: 6_000,
+        },
+    }))
+    .expect("seek");
+    assert_eq!(switched(&control), [("h".to_owned(), "hk".to_owned())]);
+    block_on(control.call(Call::Action {
+        action: Action::TimelineStop { timeline_id },
+    }))
+    .expect("stop");
+}
+
+/// A hotkey bound to a switch goes with the keyframe scene it names (ADR-0040 §3).
+#[test]
+fn a_hotkey_bound_to_a_switch_goes_with_its_keyframe_scene() {
+    let (_engine, control) = three_tracks();
+    block_on(control.call(Call::Batch(edits(vec![Edit::HotkeySet {
+        chord: jstream_protocol::Chord::new("F6"),
+        action: set("g", Some("gk")),
+    }]))))
+    .expect("bound");
+    let deleted = block_on(control.call(Call::Batch(edits(vec![Edit::SceneDelete {
+        scene_id: SceneId::new("gk"),
+    }]))))
+    .expect("deleted");
+    let jstream_protocol::CallResult::Batch {
+        removed_hotkeys, ..
+    } = deleted.result
+    else {
+        panic!("not a batch result");
+    };
+    assert_eq!(removed_hotkeys.len(), 1);
+}

@@ -77,8 +77,8 @@ is not heard), live values addressed to the keyframe, and the Move machinery.
   names one keyframe, and merging would need a keyframe scene the collection doesn't
   hold.
 - **Program.** It applies only where the scene is placed. A switched scene that is itself
-  on program draws its own values, since `scene.switch` already chooses its keyframes
-  there.
+  on program, or one of whose keyframe scenes is, draws as that scene, since
+  `scene.switch` already chooses its keyframes there; a switch then starts no Move.
 - **Copies.** The engine hands the planners a copy of the collection that carries the
   switched keyframes, alongside the open gestures' live settings (ADR-0091). That copy
   is the one thing that holds the studio state. The collection itself never holds it.
