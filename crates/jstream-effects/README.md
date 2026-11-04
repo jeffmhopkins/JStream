@@ -96,7 +96,13 @@ a loader that panics. A second folder with a pack ID that is already loaded is r
 retried in the poll that frees the ID (the first folder removed, or its pack renamed).
 Polling needs no dependency and behaves the same on every file system. The cost is the
 poll's latency, and an edit that keeps a file's size within the file system's timestamp
-resolution is seen on the next change.
+resolution is seen on the next change. A host that replaces a folder itself calls `mark_stale` on it,
+so the next poll reloads it whatever its stamps say. For a host that writes packs
+([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), `load_pack` loads one
+folder as a poll does (on a `LOAD_THREAD`, a panic caught), so it can check a pack in a
+staging folder before it puts it where the watcher reads, and `manifest_pack_id` reads
+the pack ID a folder's manifest names without validating a shader, whether or not the
+pack loads.
 
 **Shader sources** (`source`, [ADR-0093](../../docs/adr/0093-shader-sources-from-effect-packs.md)).
 A `[[source]]` table beside the `[[effect]]` tables (a pack has at least one of either,

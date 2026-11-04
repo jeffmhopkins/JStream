@@ -547,6 +547,50 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with\n`files`, or adds it, and loads it at once. The pack is always the folder named\n`pack` in the packs folder, whose `effect.toml` must say `id = \"<pack>\"`. Answers\nwith the pack as loaded. Fails, writing nothing and keeping the old version, with\n`too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with\n`invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file\npath outside the rules, a manifest that names another ID, an ID another folder\nholds, a folder `pack` that holds anything but that pack, or a pack that doesn't\nload (the first problem's file, line and message); with `internal` when the disk\nrefuses the swap; and with `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+          "properties": {
+            "files": {
+              "description": "Every file of the pack.",
+              "items": {
+                "$ref": "#/$defs/PackFile"
+              },
+              "type": "array"
+            },
+            "pack": {
+              "description": "The pack ID: lower-case ASCII letters, digits and `-`, starting with a letter\nor digit.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pack.write",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack",
+            "files"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names\npack ID `pack`, whatever its name and whether or not it loads. Its kinds leave\n`kind.list`, and filters and sources of them draw nothing, as before a pack loads.\nFails with `not_found` (entity `pack`) when no folder holds that pack, `internal`\nwhen the disk refuses, and `unsupported` from an engine that loads no packs. Not\nan edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.",
+          "properties": {
+            "pack": {
+              "description": "The pack ID.",
+              "type": "string"
+            },
+            "type": {
+              "const": "pack.delete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -569,6 +613,24 @@ source: crates/jstream-protocol/src/fixtures.rs
     "ActionResult": {
       "description": "What an action answered, for the few actions whose answer carries data. Its `type`\ntag repeats the action's name.",
       "oneOf": [
+        {
+          "description": "The answer to `pack.write` (0.72): the pack as now loaded.",
+          "properties": {
+            "pack": {
+              "$ref": "#/$defs/PackInfo",
+              "description": "The pack."
+            },
+            "type": {
+              "const": "pack.write",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
         {
           "description": "The answer to `pairing.start`: the one-time pairing code, sent to the client that\nstarted pairing and to no one else (ADR-0044).",
           "properties": {
@@ -1775,6 +1837,81 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Drawer": {
+      "description": "A thread that draws shots ([`ProfileInfo::drawers`]).",
+      "oneOf": [
+        {
+          "const": "program",
+          "description": "The program stage's `jstream-render` thread, which draws what the outputs send.",
+          "type": "string"
+        },
+        {
+          "const": "preview",
+          "description": "The preview hub's `jstream-preview` thread, which draws the preview streams.",
+          "type": "string"
+        }
+      ]
+    },
+    "DrawerProfile": {
+      "description": "One drawing thread's frames in the window.",
+      "properties": {
+        "drawer": {
+          "$ref": "#/$defs/Drawer",
+          "description": "Which thread."
+        },
+        "frame_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest frame, in milliseconds: exact for the window, as the drawer keeps the\nlongest frame of each second it publishes."
+        },
+        "frame_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a frame took, in milliseconds."
+        },
+        "frame_p95_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The time 95 in 100 frames took at most, to the nearest bucket of its histogram\n(a quarter millisecond below 16 ms, wider above)."
+        },
+        "frames": {
+          "default": 0,
+          "description": "The frames it drew.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "over_budget": {
+          "default": 0,
+          "description": "The frames that took longer than `frame_budget_ms`.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "phases": {
+          "$ref": "#/$defs/PhaseProfile",
+          "default": {
+            "captures_ms": 0.0,
+            "chains_ms": 0.0,
+            "finish_ms": 0.0,
+            "passes_ms": 0.0,
+            "uploads_ms": 0.0
+          },
+          "description": "The average time per frame in each phase."
+        },
+        "skipped": {
+          "default": 0,
+          "description": "The program's ticks skipped because drawing fell a whole period or more behind\n(R-RT-004). Always 0 for the preview, which draws when it can.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "drawer"
+      ],
+      "type": "object"
+    },
     "DropCounts": {
       "description": "Running totals of frames and packets the pipeline has dropped since the engine\nstarted (R-RT-004).\n\nEach field sums one kind of drop across every stage that counts it. A stage that\ndoes not count that kind contributes nothing. Totals only grow: a client computes\nan interval by subtracting the previous tick.\n\nSilence a stage inserts to cover a gap (an audio underrun, a device gap, encoder\ngap-fill) is not a drop and is not included.\n\nA missing field parses as 0, so a counter added in a later minor version can be left\nout by an older sender (R-API-001). Unknown fields are ignored.",
       "properties": {
@@ -2841,6 +2978,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "output_id",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Changes where a recording output writes its file (since 0.74, #1072), keeping its\ncontainer, encoder profile, mix, bus and filters. A running output keeps writing\nwhere it started; the new path applies from its next `output.start`, which still\nnever overwrites. The path is checked as in `output.create`'s\n[`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a\nrecording is `invalid_argument`. Inverse: `output.set_path` with the previous\npath.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The recording output to change."
+            },
+            "path": {
+              "description": "Where the finished recording goes: an absolute path on the engine's machine,\nending in a file name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "output.set_path",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id",
+            "path"
           ],
           "type": "object"
         },
@@ -4214,6 +4374,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "plugin",
           "description": "An installed plugin (0.35). Only an error answering a `plugin.*` action names it,\nso a client older than 0.35, which sends none, never reads it.",
+          "type": "string"
+        },
+        {
+          "const": "pack",
+          "description": "An effect pack (0.72, ADR-0097). Only an error answering a `pack.*` command names\nit, so a client older than 0.72, which sends none, never reads it.",
           "type": "string"
         }
       ]
@@ -6070,7 +6235,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The file format."
             },
             "path": {
-              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists. The engine rejects, with `invalid_argument`, an empty or\nrelative path (absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts\nwith two separators (a Windows UNC or device path, `\\\\host\\share\\…`,\n`\\\\.\\…` or `\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
+              "description": "Where the finished recording goes: an absolute path on the engine's\nmachine, ending in a file name. While recording, the file is written as\n`<path>.part` and renamed to `path` when the output stops. A recording never\noverwrites: `output.start` fails with `action_failed` when `path` or its\n`.part` name exists; `output.set_path` (since 0.74) points it at a new file.\nThe engine rejects, with `invalid_argument`, an empty or relative path\n(absolute is `/…`, `\\…`, `C:\\…` or `C:/…`), one that starts with two\nseparators (a Windows UNC or device path, `\\\\host\\share\\…`, `\\\\.\\…` or\n`\\\\?\\…`), one with `:` other than a drive letter's, `?`, `*`,\ncontrol characters or a `..` segment, one that ends in a separator or names\nno file, and one whose file name is a DOS device name, in any case and with\nor without an extension (`NUL`, `nul.mp4`, `CON`, `PRN`, `AUX`, `COM1`,\n`LPT1`, …), which Windows opens in place of a file. `output.start` also fails\nwhen the path is not absolute on the engine's own machine.",
               "type": "string"
             },
             "type": {
@@ -6224,6 +6389,122 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "PackFile": {
+      "description": "One file of a `pack.write`.",
+      "oneOf": [
+        {
+          "description": "UTF-8 text.",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Bytes, as standard base64 with padding.",
+          "properties": {
+            "base64": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "base64"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "path": {
+          "description": "Its path in the pack, `/`-separated: `effect.toml`, or a `.wgsl`, `.png`, `.jpg`\nor `.jpeg` file, under the asset-path rules (no `..`, no absolute path, no\ncomponent that starts with `.`, no `\\` or `:`, no Windows reserved name).",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "PackFileInfo": {
+      "description": "One file of a pack, as `pack.read` returns it.",
+      "properties": {
+        "base64": {
+          "description": "An image's bytes as base64, only when `pack.read` named that image by `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "digest": {
+          "description": "The BLAKE3 digest of its bytes, as lower-case hex.",
+          "type": "string"
+        },
+        "path": {
+          "description": "Its path in the pack, `/`-separated.",
+          "type": "string"
+        },
+        "size": {
+          "description": "Its size in bytes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "text": {
+          "description": "The text of an `effect.toml` or `.wgsl` file. Omitted for an image, and in a\nwhole-pack read for a file past its 3 MiB budget of text: read it by `path`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "path",
+        "size",
+        "digest"
+      ],
+      "type": "object"
+    },
+    "PackInfo": {
+      "description": "One pack in the packs folder, as `pack.list` and `pack.write` report it.",
+      "properties": {
+        "folder": {
+          "description": "The folder it is in, within the packs folder. A pack written over the protocol is\nin the folder named by its ID; one a person installed may be in another.",
+          "type": "string"
+        },
+        "id": {
+          "description": "Its pack ID, from its `effect.toml`.",
+          "type": "string"
+        },
+        "kinds": {
+          "description": "Its kinds, `<pack>/<id>`, effects then sources, while it is loaded. Empty for a\npack that doesn't load.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "loaded": {
+          "description": "Whether the engine loads it: `false` for a pack whose manifest or shaders fail\nto load, or whose ID another folder already holds.",
+          "type": "boolean"
+        },
+        "written_by": {
+          "description": "The client name (from its `hello`) of the last `pack.write` of this pack ID,\nwhich says who claims to have written it, not who proved it. It stays when a\nperson later edits or replaces the folder by hand. Omitted for a pack ID no\nclient has written, and when the last writer gave no name.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "folder",
+        "kinds",
+        "loaded"
+      ],
+      "type": "object"
     },
     "ParamDescriptor": {
       "description": "One parameter of a kind.",
@@ -6544,6 +6825,37 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PhaseProfile": {
+      "description": "Where a drawer's frame time went, as averages per frame in milliseconds. The phases\nadd up to about the frame time.",
+      "properties": {
+        "captures_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Uploading or importing the captures' frames."
+        },
+        "chains_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The video chains: source chains (and so shader sources), scene chains, item\neffects, and the scene passes they read."
+        },
+        "finish_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The output stage, reading the frame back (which waits for the GPU) and\nconverting it for the encoders."
+        },
+        "passes_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The nested scenes' passes and the program scene's composite."
+        },
+        "uploads_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Uploading the source frames that changed, and importing GPU frames."
+        }
+      },
+      "type": "object"
+    },
     "PixelSize": {
       "description": "A size in whole pixels.",
       "properties": {
@@ -6580,6 +6892,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "PlanProfile": {
+      "description": "What planning the program mix cost ([`ProfileInfo::plan`]).",
+      "properties": {
+        "ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a plan took, in milliseconds."
+        },
+        "plans": {
+          "default": 0,
+          "description": "How many plans ran: one per edit that changes what is drawn, and one per frame\nan animation or a page needs.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recent_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest plan, in milliseconds, in the last second it was read."
+        }
+      },
+      "type": "object"
     },
     "PluginClass": {
       "description": "A capability class: a set of commands a person grants a plugin as one (ADR-0069 S2).\n`read` is always granted.",
@@ -6790,6 +7125,208 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind"
       ],
       "type": "object"
+    },
+    "ProfileUnit": {
+      "description": "A unit of drawing work, by its owner.",
+      "oneOf": [
+        {
+          "description": "Uploading a source's frame to the GPU, or importing its GPU frame (a browser\nsource's).",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "upload",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Uploading or importing a capture's frame: a display, window or video device.",
+          "properties": {
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The source it is captured for; omitted for a video device, which every\nsource showing it shares, and for the display that fills an output with no\nprogram scene."
+            },
+            "type": {
+              "const": "capture",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A source's video chain: its filters, or a shader source's program.",
+          "properties": {
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The source."
+            },
+            "type": {
+              "const": "source_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene's video chain over its composite, the composite included.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An item's effects: drawing the item into its box, then each effect.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene that draws the item; a keyframe scene draws its parent's items."
+            },
+            "type": {
+              "const": "item_effects",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A `scene` source's chain where it places its scene.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene it places, as planned there."
+            },
+            "source_id": {
+              "$ref": "#/$defs/SourceId",
+              "description": "The `scene` source."
+            },
+            "type": {
+              "const": "placed_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "source_id",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Compositing a nested scene into its layer, or a scene a filter reads. Every item\nof the scene with no effects of its own is drawn here.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene."
+            },
+            "type": {
+              "const": "scene_pass",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The program scene's composite, or a running transition's, into the frame.",
+          "properties": {
+            "type": {
+              "const": "composite",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The master stage's chain over a mix.",
+          "properties": {
+            "mix_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/VideoMixId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The mix; omitted for the program."
+            },
+            "type": {
+              "const": "master_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An output's own chain.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output_chain",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProtocolVersion": {
       "description": "A protocol version: `major.minor`. Patch releases never change the wire format, so\nthey are not part of it.",
@@ -7160,6 +7697,44 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by\npack ID: each one's folder, its kinds while it loads, and the client that last\nwrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left\nout. Packs are not collection state, so no `rev`. Fails with `unsupported` from an\nengine that loads no packs.",
+          "properties": {
+            "type": {
+              "const": "pack.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and\n`.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,\na file's `text` is left out; read it by `path`. With `path`, only that file, and\nan image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which\nonly a person can have put there, fails with `too_large`. Fails with `not_found`\n(entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it\ndoesn't have, and `unsupported` from an engine that loads no packs.",
+          "properties": {
+            "pack": {
+              "description": "The pack ID.",
+              "type": "string"
+            },
+            "path": {
+              "description": "One file of it, `/`-separated. Omitted for every file.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "pack.read",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "pack"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it\npaired and was last used, never its token. Answered by the server that admits\nclients, not the engine: a `Control` with no server in front fails with\n`unsupported`.",
           "properties": {
             "type": {
@@ -7226,6 +7801,37 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "type": {
               "const": "plugin.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
+          "properties": {
+            "seconds": {
+              "description": "The window, in seconds, from 1 to 60\n([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window\nlonger than the engine has read for covers what it has.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "top": {
+              "description": "At most this many entries in each list, the costliest. Omitted, 20; above 200\n([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "profile.get",
               "type": "string"
             }
           },
@@ -7967,6 +8573,48 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `pack.list`.",
+          "properties": {
+            "packs": {
+              "description": "The packs, ordered by ID.",
+              "items": {
+                "$ref": "#/$defs/PackInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "pack.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "packs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `pack.read`.",
+          "properties": {
+            "files": {
+              "description": "The pack's files, ordered by path: every file, or the one `path` named.",
+              "items": {
+                "$ref": "#/$defs/PackFileInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "pack.read",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "files"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `device.list`. Devices are not collection state, so it carries no\n`rev`.",
           "properties": {
             "devices": {
@@ -8054,6 +8702,91 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "plugins"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "drawers": {
+              "default": [],
+              "description": "The threads that drew in the window: the program stage's while an output runs,\nthe preview hub's while a preview stream is open.",
+              "items": {
+                "$ref": "#/$defs/DrawerProfile"
+              },
+              "type": "array"
+            },
+            "frame_budget_ms": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The program's frame period in milliseconds: a drawer whose frames take longer\ncan't keep up."
+            },
+            "gpu_timing": {
+              "default": false,
+              "description": "Whether units carry `gpu_ms`, measured with GPU timestamp queries. `false` until\nthe engine measures GPU time, and on an adapter that can't.",
+              "type": "boolean"
+            },
+            "plan": {
+              "$ref": "#/$defs/PlanProfile",
+              "default": {
+                "ms": 0.0,
+                "plans": 0,
+                "recent_max_ms": 0.0
+              },
+              "description": "What planning the program mix cost: each plan holds the collection lock."
+            },
+            "process_cpu_pct": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
+            },
+            "seconds": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The seconds the window covers: what was asked for, or less when the engine has\nread for less time than that (it keeps a reading from each `stats.tick` and each\n`profile.get`)."
+            },
+            "sources": {
+              "default": [],
+              "description": "The sources that cost the `jstream-sources` thread or the planner time,\ncostliest first.",
+              "items": {
+                "$ref": "#/$defs/SourceProfile"
+              },
+              "type": "array"
+            },
+            "thread_cpu": {
+              "default": false,
+              "description": "Whether `threads` was read: `false` on a host that can't list its threads.",
+              "type": "boolean"
+            },
+            "threads": {
+              "default": [],
+              "description": "The process's threads, those of one name added together, busiest first.",
+              "items": {
+                "$ref": "#/$defs/ThreadProfile"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "profile.get",
+              "type": "string"
+            },
+            "units": {
+              "default": [],
+              "description": "The units of drawing work the drawers did, costliest first.",
+              "items": {
+                "$ref": "#/$defs/UnitProfile"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -8776,6 +9509,54 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "SourceProfile": {
+      "description": "What one source cost outside the drawing threads ([`ProfileInfo::sources`]).",
+      "properties": {
+        "build_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How long its last build took, in milliseconds: reading and decoding its files,\nor opening its page. Omitted when it wasn't built in the window."
+        },
+        "look_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a plan spent asking it for its frame, in milliseconds, with the\ncollection lock held."
+        },
+        "looks": {
+          "default": 0,
+          "description": "How many plans asked it for its frame.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "paint_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time a paint took, in milliseconds."
+        },
+        "paints": {
+          "default": 0,
+          "description": "How many times the `jstream-sources` thread painted it: a source that draws its\nown frames as they come due (`waveform`, `spectrum`, `timer`).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_id": {
+          "$ref": "#/$defs/SourceId",
+          "description": "The source."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "type": "object"
+    },
     "SourceSize": {
       "description": "One source's current size, in a `source.sizes` result.",
       "properties": {
@@ -8918,6 +9699,38 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "ThreadProfile": {
+      "description": "The threads of one name ([`ProfileInfo::threads`]).\n\nJStream names its own threads `jstream-…`, and those are `name`. A thread a library\nor driver loaded into the process started has the name that library gave it, if any:\nthird-party text (ADR-0059), so it is `remote_name`, data to show and never\ninstructions. An unnamed thread has neither.",
+      "properties": {
+        "count": {
+          "default": 0,
+          "description": "How many threads of that name ran in the window.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cpu_pct": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The CPU they used in the window, as a percentage of one core."
+        },
+        "name": {
+          "description": "The name of JStream's own threads.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "remote_name": {
+          "description": "The name another thread's library or driver gave it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "TransitionEffect": {
       "description": "How an item without a partner appears or disappears.",
       "oneOf": [
@@ -9029,6 +9842,57 @@ source: crates/jstream-protocol/src/fixtures.rs
       "required": [
         "presets",
         "default"
+      ],
+      "type": "object"
+    },
+    "UnitProfile": {
+      "description": "One unit of drawing work and what it cost ([`ProfileInfo::units`]).",
+      "properties": {
+        "drawer": {
+          "$ref": "#/$defs/Drawer",
+          "description": "The thread that did it."
+        },
+        "frames": {
+          "default": 0,
+          "description": "The frames it ran in. A source's upload runs only in frames where its picture\nchanged.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "gpu_ms": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The average GPU time it took in a frame it ran in, in milliseconds, when\n`gpu_timing` is on."
+        },
+        "ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time it took in a frame it ran in, in milliseconds."
+        },
+        "recent_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest it took in one frame during the last second the drawer reported,\nin milliseconds."
+        },
+        "share": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Its share of the drawer's time in the window, from 0 to 1."
+        },
+        "unit": {
+          "$ref": "#/$defs/ProfileUnit",
+          "description": "What it is and who owns it."
+        }
+      },
+      "required": [
+        "drawer",
+        "unit"
       ],
       "type": "object"
     },
@@ -9622,5 +10486,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.71"
+  "title": "JStream protocol 0.74"
 }

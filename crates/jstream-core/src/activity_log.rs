@@ -178,6 +178,12 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::PluginEnable { plugin_id } => {
             format!("Enabled plugin {}", quote(plugin_id.as_str()))
         }
+        Action::PackWrite { pack, files } => {
+            let n = files.len();
+            let s = if n == 1 { "" } else { "s" };
+            format!("Wrote effect pack {} ({n} file{s})", quote(pack))
+        }
+        Action::PackDelete { pack } => format!("Deleted effect pack {}", quote(pack)),
         other => capitalize(&humanize(other.name())),
     }
 }
@@ -381,6 +387,9 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         }
         Edit::OutputSetTarget { output_id, .. } => {
             format!("Changed where output {} sends", quote(output_id.as_str()))
+        }
+        Edit::OutputSetPath { output_id, .. } => {
+            format!("Changed where output {} records", quote(output_id.as_str()))
         }
         Edit::OutputDelete { output_id } => format!("Deleted output {}", quote(output_id.as_str())),
         Edit::OutputSetEncoder { output_id, .. } => {

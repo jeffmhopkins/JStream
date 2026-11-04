@@ -105,7 +105,7 @@ fn family() -> Engine {
 fn x(placement: &Placement) -> f32 {
     match placement {
         Placement::Geometry(geometry) => geometry.center.x.get(),
-        Placement::Legacy(_) => panic!("not a geometry placement"),
+        Placement::Legacy(_) | Placement::Layer(_) => panic!("not a geometry placement"),
     }
 }
 

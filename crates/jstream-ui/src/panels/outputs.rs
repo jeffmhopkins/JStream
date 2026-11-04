@@ -882,6 +882,12 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 .is_some_and(|row| matches!(row.info.kind, OutputKind::Rtmp { .. }))
         })
     };
+    let is_record = move || {
+        row.with(|row| {
+            row.as_ref()
+                .is_some_and(|row| matches!(row.info.kind, OutputKind::Record { .. }))
+        })
+    };
     let is_vcam = move || {
         row.with(|row| {
             row.as_ref()
@@ -919,6 +925,8 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Generic { url },
             }) => url.clone(),
+            // A recording's file (#1072).
+            Some(OutputKind::Record { path, .. }) => path.clone(),
             _ => String::new(),
         });
         target.set(url);
@@ -928,10 +936,18 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
         event.prevent_default();
         let output_id = id.get_value();
         let url = target.get_untracked().trim().to_owned();
+        let record = is_record();
         panel.run(move |session| async move {
-            let set = Edit::OutputSetTarget {
-                output_id,
-                target: RtmpTarget::Generic { url },
+            let set = if record {
+                Edit::OutputSetPath {
+                    output_id,
+                    path: url,
+                }
+            } else {
+                Edit::OutputSetTarget {
+                    output_id,
+                    target: RtmpTarget::Generic { url },
+                }
             };
             edit(&*session.control, set).await?;
             editing.try_set(false);
@@ -1047,7 +1063,11 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
             }}
             <Show when=move || editing.get()>
                 <form class="inline" on:submit=save_target>
-                    <input type="text" aria-label="Server URL" bind:value=target />
+                    <input
+                        type="text"
+                        aria-label=move || if is_record() { "File path" } else { "Server URL" }
+                        bind:value=target
+                    />
                     <button type="submit">"Save"</button>
                     <button type="button" on:click=move |_| editing.set(false)>
                         "Cancel"
@@ -1199,7 +1219,7 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                 >
                     <button on:click=stop>"Stop"</button>
                 </Show>
-                <Show when=is_rtmp>
+                <Show when=move || is_rtmp() || is_record()>
                     <button disabled=running on:click=begin_edit>
                         "Edit"
                     </button>

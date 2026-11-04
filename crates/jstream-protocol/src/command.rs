@@ -529,6 +529,21 @@ pub enum Edit {
         /// The new target, validated as in `output.create`.
         target: RtmpTarget,
     },
+    /// Changes where a recording output writes its file (since 0.74, #1072), keeping its
+    /// container, encoder profile, mix, bus and filters. A running output keeps writing
+    /// where it started; the new path applies from its next `output.start`, which still
+    /// never overwrites. The path is checked as in `output.create`'s
+    /// [`OutputKind::Record`](crate::OutputKind::Record). An output that isn't a
+    /// recording is `invalid_argument`. Inverse: `output.set_path` with the previous
+    /// path.
+    #[serde(rename = "output.set_path")]
+    OutputSetPath {
+        /// The recording output to change.
+        output_id: OutputId,
+        /// Where the finished recording goes: an absolute path on the engine's machine,
+        /// ending in a file name.
+        path: String,
+    },
     /// Changes the canvas: every scene's coordinate space, in whole pixels (ADR-0022).
     /// Items keep their canvas-pixel placements; nothing moves or resizes. Zero, or a
     /// side over the engine's maximum (at least 7680, both ways), is `invalid_argument`.
@@ -1094,6 +1109,7 @@ impl Edit {
             Edit::FilterReorder { .. } => "filter.reorder",
             Edit::OutputCreate { .. } => "output.create",
             Edit::OutputSetTarget { .. } => "output.set_target",
+            Edit::OutputSetPath { .. } => "output.set_path",
             Edit::OutputDelete { .. } => "output.delete",
             Edit::OutputSetEncoder { .. } => "output.set_encoder",
             Edit::EncoderCreate { .. } => "encoder.create",
@@ -1490,6 +1506,36 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
+    /// Writes one effect pack (0.72, ADR-0097): replaces the pack `pack` whole with
+    /// `files`, or adds it, and loads it at once. The pack is always the folder named
+    /// `pack` in the packs folder, whose `effect.toml` must say `id = "<pack>"`. Answers
+    /// with the pack as loaded. Fails, writing nothing and keeping the old version, with
+    /// `too_large` for `files` over 3 MiB as sent (`MAX_PACK_WRITE_BYTES`); with
+    /// `invalid_argument` for more than 64 files, an image over 2 MiB, a pack ID or file
+    /// path outside the rules, a manifest that names another ID, an ID another folder
+    /// holds, a folder `pack` that holds anything but that pack, or a pack that doesn't
+    /// load (the first problem's file, line and message); with `internal` when the disk
+    /// refuses the swap; and with `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.write")]
+    PackWrite {
+        /// The pack ID: lower-case ASCII letters, digits and `-`, starting with a letter
+        /// or digit.
+        pack: String,
+        /// Every file of the pack.
+        files: Vec<crate::PackFile>,
+    },
+    /// Removes one effect pack (0.72, ADR-0097): the folder whose `effect.toml` names
+    /// pack ID `pack`, whatever its name and whether or not it loads. Its kinds leave
+    /// `kind.list`, and filters and sources of them draw nothing, as before a pack loads.
+    /// Fails with `not_found` (entity `pack`) when no folder holds that pack, `internal`
+    /// when the disk refuses, and `unsupported` from an engine that loads no packs. Not
+    /// an edit: undo doesn't reach the disk. Agents may call it; no plugin is granted it.
+    #[serde(rename = "pack.delete")]
+    PackDelete {
+        /// The pack ID.
+        pack: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1527,6 +1573,8 @@ impl Action {
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
             Action::EffectEnable { .. } => "effect.enable",
+            Action::PackWrite { .. } => "pack.write",
+            Action::PackDelete { .. } => "pack.delete",
         }
     }
 
@@ -1572,7 +1620,9 @@ impl Action {
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
-            | Action::EffectEnable { .. } => vec![],
+            | Action::EffectEnable { .. }
+            | Action::PackWrite { .. }
+            | Action::PackDelete { .. } => vec![],
         }
     }
 
@@ -1619,6 +1669,11 @@ impl Action {
                 "type",
                 "`effect.enable` can't be bound: a person re-enables a quarantined effect \
                  through the UI (#349)",
+            )),
+            Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
+                "type",
+                "a pack action can't be bound: it writes GPU code to disk, which a key \
+                 press shouldn't (ADR-0097)",
             )),
             Action::YoutubeSignIn
             | Action::YoutubeSignOut
