@@ -1021,7 +1021,7 @@ paired microphone opens only while its audio is on and the source has at least o
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs", "crates/jstream-core/src/values.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 
