@@ -1664,7 +1664,11 @@ draw or decode. Each plan is numbered (`begin_plan`), and each source remembers 
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown. Sources run on the media clock of the backends the host
+the first time it is shown. Each source also remembers the last plan any mix looked at
+it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
+same re-plan): after that re-plan, one none of them looked at is told nothing draws it
+(`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
+its frame is taken. A `browser` page rests while nothing draws it (#1071). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `media` sources play through the injected

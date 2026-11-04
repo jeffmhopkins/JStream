@@ -35,6 +35,7 @@ pub struct FakePageState {
     spec: PageSpec,
     css: Mutex<Vec<String>>,
     reloads: AtomicUsize,
+    hidden: AtomicBool,
     audio: Arc<PageAudio>,
     policy: RequestPolicy,
     closed: AtomicBool,
@@ -64,6 +65,11 @@ impl FakePageState {
     /// How many times it was reloaded.
     pub fn reloads(&self) -> usize {
         self.reloads.load(Ordering::Acquire)
+    }
+
+    /// Whether the engine last told it nothing draws it.
+    pub fn hidden(&self) -> bool {
+        self.hidden.load(Ordering::Acquire)
     }
 
     /// Its audio, to push packets into as CEF would.
@@ -125,6 +131,7 @@ impl BrowserBackend for FakeBrowser {
             spec: spec.clone(),
             css: Mutex::new(Vec::new()),
             reloads: AtomicUsize::new(0),
+            hidden: AtomicBool::new(false),
             audio: PageAudio::new(),
             policy: RequestPolicy::for_page(spec),
             closed: AtomicBool::new(false),
@@ -176,6 +183,10 @@ impl BrowserPage for FakePage {
             .painted
             .lock()
             .unwrap_or_else(PoisonError::into_inner) = None;
+    }
+
+    fn set_hidden(&mut self, hidden: bool) {
+        self.0.hidden.store(hidden, Ordering::Release);
     }
 
     fn audio(&self) -> &Arc<PageAudio> {
