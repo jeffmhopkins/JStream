@@ -1,6 +1,7 @@
 //! The Inspector's Motion section (ADR-0099): the selected item's motion modifiers,
-//! each a row with what it moves, how (wiggle, oscillate or drift, with that kind's
-//! parameters), its clock and whether it is on, and Add and Remove. Every change sends
+//! each a row with what it moves, how (wiggle, oscillate, drift or shake, with that
+//! kind's parameters), its clock and whether it is on, and Add and Remove. A row on the
+//! trigger clock has a Fire button, which sends `item.trigger_motion` for it (#1107). Every change sends
 //! `item.set_motion` with the whole list, addressed to the shown scene, so in a keyframe
 //! scene it writes the keyframe's own list. The engine draws the motion; the canvas
 //! shows the item where its values put it.
@@ -12,7 +13,7 @@ use super::number::NumberField;
 use crate::app::SessionContext;
 use crate::store::Studio;
 use jstream_control::protocol::{
-    Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionKind, MotionModifier,
+    Action, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionKind, MotionModifier,
     MotionProperty, MotionShape, SceneId,
 };
 use leptos::prelude::*;
@@ -48,7 +49,7 @@ pub fn property_unit(property: MotionProperty) -> &'static str {
 }
 
 /// The kinds a row can switch between, by name.
-pub const KINDS: [&str; 3] = ["Wiggle", "Oscillate", "Drift"];
+pub const KINDS: [&str; 4] = ["Wiggle", "Oscillate", "Drift", "Shake"];
 
 /// The shapes an oscillator can have, by name.
 pub const SHAPES: [(MotionShape, &str); 4] = [
@@ -64,6 +65,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Wiggle { .. } => "Wiggle",
         MotionKind::Oscillate { .. } => "Oscillate",
         MotionKind::Drift { .. } => "Drift",
+        MotionKind::Impulse { .. } => "Shake",
         _ => "Other",
     }
 }
@@ -102,6 +104,13 @@ pub fn sized_kind(name: &str, size: f32) -> Option<MotionKind> {
         "Drift" => MotionKind::Drift {
             rate_per_s: finite(size * 10.0),
             wrap: None,
+        },
+        // A short jolt that dies away: bigger than a sway, since it is brief.
+        "Shake" => MotionKind::Impulse {
+            amplitude: finite(size * 4.0),
+            frequency_hz: finite(6.0),
+            decay_per_s: finite(4.0),
+            duration_ms: 700,
         },
         _ => return None,
     })
@@ -146,6 +155,10 @@ pub enum Param {
     Rate,
     /// Where a drift wraps back to 0; 0 for never.
     Wrap,
+    /// How fast a shake dies away, a second.
+    Decay,
+    /// How long a shake lasts.
+    Duration,
 }
 
 impl Param {
@@ -160,6 +173,12 @@ impl Param {
             ],
             MotionKind::Oscillate { .. } => &[Param::Amplitude, Param::Period, Param::Phase],
             MotionKind::Drift { .. } => &[Param::Rate, Param::Wrap],
+            MotionKind::Impulse { .. } => &[
+                Param::Amplitude,
+                Param::Frequency,
+                Param::Decay,
+                Param::Duration,
+            ],
             _ => &[],
         }
     }
@@ -175,6 +194,8 @@ impl Param {
             Param::Phase => ("Phase", 0.05, 2, 0.0, 0.99),
             Param::Rate => ("Rate", 1.0, 2, -100_000.0, 100_000.0),
             Param::Wrap => ("Wrap", 10.0, 1, 0.0, 100_000.0),
+            Param::Decay => ("Decay", 0.5, 1, 0.0, 1000.0),
+            Param::Duration => ("Length", 50.0, 0, 1.0, 3_600_000.0),
         }
     }
 }
@@ -184,8 +205,12 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
     let f = |v: Finite32| Some(f64::from(v.get()));
     match (*kind, param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
-        | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude) => f(amplitude),
-        (MotionKind::Wiggle { frequency_hz, .. }, Param::Frequency) => f(frequency_hz),
+        | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude)
+        | (MotionKind::Impulse { amplitude, .. }, Param::Amplitude) => f(amplitude),
+        (MotionKind::Wiggle { frequency_hz, .. }, Param::Frequency)
+        | (MotionKind::Impulse { frequency_hz, .. }, Param::Frequency) => f(frequency_hz),
+        (MotionKind::Impulse { decay_per_s, .. }, Param::Decay) => f(decay_per_s),
+        (MotionKind::Impulse { duration_ms, .. }, Param::Duration) => Some(f64::from(duration_ms)),
         (MotionKind::Wiggle { seed, .. }, Param::Seed) => Some(f64::from(seed)),
         (MotionKind::Wiggle { octaves, .. }, Param::Octaves) => Some(f64::from(octaves)),
         (MotionKind::Oscillate { period_ms, .. }, Param::Period) => Some(f64::from(period_ms)),
@@ -205,8 +230,14 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
     let mut next = *kind;
     match (&mut next, param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
-        | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude) => *amplitude = v,
-        (MotionKind::Wiggle { frequency_hz, .. }, Param::Frequency) => *frequency_hz = v,
+        | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude)
+        | (MotionKind::Impulse { amplitude, .. }, Param::Amplitude) => *amplitude = v,
+        (MotionKind::Wiggle { frequency_hz, .. }, Param::Frequency)
+        | (MotionKind::Impulse { frequency_hz, .. }, Param::Frequency) => *frequency_hz = v,
+        (MotionKind::Impulse { decay_per_s, .. }, Param::Decay) => *decay_per_s = v,
+        (MotionKind::Impulse { duration_ms, .. }, Param::Duration) => {
+            *duration_ms = value.max(1.0) as u32
+        }
         (MotionKind::Wiggle { seed, .. }, Param::Seed) => *seed = value.max(0.0) as u32,
         (MotionKind::Wiggle { octaves, .. }, Param::Octaves) => {
             *octaves = value.clamp(1.0, 4.0) as u8
@@ -294,6 +325,26 @@ pub fn MotionSection(
         change(m) && send(next)
     };
     let hint_text = Signal::derive(move || list.with(|l| hint(l)));
+    // Fires row `n`'s modifier on program (#1107).
+    let fire = move |n: usize| {
+        let Some(modifier_id) = list.with_untracked(|l| l.get(n).map(|m| m.modifier_id.clone()))
+        else {
+            return;
+        };
+        let Some(s) = session.get() else {
+            return;
+        };
+        let (item_id, _) = ids.get_value();
+        leptos::task::spawn_local(async move {
+            let fired = Action::ItemTriggerMotion {
+                item_id,
+                modifier_id: Some(modifier_id),
+            };
+            if let Err(error) = super::outputs::action(&*s.control, fired).await {
+                leptos::logging::warn!("couldn't fire the motion: {error}");
+            }
+        });
+    };
 
     let row = move |n: usize| {
         let at = move || list.with(|l| l.get(n).cloned());
@@ -424,14 +475,16 @@ pub fn MotionSection(
                         <span class="field-label">"Starts"</span>
                         <select
                             aria-label="When its time starts"
-                            title="With the studio clock, so every item with the same settings moves in step, or each time the item is shown"
+                            title="With the studio clock, so every item with the same settings moves in step, each time the item is shown, or each time it is fired (a hotkey or the Fire button)"
                             prop:value=move || at().map_or("", |m| match m.clock {
                                 MotionClock::Shown => "shown",
+                                MotionClock::Triggered => "triggered",
                                 _ => "engine",
                             })
                             on:change=move |event| {
                                 let clock = match event_target_value(&event).as_str() {
                                     "shown" => MotionClock::Shown,
+                                    "triggered" => MotionClock::Triggered,
                                     _ => MotionClock::Engine,
                                 };
                                 change(n, &|m| {
@@ -443,6 +496,7 @@ pub fn MotionSection(
                         >
                             <option value="engine">"In step"</option>
                             <option value="shown">"When shown"</option>
+                            <option value="triggered">"When fired"</option>
                         </select>
                     </label>
                 </div>
@@ -462,6 +516,15 @@ pub fn MotionSection(
                         />
                         "On"
                     </label>
+                    <Show when=move || at().is_some_and(|m| m.clock == MotionClock::Triggered)>
+                        <button
+                            class="motion-button"
+                            title="Fire this modifier now, as a hotkey bound to it would"
+                            on:click=move |_| fire(n)
+                        >
+                            "Fire"
+                        </button>
+                    </Show>
                     <button
                         class="motion-button"
                         title="Remove this modifier"
@@ -483,7 +546,7 @@ pub fn MotionSection(
     view! {
         <Fold title="Motion" open=false hint=hint_text>
             <p class="note">
-                "Continuous motion the engine draws each frame, on top of the item's values."
+                "Motion the engine draws each frame, on top of the item's values: continuous, or a shake each time it is fired."
             </p>
             {move || (0..list.with(Vec::len)).map(row).collect_view()}
             <button
@@ -550,5 +613,24 @@ mod tests {
         assert_eq!(param_value(&turn, Param::Amplitude), Some(0.5));
         assert_eq!(hint(&[]), "");
         assert_eq!(hint(&with_added(&[]).expect("room")), "1 modifier");
+    }
+
+    #[test]
+    fn a_shake_reads_and_writes_its_envelope() {
+        let shake = default_kind("Shake", MotionProperty::Y).expect("a kind");
+        assert_eq!(kind_name(&shake), "Shake");
+        assert_eq!(param_value(&shake, Param::Duration), Some(700.0));
+        let longer = with_param(&shake, Param::Duration, 1200.0).expect("has a length");
+        assert_eq!(param_value(&longer, Param::Duration), Some(1200.0));
+        let calmer = with_param(&longer, Param::Decay, 2.0).expect("has a decay");
+        assert_eq!(param_value(&calmer, Param::Decay), Some(2.0));
+        assert_eq!(with_param(&calmer, Param::Wrap, 1.0), None, "no wrap");
+        // Switching to a shake keeps the size.
+        let wiggle = default_kind("Wiggle", MotionProperty::Y).expect("a kind");
+        let switched = with_kind(&wiggle, "Shake", MotionProperty::Y).expect("switches");
+        assert_eq!(
+            param_value(&switched, Param::Amplitude),
+            param_value(&wiggle, Param::Amplitude)
+        );
     }
 }

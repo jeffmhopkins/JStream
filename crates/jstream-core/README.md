@@ -264,7 +264,16 @@ state machine. Contents:
   pass of the program shot, a video mix's included: the engine keeps when each drawn
   item appeared (`ShownSince`) and stamps it on each program shot it publishes
   (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
-  modifier stays at its start there. A legacy placement's signed scale keeps its flip,
+  modifier stays at its start there. The `triggered` clock (#1107) starts when
+  `item.trigger_motion` fires a modifier: the engine keeps when each item's modifiers
+  were last fired (`Fired`: all of them together, or one by ID, a modifier counting from
+  the later), forgets a fire after an hour (the longest an impulse runs), stamps the
+  fires on each program shot (`Shot::set_fired`) and plans the shot again, so the render
+  thread draws the fire from its next frame. A fire changes no `rev` and emits nothing;
+  a preview shot isn't stamped, so a `triggered` modifier adds nothing there. An item
+  with only `triggered` modifiers still counts as moving, so its shot draws each frame
+  while it waits to be fired.
+  A legacy placement's signed scale keeps its flip,
   and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
   legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
   `item.set_transform` stores a transform past those bounds (ADR-0022), and motion

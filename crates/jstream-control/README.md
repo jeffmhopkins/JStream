@@ -337,7 +337,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
-  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `studio.get`,
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`
+  (#1107: `not_found` for a missing item, `invalid_argument` for a malformed
+  `modifier_id`, and otherwise nothing, since the mock draws nothing), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first
   scene or deletes the program or preview scene. The mock knows only the initial `cut`
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every

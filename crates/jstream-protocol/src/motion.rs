@@ -151,6 +151,22 @@ pub enum MotionKind {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wrap: Option<Finite32>,
     },
+    /// A one-shot decaying shake, since 0.84 (#1107):
+    /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
+    /// the start of its clock, until `duration_ms`, and 0 after. Usually on the
+    /// `triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.
+    Impulse {
+        /// Its size at the start, `0..=100000`.
+        amplitude: Finite32,
+        /// How many times a second it swings, `0..=60` and not 0.
+        frequency_hz: Finite32,
+        /// How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.
+        /// Default 0.
+        #[serde(default)]
+        decay_per_s: Finite32,
+        /// How long it lasts, in milliseconds, `1..=3600000`.
+        duration_ms: u32,
+    },
     /// A kind this version of the protocol doesn't know, from a newer server, so a
     /// 0.81 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
@@ -175,6 +191,9 @@ pub enum MotionClock {
     /// so it starts fresh each time it is shown. While it isn't shown, and in a scene
     /// or source preview, the modifier is at its start.
     Shown,
+    /// From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is
+    /// fired, and in a scene or source preview, the modifier contributes nothing.
+    Triggered,
     /// A clock this version of the protocol doesn't know, from a newer server, so a
     /// 0.81 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
@@ -224,8 +243,25 @@ pub struct MotionProblem {
 const MAX_MAGNITUDE: f32 = 100_000.0;
 /// The highest wiggle frequency, in hertz.
 const MAX_FREQUENCY_HZ: f32 = 60.0;
-/// The longest oscillator period, in milliseconds: one hour.
+/// The longest oscillator period or impulse, in milliseconds: one hour.
 const MAX_PERIOD_MS: u32 = 3_600_000;
+/// The fastest impulse decay, per second.
+const MAX_DECAY_PER_S: f32 = 1000.0;
+
+/// Checks a motion modifier ID: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII letters,
+/// digits, `_` and `-`. Returns what it must be if it isn't.
+pub fn check_motion_id(id: &str) -> Result<(), &'static str> {
+    let well_formed = !id.is_empty()
+        && id.len() <= MAX_MOTION_ID_LEN
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
+    if well_formed {
+        Ok(())
+    } else {
+        Err("must be 1 to 64 bytes of ASCII letters, digits, `_` and `-`")
+    }
+}
 
 /// Checks an item's whole motion list as `item.set_motion` does (ADR-0099): at most
 /// [`MAX_MOTION_MODIFIERS`], each ID well formed and unique, and every parameter in the
@@ -244,16 +280,8 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
     for (n, m) in motion.iter().enumerate() {
         let field = |param: &str| format!("motion.{n}.{param}");
         let id = &m.modifier_id;
-        let well_formed = !id.is_empty()
-            && id.len() <= MAX_MOTION_ID_LEN
-            && id
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-');
-        if !well_formed {
-            return Err(problem(
-                field("modifier_id"),
-                "must be 1 to 64 bytes of ASCII letters, digits, `_` and `-`",
-            ));
+        if let Err(reason) = check_motion_id(id) {
+            return Err(problem(field("modifier_id"), reason));
         }
         if motion[..n].iter().any(|other| other.modifier_id == *id) {
             return Err(MotionProblem {
@@ -320,6 +348,24 @@ impl MotionKind {
                     Some(("rate_per_s", "must be within -100000..=100000"))
                 } else if wrap.is_some_and(|w| !(magnitude(w) && w.get() > 0.0)) {
                     Some(("wrap", "must be above 0 and at most 100000"))
+                } else {
+                    None
+                }
+            }
+            MotionKind::Impulse {
+                amplitude,
+                frequency_hz,
+                decay_per_s,
+                duration_ms,
+            } => {
+                if !magnitude(amplitude) {
+                    Some(("amplitude", "must be within 0..=100000"))
+                } else if !frequency(frequency_hz) {
+                    Some(("frequency_hz", "must be above 0 and at most 60"))
+                } else if !(0.0..=MAX_DECAY_PER_S).contains(&decay_per_s.get()) {
+                    Some(("decay_per_s", "must be within 0..=1000"))
+                } else if !(1..=MAX_PERIOD_MS).contains(&duration_ms) {
+                    Some(("duration_ms", "must be within 1..=3600000"))
                 } else {
                     None
                 }
@@ -466,6 +512,33 @@ mod tests {
                     wrap: Some(f(0.0)),
                 },
                 "wrap",
+            ),
+            (
+                MotionKind::Impulse {
+                    amplitude: f(1.0),
+                    frequency_hz: f(60.5),
+                    decay_per_s: f(0.0),
+                    duration_ms: 10,
+                },
+                "frequency_hz",
+            ),
+            (
+                MotionKind::Impulse {
+                    amplitude: f(1.0),
+                    frequency_hz: f(5.0),
+                    decay_per_s: f(-1.0),
+                    duration_ms: 10,
+                },
+                "decay_per_s",
+            ),
+            (
+                MotionKind::Impulse {
+                    amplitude: f(1.0),
+                    frequency_hz: f(5.0),
+                    decay_per_s: f(4.0),
+                    duration_ms: 0,
+                },
+                "duration_ms",
             ),
         ];
         for (kind, param) in cases {

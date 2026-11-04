@@ -196,6 +196,13 @@ fn describe_action(action: &Action, state: &State) -> String {
             format!("Wrote effect pack {} ({n} file{s})", quote(pack))
         }
         Action::PackDelete { pack } => format!("Deleted effect pack {}", quote(pack)),
+        Action::ItemTriggerMotion {
+            item_id,
+            modifier_id,
+        } => match modifier_id {
+            Some(id) => format!("Fired motion {} of {}", quote(id), item(state, item_id)),
+            None => format!("Fired the motion of {}", item(state, item_id)),
+        },
         other => capitalize(&humanize(other.name())),
     }
 }

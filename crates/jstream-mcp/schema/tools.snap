@@ -644,7 +644,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -664,6 +664,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -1203,6 +1228,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -2875,7 +2935,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -2901,7 +2961,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -4115,6 +4175,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
@@ -4220,6 +4285,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -7185,7 +7285,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -7205,6 +7305,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -7744,6 +7869,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -9416,7 +9576,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -9442,7 +9602,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -10656,6 +10816,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
@@ -10761,6 +10926,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -11598,7 +11798,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.trigger_motion` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -11951,6 +12151,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
@@ -12056,6 +12261,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -12937,6 +13177,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Lists one scene's items, in stacking order (the first is at the bottom). Fails with\n`not_found` if the scene doesn't exist.",
                 "properties": {
                   "scene_id": {
@@ -13743,7 +14008,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -13763,6 +14028,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item whose modifiers it fires."
+                  },
+                  "modifier_id": {
+                    "description": "The modifier to fire. Omitted for every one on the `triggered` clock.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "item.trigger_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -14302,6 +14592,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -15974,7 +16299,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -16000,7 +16325,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -17210,6 +17535,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
                 "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
+                "type": "string"
               }
             ]
           },
@@ -17315,6 +17645,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
                 ],
                 "type": "object"
               }
@@ -19177,6 +19542,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "rate_per_s"
                 ],
                 "type": "object"
+              },
+              {
+                "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Its size at the start, `0..=100000`."
+                  },
+                  "decay_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "How fast it dies away, per second, `0..=1000`: 0 keeps its size to the end.\nDefault 0."
+                  },
+                  "duration_ms": {
+                    "description": "How long it lasts, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "How many times a second it swings, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "impulse",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz",
+                  "duration_ms"
+                ],
+                "type": "object"
               }
             ],
             "properties": {
@@ -19291,6 +19691,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "shown",
                 "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              },
+              {
+                "const": "triggered",
+                "description": "From when `item.trigger_motion` last fired it, since 0.84 (#1107). Until it is\nfired, and in a scene or source preview, the modifier contributes nothing.",
                 "type": "string"
               }
             ]
@@ -19733,7 +20138,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -19759,7 +20164,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -19906,7 +20311,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

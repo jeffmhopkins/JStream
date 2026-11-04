@@ -961,12 +961,12 @@ pub struct SceneInfo {
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
-    /// Its camera motion (ADR-0113, since 0.84): the modifiers that change its camera as it is drawn.
+    /// Its camera motion (ADR-0113, since 0.85): the modifiers that change its camera as it is drawn.
     /// It belongs to the family, so a keyframe scene reports none and draws its parent's.
     /// Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub camera_motion: Vec<CameraMotionModifier>,
-    /// Its follow camera (ADR-0113, since 0.84), which glides after the pointer over a capture. It
+    /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
     /// belongs to the family, so a keyframe scene reports none and draws its parent's.
     /// Omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]

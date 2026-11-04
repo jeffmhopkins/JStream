@@ -1064,6 +1064,21 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            // The mock draws nothing, so a fire only checks its arguments (#1107).
+            Action::ItemTriggerMotion {
+                item_id,
+                modifier_id,
+            } => {
+                if let Some(id) = &modifier_id
+                    && let Err(reason) = jstream_protocol::check_motion_id(id)
+                {
+                    return Err(ProtocolError::invalid_argument("modifier_id", reason));
+                }
+                if !self.collection.items.contains_key(&item_id) {
+                    return Err(not_found(EntityKind::Item, item_id.as_str()));
+                }
+                return Ok(CallResult::action());
+            }
             Action::StudioSetPreview { scene_id } => {
                 self.collection.existing_scene(&scene_id)?;
                 if self.preview.as_ref() != Some(&scene_id) {

@@ -220,6 +220,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.show", Class(E)),
     ("item.hide", Class(E)),
     ("item.toggle", Class(E)),
+    // Moves an item for a moment, as `item.set_motion` sets how it moves (#1107).
+    ("item.trigger_motion", Class(E)),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).

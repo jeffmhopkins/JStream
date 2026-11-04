@@ -331,7 +331,7 @@ with no inverse. The engine draws open gestures' source settings through it
   the field) and stores it in wire form (`MotionList`), undone by the old list. It is a
   placement edit, so addressed to a keyframe scene it writes that keyframe's `motion`
   override. `anim_modifiers` turns a stored list into `jstream-anim`'s modifiers for the
-  engine to evaluate. The graph never evaluates motion: an item's values are what was
+  engine to evaluate, `impulse` and the `triggered` clock included (#1107). The graph never evaluates motion: an item's values are what was
   set.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
