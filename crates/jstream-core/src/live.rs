@@ -48,11 +48,12 @@ use std::time::{Duration, Instant};
 
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
-use jstream_protocol::{AssetRoot, FilterChain, Settings, SourceId, SourceKind};
+use jstream_protocol::{AssetRoot, FilterChain, SceneId, Settings, SourceId, SourceKind};
 use jstream_sources::{
-    AudioScope, AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, Painter, Registry,
-    Source, SourceAudio, SourceError,
+    AudioScope, AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, PageView, Painter,
+    Registry, Source, SourceAudio, SourceError,
 };
+use serde_json::Value;
 
 use crate::effect_packs::{PackEffects, PackSources};
 use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError, Loaded};
@@ -659,6 +660,47 @@ impl LiveSources {
         self.worker.now()
     }
 
+    /// Tells each running source whose page has the page API (ADR-0102) what it may read
+    /// now: whether it is shown on program and on preview, nested scenes included, the
+    /// two scenes, and the shared values. Each source sends its page only what changed,
+    /// so this runs after anything that can change one of them.
+    pub(crate) fn feed_pages(
+        &mut self,
+        state: &jstream_graph::State,
+        program: Option<&SceneId>,
+        preview: Option<&SceneId>,
+        values: &BTreeMap<String, Value>,
+    ) {
+        let granted = |entry: &Entry| entry.running.as_ref().is_some_and(|r| r.source.page_api());
+        if !self.entries.values().any(granted) {
+            return;
+        }
+        let on_program = program.map(|scene| crate::activity::shown_sources(state, scene));
+        let on_preview = preview.map(|scene| crate::activity::shown_sources(state, scene));
+        let scene = |scene_id: Option<&SceneId>| {
+            let scene = state.scene(scene_id?)?;
+            Some((scene.id().as_str(), scene.name()))
+        };
+        let now = self.now();
+        for (source_id, entry) in &mut self.entries {
+            let Some(running) = entry.running.as_mut().filter(|r| r.source.page_api()) else {
+                continue;
+            };
+            running.source.page_view(&PageView {
+                now,
+                program: on_program
+                    .as_ref()
+                    .is_some_and(|shown| shown.contains(source_id)),
+                preview: on_preview
+                    .as_ref()
+                    .is_some_and(|shown| shown.contains(source_id)),
+                program_scene: scene(program),
+                preview_scene: scene(preview),
+                values,
+            });
+        }
+    }
+
     /// Draws each source in `scales` ([`Shot::scales`](crate::snapshot::Shot::scales))
     /// at the density its most enlarged item needs to stay sharp (ADR-0073), for a kind
     /// that draws at a density. Drawing again can take as long as building, so it is a
@@ -798,6 +840,8 @@ impl LiveSources {
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
         let at = since(now, running.start);
+        // A granted page's clock anchor, when one is due (ADR-0102 decision 4).
+        running.source.page_clock(now);
         if reach {
             if running.planned + 1 < plan {
                 running.source.show(at);

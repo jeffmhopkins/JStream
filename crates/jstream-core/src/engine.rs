@@ -242,6 +242,7 @@ impl Engine {
         state.publish_render();
         let mut wake = Vec::new();
         state.sync_sizes(&mut wake);
+        state.feed_pages();
         drop(state);
         wake_all(wake);
         Ok(())
@@ -589,6 +590,7 @@ impl Engine {
             state.publish_render();
             // No client is connected yet, so nobody is woken.
             state.sync_sizes(&mut Vec::new());
+            state.feed_pages();
             *file = Some(opened);
         }
         Ok(self)
@@ -2852,6 +2854,7 @@ fn set_gpu(shared: &Shared, context: Option<&GpuContext>) {
         state.live.use_gpu(context);
         state.publish_render();
         state.sync_sizes(&mut wake);
+        state.feed_pages();
     }
     wake_all(wake);
 }
@@ -3334,6 +3337,7 @@ impl State {
         }
         // After `state.changed`, so a deleted source's size goes after its deletion.
         self.sync_sizes(wake);
+        self.feed_pages();
     }
 
     fn action(
@@ -3375,11 +3379,13 @@ impl State {
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
                     self.emit_studio(client_id, request_id, None, wake);
+                    self.feed_pages();
                 }
                 return Ok(CallResult::action());
             }
             Action::ValuesSet { name, value } => {
                 if self.values.set(&name, value.clone())? {
+                    self.feed_pages();
                     self.subscribers.emit(
                         &Event::ValuesChanged {
                             name,
@@ -3585,6 +3591,7 @@ impl State {
         );
         // The scene now on program can show a source no plan reached before.
         self.sync_sizes(wake);
+        self.feed_pages();
         Ok(())
     }
 
@@ -3910,6 +3917,29 @@ impl State {
         audio.sync(drawn.state(), live.audio());
         self.route_audio();
         self.publish_render();
+        self.feed_pages();
+    }
+
+    /// Tells each page granted the page API what it may read now (ADR-0102): its
+    /// visibility in the collection as drawn, the program and preview scenes, and the
+    /// shared values. A page is sent only what changed, so this runs after every plan and
+    /// after each change of the studio or of a value.
+    fn feed_pages(&mut self) {
+        let Self {
+            graph,
+            shown,
+            live,
+            studio,
+            values,
+            ..
+        } = self;
+        let drawn = shown.as_ref().unwrap_or(graph);
+        live.feed_pages(
+            drawn.state(),
+            studio.program(),
+            studio.preview(),
+            values.map(),
+        );
     }
 
     /// Publishes the gestures' live values on the render parameter channel.
@@ -4028,6 +4058,7 @@ impl Shared {
             let mut state = lock(&self.state);
             change(&mut state.capture_sizes);
             state.sync_sizes(&mut wake);
+            state.feed_pages();
         }
         wake_all(wake);
     }
@@ -4056,6 +4087,7 @@ impl Shared {
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);
+            state.feed_pages();
         }
         wake_all(wake);
     }
@@ -4110,6 +4142,7 @@ impl Shared {
             let mut state = lock(&self.state);
             state.publish_render();
             state.sync_sizes(&mut wake);
+            state.feed_pages();
         }
         wake_all(wake);
     }
@@ -4125,6 +4158,7 @@ impl LiveHost for Shared {
             state.audio.sync(state.graph.state(), state.live.audio());
             state.publish_render();
             state.sync_sizes(&mut wake);
+            state.feed_pages();
         }
         drop(guard);
         wake_all(wake);
@@ -4138,6 +4172,7 @@ impl LiveHost for Shared {
                 // The plan can take a source's new frame, and so a new size.
                 state.publish_render();
                 state.sync_sizes(&mut wake);
+                state.feed_pages();
             }
         }
         wake_all(wake);

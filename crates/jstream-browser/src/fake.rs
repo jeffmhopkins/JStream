@@ -12,7 +12,8 @@ use jstream_media::VideoFrame;
 use jstream_platform::{GpuContext, GpuFrame};
 
 use crate::{
-    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageSpec, RequestPolicy, Verdict,
+    BrowserBackend, BrowserError, BrowserPage, PageAudio, PageData, PageSpec, RequestPolicy,
+    Verdict,
 };
 
 /// A browser that opens pages in memory.
@@ -40,6 +41,7 @@ pub struct FakePageState {
     closed: AtomicBool,
     cpu: bool,
     painted: Mutex<Option<Arc<VideoFrame>>>,
+    data: Mutex<Vec<PageData>>,
 }
 
 impl FakePageState {
@@ -59,6 +61,12 @@ impl FakePageState {
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .clone()
+    }
+
+    /// The page API updates it was sent, in order, and forgets them: as the CEF
+    /// backend sends them, so only to a page opened with a page API, and none empty.
+    pub fn take_data(&self) -> Vec<PageData> {
+        std::mem::take(&mut *self.data.lock().unwrap_or_else(PoisonError::into_inner))
     }
 
     /// How many times it was reloaded.
@@ -130,6 +138,7 @@ impl BrowserBackend for FakeBrowser {
             closed: AtomicBool::new(false),
             cpu: state.cpu,
             painted: Mutex::new(None),
+            data: Mutex::new(Vec::new()),
         });
         state.pages.push(Arc::clone(&page));
         Ok(Box::new(FakePage(page)))
@@ -184,6 +193,17 @@ impl BrowserPage for FakePage {
 
     fn denied_requests(&self) -> u64 {
         self.0.policy.denied()
+    }
+
+    fn send_data(&mut self, data: PageData) {
+        if self.0.spec.page_api.is_none() || data.is_empty() {
+            return;
+        }
+        self.0
+            .data
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .extend(data.split());
     }
 }
 

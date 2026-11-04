@@ -51,6 +51,11 @@ wrap_app! {
                 );
             }
         }
+
+        // Used only in renderer processes: the page API (ADR-0102, `page_api.rs`).
+        fn render_process_handler(&self) -> Option<RenderProcessHandler> {
+            Some(super::page_api::renderer())
+        }
     }
 }
 
@@ -109,6 +114,18 @@ wrap_client! {
 
         fn permission_handler(&self) -> Option<PermissionHandler> {
             Some(self.permission.clone())
+        }
+
+        // Nothing a page's renderer sends is taken: no message from a page reaches the
+        // engine (ADR-0102 decision 3).
+        fn on_process_message_received(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            _source_process: ProcessId,
+            _message: Option<&mut ProcessMessage>,
+        ) -> c_int {
+            1
         }
     }
 }

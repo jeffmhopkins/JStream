@@ -33,6 +33,7 @@ mod helper;
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "cef")))]
 mod link;
 mod page;
+mod page_api;
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 mod permission;
 mod request;
@@ -55,6 +56,7 @@ pub use helper::run_helper;
 pub use page::{
     DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec, css_script,
 };
+pub use page_api::{MAX_PAGE_DATA_BYTES, PageApi, PageData};
 pub use request::{RequestPolicy, Verdict};
 
 use jstream_media::VideoFrame;
@@ -129,6 +131,14 @@ pub trait BrowserPage: Send {
     /// file page reaching outside its folder, a web page reaching for a local file, or
     /// a scheme no page may load.
     fn denied_requests(&self) -> u64;
+
+    /// Sends the page an update to its `window.jstream` (ADR-0102), split as
+    /// [`PageData::split`] does. Nothing for a page opened without a
+    /// [`page_api`](PageSpec::page_api), nor for a backend without pages of its own
+    /// (the default).
+    fn send_data(&mut self, data: PageData) {
+        let _ = data;
+    }
 }
 
 /// Why a page could not be opened.

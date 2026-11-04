@@ -27,6 +27,7 @@
 #[cfg(windows)]
 mod d3d11;
 mod handlers;
+mod page_api;
 #[cfg(target_os = "linux")]
 mod shm;
 
@@ -40,8 +41,9 @@ use std::time::Duration;
 
 use ::cef::{BrowserSettings, CefString, ImplBrowser, ImplBrowserHost, ImplFrame, LogSeverity};
 
+use crate::page_api::{ApiHome, PageCache};
 use crate::wire::{self, ToEngine, ToHelper};
-use crate::{PageSpec, RequestPolicy, css_script};
+use crate::{PageData, PageSpec, RequestPolicy, css_script};
 #[cfg(windows)]
 use d3d11::{Gpu, PageTextures};
 #[cfg(target_os = "linux")]
@@ -305,6 +307,12 @@ impl Host {
                     page.reload();
                 }
             }
+            ToHelper::PageData { page, data } => {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
+                    page.page_data(&data);
+                }
+            }
             ToHelper::Close { page } => {
                 let page = self.pages().remove(&page);
                 if let Some(page) = page {
@@ -345,6 +353,10 @@ impl Host {
     }
 
     fn open(self: &Arc<Self>, id: u32, spec: &PageSpec) {
+        // A grant on a page with no document of its own (a blank page) gets nothing.
+        let page_api = spec
+            .page_api
+            .and_then(|api| Some((api, ApiHome::of(&spec.location)?)));
         let page = Arc::new(PageShared {
             id,
             size: (spec.size.width(), spec.size.height()),
@@ -357,6 +369,7 @@ impl Host {
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
+            page_api: page_api.as_ref().map(|_| Mutex::new(PageCache::default())),
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
@@ -372,6 +385,19 @@ impl Host {
         };
         let mut client = handlers::client(&page);
         let url: CefString = spec.location.to_url().as_str().into();
+        // A granted page's grant and rule cross to its renderer here, and it gets a
+        // request context of its own, so its renderer process is never shared with
+        // another source's page (ADR-0102 decision 3). In memory, as every page's is.
+        let (mut extra_info, mut context) = match &page_api {
+            Some((api, home)) => (
+                page_api::extra_info(*api, home),
+                ::cef::request_context_create_context(
+                    Some(&::cef::RequestContextSettings::default()),
+                    None,
+                ),
+            ),
+            None => (None, None),
+        };
         self.pages().insert(id, Arc::clone(&page));
         self.open.fetch_add(1, Ordering::AcqRel);
         // Asynchronous: the browser arrives in `OnAfterCreated` on the UI thread.
@@ -380,8 +406,8 @@ impl Host {
             Some(&mut client),
             Some(&url),
             Some(&settings),
-            None,
-            None,
+            extra_info.as_mut(),
+            context.as_mut(),
         ) == 1;
         if asked {
             self.send(&ToEngine::Opened { page: id });
@@ -458,6 +484,9 @@ pub(crate) struct PageShared {
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
+    /// A granted page's merged updates (ADR-0102), sent whole once its browser exists and
+    /// then update by update; `None` for a page without a page API.
+    page_api: Option<Mutex<PageCache>>,
     /// What the page may request; the request handler cancels the rest.
     pub(crate) policy: RequestPolicy,
 }
@@ -467,8 +496,8 @@ struct SendBrowser(::cef::Browser);
 
 // SAFETY: CEF's browser object is reference counted with atomic counts, and the only
 // methods called through it (`host`, `main_frame`, then `close_browser`,
-// `execute_java_script` and `reload`) are documented as callable on any thread of the
-// browser process.
+// `execute_java_script`, `send_process_message` and `reload`) are documented as callable
+// on any thread of the browser process.
 unsafe impl Send for SendBrowser {}
 
 impl PageShared {
@@ -479,7 +508,14 @@ impl PageShared {
             close(&browser);
             return;
         }
+        // Taken before the browser is stored, as `page_data` takes it, so no update is
+        // sent twice or missed between the two.
+        let cache = self.page_api.as_ref().map(lock);
+        if let Some(cache) = &cache {
+            send_page_data(&browser, &cache.full());
+        }
         *lock(&self.browser) = Some(SendBrowser(browser));
+        drop(cache);
         // `closing` may have been set between the check and the store; `close` then
         // found no browser, so close it here.
         if self.closing.load(Ordering::Acquire)
@@ -619,6 +655,19 @@ impl PageShared {
         });
     }
 
+    /// Takes an update to the page's `window.jstream`: kept, and sent to its renderer
+    /// if the browser exists. Nothing for a page without a page API.
+    fn page_data(&self, data: &PageData) {
+        let Some(cache) = &self.page_api else {
+            return;
+        };
+        let mut cache = lock(cache);
+        cache.merge(data);
+        if let Some(browser) = lock(&self.browser).as_ref() {
+            send_page_data(&browser.0, data);
+        }
+    }
+
     fn set_css(&self, css: String) {
         let script = css_script(&css);
         *lock(&self.css) = css;
@@ -657,6 +706,22 @@ impl PageShared {
 fn close(browser: &::cef::Browser) {
     if let Some(host) = browser.host() {
         host.close_browser(1);
+    }
+}
+
+/// Sends a page API update to `browser`'s main frame in its renderer, split as
+/// [`PageData::split`] does.
+fn send_page_data(browser: &::cef::Browser, data: &PageData) {
+    if data.is_empty() {
+        return;
+    }
+    let Some(frame) = browser.main_frame() else {
+        return;
+    };
+    for part in data.clone().split() {
+        if let Some(mut message) = page_api::message(&part) {
+            frame.send_process_message(::cef::ProcessId::RENDERER, Some(&mut message));
+        }
     }
 }
 

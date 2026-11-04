@@ -24,7 +24,7 @@
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0025-typed-settings-kind-descriptors.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/security/threat-model.md#browser
 
 #![forbid(unsafe_code)]
 
@@ -39,6 +39,7 @@ mod error;
 mod fonts;
 mod image;
 mod media;
+mod page_api;
 mod registry;
 mod scope;
 mod shape;
@@ -58,6 +59,7 @@ pub use image::{StillImage, decode_still};
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
 pub use media::MediaAudio;
+pub use page_api::PageView;
 pub use registry::Registry;
 pub use scope::{
     AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, drawn_source, heard_scope,

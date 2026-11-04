@@ -51,6 +51,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   returns it from `audio` as a `SourceAudio`: its format, and `open(handler)`, which
   feeds an `AudioInputHandler` until the returned stream is dropped. Only `browser` and
   its `youtube_chat` preset have either; `opens_browser(kind)` names those kinds.
+  `page_api()` is `true` for a source whose page has the page API
+  ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); only such a source
+  is handed a `PageView` (`page_view`: the clock now, whether it is shown on program and
+  on preview, the two scenes and every shared value) after anything that can change
+  one, and the clock now on each look (`page_clock`). Both do nothing by default.
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -385,7 +390,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
   `html` too. `youtube_chat` never sets
-  it. Where the backend paints on the GPU (Windows), the page's picture is only there
+  it. The **Page API** group (ADR-0102, none of it live, all off by default):
+  `page_api` gives the page `window.jstream` with the engine's clock and whether the
+  source is shown on program and preview; `page_api_scenes` adds the two scenes;
+  `page_api_values` (at most 1 KiB) names the shared values it may read, as names or
+  prefixes ending in `.*`, separated by commas, each name checked as `values.set`
+  checks one. The source sends its page only what changed (`page_api.rs`, `Feed`):
+  the visibility with the clock time each part last became true, the scenes, and the
+  covered values, with a removal for one that went or left the grant's cover; and a
+  clock anchor first, every 250 ms after that, and at once when the clock goes back or
+  jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
+  the page's latest frame when the engine looks at it. `youtube_chat` never sets any
+  of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,
   [ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)), `frame` is the page's
@@ -601,7 +617,8 @@ continuous across the block seam. `player.rs`'s own tests loop a stream that sta
 in the file one frame period apart, and cut a block at a rate where 10 ms isn't a whole
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
-over URL, setting and backend errors, live CSS, the `local_network` opt-in, closing on
+over URL, setting and backend errors, live CSS, the `local_network` opt-in, the page
+API's opt-in and that a page is sent only what its grant covers, closing on
 drop, the audio hand-off, and a page that paints on the CPU shown as the source's frame.
 `tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
 page a video or link opens, a blank page for an empty setting, refused links, the

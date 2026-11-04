@@ -26,7 +26,7 @@ use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
 
 use crate::wire::{self, ToEngine, ToHelper};
-use crate::{BrowserError, BrowserPage, PageAudio, PageSpec};
+use crate::{BrowserError, BrowserPage, PageAudio, PageData, PageSpec};
 
 /// How long the helper may take to answer an open.
 const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -261,6 +261,7 @@ impl Link {
                 link: Arc::clone(self),
                 id,
                 page,
+                page_api: spec.page_api.is_some(),
             }),
             Ok(Err(reason)) => {
                 lock(&self.pages).open.remove(&id);
@@ -430,6 +431,8 @@ pub(crate) struct LinkPage {
     link: Arc<Link>,
     id: u32,
     page: Arc<PageLink>,
+    /// Whether the page was opened with a page API, so updates go to it.
+    page_api: bool,
 }
 
 impl BrowserPage for LinkPage {
@@ -465,6 +468,18 @@ impl BrowserPage for LinkPage {
 
     fn denied_requests(&self) -> u64 {
         self.page.denied.load(Ordering::Relaxed)
+    }
+
+    fn send_data(&mut self, data: PageData) {
+        if !self.page_api || data.is_empty() {
+            return;
+        }
+        for data in data.split() {
+            self.link.send(&ToHelper::PageData {
+                page: self.id,
+                data,
+            });
+        }
     }
 }
 
@@ -600,6 +615,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network: false,
+            page_api: None,
         }
     }
 

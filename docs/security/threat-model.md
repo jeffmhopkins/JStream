@@ -208,6 +208,10 @@ covers = [
   "crates/jstream-browser/src/helper/mod.rs",
   "crates/jstream-browser/src/helper/handlers.rs",
   "crates/jstream-browser/src/permission.rs",
+  "crates/jstream-browser/src/page_api.rs",
+  "crates/jstream-browser/src/page_api.js",
+  "crates/jstream-browser/src/helper/page_api.rs",
+  "crates/jstream-sources/src/page_api.rs",
 ]
 depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md"]
 -->
@@ -266,16 +270,21 @@ enforces them in the pinned CEF's windowless pages is not yet confirmed on a Win
 (#347). ADR-0021's per-source
 "allow page to control JStream" opt-in must not hand the page the control token (#347).
 
-**Decided, not built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a
-source may opt its page in to a read-only `window.jstream` with the engine animation clock
-and the page's own visibility, and, per further setting, the program and preview scenes,
-named shared values and one bus's levels and bands. The API exists only in the main frame
-while it shows the source's own document. Data flows one way, filtered to the grant in the
-engine, and the helper drops every message a renderer sends. A page has no path to the
-engine, and a compromised renderer holds only what the sources sharing its renderer were
-granted (each such page is to get a renderer of its own). Whatever a page is granted, a web
-page can send off the machine: preview scene names and a microphone bus's bands matter
-most.
+**Built, in part** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source
+may opt its page in to a read-only `window.jstream` with the engine animation clock and
+the page's own visibility, and, per further setting, the program and preview scenes and
+named shared values. One bus's levels and bands are decided, not built. The renderer
+defines the API only in the main frame, and only while it shows the source's own
+document: the source's web origin exactly, its file's folder or below, or the `data:`
+document of a page given as HTML. Data flows one way: the engine filters it to the
+grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
+updates in the renderer only from the browser process, and its client drops every
+process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A
+page has no path to the engine. Each granted page gets a request context of its own, so
+that no other source's page shares its renderer, and a compromised renderer holds only
+its own grant; that CEF keeps such pages in separate renderer processes is not yet
+checked on a run. Whatever a page is granted, a web page can send off the machine:
+preview scene names matter most, and once built, a microphone bus's bands.
 
 <a id="files"></a>
 ## Files and decoders
