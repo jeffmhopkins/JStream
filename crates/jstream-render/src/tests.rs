@@ -104,7 +104,12 @@ pub(crate) fn near(snapshot: &Snapshot, x: u32, y: u32, expected: [u8; 4], tol: 
     }
 }
 
-fn item<'a>(image: &'a crate::Image, placement: Placement, crop: Crop, opacity: f32) -> Item<'a> {
+pub(crate) fn item<'a>(
+    image: &'a crate::Image,
+    placement: Placement,
+    crop: Crop,
+    opacity: f32,
+) -> Item<'a> {
     Item {
         image,
         placement,

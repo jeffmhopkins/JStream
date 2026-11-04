@@ -117,8 +117,8 @@ pub trait BrowserPage: Send {
     fn set_css(&mut self, css: &str);
 
     /// Loads the page again from its location, as if it had just opened: its scripts and
-    /// CSS animations start over. Its frames keep showing the old page until the new
-    /// one paints.
+    /// CSS animations start over. It is transparent from the reload until the new
+    /// document paints, never showing the end of the old one.
     fn reload(&mut self);
 
     /// The page's audio, which the engine records into a mixer input with

@@ -341,19 +341,19 @@ impl ParamDescriptor {
                     check_asset_path(root, &path)?;
                     check_extension(&path, accept)
                 }
-                Some(_) => Err("must be an asset reference or null".into()),
+                Some(_) => Err(not_a_reference("asset")),
             },
             ParamType::Scene => match reference(value, "scene")? {
                 None | Some(Reference::Scene { .. }) => Ok(()),
-                Some(_) => Err("must be a scene reference or null".into()),
+                Some(_) => Err(not_a_reference("scene")),
             },
             ParamType::Source { .. } => match reference(value, "source")? {
                 None | Some(Reference::Source { .. }) => Ok(()),
-                Some(_) => Err("must be a source reference or null".into()),
+                Some(_) => Err(not_a_reference("source")),
             },
             ParamType::Bus => match reference(value, "bus")? {
                 None | Some(Reference::Bus { .. }) => Ok(()),
-                Some(_) => Err("must be a bus reference or null".into()),
+                Some(_) => Err(not_a_reference("bus")),
             },
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
@@ -462,7 +462,27 @@ fn reference(value: &Value, want: &str) -> Result<Option<Reference>, String> {
     }
     Reference::from_value(value)
         .map(Some)
-        .ok_or_else(|| format!("must be a {want} reference or null"))
+        .ok_or_else(|| not_a_reference(want))
+}
+
+/// The reason a value isn't the `want` reference a parameter takes: it names the
+/// reference's shape, since a first try is often a bare path or id (#1021).
+///
+/// `want` is a reference's `type` tag: `"asset"`, `"scene"`, `"source"` or `"bus"`.
+/// Sources share it for the checks they repeat after the graph has validated their
+/// settings, so both give the same reason (#1081).
+#[must_use]
+pub fn not_a_reference(want: &str) -> String {
+    match want {
+        "asset" => "must be an asset reference or null: an object such as \
+                    `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/file.png\"}` \
+                    (`root` `collection` or `app` takes a path relative to that folder)"
+            .to_owned(),
+        _ => format!(
+            "must be a {want} reference or null: an object such as \
+             `{{\"type\": \"{want}\", \"{want}_id\": \"<id>\"}}`"
+        ),
+    }
 }
 
 /// Whether Win32 opens the path component `name` as a DOS device rather than a file.
@@ -775,6 +795,38 @@ mod tests {
         }
         assert!(file.check(&asset("absolute", "img/a.png")).is_err());
         assert!(super::check_asset_path(AssetRoot::App, "x/y.png").is_ok());
+    }
+
+    /// Issue #1021: a bare string where a reference goes is refused with a reason that
+    /// names the reference's shape, with the right article.
+    #[test]
+    fn a_bare_string_for_a_reference_names_the_shape() {
+        let file = param(
+            "file",
+            ParamType::Asset {
+                accept: vec!["png".into()],
+            },
+            Value::Null,
+        );
+        let reason = file.check(&json!("/pics/a.png")).expect_err("a bare path");
+        assert!(
+            reason.starts_with("must be an asset reference or null"),
+            "{reason}"
+        );
+        assert!(
+            reason.contains(r#"{"type": "asset", "root": "absolute", "path": "#),
+            "{reason}"
+        );
+        let wrong = file
+            .check(&json!({"type": "scene", "scene_id": "s"}))
+            .expect_err("another reference");
+        assert_eq!(wrong, reason);
+
+        let scene = param("mask", ParamType::Scene, Value::Null);
+        assert_eq!(
+            scene.check(&json!("s")).expect_err("a bare id"),
+            r#"must be a scene reference or null: an object such as `{"type": "scene", "scene_id": "<id>"}`"#
+        );
     }
 
     /// Issue #403: under `collection` and `app`, a relative path whose last component

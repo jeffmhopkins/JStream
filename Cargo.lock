@@ -2864,6 +2864,7 @@ name = "jstream-core"
 version = "0.0.0"
 dependencies = [
  "arc-swap",
+ "blake3",
  "futures-core",
  "insta",
  "jstream-audio",
@@ -3208,7 +3209,7 @@ version = "0.0.0"
 
 [[package]]
 name = "jstream-ui"
-version = "0.0.0"
+version = "0.1.0-alpha.3"
 dependencies = [
  "futures-util",
  "jstream-control",

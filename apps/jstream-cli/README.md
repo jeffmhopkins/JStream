@@ -87,6 +87,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
+| `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
@@ -141,8 +142,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   edits (`folder.*`, `label.*`, `scene.set_folder`, `scene.set_meta`,
   `scene.set_options`, `source.set_meta`).
   `item.set_source <item-id> <source-id>` switches an item to another source.
+  `item.set_locked <item-id> true|false` locks or unlocks an item's canvas box
+  (protocol 0.71).
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
-  item's opacity and blend mode; the engine draws every mode (protocol 0.47).
+  item's opacity and blend mode; the engine draws every mode (protocol 0.47), and
+  `normal_srgb` and `additive_srgb` (0.75) blend as a browser does.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
@@ -154,10 +158,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
   <rtmp-url>` take the ingest server URL (`rtmp://host[:port]/app` or `rtmps://…`),
-  which is the whole target of a generic RTMP output. The CLI has no form for a
-  recording output or a YouTube-bound one yet, and none of protocol 0.23's YouTube
-  actions and queries. An argument without an `rtmp` or `rtmps` scheme is a usage
-  error, which leaves other spellings free for later output kinds; the engine checks
+  which is the whole target of a generic RTMP output. `output.set_path <output-id>
+  <file-path>` points a recording output at another file (protocol 0.74). The CLI has
+  no form for creating a recording output or a YouTube-bound one yet, and none of protocol 0.23's YouTube
+  actions and queries. A URL argument of `output.create` or `output.set_target` without
+  an `rtmp` or `rtmps` scheme is a usage error, which leaves other spellings free for later output kinds; the engine checks
   the rest. Neither message repeats
   the URL.
 - **No undo or redo command.** Undo history belongs to a client and ends with its

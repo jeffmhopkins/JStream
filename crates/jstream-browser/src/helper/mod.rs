@@ -258,11 +258,16 @@ pub(crate) struct Host {
 
 impl Host {
     /// Sends one message to the engine. A failed write means the engine is gone: the
-    /// helper shuts down.
+    /// helper shuts down, from a task on the UI thread, so no lock the caller holds is
+    /// taken again.
     fn send(self: &Arc<Self>, message: &ToEngine) {
         let sent = wire::send(&mut *lock(&self.to_engine), message);
-        if sent.is_err() {
-            self.stop();
+        // Before CEF has started there is nothing to stop, and no UI thread to post to.
+        if sent.is_err() && self.started.load(Ordering::Acquire) {
+            // Later, on the UI thread: the sender may hold a page's locks, which
+            // stopping takes to close the page.
+            let host = Arc::clone(self);
+            post(move || host.stop());
         }
     }
 
@@ -289,22 +294,26 @@ impl Host {
         match message {
             ToHelper::Open { page, spec } => self.open(page, &spec),
             ToHelper::SetCss { page, css } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.set_css(css);
                 }
             }
             ToHelper::Reload { page } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.reload();
                 }
             }
             ToHelper::Close { page } => {
-                if let Some(page) = self.pages().remove(&page) {
+                let page = self.pages().remove(&page);
+                if let Some(page) = page {
                     page.close();
                 }
             }
             ToHelper::Released { page, slot } => {
-                if let Some(page) = self.pages().get(&page).cloned() {
+                let page = self.pages().get(&page).cloned();
+                if let Some(page) = page {
                     page.textures.release(slot);
                 }
             }
@@ -344,6 +353,7 @@ impl Host {
             closing: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
+            reloading: Mutex::new(false),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -440,6 +450,11 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
+    /// Set from a reload until the reloaded document starts loading: the old document's
+    /// paints meanwhile are skipped, so the engine never shows them after the reload.
+    /// A paint holds it from its check until its frame is sent, and a reload holds it
+    /// until [`ToEngine::Reloading`] is sent, so no old frame follows that message.
+    reloading: Mutex<bool>,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -483,8 +498,15 @@ impl PageShared {
         self.host.browser_closed();
     }
 
+    /// The main frame started loading a document (`OnLoadStart`), or ended or failed
+    /// loading one: paints from here are the new document's, so a reload's hold ends.
+    pub(crate) fn load_started(&self) {
+        *lock(&self.reloading) = false;
+    }
+
     /// The main frame finished loading: applies the custom CSS to the new document.
     pub(crate) fn loaded(&self, frame: &::cef::Frame) {
+        self.load_started();
         let css = lock(&self.css).clone();
         run_script(frame, &css_script(&css));
     }
@@ -500,6 +522,10 @@ impl PageShared {
     /// succeeds.
     #[cfg(windows)]
     pub(crate) fn paint(&self, handle: *mut c_void) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
+            return;
+        }
         let painted = {
             let gpu = lock(&self.host.gpu);
             let Some(gpu) = gpu.as_ref() else {
@@ -508,6 +534,7 @@ impl PageShared {
             self.textures.paint(gpu, handle)
         };
         self.painted(painted);
+        drop(reloading);
     }
 
     /// One software paint, `bgra` of `width` × `height` premultiplied BGRA8 (UI thread,
@@ -516,10 +543,15 @@ impl PageShared {
     /// paint succeeds.
     #[cfg(target_os = "linux")]
     pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
+        let reloading = lock(&self.reloading);
+        if *reloading {
+            return;
+        }
         let painted = self
             .textures
             .paint(&self.host.frames, self.id, bgra, (width, height));
         self.painted(painted);
+        drop(reloading);
     }
 
     fn painted(&self, painted: Result<Option<Painted>, String>) {
@@ -597,9 +629,19 @@ impl PageShared {
     }
 
     /// Loads the page again; its custom CSS goes in again on load, as on the first.
+    /// The old document's paints stop first, and the engine is told so
+    /// ([`ToEngine::Reloading`]) before any paint of the new one.
     fn reload(&self) {
-        if let Some(browser) = lock(&self.browser).as_ref() {
+        let browser = lock(&self.browser);
+        if let Some(browser) = browser.as_ref() {
+            let mut reloading = lock(&self.reloading);
+            *reloading = true;
+            self.host.send(&ToEngine::Reloading { page: self.id });
+            drop(reloading);
             browser.0.reload();
+        } else {
+            // No browser yet: its first load is the start the engine waits for.
+            self.host.send(&ToEngine::Reloading { page: self.id });
         }
     }
 

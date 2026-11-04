@@ -46,6 +46,9 @@ Commands:
                                    (query capture.targets)
   font list                        list the installed fonts, each with its family,
                                    style and path (query font.list)
+  profile get [<seconds>]          where the engine's time went over the last 5 (or
+                                   <seconds>, up to 60) seconds: per drawing thread,
+                                   item, source and thread, as JSON (query profile.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   item show|hide|toggle <item-id> [--scene <scene-id>]
@@ -90,6 +93,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.reorder <item-id> <index>
   item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
+  item.set_locked <item-id> true|false
   item.set_source <item-id> <source-id>
   item.set_opacity <item-id> <0..1>
   item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
@@ -101,6 +105,7 @@ Edits (each is its protocol command name followed by its arguments):
   canvas.set_size <width> <height>
   output.create <output-id> <rtmp-url>
   output.set_target <output-id> <rtmp-url>
+  output.set_path <output-id> <file-path>
   output.delete <output-id>
   hotkey.set <chord> <action> <id>
                     bind a chord such as Ctrl+Digit1 or F1 to scene.switch
@@ -295,6 +300,14 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }),
         ["capture", "targets"] => Command::Query(Query::CaptureTargets),
         ["font", "list"] => Command::Query(Query::FontList),
+        ["profile", "get"] => Command::Query(Query::ProfileGet {
+            seconds: None,
+            top: None,
+        }),
+        ["profile", "get", seconds] => Command::Query(Query::ProfileGet {
+            seconds: Some(number(seconds, "seconds")?),
+            top: None,
+        }),
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -429,8 +442,9 @@ fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" | "hotkey.clear" => 1,
         "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
-        | "item.reorder" | "item.set_visible" | "item.set_source" | "item.set_opacity"
-        | "item.set_blend" | "output.create" | "output.set_target" | "canvas.set_size" => 2,
+        | "item.reorder" | "item.set_visible" | "item.set_locked" | "item.set_source"
+        | "item.set_opacity" | "item.set_blend" | "output.create" | "output.set_target"
+        | "output.set_path" | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" | "hotkey.set" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -567,6 +581,18 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 }
             },
         },
+        ("item.set_locked", [id, locked]) => Edit::ItemSetLocked {
+            item_id: ItemId::new(*id),
+            locked: match *locked {
+                "true" => true,
+                "false" => false,
+                other => {
+                    return Err(usage(format!(
+                        "`item.set_locked` takes `true` or `false`, not `{other}`"
+                    )));
+                }
+            },
+        },
         ("item.set_crop", [id, left, top, right, bottom]) => Edit::ItemSetCrop {
             item_id: ItemId::new(*id),
             scene_id: None,
@@ -633,6 +659,10 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         ("output.set_target", [id, url]) => Edit::OutputSetTarget {
             output_id: OutputId::new(*id),
             target: rtmp_target(url)?,
+        },
+        ("output.set_path", [id, path]) => Edit::OutputSetPath {
+            output_id: OutputId::new(*id),
+            path: (*path).to_owned(),
         },
         ("output.delete", [id]) => Edit::OutputDelete {
             output_id: OutputId::new(*id),
@@ -916,6 +946,21 @@ mod tests {
             ok(&["font", "list"]).command,
             Command::Query(Query::FontList)
         );
+        assert_eq!(
+            ok(&["profile", "get"]).command,
+            Command::Query(Query::ProfileGet {
+                seconds: None,
+                top: None
+            })
+        );
+        assert_eq!(
+            ok(&["profile", "get", "10"]).command,
+            Command::Query(Query::ProfileGet {
+                seconds: Some(10),
+                top: None
+            })
+        );
+        assert!(err(&["profile", "get", "ten"]).contains("seconds"));
     }
 
     #[test]
@@ -995,6 +1040,27 @@ mod tests {
         assert_eq!(
             err(&["edit", "output.set_target", "o"]),
             "`output.set_target` takes 2 arguments; try `jstream-cli help`"
+        );
+    }
+
+    /// #1072: a recording's file changes with `output.set_path`.
+    #[test]
+    fn output_set_path_takes_a_file_path() {
+        let Command::Edit(batch) =
+            ok(&["edit", "output.set_path", "rec", "/home/me/take2.mp4"]).command
+        else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: "/home/me/take2.mp4".into(),
+            }]
+        );
+        assert_eq!(
+            err(&["edit", "output.set_path", "rec"]),
+            "`output.set_path` takes 2 arguments; try `jstream-cli help`"
         );
     }
 
@@ -1441,6 +1507,20 @@ mod tests {
             "`item.set_visible` takes `true` or `false`, not `yes`"
         );
         assert_eq!(
+            err(&["edit", "item.set_locked", "i", "on"]),
+            "`item.set_locked` takes `true` or `false`, not `on`"
+        );
+        let Command::Edit(batch) = ok(&["edit", "item.set_locked", "i", "true"]).command else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [Edit::ItemSetLocked {
+                item_id: ItemId::new("i"),
+                locked: true,
+            }]
+        );
+        assert_eq!(
             err(&["edit", "source.create", "a", "A", "webcam"]),
             "source kind `webcam` must be `builtin:<kind>` or `scene:<scene-id>`"
         );
@@ -1451,7 +1531,8 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_blend", "i", "dissolve"]),
             "`item.set_blend` takes one of normal, additive, multiply, screen, overlay, \
-             darken, lighten, difference, exclusion, not `dissolve`"
+             darken, lighten, difference, exclusion, normal_srgb, additive_srgb, not \
+             `dissolve`"
         );
         assert_eq!(
             err(&["edit", "scene.set_role", "s", "folder"]),

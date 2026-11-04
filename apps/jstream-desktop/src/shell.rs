@@ -6,7 +6,9 @@
 //!   loaded in a webview that runs the bootstrap script. A new window (`window.open`, a
 //!   link with a target) opens only for one of the UI's own projector pages
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
-//!   script, full screen when the page asks for it. Any other is refused.
+//!   script, full screen when the page asks for it. A link to one of the project's own
+//!   pages on GitHub ([`links`]: the UI's Help menu and About dialog) opens in the
+//!   system browser instead. Any other is refused.
 //! - The page gets no Tauri IPC commands: the app defines none and grants no
 //!   capabilities, so the UI talks to the engine only over the WebSocket API.
 //! - When the app exits, the host stops: the server closes its connections and the
@@ -15,6 +17,7 @@
 //! Docs: apps/jstream-desktop/README.md#design
 
 use crate::host::Host;
+use crate::links;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -73,8 +76,24 @@ fn allowed(url: &Url, blank: bool) -> bool {
     allowed
 }
 
-/// Opens the projector window `window.open` asked for (`url`, `features`), or refuses
-/// it. It starts blank, as a window handed to the opener must, then shows `url`.
+/// Opens `url`, one of the project's pages ([`links::is_project_page`]), in the system
+/// browser: Explorer hands an `https` URL to the default browser. The URL is one
+/// argument, never parsed by a shell.
+fn open_in_browser(url: &Url) {
+    let explorer = std::env::var_os("SystemRoot")
+        .map(|root| std::path::Path::new(&root).join("explorer.exe"))
+        .unwrap_or_else(|| "explorer.exe".into());
+    if let Err(error) = std::process::Command::new(explorer)
+        .arg(url.as_str())
+        .spawn()
+    {
+        tracing::warn!(%error, "could not open a link in the browser");
+    }
+}
+
+/// Opens the projector window `window.open` asked for (`url`, `features`), opens a link
+/// to one of the project's pages in the system browser, or refuses it. A projector
+/// starts blank, as a window handed to the opener must, then shows `url`.
 fn open_projector(
     app: &AppHandle<Wry>,
     script: Option<&str>,
@@ -82,6 +101,10 @@ fn open_projector(
     features: NewWindowFeatures,
 ) -> NewWindowResponse<Wry> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
+    if url.scheme() == "https" && links::is_project_page(url.as_str()) {
+        open_in_browser(url);
+        return NewWindowResponse::Deny;
+    }
     let Some(full) = projector(url) else {
         tracing::warn!(scheme = url.scheme(), "a new window refused");
         return NewWindowResponse::Deny;

@@ -40,7 +40,7 @@ disagree with the picture.
    `{ item_id, scene_id? }`, with `item.set_visible`'s `scene_id` rules and errors. The
    field of an error names the action's field (`scene_id`), not `edits.0.scene_id`.
    `item.toggle` reads the placement's visibility first: a keyframe scene's override if
-   it has one, else the item's own. Protocol 0.72.
+   it has one, else the item's own. Protocol 0.76.
 2. **They change the collection.** The engine applies the `item.set_visible` the action
    stands for: `rev` moves on by one, `state.changed` follows (with no `cause`), and the
    collection saves it. A show of a shown item, or a hide of a hidden one, changes
@@ -72,7 +72,9 @@ disagree with the picture.
    it in the same edit, and its inverse restores them after the item
    ([ADR-0040 §3](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
    `delete.plan` lists them. Plugins get them with the `edit` class, as
-   `item.set_visible`. MCP's `item` tool carries them. The web UI binds them from an
+   `item.set_visible`. MCP's `item` tool carries them, and they are in `REVERSIBLE_ACTIONS`
+   ([ADR-0098](0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)): the opposite
+   action takes one back, as a `scene.switch` back does, so they don't make it destructive. The web UI binds them from an
    item's Inspector (Hotkeys: Toggle, Show, Hide).
 
 [`tree_items`]: ../../crates/jstream-graph/src/model/mod.rs

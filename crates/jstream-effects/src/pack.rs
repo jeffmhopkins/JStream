@@ -236,6 +236,18 @@ impl Effect {
     }
 }
 
+/// The pack ID the `effect.toml` in `dir` names, read and checked as a load reads it,
+/// without validating any shader: for telling which folder holds which pack
+/// (ADR-0097 decision 2), whether or not the pack loads.
+///
+/// # Errors
+/// When the manifest is missing, too large or doesn't parse.
+pub fn manifest_pack_id(dir: &Path) -> Result<String, PackError> {
+    let path = dir.join(MANIFEST);
+    let text = read(&path, MAX_MANIFEST_BYTES)?;
+    Ok(manifest::parse(&path, &text)?.pack.id)
+}
+
 /// The files, relative to the pack folder, that the manifest at `path` names: each
 /// effect's shader, and each shader source's `common` file, pass files and images.
 pub(crate) fn shader_files(path: &Path) -> Result<Vec<String>, PackError> {

@@ -592,6 +592,7 @@ fn apply_edit(
                 blend,
                 effects: Chains::default(),
                 transition: ItemTransition::default(),
+                locked: false,
             });
             Ok(vec![Edit::ItemRemove {
                 item_id: item_id.clone(),
@@ -955,6 +956,27 @@ fn apply_edit(
                 target: old,
             }])
         }
+        Edit::OutputSetPath { output_id, path } => {
+            let output = state
+                .outputs
+                .get_mut(output_id)
+                .ok_or_else(|| not_found(EntityKind::Output, output_id.as_str()))?;
+            if let Some(problem) = record_path_problem(path) {
+                return Err(invalid(at, "path", problem));
+            }
+            let OutputKind::Record { path: current, .. } = &mut output.kind else {
+                return Err(invalid(
+                    at,
+                    "output_id",
+                    "the output is not a recording output",
+                ));
+            };
+            let old = std::mem::replace(current, path.clone());
+            Ok(vec![Edit::OutputSetPath {
+                output_id: output_id.clone(),
+                path: old,
+            }])
+        }
         Edit::OutputDelete { output_id } => {
             if running.contains(output_id) {
                 return Err(invalid(
@@ -991,6 +1013,16 @@ fn apply_edit(
             }
             inverse.extend(crate::filter::restore_output(&output));
             Ok(inverse)
+        }
+        Edit::ItemSetLocked { item_id, locked } => {
+            let (si, ii) = state
+                .item_index(item_id)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+            let old = std::mem::replace(&mut state.scenes[si].items[ii].locked, *locked);
+            Ok(vec![Edit::ItemSetLocked {
+                item_id: item_id.clone(),
+                locked: old,
+            }])
         }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
     }
@@ -1200,6 +1232,12 @@ fn restore_item(
         edits.push(Edit::ItemSetTransition {
             item_id: item.id.clone(),
             transition: item.transition,
+        });
+    }
+    if item.locked {
+        edits.push(Edit::ItemSetLocked {
+            item_id: item.id.clone(),
+            locked: true,
         });
     }
     // Its effects belong to the placement (ADR-0065 §3), in order after `item.add`.

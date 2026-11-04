@@ -84,7 +84,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
+    ("profile.get", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
@@ -124,6 +126,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_blend", Class(E)),
     ("item.set_source", Class(E)),
     ("item.set_transition", Class(E)),
+    ("item.set_locked", Class(E)),
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("source.create", Class(E)),
@@ -150,6 +153,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("hotkey.clear", Class(E)),
     ("output.create", N),
     ("output.set_target", N),
+    ("output.set_path", N),
     ("output.delete", N),
     ("output.set_encoder", N),
     ("encoder.create", N),
@@ -214,6 +218,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.enable", N),
     // A person re-enables a quarantined effect (#349); a plugin never does.
     ("effect.enable", N),
+    ("pack.write", N),
+    ("pack.delete", N),
+    ("pack.list", Class(R)),
+    ("pack.read", Class(R)),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),
