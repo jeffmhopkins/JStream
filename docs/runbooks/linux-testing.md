@@ -65,12 +65,14 @@ and a desktop window (JStream runs in your browser instead).
 <a id="script"></a>
 ## The script
 <!-- @section
-covers = ["scripts/linux/**", ".github/workflows/linux-install.yml"]
+covers = ["scripts/linux/**", "scripts/install-tools.txt", ".github/workflows/linux-install.yml"]
 depends_on = ["docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/runbooks/mac-testing.md#script", "apps/jstream-daemon/README.md#purpose"]
 -->
 
 `scripts/linux/install.sh` has the Mac installer's shape
-([mac-testing › script](mac-testing.md#script)): the same steps, flags and pins file. It
+([mac-testing › script](mac-testing.md#script)): the same order of steps, the same pins
+file, and its `--ref`, `--source`, `--no-open` and `--uninstall [--purge]` flags. Linux
+adds the package and sandbox steps, and `--no-browser-sources` and `--no-packages`. It
 does each step only when it is needed, so running it again updates what changed:
 
 1. **Checks the machine:** x86_64, or aarch64 with a best-effort warning; the
@@ -87,8 +89,9 @@ does each step only when it is needed, so running it again updates what changed:
    release has them. On another distribution, or with `--no-packages`, it lists what to
    install. GPU encode drivers are suggested at the end, not installed: they depend on
    the GPU and on the distribution's patent policy.
-3. **Rust:** rustup, if missing, installed without touching the shell profile, then the
-   toolchain the repository's `rust-toolchain.toml` pins.
+3. **Rust:** rustup, if missing, installed without touching the shell profile. After the
+   checkout, the toolchain `rust-toolchain.toml` pins is installed by name, as the Mac
+   script does, since rustup before 1.28 needs the name, and the UI's wasm target is added.
 4. **Source:** a clone in `~/.local/share/jstream-build/src`, checked out at `--ref`,
    else the newest release tag that has the installer, else `main`. `--source <dir>`
    builds a checkout as it is instead.
@@ -104,7 +107,10 @@ does each step only when it is needed, so running it again updates what changed:
    ([ADR-0062](../adr/0062-aac-lc-encoder-patent-check.md)), beside the install.
 8. **Browser sandbox:** where the kernel restricts unprivileged user namespaces (Ubuntu's
    AppArmor setting, or the older Debian switch), `chrome-sandbox` is made setuid root, as
-   ADR-0095 says an install must. Elsewhere Chromium's namespace sandbox needs nothing.
+   ADR-0095 says an install must, in one root step that refuses a symlink or a file the
+   user doesn't own and changes the owner before the mode, so a file swapped in after the
+   check is the user's and gains nothing from the setuid bit. Elsewhere Chromium's
+   namespace sandbox needs nothing.
 9. **Install:** the staged folder replaces `~/.local/lib/jstream`, refusing while JStream
    runs; `~/.local/bin/jstream` links the launcher; and a `jstream.desktop` entry and the
    app icon go in `~/.local/share`. It then checks the daemon runs, warns when no Vulkan
@@ -128,5 +134,7 @@ script from the checkout on `ubuntu-latest`, checks the install's files, the AAC
 and the setuid sandbox, starts the daemon through `jstream --print`, loads the UI, stops
 it, then starts it again and has a red browser source painted on program through MCP
 until the program snapshot shows red, and uninstalls. `fedora` runs the script in a Fedora container, which checks the dnf
-package names. mac-install's `pins` job checks every pin, the Linux ones included. The
+package names. mac-install's `pins` job checks every pin's version, the Linux ones
+included, against CI and `Cargo.lock`; `ubuntu` and `fedora` check the x86_64 sums when
+they download, and the aarch64 sums were recorded by hand from the release files. The
 screen picker, PipeWire, the clipboard and the notification need a real desktop.

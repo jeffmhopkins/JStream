@@ -37,6 +37,24 @@ ICON_DIR="$XDG_DATA/icons/hicolor/256x256/apps"
 # The daemon's data folder on Linux (jstream-platform's `paths::data_dir`).
 DATA_DIR="$XDG_DATA/jstream"
 
+usage() {
+    cat <<'EOF'
+JStream for Linux: builds JStream from source and installs it in your home folder.
+
+  curl -fsSL https://raw.githubusercontent.com/jeffmhopkins/JStream/main/scripts/linux/install.sh | bash
+
+Options (after `bash -s --` when piped):
+  --ref <ref>             build this tag, branch or commit (default: the newest release
+                          tag that has this installer, else main)
+  --source <dir>          build this checkout as it is, without cloning or fetching
+  --no-browser-sources    build without browser sources: no CEF download, no sandbox step
+  --no-packages           don't install distribution packages (say what's missing instead)
+  --no-open               don't open JStream when done
+  --uninstall             remove JStream, its menu entry and the build folder; add
+                          --purge to remove the collection, token and logs too
+EOF
+}
+
 step() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }
 note() { printf '    %s\n' "$*"; }
 warn() { printf '\033[33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -150,7 +168,9 @@ dnf_packages() {
 
 pacman_packages() {
     echo base-devel git curl cmake ninja pkgconf
-    echo vulkan-icd-loader libva pipewire alsa-lib xdg-desktop-portal xdg-utils libnotify
+    # vulkan-swrast is Mesa's software Vulkan driver (lavapipe), so JStream can always
+    # render; vulkan-intel or vulkan-radeon add the GPU's own.
+    echo vulkan-icd-loader vulkan-swrast libva pipewire alsa-lib xdg-desktop-portal xdg-utils libnotify
     if [ -n "$BROWSER" ]; then
         echo nss atk at-spi2-core libcups libxcomposite libxdamage libxrandr mesa pango cairo libxkbcommon libdrm
     fi
@@ -326,8 +346,14 @@ source_tree() {
     fi
     [ -f "$SRC/scripts/linux/jstream" ] ||
         die "this version of JStream predates the Linux installer: pick a newer --ref"
-    # The toolchain rust-toolchain.toml pins, with the wasm target the UI needs.
-    (cd "$SRC" && rustup toolchain install >/dev/null)
+    # The pinned toolchain, by name: rustup 1.28.0 stopped installing it on the first
+    # cargo call, and rustup before 1.28 needs the name. Its components come from
+    # rust-toolchain.toml on the first cargo call; the UI's wasm target is added here.
+    local channel
+    channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")
+    [ -n "$channel" ] || die "no channel in $SRC/rust-toolchain.toml"
+    rustup toolchain install --profile minimal "$channel"
+    rustup target add --toolchain "$channel" wasm32-unknown-unknown
 }
 
 version_of() {
@@ -475,8 +501,13 @@ browser_sandbox() {
     fi
     note "this kernel restricts user namespaces, so Chromium's sandbox helper must be setuid root"
     [ "$(id -u)" = 0 ] || note "sudo asks for your password to set that up"
-    as_root chown root:root "$sandbox"
-    as_root chmod 4755 "$sandbox"
+    # One root step, which refuses a symlink or a file that isn't the user's, so the mode
+    # change lands on the file the build staged (chown -h never follows a link).
+    local script="f=\$1; u=\$2
+        [ -f \"\$f\" ] && [ ! -L \"\$f\" ] && [ \"\$(stat -c %u \"\$f\")\" = \"\$u\" ] || exit 3
+        chown -h root:root \"\$f\" && [ ! -L \"\$f\" ] && chmod 4755 \"\$f\""
+    as_root sh -c "$script" sh "$sandbox" "$(id -u)" ||
+        die "couldn't make $sandbox setuid root (it must be the regular file the build staged)"
     if findmnt -n -o OPTIONS --target "$sandbox" 2>/dev/null | grep -qw nosuid; then
         warn "$(dirname "$APP_DIR") is on a nosuid mount: browser sources won't start there"
     fi
@@ -529,8 +560,13 @@ checks() {
     step "Checking the install"
     note "$("$APP_DIR/jstream-daemon" --version | head -1)"
     if ! compgen -G '/usr/share/vulkan/icd.d/*.json' >/dev/null && ! compgen -G '/etc/vulkan/icd.d/*.json' >/dev/null; then
-        warn "no Vulkan driver is installed: JStream can't render without one; install your"
-        warn "distribution's Mesa Vulkan drivers (Debian and Ubuntu: mesa-vulkan-drivers)"
+        local driver
+        case "$FAMILY" in
+            apt | dnf) driver=mesa-vulkan-drivers ;;
+            pacman) driver="vulkan-swrast (or vulkan-intel, vulkan-radeon)" ;;
+            *) driver="your distribution's Mesa Vulkan drivers" ;;
+        esac
+        warn "no Vulkan driver is installed: JStream can't render without one; install $driver"
     fi
     gpu_encode_hint
 }
@@ -584,7 +620,7 @@ main() {
             --no-open) OPEN="" ;;
             --uninstall) UNINSTALL=1 ;;
             --purge) PURGE=1 ;;
-            -h | --help) sed -n '2,22p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+            -h | --help) usage; exit 0 ;;
             *) die "unknown option: $1 (try --help)" ;;
         esac
         shift
