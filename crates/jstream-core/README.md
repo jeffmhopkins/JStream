@@ -569,7 +569,9 @@ state machine. Contents:
   by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
-  (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
+  (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
+  starts again at its duration when its `restart` counter changes
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
@@ -1365,7 +1367,7 @@ a newer one. Until its build installs, a source keeps showing what it showed bef
 or nothing. A changed setting always rebuilds the source, live or not, so an
 animation restarts with it, unless its kind keeps the old instance's time zero for that
 change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
-through any change but its `mode` or `duration` (#1027). The build then carries that
+through any change but its `mode`, `duration` or `restart` counter (#1027, #1040). The build then carries that
 time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
 one keeps, so a later style edit can't undo a restart), the thread paints the new
 instance for it as soon as it is created, off the lock, so its first plan already shows
@@ -1646,8 +1648,13 @@ or a size that does not fit in memory is `SourceFrameError`.
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot. It owns the compositor, serves requests in order, and stops when the
 engine goes away. The compositor opens on the first snapshot, hardware adapter first,
-with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `internal`, and the reason
-starts with `no wgpu adapter`. A failed open is cached: until its retry time,
+with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `action_failed` (#1073), as for
+`output.start`, and the reason starts with `no wgpu adapter` and, on Linux, ends naming
+the software Vulkan driver to install (`mesa-vulkan-drivers`). On Linux the daemon asks
+the same thing at startup through `no_adapter_warning` (`lib.rs`): it lists the adapters wgpu can
+see, on every backend, without opening a device, and when there are none it returns
+"no graphics adapter, so scenes can't be drawn" for the daemon to log as a warning, with
+the same driver hint on Linux; it is `None` when an adapter is there. A failed open is cached: until its retry time,
 snapshots answer that error at once instead of probing adapters again. The first
 retry is 5 s after the failure, and each failure in a row doubles the wait, up to
 5 minutes; a successful open clears it. A panic while drawing answers `internal`,

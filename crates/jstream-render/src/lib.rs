@@ -26,14 +26,14 @@ pub mod transition;
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
-pub use error::RenderError;
+pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
     ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING, FilterClock, Lut, LutError,
     MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS, PROGRAM_MAX_INPUTS,
     PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage,
     ProgramInput, ProgramPass, VideoFilter, descriptors as video_filter_descriptors, lut_image,
 };
-pub use gpu::OpenOptions;
+pub use gpu::{OpenOptions, adapter_available};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{GpuModel, Lighting, ModelDraw};

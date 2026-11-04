@@ -429,7 +429,11 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
     used, since desktop and application audio need it;
   - `LinuxGpu` as the GPU interop. On a machine without a Vulkan hardware adapter its
     `open_device` fails, and the engine composites on its own software device with CPU
-    frames, as core logs;
+    frames, as core logs. That software device is a Vulkan driver, Mesa's lavapipe
+    (`mesa-vulkan-drivers` on Debian, Ubuntu and Fedora), so a machine without a GPU
+    needs it installed. Without any adapter the daemon logs a warning at startup naming
+    that package (`jstream_core::no_adapter_warning`), and `video.snapshot` and
+    `output.start` fail with `action_failed`, naming it too (#1073);
   - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
     [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
     virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;
@@ -473,10 +477,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `stats.tick` about once a second while no output runs, and hands the engine the
   process CPU reader on Windows (`WindowsProcessCpu`), macOS (`MacosProcessCpu`) and
   Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
-  leave `cpu_ms` out. On Windows (`WindowsThreadCpu`) and Linux (`LinuxThreadCpu`) it
-  also hands it the thread CPU reader, for `profile.get`'s threads
-  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); on macOS the
-  profile has no threads.
+  leave `cpu_ms` out. On Windows (`WindowsThreadCpu`), macOS (`MacosThreadCpu`) and
+  Linux (`LinuxThreadCpu`) it also hands it the thread CPU reader, for `profile.get`'s
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)).
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.

@@ -104,13 +104,61 @@ jobs:
             //    count; among markers for the head SHA, the highest round decides, and within
             //    that round any fail/escalate beats pass (parallel reviewer runs can't race).
             const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
-            const [state, description] = decide(comments, authors, head);
+
+            // 4. ADR-0109: a pass carries across merges of the base branch. When the head has no
+            //    verdict, the latest reviewed head is an ancestor of it, every commit since
+            //    merges the base branch in (or only restamps the ledger), and the PR's diff
+            //    against the base branch is the same at both, that review's verdict stands for
+            //    the head. Any doubt (an API error, a truncated list, a file without a patch)
+            //    leaves it pending, as before.
+            let carry = null;
+            const from = carryCandidate(comments, head);
+            if (from) {
+              try {
+                const cmp = async (basehead, per_page) =>
+                  (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead, per_page })).data;
+                const path = await cmp(`${from}...${head}`, 100);
+                // The base branch's own commits that a merge brought in are listed too; only
+                // the PR's own commits (on the head, not in the base) are classified.
+                const own = await cmp(`${pr.base.sha}...${head}`, 100);
+                const commits = [];
+                if (path.status === 'ahead' && path.total_commits <= 100 && path.commits.length === path.total_commits
+                    && own.total_commits <= 100 && own.commits.length === own.total_commits) {
+                  const ownShas = new Set(own.commits.map((c) => c.sha));
+                  for (const c of path.commits) {
+                    const entry = { parents: c.parents.length, parentInBase: false, files: null, inBase: !ownShas.has(c.sha) };
+                    if (entry.inBase) { commits.push(entry); continue; }
+                    if (c.parents.length === 2) {
+                      // A merge of the base: one parent is the base branch's tip or behind it.
+                      for (const p of c.parents) {
+                        const st = (await cmp(`${p.sha}...${pr.base.sha}`, 1)).status;
+                        if (st === 'ahead' || st === 'identical') entry.parentInBase = true;
+                      }
+                    } else if (c.parents.length === 1) {
+                      const { data: one } = await github.rest.repos.getCommit({ owner, repo, ref: c.sha, per_page: 100 });
+                      entry.files = (one.files ?? null) && one.files.map((f) => f.filename);
+                    }
+                    commits.push(entry);
+                  }
+                }
+                if (commits.length > 0 && onlyBaseMerges(commits)) {
+                  const files = async (sha) => (await cmp(`${pr.base.sha}...${sha}`, 300)).files ?? null;
+                  if (sameChange(await files(from), await files(head))) carry = { from };
+                  else core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
+                } else {
+                  core.info(`commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
+                }
+              } catch (e) {
+                core.warning(`could not compare ${from.slice(0, 7)} with ${head.slice(0, 7)}: ${e.message}`);
+              }
+            }
+            const [state, description] = decide(comments, authors, head, carry);
             await setStatus(state, description);
             if (state === 'success') await dispatchAfterReview();
             return;
 
             // BEGIN decide (tested by extracting this block; keep it self-contained)
-            function decide(comments, authors, head) {
+            function markersOf(comments) {
               const norm = (s) => (s.match(/session_[A-Za-z0-9]+/) || [s.trim()])[0];
               const markerRe = /^<!-- jstream-review v1 verdict=(pass|fail|escalate|recuse) sha=([0-9a-f]{40}) round=(\d+) reviewer-session=(\S+) -->$/m;
               const markers = [];
@@ -119,20 +167,86 @@ jobs:
                 const m = (c.body || '').match(markerRe);
                 if (m) markers.push({ verdict: m[1], sha: m[2], round: Number(m[3]), session: norm(m[4]) });
               }
-              const sha7 = head.slice(0, 7);
-              if (markers.length === 0) return ['pending', `Waiting for review of ${sha7}`];
-              const forHead = markers.filter((x) => x.sha === head);
-              if (forHead.length === 0) {
-                const last = markers[markers.length - 1];
-                return ['pending', `Last review was ${last.sha.slice(0, 7)}; waiting for review of ${sha7}`];
-              }
-              const round = Math.max(...forHead.map((x) => x.round));
-              const current = forHead.filter((x) => x.round === round);
+              return markers;
+            }
+
+            // The latest marker: the highest round, and the last posted within it.
+            function latestMarker(markers) {
+              let last = null;
+              for (const x of markers) if (!last || x.round >= last.round) last = x;
+              return last;
+            }
+
+            // ADR-0109: the reviewed head whose pass may carry to `head`, or null.
+            function carryCandidate(comments, head) {
+              const last = latestMarker(markersOf(comments));
+              return last && last.sha !== head ? last.sha : null;
+            }
+
+            // ADR-0109: whether two PR diffs (compare-API `files`, each against the base branch)
+            // are the same change: the same files with the same status and the same added and
+            // removed lines, in order. Context lines and hunk positions may differ, since main
+            // moved under them. docs/verified.toml is left out: a merge restamps it. Fails
+            // closed on a file without a patch (binary or too large) or a list of 300 files,
+            // which may be truncated.
+            // ADR-0109: whether the commits after the reviewed head only merge the base branch
+            // in. Each is { inBase, parents, parentInBase, files }. A commit already in the base
+            // branch came in through a merge and is skipped. Of the PR's own commits, at least
+            // one, a merge must have a parent that is in the base branch, and any other commit
+            // must have one parent and touch only the stamp ledger (a `docs verify --merge`
+            // restamp). Anything else, or files unknown, is no.
+            function onlyBaseMerges(commits) {
+              const own = commits.filter((c) => !c.inBase);
+              return own.length > 0 && own.every((c) =>
+                c.parents === 2 ? c.parentInBase
+                  : c.parents === 1 && Array.isArray(c.files) && c.files.length > 0
+                    && c.files.every((f) => f === 'docs/verified.toml'));
+            }
+
+            function sameChange(a, b) {
+              const ledger = 'docs/verified.toml';
+              const key = (files) => {
+                if (!Array.isArray(files) || files.length >= 300) return null;
+                const out = [];
+                for (const f of files) {
+                  if (f.filename === ledger) continue;
+                  if (typeof f.patch !== 'string') return null;
+                  const lines = f.patch.split('\n').filter((l) => /^[+-]/.test(l));
+                  out.push([f.filename, f.previous_filename ?? '', f.status, ...lines].join('\n'));
+                }
+                return out.sort().join('\n\0\n');
+              };
+              const ka = key(a), kb = key(b);
+              return ka !== null && kb !== null && ka === kb;
+            }
+
+            function verdictFor(markers, authors, sha) {
+              const forSha = markers.filter((x) => x.sha === sha);
+              const sha7 = sha.slice(0, 7);
+              const round = Math.max(...forSha.map((x) => x.round));
+              const current = forSha.filter((x) => x.round === round);
               if (current.some((x) => authors.has(x.session))) return ['failure', 'Verdict came from a session that authored this PR'];
               const v = new Set(current.map((x) => x.verdict));
               if (v.has('fail')) return ['failure', `Blocking findings at ${sha7} (round ${round})`];
               if (v.has('escalate')) return ['failure', 'Escalated: needs the maintainer (see needs-human)'];
               if (v.has('pass')) return ['success', `No issues found at ${sha7} (round ${round})`];
               return ['pending', 'Reviewer recused; waiting for an independent reviewer'];
+            }
+
+            // carry: { from } when the caller found that `from` is an ancestor of `head` with the
+            // same PR change (sameChange), else null.
+            function decide(comments, authors, head, carry) {
+              const markers = markersOf(comments);
+              const sha7 = head.slice(0, 7);
+              if (markers.length === 0) return ['pending', `Waiting for review of ${sha7}`];
+              if (markers.some((x) => x.sha === head)) return verdictFor(markers, authors, head);
+              const last = latestMarker(markers);
+              if (carry && carry.from === last.sha) {
+                const [state, , ] = verdictFor(markers, authors, last.sha);
+                if (state === 'success') {
+                  return ['success', `Review of ${last.sha.slice(0, 7)} (round ${last.round}) holds: ${sha7} only merges the base branch in (ADR-0109)`];
+                }
+              }
+              return ['pending', `Last review was ${last.sha.slice(0, 7)}; waiting for review of ${sha7}`];
             }
             // END decide

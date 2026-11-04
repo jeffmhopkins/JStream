@@ -68,7 +68,8 @@ depends_on = ["REVIEW.md#output", "REVIEW.md#rounds"]
    by hand.**
 3. Answer every blocking finding: push a fix and reply naming the commit, or reply with a
    concrete rebuttal ([R-GOV-004](docs/RULES.md#R-GOV-004)). Each push resets the gate and
-   triggers a new review round.
+   triggers a new review round, except a push that only merges `main` into a passed head:
+   that pass carries ([ADR-0109](docs/adr/0109-review-pass-carries-across-base-merges.md)).
 4. Non-blocking findings: fix them if cheap, or say they're deferred. Pre-existing problems
    become issues.
 5. A `needs-human` label means the maintainer decides. Stop arguing that point.
