@@ -347,7 +347,7 @@ fn a_hierarchy_that_fans_out_is_stopped_early() {
     doc["nodes"] = json!(nodes);
     let started = std::time::Instant::now();
     let err = load_glb(&doc, &bin).expect_err("refused");
-    assert!(err.0.contains("node instances"), "{err:?}");
+    assert!(err.0.contains("node and primitive instances"), "{err:?}");
     assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
 
@@ -359,6 +359,98 @@ fn an_accessor_past_the_caps_is_refused_before_it_is_read() {
         json!({ "componentType": 5126, "count": 1_000_000_000u64, "type": "VEC3" });
     let err = load_glb(&doc, &bin).expect_err("refused");
     assert!(err.0.contains("more than a model may hold"), "{err:?}");
+    // The same without indices, which would count every vertex into an index list.
+    let (mut doc, bin) = triangle(json!({}), true);
+    doc["accessors"][0] =
+        json!({ "componentType": 5126, "count": 1_000_000_000u64, "type": "VEC3" });
+    doc["meshes"][0]["primitives"][0]
+        .as_object_mut()
+        .expect("an object")
+        .remove("indices");
+    let err = load_glb(&doc, &bin).expect_err("refused unindexed");
+    assert!(err.0.contains("more than a model may hold"), "{err:?}");
+}
+
+#[test]
+fn empty_primitives_under_a_hierarchy_that_fans_out_are_stopped_early() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    let empty = doc["accessors"].as_array().expect("an array").len();
+    doc["accessors"]
+        .as_array_mut()
+        .expect("an array")
+        .push(json!({ "componentType": 5126, "count": 0, "type": "VEC3" }));
+    doc["meshes"][0]["primitives"] = json!(
+        (0..200)
+            .map(|_| json!({ "attributes": { "POSITION": empty } }))
+            .collect::<Vec<_>>()
+    );
+    // 17 levels, each naming the next twice and holding the mesh: well under the node
+    // cap's 100,000 nodes on its own, but 200 primitives on each.
+    let mut nodes: Vec<Value> = (0..16)
+        .map(|i| json!({ "mesh": 0, "children": [i + 1, i + 1] }))
+        .collect();
+    nodes.push(json!({ "mesh": 0 }));
+    doc["nodes"] = json!(nodes);
+    let started = std::time::Instant::now();
+    let err = load_glb(&doc, &bin).expect_err("refused");
+    assert!(err.0.contains("primitive instances"), "{err:?}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+}
+
+/// Counts reads, to show a file named by many buffers is read once.
+#[derive(Default)]
+struct Reads(Vec<u8>, usize);
+
+impl Resources for Reads {
+    fn read(&mut self, _: &str) -> Result<Vec<u8>, LoadError> {
+        self.1 += 1;
+        Ok(self.0.clone())
+    }
+
+    fn decode(&mut self, _: &[u8], name: &str) -> Result<(u32, u32, Vec<u8>), LoadError> {
+        Err(LoadError(format!("no image {name}")))
+    }
+}
+
+#[test]
+fn a_file_named_by_many_buffers_is_read_once() {
+    let (mut doc, bin) = triangle(json!({}), true);
+    doc["buffers"] = json!(
+        (0..2000)
+            .map(|_| json!({ "uri": "mesh.bin", "byteLength": bin.len() }))
+            .collect::<Vec<_>>()
+    );
+    let json = serde_json::to_vec(&doc).expect("serialises");
+    let mut reads = Reads(bin, 0);
+    let (model, _) = load(&json, &mut reads).expect("loads");
+    assert_eq!(model.triangles(), 1);
+    assert_eq!(reads.1, 1);
+}
+
+/// Every read is a fresh file of 100 MiB.
+struct Big;
+
+impl Resources for Big {
+    fn read(&mut self, _: &str) -> Result<Vec<u8>, LoadError> {
+        Ok(vec![0; 100 * 1024 * 1024])
+    }
+
+    fn decode(&mut self, _: &[u8], name: &str) -> Result<(u32, u32, Vec<u8>), LoadError> {
+        Err(LoadError(format!("no image {name}")))
+    }
+}
+
+#[test]
+fn the_buffers_together_are_capped() {
+    let (mut doc, _) = triangle(json!({}), true);
+    doc["buffers"] = json!(
+        (0..20)
+            .map(|i| json!({ "uri": format!("part{i}.bin"), "byteLength": 1 }))
+            .collect::<Vec<_>>()
+    );
+    let json = serde_json::to_vec(&doc).expect("serialises");
+    let err = load(&json, &mut Big).expect_err("refused");
+    assert!(err.0.contains("buffers hold more than 512 MiB"), "{err:?}");
 }
 
 /// Counts decodes, to show the texture cap stops before decoding the 65th.

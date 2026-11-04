@@ -9,6 +9,7 @@
 //! (each kind logged once); a required extension the loader lacks is an error naming it.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::rc::Rc;
 
 use jstream_media::model::{
     AlphaMode, MAX_MODEL_BYTES, MAX_TEXTURE_SIDE, MAX_TEXTURES, MAX_TRIANGLES, Material, Model,
@@ -378,18 +379,37 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
     Ok((model, ignored))
 }
 
+/// Reads every buffer once: two entries that name the same file share its bytes, and all
+/// of them together may hold no more than a model may (ADR-0107), so a short list can't
+/// read one big file over and over.
 fn load_buffers(
     doc: &Document,
     bin: Option<&[u8]>,
     resources: &mut dyn Resources,
-) -> Result<Vec<Vec<u8>>> {
-    let mut out = Vec::with_capacity(doc.buffers.len());
+) -> Result<Vec<Rc<[u8]>>> {
+    let mut out: Vec<Rc<[u8]>> = Vec::with_capacity(doc.buffers.len());
+    let mut read: BTreeMap<&str, Rc<[u8]>> = BTreeMap::new();
+    let mut total: u64 = 0;
     for (index, buffer) in doc.buffers.iter().enumerate() {
-        let bytes = match &buffer.uri {
-            Some(uri) => read_uri(uri, resources)?,
+        let bytes: Rc<[u8]> = match &buffer.uri {
+            Some(uri) => match read.get(uri.as_str()) {
+                Some(bytes) => Rc::clone(bytes),
+                None => {
+                    let bytes: Rc<[u8]> = read_uri(uri, resources)?.into();
+                    total = total.saturating_add(bytes.len() as u64);
+                    if total > MAX_MODEL_BYTES {
+                        return Err(LoadError::new(format!(
+                            "the model's buffers hold more than {} MiB",
+                            MAX_MODEL_BYTES / (1024 * 1024)
+                        )));
+                    }
+                    read.insert(uri, Rc::clone(&bytes));
+                    bytes
+                }
+            },
             None if index == 0 => bin
                 .ok_or_else(|| LoadError::new("buffer 0 has no URI and the file no binary chunk"))?
-                .to_vec(),
+                .into(),
             None => return Err(LoadError::new(format!("buffer {index} has no URI"))),
         };
         if bytes.len() < buffer.byte_length {
@@ -585,7 +605,7 @@ fn flip(v: [f32; 3]) -> [f32; 3] {
 
 struct Builder<'a> {
     doc: &'a Document,
-    buffers: &'a [Vec<u8>],
+    buffers: &'a [Rc<[u8]>],
     resources: &'a mut dyn Resources,
     textures: Vec<ModelTexture>,
     /// Each image already decoded, by its index and how it is read.
@@ -604,7 +624,7 @@ struct Builder<'a> {
     visits: usize,
 }
 
-/// The most node instances a scene may expand to.
+/// The most node and primitive instances a scene may expand to.
 const MAX_NODE_VISITS: usize = 100_000;
 
 /// The most elements an accessor may hold: a list of the most triangles a model may have,
@@ -621,12 +641,7 @@ impl Builder<'_> {
                 "the node hierarchy is deeper than 64, or has a cycle",
             ));
         }
-        self.visits += 1;
-        if self.visits > MAX_NODE_VISITS {
-            return Err(LoadError::new(format!(
-                "the scene expands to more than {MAX_NODE_VISITS} node instances"
-            )));
-        }
+        self.visit()?;
         let node = self
             .doc
             .nodes
@@ -645,6 +660,18 @@ impl Builder<'_> {
         Ok(())
     }
 
+    /// Counts one more node or primitive instance, and stops a scene that expands past
+    /// [`MAX_NODE_VISITS`] of them, even when each adds nothing.
+    fn visit(&mut self) -> Result<()> {
+        self.visits += 1;
+        if self.visits > MAX_NODE_VISITS {
+            return Err(LoadError::new(format!(
+                "the scene expands to more than {MAX_NODE_VISITS} node and primitive instances"
+            )));
+        }
+        Ok(())
+    }
+
     fn mesh(&mut self, index: usize, world: &Mat4) -> Result<()> {
         let mesh = self
             .doc
@@ -656,12 +683,22 @@ impl Builder<'_> {
         // A mirroring transform turns triangles inside out; swap them back.
         let mirrored = determinant(&linear) < 0.0;
         for p in &mesh.primitives {
+            self.visit()?;
             if p.targets.as_ref().is_some_and(|t| !t.is_empty()) {
                 self.ignored.0.insert("morph targets");
             }
             let order: Vec<u32> = match p.mode {
                 4..=6 => {
                     let count = self.accessor_count(p.attributes.get("POSITION"))?;
+                    // Refuse a vertex count past the caps before anything is built from it.
+                    let bytes = (count as u64).saturating_mul(VERTEX_BYTES);
+                    if count > MAX_ACCESSOR_COUNT
+                        || self.bytes.saturating_add(bytes) > MAX_MODEL_BYTES
+                    {
+                        return Err(LoadError::new(format!(
+                            "a primitive of mesh {index} has {count} vertices, more than a model may hold"
+                        )));
+                    }
                     let raw = match p.indices {
                         Some(i) => self.indices(i)?,
                         None => (0..count as u32).collect(),
@@ -673,6 +710,10 @@ impl Builder<'_> {
                     continue;
                 }
             };
+            if order.is_empty() {
+                // Nothing to draw.
+                continue;
+            }
             let positions = self.floats(
                 *p.attributes.get("POSITION").ok_or_else(|| {
                     LoadError::new(format!("a primitive of mesh {index} has no POSITION"))
