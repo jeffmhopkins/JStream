@@ -76,7 +76,10 @@ back on undo.
   that call's effects and events. It is credited to the client and request that started
   the timeline. While it runs, the engine takes the cue's exact time as now, so a
   transition, an item's appear effect or a fired motion that the cue starts begins at the
-  cue's time, however late the tick. A cue that fails doesn't stop the timeline.
+  cue's time, however late the tick. A cue that fails doesn't stop the timeline. A cue
+  isn't a call, so it gets no audit or activity entry of its own: the `timeline.play`
+  or `timeline.seek` that started the timeline has one, and `timeline.cue_fired`
+  reports each cue.
 - **Ticks.** The live ticker fires cues. It already runs on the control thread for live
   values, and it sleeps until the next cue or the end of a pass. A client's
   `timeline.play` runs the first tick before it returns, so a cue at 0 has run by then.

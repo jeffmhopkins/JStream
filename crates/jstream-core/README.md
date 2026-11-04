@@ -317,6 +317,11 @@ state machine. Contents:
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+- **Timelines** (`timelines.rs`,
+  [ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)): the timelines playing,
+  studio state beside the program scene, whose cues the live ticker fires on the
+  animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
+  restarts a live source (`LiveSources::restart`).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
@@ -426,7 +431,8 @@ state machine. Contents:
   difference between the newest and the one from that long ago.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
-  `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`, `tests/mcp.rs`,
+  `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
+  `src/tests/timelines.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1125,8 +1131,9 @@ and the client and request that started it. Nothing of it is saved or undone.
   it at the cue's time, so that timeline's first cues are due in the next round.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
   start the ticker while a timeline plays (`start_ticker`).
-- **A cue** runs through `State::action`, as the call would, credited to the client
-  and request that started the timeline, with `cue_at` set to its exact time:
+- **A cue** runs through `State::action`, as the call would (with no audit or activity
+  entry of its own, and nothing logged), credited to the client and request that
+  started the timeline, with `cue_at` set to its exact time:
   `action_now` gives that time to `scene.switch`, `item.show`/`hide`/`toggle` and
   `item.trigger_motion`, so the transition, appear effect or fire it starts begins at
   the cue's time, however late the tick. Its result is `timeline.cue_fired`'s `error`.
@@ -1378,8 +1385,8 @@ settings, so the others are live. The scenes its `scene` parameters name fill th
 program's input slots: they are scheduled before the chain like a `scene_mask`'s, and
 each layer is handed in once it is remade, the old one retired into the cache
 (`ResourceCache::retire_image`), so the program keeps its feedback. When the program
-mix shows the source again its stand-in makes a new frame, and a new frame restarts the
-program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
+mix shows the source again, or `source.restart` names it, its stand-in makes a new frame,
+and a new frame restarts the program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
 or the kind is quarantined, no program runs and the source draws nothing at its size.
 A shader source that hears audio (`audio = true`) hears the scope its `audio` and
 `audio_source` settings name, as a `spectrum` does: the live sources find it on each
@@ -2916,8 +2923,9 @@ drawing or encoding; a session's preview streams and binary channel are leaf loc
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
-`jstream-live` thread takes the collection lock only to send due `live.changed` events
-and release committed values, and sleeps without it. The WASM plugins' registry lock
+`jstream-live` thread takes the collection lock only to send due `live.changed` events,
+release committed values and fire due timeline cues (each runs as its action's call
+would under that lock, [Timelines](#timelines)), and sleeps without it. The WASM plugins' registry lock
 and the host's lock are taken with no other engine lock held, and released before a
 plugin loads, before an event is emitted and before a subscription closes; under the
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
@@ -2968,7 +2976,8 @@ output action (with `output_id`, and the error code when it fails), `debug` for
 everything else (the new `rev`, or the error code). A refused `hello`, with the client's
 name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
 revisions and error codes are logged, never a call's arguments
-([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
+([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
+log nothing: `timeline.cue_fired` reports each, with its error.
 
 <a id="audit-log"></a>
 ## Audit log
@@ -3005,7 +3014,10 @@ targets or keys, and is not written to `audit.jsonl`; the in-memory copy keeps a
 256 characters of it. The engine keeps the last 100
 entries with their sentences in memory (`activity_log.rs`), whether or not the host gave
 a sink, and answers `activity.list` from them; a restarted engine starts empty. An edit
-or action the sentence table doesn't name reads as its command name.
+or action the sentence table doesn't name reads as its command name. A timeline's cues
+get no entry of their own: the `timeline.play` or `timeline.seek` that started it has
+one, and `timeline.cue_fired` reports each cue
+([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md)).
 
 Live values are logged once per gesture, never per `live.set`
 ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): `live.set` and `live.cancel`
