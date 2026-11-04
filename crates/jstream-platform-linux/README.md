@@ -307,7 +307,10 @@ It has:
   while the rest of the engine runs.
 - **`LinuxProcessCpu`** (`ProcessCpu`, `process.rs`): the process's CPU time from
   `clock_gettime(CLOCK_PROCESS_CPUTIME_ID)`, user and system on every thread, for
-  `stats.tick`'s load.
+  `stats.tick`'s load. **`LinuxThreadCpu`** (`ThreadCpu`, `process.rs`): each thread
+  under `/proc/self/task`, its name from `comm` and its CPU time from `schedstat`
+  (nanoseconds), or from `stat`'s user and system clock ticks where the kernel has no
+  scheduler statistics, for `profile.get`.
 - **`probe_encoders`** opens each DRM render node (`/dev/dri/renderD*`) through libva and
   libva-drm, and records the best H.264 profile (High, then Main, then Constrained
   Baseline) its driver offers, then HEVC Main, each with its encode entry point (full,

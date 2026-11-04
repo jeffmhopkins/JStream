@@ -120,6 +120,11 @@ impl Layout {
 
     /// The WGSL declaring `Params` and `p`; empty when there are no parameters.
     pub(crate) fn header(&self) -> String {
+        self.header_at(PARAMS_BINDING)
+    }
+
+    /// [`Self::header`] with `p` at `binding` of group 0.
+    pub(crate) fn header_at(&self, binding: u32) -> String {
         if self.fields.is_empty() {
             return String::new();
         }
@@ -130,7 +135,7 @@ impl Layout {
             out.push_str(&format!("    {id}: {},\n", ty.wgsl()));
         }
         out.push_str(&format!(
-            "}}\n@group({PARAMS_GROUP}) @binding({PARAMS_BINDING}) var<uniform> p: Params;\n"
+            "}}\n@group({PARAMS_GROUP}) @binding({binding}) var<uniform> p: Params;\n"
         ));
         out
     }
@@ -211,25 +216,60 @@ fn linear_rgba(text: &str) -> Option<[f32; 4]> {
 /// Parses and validates `prelude`, then `header`, then `source`, and checks the effect
 /// contract. The error is a message for the effect's file, with its own line numbers.
 pub(crate) fn validate(prelude: &str, header: &str, source: &str) -> Result<(), String> {
+    validate_parts(prelude, header, &[source]).map_err(|(_, message)| message)
+}
+
+/// [`validate`] for a shader-source pass, whose text is the pack's `common` file (when it
+/// has one) then the pass's file: `parts`, in order. The error names the part it is in,
+/// by index, with that part's own line numbers. The contract is the effect's, and the
+/// header may declare `p` and the pass's input textures, which it then reads.
+pub(crate) fn validate_parts(
+    prelude: &str,
+    header: &str,
+    parts: &[&str],
+) -> Result<(), (usize, String)> {
+    let last = parts.len().saturating_sub(1);
+    let host_error = |m: String| (last, m);
     let host = naga::front::wgsl::parse_str(prelude)
-        .map_err(|e| format!("the host prelude does not parse: {}", e.message()))?;
-    // A host mistake is named as one, not blamed on the generated `Params`.
+        .map_err(|e| host_error(format!("the host prelude does not parse: {}", e.message())))?;
+    // A host mistake is named as one, not blamed on the generated header.
     Validator::new(ValidationFlags::all(), Capabilities::empty())
         .validate(&host)
-        .map_err(|e| format!("the host prelude does not validate: {}", e.as_inner()))?;
+        .map_err(|e| {
+            host_error(format!(
+                "the host prelude does not validate: {}",
+                e.as_inner()
+            ))
+        })?;
     let head = format!("{prelude}\n{header}\n");
-    // The effect's first line is the one after the head's last newline.
+    // Each part's first line is the one after the text before it.
+    let mut starts = Vec::with_capacity(parts.len());
+    let mut full = head.clone();
+    for part in parts {
+        starts.push(full.matches('\n').count());
+        full.push_str(part);
+        full.push('\n');
+    }
     let head_lines = head.matches('\n').count();
-    let full = format!("{head}{source}");
-    let at = |location: Option<naga::SourceLocation>| match location {
-        Some(l) if l.line_number as usize > head_lines => {
-            format!("line {}: ", l.line_number as usize - head_lines)
+    let at = |location: Option<naga::SourceLocation>| -> (usize, String) {
+        match location {
+            Some(l) if l.line_number as usize > head_lines => {
+                let line = l.line_number as usize;
+                let part = starts.iter().rposition(|&s| line > s).unwrap_or(last);
+                (part, format!("line {}: ", line - starts[part]))
+            }
+            Some(_) => (
+                last,
+                "in the generated `Params` or inputs (a parameter ID or name WGSL reserves?): "
+                    .to_owned(),
+            ),
+            None => (last, String::new()),
         }
-        Some(_) => "in the generated `Params` (a parameter ID WGSL reserves?): ".to_owned(),
-        None => String::new(),
     };
-    let module = naga::front::wgsl::parse_str(&full)
-        .map_err(|e| format!("{}{}", at(e.location(&full)), e.message()))?;
+    let module = naga::front::wgsl::parse_str(&full).map_err(|e| {
+        let (part, prefix) = at(e.location(&full));
+        (part, format!("{prefix}{}", e.message()))
+    })?;
     Validator::new(ValidationFlags::all(), Capabilities::empty())
         .validate(&module)
         .map_err(|e| {
@@ -240,12 +280,35 @@ pub(crate) fn validate(prelude: &str, header: &str, source: &str) -> Result<(), 
                 message.push_str(&c.to_string());
                 cause = c.source();
             }
-            format!("{}{message}", at(e.location(&full)))
+            let (part, prefix) = at(e.location(&full));
+            (part, format!("{prefix}{message}"))
         })?;
-    check_contract(&host, &module, !header.is_empty())
+    // What the header declares (`p`, a pass's inputs) belongs to the host.
+    let declared = header_globals(prelude, header);
+    check_contract(&host, &module, &declared).map_err(|m| (last, m))
 }
 
-fn check_contract(host: &Module, module: &Module, has_params: bool) -> Result<(), String> {
+/// The globals `header` declares after `prelude`, by name; empty when it declares none
+/// or does not parse alone (the full text's parse then names the problem).
+fn header_globals(prelude: &str, header: &str) -> BTreeSet<String> {
+    if header.is_empty() {
+        return BTreeSet::new();
+    }
+    naga::front::wgsl::parse_str(&format!("{prelude}\n{header}\n"))
+        .map(|m| {
+            m.global_variables
+                .iter()
+                .filter_map(|(_, g)| g.name.clone())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn check_contract(
+    host: &Module,
+    module: &Module,
+    declared: &BTreeSet<String>,
+) -> Result<(), String> {
     let host_entries: BTreeSet<&str> = host.entry_points.iter().map(|e| e.name.as_str()).collect();
     let mut found = false;
     for entry in &module.entry_points {
@@ -299,13 +362,7 @@ fn check_contract(host: &Module, module: &Module, has_params: bool) -> Result<()
         if host_globals.contains(&name) {
             continue;
         }
-        let is_params = has_params
-            && name == Some("p")
-            && global
-                .binding
-                .as_ref()
-                .is_some_and(|b| b.group == PARAMS_GROUP && b.binding == PARAMS_BINDING);
-        if is_params || global.space == AddressSpace::Private {
+        if name.is_some_and(|n| declared.contains(n)) || global.space == AddressSpace::Private {
             continue;
         }
         return Err(format!(

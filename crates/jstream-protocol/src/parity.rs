@@ -281,9 +281,14 @@ pub fn collection() -> Batch {
                     url: TWITCH_URL.into(),
                 },
             },
+            // Created at another file and moved to its own (`output.set_path`, #1072).
             Edit::OutputCreate {
                 output_id: OutputId::new("rec"),
-                kind: recording().kind,
+                kind: record("/home/me/Videos/take1.mp4"),
+            },
+            Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: "/home/me/Videos/show.mp4".into(),
             },
             Edit::EncoderCreate {
                 profile_id: EncoderProfileId::new("low"),
@@ -598,6 +603,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                     SceneInfo {
                         overrides: Vec::new(),
@@ -612,6 +618,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         folder: None,
                         meta: Default::default(),
                         options: Default::default(),
+                        camera: None,
                     },
                 ],
                 outputs: outputs(),
@@ -994,6 +1001,33 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 kind: record("C:\\Videos\\nul.mp4"),
             }),
             invalid("edits.0.kind.path", "must not end in a DOS device name"),
+        ),
+        (
+            Batch::single(Edit::OutputSetPath {
+                output_id: OutputId::new("rec"),
+                path: "Videos/take2.mp4".into(),
+            }),
+            invalid(
+                "edits.0.path",
+                "must be absolute: `/…`, `\\…`, `C:\\…` or `C:/…`",
+            ),
+        ),
+        (
+            Batch::single(Edit::OutputSetPath {
+                output_id: OutputId::new("tw"),
+                path: "/home/me/Videos/take2.mp4".into(),
+            }),
+            invalid("edits.0.output_id", "the output is not a recording output"),
+        ),
+        (
+            Batch::single(Edit::OutputSetPath {
+                output_id: OutputId::new("ghost"),
+                path: "/home/me/Videos/take2.mp4".into(),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Output,
+                id: "ghost".into(),
+            },
         ),
         (
             Batch::single(Edit::OutputSetTarget {
@@ -2374,6 +2408,7 @@ fn items_of_a() -> Vec<ItemInfo> {
         opacity: Finite32::ONE,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
+        locked: false,
     };
     vec![
         ItemInfo {
@@ -2388,6 +2423,7 @@ fn items_of_a() -> Vec<ItemInfo> {
             opacity: QUARTER,
             blend: BlendMode::Normal,
             transition: ItemTransition::default(),
+            locked: false,
         },
         plain("i1", "cam_copy"),
         plain("i2", "b_src"),
@@ -2408,5 +2444,6 @@ fn items_of_b() -> Vec<ItemInfo> {
         opacity: HALF,
         blend: BlendMode::Normal,
         transition: ItemTransition::default(),
+        locked: false,
     }]
 }

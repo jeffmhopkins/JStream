@@ -23,6 +23,8 @@ use std::time::{Duration, SystemTime};
 
 use crate::error::PackError;
 use crate::pack::{Effect, MANIFEST, Pack};
+use crate::source::ShaderSource;
+use jstream_render::{ProgramImage, ProgramPass};
 
 /// A poll interval that feels immediate to someone editing a shader.
 pub const DEFAULT_POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -176,6 +178,7 @@ impl PackWatcher {
                 tracing::info!(
                     pack = pack.id(),
                     effects = pack.effects().len(),
+                    sources = pack.sources().len(),
                     "effect pack loaded"
                 );
                 diff(folder.pack.as_ref(), Some(&pack), &mut changes.kinds);
@@ -194,6 +197,15 @@ impl PackWatcher {
         }
     }
 
+    /// Makes the next [`Self::poll`] reload the pack folder `dir`, whatever its files'
+    /// stamps say: for a host that replaced the folder, whose new files may keep the old
+    /// ones' sizes and times.
+    pub fn mark_stale(&mut self, dir: &Path) {
+        if let Some(folder) = self.folders.get_mut(dir) {
+            folder.stamp.clear();
+        }
+    }
+
     /// The packs loaded now, by folder.
     pub fn packs(&self) -> impl Iterator<Item = &Pack> {
         self.folders.values().filter_map(|f| f.pack.as_ref())
@@ -203,6 +215,21 @@ impl PackWatcher {
     pub fn effect(&self, kind_id: &str) -> Option<&Effect> {
         self.packs().find_map(|p| p.effect(kind_id))
     }
+
+    /// The shader source whose kind ID is `kind_id`, from whichever pack has it.
+    pub fn source(&self, kind_id: &str) -> Option<&ShaderSource> {
+        self.packs().find_map(|p| p.source(kind_id))
+    }
+}
+
+/// Loads the pack in `dir` as a poll loads one: on a [`LOAD_THREAD`], a panic caught and
+/// returned as [`PackError::Panicked`]. For a host that checks a pack before it puts it
+/// where the watcher reads (ADR-0097's staging folder).
+///
+/// # Errors
+/// What [`Pack::load`] fails with, or [`PackError::Panicked`].
+pub fn load_pack(dir: &Path, prelude: &str) -> Result<Pack, PackError> {
+    load_caught(Pack::load, dir, prelude)
 }
 
 /// The name of the thread each pack loads on. A panic there is caught and becomes
@@ -276,26 +303,48 @@ fn stamp(files: &[PathBuf]) -> Stamp {
         .collect()
 }
 
+/// What a kind draws, to tell a changed kind from an unchanged one: its descriptor, an
+/// effect's WGSL, and a shader source's passes (WGSL, scale and inputs) and images
+/// (size and pixels).
+#[derive(PartialEq)]
+struct Drawn<'a> {
+    descriptor: &'a jstream_protocol::KindDescriptor,
+    wgsl: Option<&'a str>,
+    passes: &'a [ProgramPass],
+    images: &'a [ProgramImage],
+}
+
 /// The kind changes from `old` to `new`.
 fn diff(old: Option<&Pack>, new: Option<&Pack>, out: &mut Vec<KindChange>) {
-    let kinds = |pack: Option<&Pack>| -> BTreeMap<String, Effect> {
-        pack.map(|p| {
-            p.effects()
-                .iter()
-                .map(|e| (e.kind_id().to_owned(), e.clone()))
-                .collect()
-        })
-        .unwrap_or_default()
-    };
+    fn kinds(pack: Option<&Pack>) -> BTreeMap<String, Drawn<'_>> {
+        let Some(pack) = pack else {
+            return BTreeMap::new();
+        };
+        let effects = pack.effects().iter().map(|e| {
+            let drawn = Drawn {
+                descriptor: e.descriptor(),
+                wgsl: Some(e.wgsl()),
+                passes: &[],
+                images: &[],
+            };
+            (e.kind_id().to_owned(), drawn)
+        });
+        let sources = pack.sources().iter().map(|s| {
+            let drawn = Drawn {
+                descriptor: s.descriptor(),
+                wgsl: None,
+                passes: s.passes(),
+                images: jstream_render::ExternalProgram::images(s),
+            };
+            (s.kind_id().to_owned(), drawn)
+        });
+        effects.chain(sources).collect()
+    }
     let (old, new) = (kinds(old), kinds(new));
-    for (id, effect) in &new {
+    for (id, drawn) in &new {
         match old.get(id) {
             None => out.push(KindChange::Added(id.clone())),
-            Some(before)
-                if before.descriptor() != effect.descriptor() || before.wgsl() != effect.wgsl() =>
-            {
-                out.push(KindChange::Changed(id.clone()));
-            }
+            Some(before) if before != drawn => out.push(KindChange::Changed(id.clone())),
             Some(_) => {}
         }
     }

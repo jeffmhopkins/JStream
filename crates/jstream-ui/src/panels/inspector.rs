@@ -19,9 +19,9 @@ use crate::panels::labels::{LabelChips, LabelPopover, TagButton, TagPopover, Tag
 use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Chord, Crop, Edit, Finite32, Glide, ItemEasing, ItemGeometry, ItemId, ItemInfo,
-    ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId, SourceKind,
-    TransitionEffect, TransitionPresetId, TransitionsInfo,
+    BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
+    ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
+    SourceKind, TransitionEffect, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
 use std::collections::HashMap;
@@ -254,6 +254,21 @@ pub fn with_depth(geometry: &ItemGeometry, field: Depth3, value: f32) -> Option<
     Some(next)
 }
 
+/// Each fit mode with the name the Inspector shows, in its list's order.
+pub const FIT_MODES: [(FitMode, &str); 3] = [
+    (FitMode::Fit, "Fit inside"),
+    (FitMode::Fill, "Fill (crop)"),
+    (FitMode::Stretch, "Stretch"),
+];
+
+/// The name the Inspector shows for a fit mode.
+pub fn fit_name(mode: FitMode) -> &'static str {
+    FIT_MODES
+        .iter()
+        .find(|(m, _)| *m == mode)
+        .map_or("Fit inside", |(_, n)| n)
+}
+
 /// A blend mode's name, as the Mode select lists it.
 pub fn blend_name(mode: BlendMode) -> &'static str {
     match mode {
@@ -265,6 +280,8 @@ pub fn blend_name(mode: BlendMode) -> &'static str {
         BlendMode::Lighten => "Lighten",
         BlendMode::Difference => "Difference",
         BlendMode::Exclusion => "Exclusion",
+        BlendMode::NormalSrgb => "Normal (browser)",
+        BlendMode::AdditiveSrgb => "Additive (browser)",
         _ => "Normal",
     }
 }
@@ -927,6 +944,43 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
         }
     });
 
+    // How the cropped source fills the box (`fit_mode`), as OBS's bounding box type.
+    let fit = Memo::new(move |_| geometry.get().map(|g| g.fit_mode));
+    let send_fit = move |name: String| {
+        let Some(mode) = FIT_MODES.iter().find(|(_, n)| *n == name).map(|(m, _)| *m) else {
+            return;
+        };
+        let Some(g) = geometry.get_untracked().filter(|g| g.fit_mode != mode) else {
+            return;
+        };
+        let (item_id, scene) = ids.get_value();
+        send(Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene),
+            geometry: ItemGeometry {
+                fit_mode: mode,
+                ..g
+            },
+        });
+    };
+    let fit_field = view! {
+        <label class="select-field">
+            <span class="field-label">"Fit"</span>
+            <select
+                aria-label="Fit"
+                title="How the source fills its box: whole inside it, covering it, or stretched to it"
+                disabled=move || fit.with(Option::is_none)
+                prop:value=move || fit.get().map_or("", fit_name)
+                on:change=move |event| send_fit(event_target_value(&event))
+            >
+                {FIT_MODES
+                    .iter()
+                    .map(|(_, name)| view! { <option value=*name>{*name}</option> })
+                    .collect_view()}
+            </select>
+        </label>
+    };
+
     let crop = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.crop)));
     let crop_field = move |side: Side, label: &'static str| {
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
@@ -1065,6 +1119,7 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 {percent_field(true)}
                 {percent_field(false)}
                 {field(Param::Rotation)}
+                {fit_field}
             </div>
         </Fold>
         <Fold title="3D" open=false hint=depth_hint>
@@ -1525,6 +1580,17 @@ mod tests {
         folds.insert("Crop".to_owned(), true);
         assert_eq!(parse_folds(&folds_json(&folds)), folds);
         assert!(parse_folds("not json").is_empty());
+    }
+
+    #[test]
+    fn every_fit_mode_has_its_own_name() {
+        for mode in [FitMode::Fit, FitMode::Fill, FitMode::Stretch] {
+            let name = fit_name(mode);
+            assert_eq!(
+                FIT_MODES.iter().find(|(_, n)| *n == name).map(|(m, _)| *m),
+                Some(mode)
+            );
+        }
     }
 
     #[test]

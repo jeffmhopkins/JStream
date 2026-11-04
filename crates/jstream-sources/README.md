@@ -26,13 +26,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `SourceKind`: a kind's descriptor and `create(settings, ctx)`, which builds a
   `Source` from a complete settings map, as the graph stores it. Creating may block on
   reading and decoding a file, so it never runs on a real-time thread.
+  `keeps_time(old, new)` says whether a source built from `new` in place of one running
+  with `old` keeps the old one's time zero, so its `at` runs on instead of starting from
+  zero; the engine asks before it builds a source again for a settings change. The
+  default is `false`; the `timer` kind keeps it unless `mode` or `duration` changed.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
   allocates, and a frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform`, `spectrum` and `chat_message` kinds draw theirs in a `Painter`
-  instead, and `frame`
+  the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
+  `Painter` instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
   says the program mix shows the source again after plans that didn't reach it; a kind
@@ -54,14 +58,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `set_density(d)` asks a source to draw its frames `d` times as many pixels each way
   as its own size, so an item that shows it enlarged stays sharp, and returns that own
   size, which its frames are placed at; the default is `None`, a kind whose frames are
-  their own size whatever is asked. Only `text` draws at a density (see *Kinds*).
+  their own size whatever is asked. Only `text` and `timer` draw at a density (see *Kinds*).
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
   frame is due (the engine's `jstream-sources` thread does). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
-  message.
+  message, and `timer`'s when the value it shows changes, once a second at most.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -124,7 +128,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   keeps one, calls both before it builds the sources an edit changed, and feeds every
   scope in it from its mixer thread. Its locks are taken only to find, make or drop a
   scope, never by the thread that pushes. `drawn_source(kind, settings)` names the source a `waveform` or
-  `spectrum` draws, for the engine to feed.
+  `spectrum` draws, for the engine to feed. For a kind outside this crate with the same
+  `audio` and `audio_source` settings (a shader source that hears audio, ADR-0093),
+  `heard_source(settings)` names that source and `heard_scope(scopes, settings)` finds
+  the scope it hears.
+- `AudioMeter` (`scope/meter.rs`): what a shader source hears of a scope each frame, as
+  `Metered`: the window's RMS level and peak, an onset (1 when the level jumps above its
+  recent average, falling back), `METER_BANDS` (64) log-spaced bands from 20 Hz on the
+  `spectrum` kind's dB scale, and the window at 64 evenly spaced points. Levels and bands
+  rise at once and fall over a few frames. `AudioMeter::new` plans the FFT and allocates
+  its buffers, so `measure(scope, ms)` allocates nothing and takes no lock, and can run
+  on the engine's render thread. It hears silence once the ring has stood still for a
+  quarter second, as the scope sources do, and a non-finite sample as silence. Tests
+  measure a 1 kHz tone, then silence, and a window with NaN and infinite samples.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -205,7 +221,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   and background are blended on sRGB values, not in linear light. The frame must fit
   `Limits`: its sides within `max_side`, and its working memory (8 bytes a pixel, 4
   more with an outline and 8 more with a shadow) within `max_decoded_bytes`; otherwise `create` or `update` fails
-  naming `text`. It is the one kind that draws at a density
+  naming `text`. It draws at a density (as `timer` does, the same way)
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)):
   `set_density(d)` draws the same layout with every length (the em size, the glyphs'
   positions, the outline, the padding, the shadow) multiplied by `d`, so the frame has `d` times the
@@ -215,6 +231,33 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0079](../../docs/adr/0079-text-density-bounded-by-pixels.md)); one whose frame
   would still be over the limits is halved until it fits, down to 1. An update draws at
   the density set last, lowered the same way.
+- `timer` (#1027): a countdown, a stopwatch or a clock, drawn as `text` draws (every
+  `text` setting but `text` and `wrap_width`). A `countdown` shows the seconds left of
+  `duration` (up to a day), rounded up (05:00 at the start, 00:00 at the end), then
+  `end_text` when that isn't empty; a `stopwatch` shows the whole seconds since its
+  start and stops at 99:59:59 (99:59 written `mm:ss`). `format` writes them `auto`
+  (`mm:ss`, or `h:mm:ss` from an hour), `mm:ss` (minutes past an hour keep counting) or
+  `hh:mm:ss`. Both count on the media clock from the source's time zero, its `at`, and
+  `keeps_time` keeps that zero through every change but `mode` and `duration`, so the
+  engine, which builds a source again for any change and any new density, keeps the
+  count going when the look is edited or the item resized; `mode` and `duration` are
+  the settings that aren't live. A `clock` shows the wall-clock time of day
+  (`clock_format` `24h`, `12h` with AM or PM, or either without seconds) in the
+  machine's time zone, or the IANA zone `time_zone` names, through `jiff` (with no zone
+  found for the machine it shows UTC; an unknown name is a setting error). Every frame
+  has one size: when the source is created or updated it measures every shape a value
+  can take (each digit at each of 0 to 9) and `end_text`, wraps the text at the widest
+  of them so `align` places each value in one box, and draws every value into the union
+  of their bounds (`raster::render_within`), cutting off any ink outside. So the frame
+  the engine placed, and the size `source.sizes` reports, never change as the count
+  does, and a frame too large for the limits (its text, padding, outline or shadow)
+  fails `create` or `update`, naming `end_text` when that is the widest value, else
+  `size`. The `Painter` draws a value when the one shown is out of
+  date, and `frame` only hands out the one drawn last; `next_change` is the value's next
+  second (a clock's next wall-clock second, or minute without seconds), `at` itself while
+  the painter hasn't caught up, and `None` once a countdown ends or a stopwatch stops.
+  Every setting but `font`, `mode` and `duration` is live, and it draws at a density as
+  `text` does.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
   `hwnd:0x` and the window handle). An empty `display` target is the primary display,
@@ -287,7 +330,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   (#362): `null`, the default, is the program mix, the master after its filters as
   the outputs hear it; a `bus` reference is that bus after its fader, before the
   master's filters. The parameter's description says so, and a change of it needs a
-  new source; a value that isn't a bus reference or `null` is a setting error. The
+  new source; a value that isn't a bus reference or `null` is a setting error, whose
+  reason shows the reference's shape as the graph's does (`not_a_reference`, #1081). The
   graph checks that the bus exists and refuses to delete it while a source draws it.
   A second setting, `audio_source` (#459), a source reference restricted to audio
   (`null` by default, so a source from before it draws what it drew, and the kinds'
@@ -300,7 +344,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   source doesn't: it has no channel of its own), and the reference is an ordinary
   source → source edge, so the drawn source's delete is refused, and `delete.plan`
   clears it, as for any source reference. A change of it needs a new source; a value
-  that isn't a source reference or `null` is a setting error. `create`
+  that isn't a source reference or `null` is a setting error, with the same reason. `create`
   paints the first frame; after that their `Painter` draws a new one each 1/30 s tick
   of `at` (`next_change` is the next tick; with no scope, `None`), row by row into a
   pool of up to four frames reused once no one holds them, so a frame handed out
@@ -322,18 +366,27 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   than a bin shows its nearest bin. Bars at least three pixels wide have a
   one-pixel gap.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
-  `http://` or `https://`) or the `file` asset (`.html` or `.htm`, which wins when set),
-  opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
+  scripts inline; it wins over the URL when it isn't blank), or the `file` asset
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
   CSS without reloading it. Through the engine a `css` edit still reloads the page, until
   the engine updates live settings in place (core's README › Open items).
+  `restart_on_show` (live, default off) reloads the page each time the program shows it
+  again (`show`), so an HTML graphic or stinger plays its entrance every time. It is
+  transparent while it reloads, never the end of its previous run.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
-  off, `jstream-browser`'s request policy refuses them (#347). `youtube_chat` never sets
-  it. The page's picture is only on the GPU (`gpu_frame`), so
-  `frame` is a transparent frame of the page's size, and the page's audio is the
+  off, `jstream-browser`'s request policy refuses them (#347), for a page given as
+  `html` too. `youtube_chat` never sets
+  it. Where the backend paints on the GPU (Windows), the page's picture is only there
+  (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
+  Where it paints on the CPU (CEF on Linux,
+  [ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)), `frame` is the page's
+  latest paint (transparent before the first), and `next_change` asks for the source
+  again one frame of `fps` later, rounded up to a millisecond. The page's audio is the
   source's `audio`. With no backend, `create` fails with `SourceError::NoBackend`; a
   backend's failure is `SourceError::Browser`. Dropping the source closes the page.
 - `youtube_chat` ("YouTube chat"): a preset of `browser` that shows a live video's chat
@@ -464,7 +517,9 @@ references), `jstream-browser` (the browser seam), `serde_json` (setting values)
 `thiserror` (`SourceError`), the pure-Rust decoders `png`, `zune-jpeg` with
 `zune-core`, `image-webp` and `gif`, `realfft` (with `rustfft`, scalar only) for the
 spectrum's FFT, and for fonts `skrifa` (with `read-fonts`, `font-types`, `bytemuck`,
-`yoke` and `once_cell`) and `ab_glyph_rasterizer`, each with default features off.
+`yoke` and `once_cell`) and `ab_glyph_rasterizer`, and `jiff` (with `jiff-core`, and on
+Windows its bundled `jiff-tzdb`) for the `timer`'s time of day, each with default
+features off.
 `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
@@ -495,7 +550,15 @@ them the styled text at a density of 2^0.75 (`JSTREAM_BLESS=1` rewrites them). `
 rectangle at its exact size, a pill whose corners are clear and whose edge is
 antialiased, a circle that is symmetric, linear gradients that run their angle without
 banding and mix in linear light, a radial one, and a border inside the edge, and
-checks that every setting is live. The unit tests check the shape's distances (a
+checks that every setting is live. `tests/timer.rs` checks that a countdown keeps its
+frame size when it turns to its `end_text` and a stopwatch past an hour, that a clock has
+one size and changes within a second, that `frame` hands out what the painter drew and
+`next_change` asks for a paint while it is out of date, that a countdown stops changing
+at its end, that an `end_text` too wide for the limits fails `create` and `update`, that
+a frame its padding takes past the limits names `end_text` rather than `text`, a
+density, a live update that keeps the count, which changes keep the time zero, and an
+unknown time zone; its unit tests check the values in every mode and format, the times
+they change at, and the candidates the box is measured by. The unit tests check the shape's distances (a
 rectangle's, a pill's corner, an ellipse's axes) and premultiplied mixing. The scope's unit tests check the
 ring (latest window, wrap-around, and a reader racing a writer never seeing a torn
 window), the frame ticks and easing, and draw both kinds from known audio: each
@@ -534,7 +597,7 @@ in the file one frame period apart, and cut a block at a rate where 10 ms isn't 
 number of frames, keeping every frame and the pieces contiguous. `tests/browser.rs` runs
 the `browser` kind against `jstream-browser`'s fake backend: the page spec it opens, file
 over URL, setting and backend errors, live CSS, the `local_network` opt-in, closing on
-drop and the audio hand-off.
+drop, the audio hand-off, and a page that paints on the CPU shown as the source's frame.
 `tests/youtube_chat.rs` runs the `youtube_chat` preset the same way: the popout chat
 page a video or link opens, a blank page for an empty setting, refused links, the
 default CSS and live CSS.

@@ -26,9 +26,9 @@ use jstream_media::FrameSize;
 
 use crate::{PageLocation, PageSpec};
 
-/// The longest message either side sends: a CSS update at most 64 KiB, an audio packet
-/// of at most 4096 stereo frames, or a URL at most 8 KiB.
-pub(crate) const MAX_MESSAGE_BYTES: usize = 128 * 1024;
+/// The longest message either side sends: a page opened with at most 128 KiB of HTML and
+/// 64 KiB of CSS, with room to spare.
+pub(crate) const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 
 /// The most samples one audio message carries: 4096 stereo frames.
 pub(crate) const MAX_AUDIO_SAMPLES: usize = 4096 * 2;
@@ -49,6 +49,8 @@ pub(crate) enum ToHelper {
     Open { page: u32, spec: PageSpec },
     /// Replace a page's custom CSS.
     SetCss { page: u32, css: String },
+    /// Load a page again from its location.
+    Reload { page: u32 },
     /// Close a page.
     Close { page: u32 },
     /// The engine is done with a page's shared texture `slot`: the helper may paint
@@ -87,6 +89,10 @@ pub(crate) enum ToEngine {
     Denied { page: u32, count: u64 },
     /// A page's browser closed.
     Closed { page: u32 },
+    /// The helper took a page's [`ToHelper::Reload`]: it paints nothing of the old
+    /// document after this, so every later [`Frame`](Self::Frame) of the page is the
+    /// reloaded one's.
+    Reloading { page: u32 },
     /// Something went wrong in the helper that the engine should log: the helper has no
     /// log of its own. The text names no page URL or path.
     Warning { message: String },
@@ -214,6 +220,10 @@ impl ToHelper {
                             .ok_or(WireError::Malformed("the page's file path isn't UTF-8"))?;
                         out.str(path)?;
                     }
+                    PageLocation::Html(html) => {
+                        out.u8(3);
+                        out.str(html)?;
+                    }
                 }
                 out.u32(spec.size.width());
                 out.u32(spec.size.height());
@@ -236,6 +246,10 @@ impl ToHelper {
                 out.u32(*page);
                 out.u8(*slot);
             }
+            Self::Reload { page } => {
+                out.u8(7);
+                out.u32(*page);
+            }
         }
         Ok(())
     }
@@ -255,6 +269,7 @@ impl ToHelper {
                     0 => PageLocation::Blank,
                     1 => PageLocation::Web(body.string()?),
                     2 => PageLocation::File(PathBuf::from(body.string()?)),
+                    3 => PageLocation::Html(body.string()?),
                     _ => return Err(WireError::Malformed("an unknown page location")),
                 };
                 let (width, height) = (body.u32()?, body.u32()?);
@@ -296,6 +311,7 @@ impl ToHelper {
                 page: body.u32()?,
                 slot: body.u8()?,
             },
+            7 => Self::Reload { page: body.u32()? },
             _ => return Err(WireError::Malformed("an unknown message to the helper")),
         };
         body.end()?;
@@ -363,6 +379,10 @@ impl ToEngine {
                 out.u8(9);
                 out.str(message)?;
             }
+            Self::Reloading { page } => {
+                out.u8(10);
+                out.u32(*page);
+            }
         }
         Ok(())
     }
@@ -410,6 +430,7 @@ impl ToEngine {
             9 => Self::Warning {
                 message: body.string()?,
             },
+            10 => Self::Reloading { page: body.u32()? },
             _ => return Err(WireError::Malformed("an unknown message to the engine")),
         };
         body.end()?;
@@ -546,11 +567,19 @@ mod tests {
                 page: 3,
                 spec: spec(PageLocation::File(PathBuf::from("/srv/overlay/index.html"))),
             },
+            ToHelper::Open {
+                page: 4,
+                spec: PageSpec {
+                    css: "x".repeat(crate::MAX_CSS_BYTES),
+                    ..spec(PageLocation::Html("é".repeat(crate::MAX_HTML_BYTES / 2)))
+                },
+            },
             ToHelper::SetCss {
                 page: 3,
                 css: "x".repeat(64 * 1024),
             },
             ToHelper::Close { page: 2 },
+            ToHelper::Reload { page: 4 },
             ToHelper::Released { page: 3, slot: 2 },
             ToHelper::Shutdown,
         ]);
@@ -584,6 +613,7 @@ mod tests {
                 count: u64::MAX,
             },
             ToEngine::Closed { page: 1 },
+            ToEngine::Reloading { page: 2 },
             ToEngine::Warning {
                 message: "a paint could not be copied".into(),
             },

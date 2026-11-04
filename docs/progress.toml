@@ -945,9 +945,17 @@ prs = [360]
 id = "3D2"
 milestone = "M3"
 title = "3D scenes with a camera"
-status = "review"
-prs = [1038]
-note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; then the protocol, graph, render and core parts, and the UI's camera fields and orbit drag"
+status = "done"
+prs = [1038, 1044, 1053, 1110]
+note = "ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110)"
+
+[[item]]
+id = "3D3"
+milestone = "M3"
+title = "3D models with materials and live textures"
+status = "planned"
+prs = [1112]
+note = "ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
 needs = ["build"]
 
 [[item]]
@@ -1038,3 +1046,11 @@ title = "A too_large error for oversized plugin state"
 status = "done"
 prs = [794, 981]
 note = "ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly"
+
+[[item]]
+id = "X2"
+milestone = "M3"
+title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP"
+status = "hardware"
+prs = [1034, 1048, 1050, 1052, 1064, 1085]
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"

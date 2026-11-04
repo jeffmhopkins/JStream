@@ -42,67 +42,140 @@ fn densest(extent: FrameSize) -> f32 {
     by_side.min(by_pixels).max(1.0)
 }
 
-/// Lays `text` out with `style` in `font`, then draws it `density` times as many pixels
-/// each way as `style` sizes it: the layout, its line breaks and the frame's own size
-/// (its [`Drawn::extent`]) are the same at any density, and only the drawing is finer.
-/// A density whose frame would hold more than a 4K canvas's pixels, or be wider or
-/// taller than 8192, is lowered to the highest that isn't ([`densest`]).
-///
-/// # Errors
-/// [`SourceError::Setting`] naming `text` when the drawn text would be larger than
-/// `limits` allow.
-pub(crate) fn render(
-    font: &FontRef<'_>,
-    text: &str,
-    style: &Style,
-    density: f32,
-    limits: &Limits,
-) -> Result<Drawn, SourceError> {
-    // `size` is the em size in pixels, which is skrifa's pixels per em.
-    let size = Size::new(style.size);
-    let metrics = font.metrics(size, LocationRef::default());
-    let advances = font.glyph_metrics(size, LocationRef::default());
-    let charmap = font.charmap();
-    let advance = |id: GlyphId| advances.advance_width(id).unwrap_or(0.0);
-    // `descent` is below the baseline, so negative.
-    let line_height = metrics.ascent - metrics.descent;
-    let line_step = line_height + metrics.leading;
+/// Where a drawn text's pixels lie, in layout pixels at a density of 1 from the text
+/// box's top left: whole pixels, since a frame's sides are.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct Bounds {
+    /// The background's rectangle (left, top, right, bottom): the text box with its
+    /// padding, grown to every glyph's ink and outline.
+    pub(crate) plate: [f32; 4],
+    /// The frame's rectangle: the plate, grown to the shadow.
+    pub(crate) frame: [f32; 4],
+}
 
-    // Lay out every line at x = 0, then align them.
-    let wrap = style.wrap_width.map(|w| w as f32);
-    let mut lines: Vec<(Vec<(GlyphId, f32)>, f32)> = Vec::new();
-    for paragraph in text.split('\n') {
-        let glyphs: Vec<(GlyphId, f32, bool)> = paragraph
-            .chars()
-            .filter_map(|c| match c {
-                '\t' => Some(' '),
-                c if c.is_control() => None,
-                c => Some(c),
-            })
-            .map(|c| {
-                let id = charmap.map(c).unwrap_or(GlyphId::NOTDEF);
-                (id, advance(id) + style.letter_spacing, c == ' ')
-            })
-            .collect();
-        for range in wrap_lines(&glyphs, wrap) {
-            lines.push(place(&glyphs[range], style.letter_spacing));
+impl Bounds {
+    /// The smallest bounds holding both.
+    pub(crate) fn union(self, other: Self) -> Self {
+        let join = |a: [f32; 4], b: [f32; 4]| {
+            [
+                a[0].min(b[0]),
+                a[1].min(b[1]),
+                a[2].max(b[2]),
+                a[3].max(b[3]),
+            ]
+        };
+        Self {
+            plate: join(self.plate, other.plate),
+            frame: join(self.frame, other.frame),
         }
     }
-    let widest = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max);
-    let box_width = wrap.unwrap_or(widest);
-    let box_height = line_height + line_step * (lines.len().saturating_sub(1)) as f32;
-    let outlines = font.outline_glyphs();
-    // Every glyph's outline, placed, at a density `d`: positions and the em size scaled
-    // alike.
-    let pens = |d: f32| {
+}
+
+/// `text` laid out in lines with `style`, at a density of 1.
+struct Layout {
+    /// Each line's glyphs with their x from the line's start, and the line's width.
+    lines: Vec<(Vec<(GlyphId, f32)>, f32)>,
+    box_width: f32,
+    ascent: f32,
+    line_step: f32,
+    bounds: Bounds,
+}
+
+impl Layout {
+    fn new(font: &FontRef<'_>, text: &str, style: &Style) -> Self {
+        // `size` is the em size in pixels, which is skrifa's pixels per em.
+        let size = Size::new(style.size);
+        let metrics = font.metrics(size, LocationRef::default());
+        let advances = font.glyph_metrics(size, LocationRef::default());
+        let charmap = font.charmap();
+        let advance = |id: GlyphId| advances.advance_width(id).unwrap_or(0.0);
+        // `descent` is below the baseline, so negative.
+        let line_height = metrics.ascent - metrics.descent;
+        let line_step = line_height + metrics.leading;
+
+        // Lay out every line at x = 0, then align them.
+        let wrap = style.wrap_width.map(|w| w as f32);
+        let mut lines: Vec<(Vec<(GlyphId, f32)>, f32)> = Vec::new();
+        for paragraph in text.split('\n') {
+            let glyphs: Vec<(GlyphId, f32, bool)> = paragraph
+                .chars()
+                .filter_map(|c| match c {
+                    '\t' => Some(' '),
+                    c if c.is_control() => None,
+                    c => Some(c),
+                })
+                .map(|c| {
+                    let id = charmap.map(c).unwrap_or(GlyphId::NOTDEF);
+                    (id, advance(id) + style.letter_spacing, c == ' ')
+                })
+                .collect();
+            for range in wrap_lines(&glyphs, wrap) {
+                lines.push(place(&glyphs[range], style.letter_spacing));
+            }
+        }
+        let widest = lines.iter().map(|(_, w)| *w).fold(0.0, f32::max);
+        let box_width = wrap.unwrap_or(widest);
+        let box_height = line_height + line_step * (lines.len().saturating_sub(1)) as f32;
+        let mut layout = Self {
+            lines,
+            box_width,
+            ascent: metrics.ascent,
+            line_step,
+            bounds: Bounds {
+                plate: [0.0; 4],
+                frame: [0.0; 4],
+            },
+        };
+        // The bounds come from the outlines at a density of 1, so the extent is the
+        // frame's size at 1 whatever the density: dividing the dense bounds back by it
+        // can land a pixel over (review B1 on #781).
+        let plain = layout.pens(font, style, 1.0);
+
+        // The frame holds the text box with its padding, and every glyph's ink with the
+        // outline around it, which may reach past the box: the background fills that
+        // much. A shadow may reach past it again, over a transparent margin. Its bounds
+        // are whole pixels at a density of 1, its extent.
+        let pad = style.padding as f32;
+        let reach = style.outline_width as f32;
+        let (mut left, mut top) = (-pad, -pad);
+        let (mut right, mut bottom) = (box_width + pad, box_height + pad);
+        for glyph in &plain {
+            left = left.min(glyph.min.x - reach);
+            top = top.min(glyph.min.y - reach);
+            right = right.max(glyph.max.x + reach);
+            bottom = bottom.max(glyph.max.y + reach);
+        }
+        let plate = [left.floor(), top.floor(), right.ceil(), bottom.ceil()];
+        let shadow = style.shadow;
+        if shadow.shows() {
+            // Three standard deviations of the blur, which is twice one.
+            let spread = reach + 1.5 * shadow.blur;
+            for glyph in &plain {
+                left = left.min(glyph.min.x - spread + shadow.x);
+                top = top.min(glyph.min.y - spread + shadow.y);
+                right = right.max(glyph.max.x + spread + shadow.x);
+                bottom = bottom.max(glyph.max.y + spread + shadow.y);
+            }
+        }
+        layout.bounds = Bounds {
+            plate,
+            frame: [left.floor(), top.floor(), right.ceil(), bottom.ceil()],
+        };
+        layout
+    }
+
+    /// Every glyph's outline, placed, at a density `d`: positions and the em size scaled
+    /// alike.
+    fn pens(&self, font: &FontRef<'_>, style: &Style, d: f32) -> Vec<Pen> {
+        let outlines = font.outline_glyphs();
         let mut glyphs = Vec::new();
-        for (i, (line, width)) in lines.iter().enumerate() {
+        for (i, (line, width)) in self.lines.iter().enumerate() {
             let offset = match style.align {
                 Align::Left => 0.0,
-                Align::Center => (box_width - width) / 2.0,
-                Align::Right => box_width - width,
+                Align::Center => (self.box_width - width) / 2.0,
+                Align::Right => self.box_width - width,
             };
-            let baseline = metrics.ascent + line_step * i as f32;
+            let baseline = self.ascent + self.line_step * i as f32;
             for &(id, x) in line {
                 let mut pen = Pen::new((x + offset) * d, baseline * d);
                 // A glyph with no outline (a space) or one the font can't draw adds no
@@ -122,49 +195,67 @@ pub(crate) fn render(
             }
         }
         glyphs
-    };
-    // The bounds come from the outlines at a density of 1, so the extent is the frame's
-    // size at 1 whatever the density: dividing the dense bounds back by it can land a
-    // pixel over (review B1 on #781).
-    let plain = pens(1.0);
+    }
+}
 
-    // The frame holds the text box with its padding, and every glyph's ink with the
-    // outline around it, which may reach past the box: the background fills that much.
-    // A shadow may reach past it again, over a transparent margin. Its bounds are whole
-    // pixels at a density of 1, its extent, and the drawing covers them `k` times over.
-    let pad = style.padding as f32;
+/// Where `text` drawn with `style` in `font` lies ([`Bounds`]), and how wide its widest
+/// line is, without drawing it: what a caller that draws several texts in one fixed
+/// frame ([`render_within`]) measures them by.
+pub(crate) fn measure(font: &FontRef<'_>, text: &str, style: &Style) -> (Bounds, f32) {
+    let layout = Layout::new(font, text, style);
+    let widest = layout.lines.iter().map(|(_, w)| *w).fold(0.0, f32::max);
+    (layout.bounds, widest)
+}
+
+/// Lays `text` out with `style` in `font`, then draws it `density` times as many pixels
+/// each way as `style` sizes it: the layout, its line breaks and the frame's own size
+/// (its [`Drawn::extent`]) are the same at any density, and only the drawing is finer.
+/// A density whose frame would hold more than a 4K canvas's pixels, or be wider or
+/// taller than 8192, is lowered to the highest that isn't ([`densest`]).
+///
+/// # Errors
+/// [`SourceError::Setting`] naming `text` when the drawn text would be larger than
+/// `limits` allow.
+pub(crate) fn render(
+    font: &FontRef<'_>,
+    text: &str,
+    style: &Style,
+    density: f32,
+    limits: &Limits,
+) -> Result<Drawn, SourceError> {
+    render_within(font, text, style, density, limits, None)
+}
+
+/// [`render`], into the frame `within` gives instead of the text's own when it is
+/// `Some`: the frame and its background are exactly those rectangles, whatever the
+/// text, and ink outside them is cut off. So texts measured together ([`measure`],
+/// [`Bounds::union`]) all draw frames of one size, each placed where its own layout
+/// puts it.
+///
+/// # Errors
+/// As [`render`]'s.
+pub(crate) fn render_within(
+    font: &FontRef<'_>,
+    text: &str,
+    style: &Style,
+    density: f32,
+    limits: &Limits,
+    within: Option<Bounds>,
+) -> Result<Drawn, SourceError> {
+    let layout = Layout::new(font, text, style);
+    let Bounds {
+        plate,
+        frame: [left, top, right, bottom],
+    } = within.unwrap_or(layout.bounds);
     let reach = style.outline_width as f32;
-    let (mut left, mut top) = (-pad, -pad);
-    let (mut right, mut bottom) = (box_width + pad, box_height + pad);
-    for glyph in &plain {
-        left = left.min(glyph.min.x - reach);
-        top = top.min(glyph.min.y - reach);
-        right = right.max(glyph.max.x + reach);
-        bottom = bottom.max(glyph.max.y + reach);
-    }
-    let plate = [left.floor(), top.floor(), right.ceil(), bottom.ceil()];
     let shadow = style.shadow;
-    if shadow.shows() {
-        // Three standard deviations of the blur, which is twice one.
-        let spread = reach + 1.5 * shadow.blur;
-        for glyph in &plain {
-            left = left.min(glyph.min.x - spread + shadow.x);
-            top = top.min(glyph.min.y - spread + shadow.y);
-            right = right.max(glyph.max.x + spread + shadow.x);
-            bottom = bottom.max(glyph.max.y + spread + shadow.y);
-        }
-    }
-    let (left, top) = (left.floor(), top.floor());
-    let extent = FrameSize::new(
-        side(right.ceil() - left, limits)?,
-        side(bottom.ceil() - top, limits)?,
-    )?;
+    let extent = FrameSize::new(side(right - left, limits)?, side(bottom - top, limits)?)?;
     let k = if density > 1.0 {
         density.min(densest(extent))
     } else {
         density
     };
-    let dense = (k != 1.0).then(|| pens(k));
+    let pens = layout.pens(font, style, k);
     let width = side((extent.width() as f32 * k).ceil(), limits)?;
     let height = side((extent.height() as f32 * k).ceil(), limits)?;
     // The background's rectangle in frame pixels, rounded outward as the frame's own
@@ -189,7 +280,7 @@ pub(crate) fn render(
     let (w, h) = (width as usize, height as usize);
 
     let mut fill = vec![0f32; w * h];
-    for glyph in dense.as_ref().unwrap_or(&plain) {
+    for glyph in &pens {
         glyph.draw(&mut fill, w, h, point(left, top));
     }
     let outline = (style.outline_width > 0).then(|| outline(&fill, w, h, reach));

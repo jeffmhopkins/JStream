@@ -1,13 +1,15 @@
 //! The scene Properties dialog (spec-workspace.md 6.2.5): a scene's name, its
 //! Transition in and out, the hotkey that switches to it, whether a multiview shows it,
-//! its background colour, and whether its audio reaches the Mixer when it is nested.
-//! Everything is a draft until OK, which sends what changed as one batch
-//! (`scene.rename`, `scene.set_transitions`, `scene.set_meta`, `scene.set_options`,
-//! `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop drop it, and
-//! Defaults clears the overrides, the hotkey and the background and checks both switches
-//! again, keeping the name. A keyframe scene shows its parent's background, which its
-//! dialog shows and doesn't edit. The scene's filters show on the right, each change sent
-//! at once, as the source Properties dialog's are.
+//! its background colour, whether its audio reaches the Mixer when it is nested, and its
+//! 3D camera (ADR-0094). Everything is a draft until OK, which sends what changed as one
+//! batch (`scene.rename`, `scene.set_transitions`, `scene.set_meta`, `scene.set_options`,
+//! `scene.set_camera`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
+//! drop it, and Defaults clears the overrides, the hotkey and the background and checks
+//! both switches again, keeping the name and the camera. A keyframe scene's camera is
+//! its override of its parent's, offered only while the parent has one. A keyframe
+//! scene shows its parent's background, which its dialog shows and doesn't edit. The
+//! scene's filters show on the right, each change sent at once, as the source
+//! Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -19,7 +21,8 @@ use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, Chord, Edit, FilterOwner, SceneId, TransitionPresetId, parse_rgba,
+    Action, Chord, Edit, FilterOwner, Finite32, SceneCamera, SceneId, TransitionPresetId,
+    parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -47,7 +50,7 @@ impl Default for SceneDialog {
 }
 
 /// What the dialog edits.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct SceneDraft {
     /// The display name, as typed.
     pub name: String,
@@ -63,6 +66,9 @@ pub struct SceneDraft {
     pub include_audio: bool,
     /// Its background colour as typed (`#rrggbb` or `#rrggbbaa`), or none.
     pub background: Option<String>,
+    /// Its camera, which makes it a 3D scene (ADR-0094); on a keyframe scene its
+    /// override of its parent's.
+    pub camera: Option<SceneCamera>,
 }
 
 impl SceneDraft {
@@ -77,16 +83,29 @@ impl SceneDraft {
             show_in_multiview: scene.meta.show_in_multiview,
             include_audio: scene.options.include_audio,
             background: scene.options.background.clone(),
+            camera: scene.camera,
         })
+    }
+}
+
+/// The camera the dialog's switch starts `scene_id` from when it is turned on (ADR-0094
+/// §6): a keyframe scene's parent's, which its own then overrides, or `None` while that
+/// parent has none, as `scene.set_camera` refuses; any other scene's starts from one that
+/// shows it as it is now.
+pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<SceneCamera> {
+    match collection.scene(scene_id)?.variant_of {
+        Some(_) => collection.parent_of(scene_id)?.camera,
+        None => Some(SceneCamera::framing(collection.canvas)),
     }
 }
 
 /// The edits that turn `before` into `draft` for `scene_id`, in one batch: a rename
 /// (a blank name is ignored), the overrides, the multiview flag (the scene's other
-/// metadata kept), the options, then the hotkey (the old chord cleared
+/// metadata kept), the options, the camera, then the hotkey (the old chord cleared
 /// before the new one is bound, keeping the preset the old binding named). Refused when
-/// the background isn't a colour, or the new chord is bound already, which
-/// `scene.set_options` and `hotkey.set` would refuse too.
+/// the background isn't a colour, the camera is one the engine can't see through, or
+/// the new chord is bound already, which `scene.set_options`, `scene.set_camera` and
+/// `hotkey.set` would refuse too.
 pub fn scene_edits(
     collection: &Collection,
     scene_id: &SceneId,
@@ -139,6 +158,17 @@ pub fn scene_edits(
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
+        });
+    }
+    if draft.camera != before.camera {
+        if let Some(camera) = draft.camera
+            && let Err(error) = camera.validate()
+        {
+            return Err(format!("The camera can't be used: {error}."));
+        }
+        edits.push(Edit::SceneSetCamera {
+            scene_id: scene_id.clone(),
+            camera: draft.camera,
         });
     }
     if draft.hotkey != before.hotkey {
@@ -266,6 +296,112 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     let swatch = {
         let shown = shown_background.clone();
         move || background_swatch(&shown())
+    };
+    // The camera (ADR-0094). A keyframe scene's is an override of its parent's, which
+    // it follows while it has none of its own; with no parent camera there is none to
+    // override.
+    let (canvas, parent_camera, items_3d) = studio.collection.with_untracked(|c| {
+        c.as_ref().map_or((Default::default(), None, false), |c| {
+            (
+                c.canvas,
+                c.parent_of(&scene_id).and_then(|p| p.camera),
+                has_3d_items(c, &scene_id),
+            )
+        })
+    });
+    let camera_label = if keyframe { "Own camera" } else { "3D camera" };
+    let start = studio
+        .collection
+        .with_untracked(|c| c.as_ref().map(|c| camera_start(c, &scene_id)));
+    let camera_locked = start.is_some_and(|s| s.is_none());
+    let parent_name = keyframe_of.as_ref().map(|(parent, _)| parent.clone());
+    let camera_note = move || {
+        let on = draft.with(|d| d.camera.is_some());
+        match (&parent_name, parent_camera, on) {
+            (Some(parent), None, _) => {
+                format!("Give “{parent}” a camera first; a keyframe scene follows its parent.")
+            }
+            (Some(parent), Some(_), false) => {
+                format!("Off, it follows the camera of “{parent}”. On, it moves the camera when you switch to it.")
+            }
+            (_, _, true) if items_3d => "Items with depth or angles already look different through the camera.".to_owned(),
+            (_, _, true) => "Items sit in one 3D space. Alt-drag on the canvas to orbit, Alt+Shift-drag to dolly.".to_owned(),
+            (None, _, false) => "Starts from a camera that shows the scene as it is now.".to_owned(),
+        }
+    };
+    let toggle_camera = move |on: bool| {
+        draft.update(|d| {
+            d.camera = on.then(|| {
+                start
+                    .flatten()
+                    .unwrap_or_else(|| SceneCamera::framing(canvas))
+            });
+        });
+    };
+    let number = move |label: &'static str, field: CameraField, step: &'static str| {
+        view! {
+            <label class="camera-number">
+                <span class="label">{label}</span>
+                <input
+                    type="number"
+                    step=step
+                    aria-label=label
+                    prop:value=move || draft.with(|d| d.camera.map(|c| {
+                        let v = field.get(&c);
+                        format!("{}", (v * 100.0).round() / 100.0 + 0.0)
+                    }).unwrap_or_default())
+                    on:change=move |event| {
+                        if let Ok(value) = event_target_value(&event).trim().parse::<f32>() {
+                            draft.update(|d| {
+                                if let Some(camera) = d.camera.as_mut() {
+                                    field.set(camera, value);
+                                }
+                            });
+                        }
+                    }
+                />
+            </label>
+        }
+    };
+    let camera_fields = move || {
+        draft.with(|d| d.camera.is_some()).then(|| {
+            view! {
+                <div class="camera-fields">
+                    <div class="camera-row">
+                        <span class="label">"Position"</span>
+                        {number("Position X", CameraField::Position(0), "1")}
+                        {number("Position Y", CameraField::Position(1), "1")}
+                        {number("Position Z", CameraField::Position(2), "1")}
+                    </div>
+                    <div class="camera-row">
+                        <span class="label">"Looks at"</span>
+                        {number("Target X", CameraField::Target(0), "1")}
+                        {number("Target Y", CameraField::Target(1), "1")}
+                        {number("Target Z", CameraField::Target(2), "1")}
+                    </div>
+                    <div class="camera-row">
+                        {number("Field of view (°)", CameraField::Fov, "0.5")}
+                        {number("Roll (°)", CameraField::Roll, "0.5")}
+                    </div>
+                    <label class="camera-row">
+                        <input
+                            type="checkbox"
+                            aria-label="Nearest on top"
+                            prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.depth_sort))
+                            on:change=move |event| {
+                                let sorted = event_target_checked(&event);
+                                draft.update(|d| {
+                                    if let Some(camera) = d.camera.as_mut() {
+                                        camera.depth_sort = sorted;
+                                    }
+                                });
+                            }
+                        />
+                        <span>"Nearest on top (off: stacking order)"</span>
+                    </label>
+                </div>
+            }
+        })
     };
     let problem = RwSignal::new(None::<String>);
     let id = StoredValue::new(scene_id);
@@ -484,6 +620,20 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
                 </label>
+                <div class="field camera-field">
+                    <label class="camera-toggle">
+                        <span class="label">{camera_label}</span>
+                        <input
+                            type="checkbox"
+                            aria-label=camera_label
+                            disabled=camera_locked
+                            prop:checked=move || draft.with(|d| d.camera.is_some())
+                            on:change=move |event| toggle_camera(event_target_checked(&event))
+                        />
+                    </label>
+                    {camera_fields}
+                    <span class="field-note">{camera_note}</span>
+                </div>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
             </div>
             <SceneFilterSide owner=owner parent=parent />
@@ -496,6 +646,69 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         </Modal>
     }
     .into_any()
+}
+
+/// Whether any of `scene`'s items already has 3D (depth, tilt, turn or its own
+/// perspective), which looks different once the scene has a camera (ADR-0094).
+fn has_3d_items(collection: &Collection, scene_id: &SceneId) -> bool {
+    let scene = collection
+        .parent_of(scene_id)
+        .or_else(|| collection.scene(scene_id));
+    scene.is_some_and(|scene| {
+        scene
+            .items
+            .iter()
+            .filter_map(|item| item.geometry)
+            .any(|g| {
+                g.depth_px.get() != 0.0
+                    || g.tilt_deg.get() != 0.0
+                    || g.turn_deg.get() != 0.0
+                    || g.perspective_px.is_some()
+            })
+    })
+}
+
+/// One number of a camera, to show and to set.
+#[derive(Clone, Copy)]
+enum CameraField {
+    Position(usize),
+    Target(usize),
+    Fov,
+    Roll,
+}
+
+impl CameraField {
+    fn get(self, camera: &SceneCamera) -> f32 {
+        let axis = |v: &jstream_control::protocol::Vec3, i: usize| match i {
+            0 => v.x.get(),
+            1 => v.y.get(),
+            _ => v.z.get(),
+        };
+        match self {
+            CameraField::Position(i) => axis(&camera.position, i),
+            CameraField::Target(i) => axis(&camera.target, i),
+            CameraField::Fov => camera.fov_deg.get(),
+            CameraField::Roll => camera.roll_deg.get(),
+        }
+    }
+
+    /// `camera` with this number set to `value`, or unchanged when it isn't finite.
+    fn set(self, camera: &mut SceneCamera, value: f32) {
+        let Some(value) = Finite32::new(value) else {
+            return;
+        };
+        let axis = |v: &mut jstream_control::protocol::Vec3, i: usize| match i {
+            0 => v.x = value,
+            1 => v.y = value,
+            _ => v.z = value,
+        };
+        match self {
+            CameraField::Position(i) => axis(&mut camera.position, i),
+            CameraField::Target(i) => axis(&mut camera.target, i),
+            CameraField::Fov => camera.fov_deg = value,
+            CameraField::Roll => camera.roll_deg = value,
+        }
+    }
 }
 
 /// The `#rrggbb` a colour swatch shows for `background`: its colour without alpha, or
@@ -734,6 +947,131 @@ mod tests {
         );
         assert_eq!(scene_edits(&c, &a, &before, &with("#112233")), Ok(vec![]));
         assert!(scene_edits(&c, &a, &before, &with("blue")).is_err());
+    }
+
+    /// ADR-0094: turning the camera on, changing it and turning it off each send one
+    /// `scene.set_camera`; a camera the engine would refuse is refused before sending.
+    #[test]
+    fn the_camera_sends_scene_set_camera() {
+        let scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+        }))
+        .expect("a scene");
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert_eq!(before.camera, None);
+        let framing = SceneCamera::framing(jstream_control::protocol::Canvas {
+            width: 1920,
+            height: 1080,
+        });
+        let on = SceneDraft {
+            camera: Some(framing),
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &on),
+            Ok(vec![Edit::SceneSetCamera {
+                scene_id: a.clone(),
+                camera: Some(framing),
+            }])
+        );
+        assert_eq!(
+            scene_edits(&c, &a, &on, &before),
+            Ok(vec![Edit::SceneSetCamera {
+                scene_id: a.clone(),
+                camera: None,
+            }])
+        );
+        let mut wide = framing;
+        CameraField::Fov.set(&mut wide, 200.0);
+        assert_eq!(CameraField::Fov.get(&wide), 200.0);
+        let refused = SceneDraft {
+            camera: Some(wide),
+            ..before.clone()
+        };
+        assert!(scene_edits(&c, &a, &before, &refused).is_err());
+        let mut moved = framing;
+        CameraField::Position(2).set(&mut moved, 900.0);
+        CameraField::Target(0).set(&mut moved, f32::NAN);
+        assert_eq!(CameraField::Position(2).get(&moved), 900.0);
+        assert_eq!(
+            CameraField::Target(0).get(&moved),
+            960.0,
+            "a non-finite number is ignored"
+        );
+    }
+
+    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, and is
+    /// offered only while the parent has one; any other scene starts from the framing.
+    #[test]
+    fn a_keyframe_gets_own_camera_only_while_its_parent_has_one() {
+        let scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
+            { "scene_id": "p", "name": "P", "items": [] },
+            { "scene_id": "k", "name": "K", "items": [], "variant_of": "p" },
+        ]))
+        .expect("scenes");
+        let mut c = Collection {
+            scenes,
+            ..Collection::default()
+        };
+        let p = SceneId::new("p");
+        let k = SceneId::new("k");
+        let framing = SceneCamera::framing(c.canvas);
+        assert_eq!(camera_start(&c, &p), Some(framing));
+        assert_eq!(camera_start(&c, &k), None, "the parent has no camera");
+        let mut parents = framing;
+        CameraField::Position(0).set(&mut parents, 300.0);
+        c.scenes[0].camera = Some(parents);
+        assert_eq!(camera_start(&c, &k), Some(parents));
+        assert_eq!(camera_start(&c, &SceneId::new("gone")), None);
+    }
+
+    /// A scene whose items already have depth or angles warns that a camera changes them.
+    #[test]
+    fn items_with_3d_are_noticed() {
+        use jstream_control::protocol::{
+            Crop, ItemGeometry, ItemInfo, ItemTransform, PlacementForm, Size, Vec2,
+        };
+        let mut geometry = ItemGeometry::try_new(
+            Vec2::new(10.0, 10.0).expect("finite"),
+            Size::try_new(10.0, 10.0).expect("positive"),
+        )
+        .expect("geometry");
+        let mut scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+        }))
+        .expect("a scene");
+        let mut c = Collection {
+            scenes: vec![scene.clone()],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        assert!(!has_3d_items(&c, &a));
+        geometry.turn_deg = Finite32::new(30.0).expect("finite");
+        scene.items.push(ItemInfo {
+            item_id: "i".into(),
+            source_id: "s".into(),
+            placement: PlacementForm::Geometry,
+            transform: ItemTransform::IDENTITY,
+            geometry: Some(geometry),
+            crop: Crop::NONE,
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
+        });
+        c.scenes = vec![scene];
+        assert!(has_3d_items(&c, &a));
     }
 
     /// The swatch shows a background's colour without its alpha, and picking one keeps

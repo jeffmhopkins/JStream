@@ -94,7 +94,7 @@ fn premultiplied([r, g, b, a]: [f32; 4]) -> [f32; 4] {
 }
 
 /// Copies `input` texel for texel into `output`, the same size.
-fn copy(ctx: &mut Ctx<'_>, input: &Image, output: &Image) -> Result<(), RenderError> {
+pub(crate) fn copy(ctx: &mut Ctx<'_>, input: &Image, output: &Image) -> Result<(), RenderError> {
     ctx.draw(&Draw {
         shader: COPY,
         input,

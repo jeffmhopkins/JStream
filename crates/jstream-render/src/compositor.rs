@@ -12,6 +12,7 @@ use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::mips::{MipPipelines, Mips, Region};
+use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
 use jstream_protocol::BlendMode;
@@ -83,11 +84,17 @@ pub struct Compositor {
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
+    /// The order a 3D scene's items draw in (ADR-0094 decision 4), kept to reuse its
+    /// allocation: each item's depth along the camera's axis and its index.
+    order: Vec<(f64, usize)>,
     /// The holds staged for the submit being built, and their textures, which the
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
     mip_pipelines: MipPipelines,
+    models: ModelRuntime,
+    /// How long the last [`Self::render`] waited for its readback (ADR-0103).
+    readback_wait: std::time::Duration,
 }
 
 impl Compositor {
@@ -207,6 +214,7 @@ impl Compositor {
     /// A failed `stage` may already have armed the queue's next submit: the platform
     /// attaches the fences to whichever submit happens next.
     pub fn render(&mut self, scene: &Scene<'_>, readback: bool) -> Result<Output, RenderError> {
+        self.readback_wait = std::time::Duration::ZERO;
         self.load(scene)?;
         let width = scene.canvas.width();
         let height = scene.canvas.height();
@@ -275,11 +283,20 @@ impl Compositor {
         }
 
         let output = targets.output.clone();
+        let waiting = std::time::Instant::now();
         let pixels = match readback_buffer {
             Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
             None => None,
         };
+        self.readback_wait = waiting.elapsed();
         Ok(Output::new(output, width, height, pixels))
+    }
+
+    /// How long the last [`Self::render`] spent waiting for its readback: the GPU
+    /// finishing the frame and the copy to the CPU. Zero for a render with no readback.
+    /// A profile counts it apart from the composite it follows (ADR-0103).
+    pub fn readback_wait(&self) -> std::time::Duration {
+        self.readback_wait
     }
 
     /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
@@ -374,6 +391,33 @@ impl Compositor {
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
+    }
+
+    /// Uploads a 3D model (ADR-0107): its meshes, its textures with the mips the model
+    /// already holds, and its materials. Do it once per [`jstream_media::model::Model::version`]
+    /// and keep the result; drawing it allocates nothing.
+    ///
+    /// # Errors
+    /// [`RenderError::TooLarge`] for a texture past the adapter's limit, and
+    /// [`RenderError::Invalid`] for a primitive too large for one draw or for one of the
+    /// adapter's buffers.
+    pub fn upload_model(
+        &self,
+        model: &jstream_media::model::Model,
+    ) -> Result<GpuModel, RenderError> {
+        self.models.upload(&self.gpu, &self.owner, model)
+    }
+
+    /// Draws a model placed by an item into `target`, a [`Self::layer`] of the canvas
+    /// size, replacing what it held (ADR-0107 decision 6): transparent where the model
+    /// isn't, the model with its own depth test where it is. A scene then places the
+    /// layer with [`crate::Placement::Layer`], after any filters run over it.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when the model or the layer came from another compositor
+    /// or the target is not a layer, or when the placement or camera can't be drawn.
+    pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
+        self.models.draw(&self.gpu, &self.owner, draw, target)
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed
@@ -630,6 +674,7 @@ impl Compositor {
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
         let filters = filter::Runtime::new(&gpu.device);
         let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
+        let models = ModelRuntime::new(&gpu);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-vertices"),
             size: VERTEX_STRIDE * u64::from(MAX_VERTICES_PER_ITEM),
@@ -649,9 +694,12 @@ impl Compositor {
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
+            order: Vec::new(),
             staged: Vec::new(),
             filters,
             mip_pipelines,
+            models,
+            readback_wait: std::time::Duration::ZERO,
         }
     }
 
@@ -660,7 +708,40 @@ impl Compositor {
         self.draws.clear();
         let canvas_w = scene.canvas.width() as f32;
         let canvas_h = scene.canvas.height() as f32;
-        for (index, item) in scene.items.iter().enumerate() {
+        // Stacking order, or far to near within each run of items seen through one camera
+        // that sorts, in one `depth_run` (ADR-0094 decision 4); equal depths keep
+        // stacking order.
+        self.order.clear();
+        self.order.extend(
+            scene
+                .items
+                .iter()
+                .enumerate()
+                .map(|(index, _)| (0.0, index)),
+        );
+        let mut start = 0;
+        while start < scene.items.len() {
+            let (camera, run) = (scene.items[start].camera, scene.items[start].depth_run);
+            let end = scene.items[start..]
+                .iter()
+                .position(|item| item.camera != camera || item.depth_run != run)
+                .map_or(scene.items.len(), |run| start + run);
+            if let Some(camera) = camera.filter(|camera| camera.depth_sort) {
+                let view = view_of(camera, scene)?;
+                for slot in &mut self.order[start..end] {
+                    slot.0 = place::depth(&view, scene.items[slot.1].placement);
+                }
+                // Unstable, so it allocates nothing; the index breaks ties, which keeps
+                // stacking order among items at one depth.
+                self.order[start..end]
+                    .sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+            }
+            start = end;
+        }
+        let mut view: Option<(jstream_protocol::SceneCamera, jstream_protocol::CameraView)> = None;
+        for at in 0..self.order.len() {
+            let index = self.order[at].1;
+            let item = &scene.items[index];
             // Checked for hidden items too, so a scene is valid or not regardless of
             // visibility. Another compositor's bind group would reach a wgpu panic.
             if !item.image.owner().is(&self.owner) {
@@ -677,7 +758,13 @@ impl Compositor {
             }
             self.blends.steps(item.blend)?;
             let (width, height) = item.image.extent();
-            let mut shape = place::shape(width, height, item.placement, item.crop)?;
+            if let Some(camera) = item.camera
+                && view.as_ref().is_none_or(|(seen, _)| *seen != camera)
+            {
+                view = Some((camera, view_of(camera, scene)?));
+            }
+            let seen = item.camera.and(view.as_ref()).map(|(_, view)| view);
+            let mut shape = place::shape_seen(width, height, item.placement, item.crop, seen)?;
             if !item.visible || item.opacity == 0.0 {
                 continue;
             }
@@ -1127,6 +1214,23 @@ impl std::fmt::Debug for Compositor {
             .field("adapter", &self.adapter_description())
             .finish_non_exhaustive()
     }
+}
+
+/// `camera` seen on `scene`'s canvas, or [`RenderError::Invalid`] for a camera the
+/// collection would refuse.
+fn view_of(
+    camera: jstream_protocol::SceneCamera,
+    scene: &Scene<'_>,
+) -> Result<jstream_protocol::CameraView, RenderError> {
+    camera
+        .view(jstream_protocol::Canvas {
+            width: scene.canvas.width(),
+            height: scene.canvas.height(),
+        })
+        .map_err(|error| RenderError::Invalid {
+            what: "camera",
+            detail: error.to_string(),
+        })
 }
 
 /// The texels of a `width` by `height` target that `shape` can touch, a texel of margin

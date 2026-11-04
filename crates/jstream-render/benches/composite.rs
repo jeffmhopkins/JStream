@@ -18,6 +18,12 @@
 //! - `composite_1080p_blend`: the submit frame of 4 items, each drawn with one blend
 //!   mode: `normal`, `multiply` (two fixed-function draws) and `overlay` (a backdrop
 //!   copy and a pass per item, ADR-0082).
+//! - `composite_1080p_camera`: the submit frame of N items in a 3D scene (ADR-0094): each
+//!   turned and at its own depth, seen through an off-axis camera and sorted far to near,
+//!   so every item takes the 3D path (its mip chain, anisotropic sampling, edge coverage).
+//! - `model_1080p`: one built-in sphere drawn into a 1080p layer through that camera,
+//!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
+//!   model; and the same with a cube, the cheapest closed shape.
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (CPU premultiply in linear
 //!   light, then the queue write), as an image or browser source does on a new frame.
 
@@ -26,8 +32,12 @@ use std::io::Write;
 
 use criterion::{BenchmarkId, Criterion, criterion_main};
 use jstream_media::FrameSize;
+use jstream_media::model::Material;
+use jstream_media::model::shapes::Shape;
+use jstream_protocol::{Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
 use jstream_render::{
-    BlendMode, Color, Compositor, Crop, Image, Item, LegacyTransform, OpenOptions, Placement, Scene,
+    BlendMode, Color, Compositor, Crop, Image, Item, LegacyTransform, Lighting, ModelDraw,
+    OpenOptions, Placement, Scene,
 };
 
 const WIDTH: u32 = 1920;
@@ -116,6 +126,8 @@ fn blended(images: &[Image], blend: BlendMode) -> Vec<Item<'_>> {
                 opacity: 0.8,
                 blend,
                 visible: true,
+                camera: None,
+                depth_run: 0,
             }
         })
         .collect()
@@ -191,6 +203,121 @@ fn composite(c: &mut Criterion) {
     group.finish();
 }
 
+/// The camera the 3D benches look through: up and to the left of the framing camera,
+/// looking at the canvas centre.
+fn camera() -> SceneCamera {
+    let framing = SceneCamera::framing(jstream_protocol::Canvas {
+        width: WIDTH,
+        height: HEIGHT,
+    });
+    SceneCamera {
+        position: Vec3::new(600.0, 200.0, framing.position.z.get() * 0.9)
+            .expect("invariant: finite"),
+        ..framing
+    }
+}
+
+fn geometry(x: f32, y: f32, size: f32) -> ItemGeometry {
+    let center = Vec2::new(x, y).expect("invariant: finite");
+    let size = Size::try_new(size, size * 9.0 / 16.0).expect("invariant: positive");
+    ItemGeometry::try_new(center, size).expect("invariant: a box")
+}
+
+/// [`items`] as cards in a 3D scene: each turned a little and at its own depth.
+fn cards(images: &[Image]) -> Vec<Item<'_>> {
+    let camera = camera();
+    images
+        .iter()
+        .enumerate()
+        .map(|(i, image)| {
+            let step = i as f32;
+            let mut placed = geometry(
+                400.0 + (step * 83.0) % 1100.0,
+                300.0 + (step * 47.0) % 500.0,
+                640.0,
+            );
+            placed.turn_deg = Finite32::new(10.0 + step * 3.0).expect("invariant: finite");
+            placed.depth_px = Finite32::new(-(step * 60.0)).expect("invariant: finite");
+            Item {
+                image,
+                placement: Placement::Geometry(placed),
+                crop: Crop::NONE,
+                opacity: 0.8,
+                blend: BlendMode::Normal,
+                visible: true,
+                camera: Some(camera),
+                depth_run: 0,
+            }
+        })
+        .collect()
+}
+
+fn three_d(c: &mut Criterion) {
+    let Some(mut compositor) = open() else {
+        return;
+    };
+    let max = ITEM_COUNTS.iter().copied().max().unwrap_or(1);
+    let images = images(&compositor, max);
+    wait(&compositor);
+    let mut group = c.benchmark_group("composite_1080p_camera");
+    group.sample_size(20);
+    for count in ITEM_COUNTS {
+        let items = cards(&images[..count]);
+        let scene = scene(&items);
+        group.bench_with_input(BenchmarkId::new("items", count), &scene, |b, scene| {
+            b.iter(|| {
+                // A live source's frame changes every frame, so its mips are rebuilt.
+                for image in &images[..count] {
+                    image.mark_changed();
+                }
+                black_box(compositor.render(scene, false).expect("render"));
+                wait(&compositor);
+            });
+        });
+    }
+    group.finish();
+
+    let layer = compositor
+        .layer(WIDTH, HEIGHT)
+        .expect("invariant: the canvas fits");
+    let camera = camera();
+    let placed = geometry(WIDTH as f32 * 0.5, HEIGHT as f32 * 0.5, 900.0);
+    let mut group = c.benchmark_group("model_1080p");
+    group.sample_size(20);
+    for shape in [Shape::Sphere, Shape::Cube] {
+        let model = shape
+            .model(Material::default())
+            .expect("invariant: a built-in shape builds");
+        let uploaded = compositor
+            .upload_model(&model)
+            .expect("invariant: a shape uploads");
+        let draw = ModelDraw {
+            model: &uploaded,
+            geometry: placed,
+            camera: Some(camera),
+            lighting: Lighting::Studio,
+        };
+        group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
+            b.iter(|| {
+                compositor.draw_model(&draw, &layer).expect("draw");
+                let items = [Item {
+                    image: &layer,
+                    placement: Placement::Layer(placed),
+                    crop: Crop::NONE,
+                    opacity: 1.0,
+                    blend: BlendMode::Normal,
+                    visible: true,
+                    camera: Some(camera),
+                    depth_run: 0,
+                }];
+                black_box(compositor.render(&scene(&items), false).expect("render"));
+                wait(&compositor);
+            });
+        });
+    }
+    group.finish();
+}
+
 fn rewrite(c: &mut Criterion) {
     let Some(compositor) = open() else {
         return;
@@ -220,6 +347,7 @@ fn rewrite(c: &mut Criterion) {
 fn benches() {
     let mut c = Criterion::default().configure_from_args();
     composite(&mut c);
+    three_d(&mut c);
     rewrite(&mut c);
 }
 

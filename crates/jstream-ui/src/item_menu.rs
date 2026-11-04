@@ -15,7 +15,9 @@
 use crate::app::SessionContext;
 use crate::canvas::snap::Bounds;
 use crate::canvas::transform::{nudge, with_box};
-use crate::clipboard::Pasting;
+use crate::clipboard::{
+    FilterClip, Pasting, TransformClip, paste_filter_edits, paste_transform_edits,
+};
 use crate::dock::PanelId;
 use crate::menu::Entry;
 use crate::panels::add_source::{AddSourceDialog, REFERENCE_ADDED, has_picture};
@@ -27,8 +29,8 @@ use crate::panels::source_properties::{self, PropertiesDialog};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    BlendMode, Canvas, Crop, Edit, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo, SceneId,
-    SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
+    BlendMode, Canvas, Crop, Edit, FilterChains, Finite32, FitMode, ItemGeometry, ItemId, ItemInfo,
+    SceneId, SceneRole, Settings, Size, SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
 use std::rc::Rc;
@@ -672,6 +674,8 @@ struct Facts {
     cropped: bool,
     /// Whether the primary item is shown, and how it blends.
     visible: bool,
+    /// Whether the primary item's box is locked (ADR-0096).
+    locked: bool,
     blend: BlendMode,
     /// The primary item's source, its name and kind, and whether it has a picture.
     source_id: SourceId,
@@ -687,6 +691,12 @@ struct Facts {
     child: bool,
     /// Whether the primary item is a reference or a clone.
     sharing: Sharing,
+    /// The primary item's box and crop, when it has a box (Copy transform).
+    transform: Option<(ItemGeometry, Crop)>,
+    /// The primary item's source's filters (Copy filters).
+    filters: FilterChains,
+    /// Each selected item's source, in the selection's order (Paste filters).
+    sources: Vec<SourceId>,
 }
 
 impl Facts {
@@ -721,6 +731,7 @@ impl Facts {
                 .collect(),
             cropped: selected.iter().any(|i| i.crop != Crop::NONE),
             visible: primary.visible,
+            locked: primary.locked,
             blend: primary.blend,
             source_id: source.source_id.clone(),
             name: source.name.clone(),
@@ -730,6 +741,9 @@ impl Facts {
             keyframe: scene.variant_of.is_some(),
             child: !scene.items.iter().any(|i| i.item_id == primary.item_id),
             sharing: Sharing::of(collection, primary),
+            transform: primary.geometry.map(|g| (g, primary.crop)),
+            filters: source.filters.clone(),
+            sources: selected.iter().map(|i| i.source_id.clone()).collect(),
         })
     }
 
@@ -1086,6 +1100,69 @@ fn clip_entries(cx: Context, scene_id: &SceneId, items: &[ItemId]) -> Vec<Entry>
     vec![copy, paste]
 }
 
+/// The Copy/paste filters submenu: Copy filters, from the primary item's source, and the
+/// two pastes onto each selected item's source (`clipboard::paste_filter_edits`). Off
+/// outside the shell.
+fn filter_clip_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
+    let Some(clip) = use_context::<FilterClip>() else {
+        return Vec::new();
+    };
+    let copied = facts.filters.clone();
+    let copy = Entry::item("Copy filters", move || clip.0.set(Some(copied.clone())))
+        .disabled_if(facts.filters.is_empty());
+    let empty = clip
+        .0
+        .with_untracked(|c| c.as_ref().is_none_or(FilterChains::is_empty));
+    let paste = |label: &str, replace: bool| {
+        let sources = facts.sources.clone();
+        Entry::item(label, move || {
+            let Some(s) = cx.session.get() else { return };
+            let Some(filters) = clip.0.get_untracked() else {
+                return;
+            };
+            let studio = cx.studio;
+            let edits = studio.collection.with_untracked(|c| {
+                c.as_ref().map_or_else(Vec::new, |c| {
+                    paste_filter_edits(c, &filters, &sources, replace, &mut |prefix| {
+                        studio.fresh_id(&s, prefix)
+                    })
+                })
+            });
+            cx.send(edits);
+        })
+        .disabled_if(empty)
+    };
+    // A submenu keeps the item menu short enough to fit the window.
+    vec![Entry::submenu(
+        "Copy/paste filters",
+        vec![
+            copy,
+            paste("Paste filters", false),
+            paste("Paste filters, replacing", true),
+        ],
+    )]
+}
+
+/// Copy transform, from the primary item, and Paste transform onto every selected item.
+/// Off outside the shell.
+fn transform_clip_entries(cx: Context, scene_id: &SceneId, facts: &Facts) -> Vec<Entry> {
+    let Some(clip) = use_context::<TransformClip>() else {
+        return Vec::new();
+    };
+    let copied = facts.transform;
+    let copy = Entry::item("Copy transform", move || clip.0.set(copied))
+        .disabled_if(facts.transform.is_none());
+    let empty = clip.0.with_untracked(Option::is_none);
+    let (ids, scene) = (facts.items.clone(), scene_id.clone());
+    let paste = Entry::item("Paste transform", move || {
+        if let Some((geometry, crop)) = clip.0.get_untracked() {
+            cx.send(paste_transform_edits(&ids, &scene, geometry, crop));
+        }
+    })
+    .disabled_if(empty);
+    vec![copy, paste]
+}
+
 /// The menu for the selected `items` of `scene_id`, the primary one first; empty when
 /// none of them is in the scene.
 pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) -> Vec<Entry> {
@@ -1116,6 +1193,22 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         }
         (false, _) => crate::projector::pop_out_source(cx.studio, facts.source_id.clone()),
         _ => crate::projector::pop_out(cx.studio, None),
+    };
+    // A nested scene's screenshot is the scene's, any other source's the source alone.
+    let screenshot = match (many, &facts.kind) {
+        (true, _) => None,
+        (false, SourceKind::Scene { scene_id }) => Some(crate::screenshot::entry(
+            "Screenshot (scene)",
+            cx.studio,
+            Some(cx.session),
+            Some(crate::screenshot::Shot::Scene(scene_id.clone())),
+        )),
+        (false, _) => Some(crate::screenshot::entry(
+            "Screenshot (source)",
+            cx.studio,
+            Some(cx.session),
+            Some(crate::screenshot::Shot::Source(facts.source_id.clone())),
+        )),
     };
     let labels = labels_entry(cx, &facts.source_id);
     let audio = facts.audio.map(|on| {
@@ -1154,7 +1247,26 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         })
         .checked(on)
     };
+    // OBS's Lock: the item's box takes no canvas drag (ADR-0096). It belongs to the
+    // item, so a keyframe sets it on the parent's item; the primary item's state names
+    // the check, and each selected item takes the other.
+    let lock = {
+        let (ids, on) = (facts.items.clone(), facts.locked);
+        Entry::item("Lock", move || {
+            cx.send(
+                ids.iter()
+                    .map(|item_id| Edit::ItemSetLocked {
+                        item_id: item_id.clone(),
+                        locked: !on,
+                    })
+                    .collect(),
+            );
+        })
+        .checked(on)
+    };
     let clip = clip_entries(cx, scene_id, &facts.items);
+    let filter_clip = filter_clip_entries(cx, &facts);
+    let transform_clip = transform_clip_entries(cx, scene_id, &facts);
 
     // A nested scene (5.2.8).
     if let (false, SourceKind::Scene { scene_id: nested }) = (many, &facts.kind) {
@@ -1174,7 +1286,11 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 None => entry.disabled_if(keyframe),
             })
         });
-        let mut list = vec![visible, properties, filters, labels, pop_out, Entry::Sep];
+        let mut list = vec![visible, lock, properties, filters];
+        list.extend(filter_clip);
+        list.extend([labels, pop_out]);
+        list.extend(screenshot);
+        list.push(Entry::Sep);
         list.extend(clip);
         list.push(Entry::Sep);
         list.extend(audio);
@@ -1192,7 +1308,9 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     }
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
-        let mut list = vec![properties, filters, labels, Entry::Sep];
+        let mut list = vec![properties, filters];
+        list.extend(filter_clip);
+        list.extend([labels, Entry::Sep]);
         list.extend(clip);
         list.push(Entry::Sep);
         if let Some(audio) = audio {
@@ -1213,13 +1331,20 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             },
             Entry::Sep,
             visible,
+            lock,
             Entry::Sep,
         ]);
+        list.extend(filter_clip);
+        list.push(Entry::Sep);
     } else {
         if let Some(audio) = audio {
             list.extend([audio, Entry::Sep]);
         }
-        list.extend([visible, properties, filters, labels, pop_out, Entry::Sep]);
+        list.extend([visible, lock, properties, filters]);
+        list.extend(filter_clip);
+        list.extend([labels, pop_out]);
+        list.extend(screenshot);
+        list.push(Entry::Sep);
         list.extend(sharing_entries(cx, &facts));
     }
     list.extend(clip);
@@ -1322,12 +1447,16 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         Entry::Sep,
         Entry::submenu(
             "Transform",
-            vec![
-                arrange("Center on canvas", |f| centered(&f.placed, f.canvas)),
-                arrange("Fit to canvas", |f| f.each(fitted)),
-                arrange("Stretch to canvas", |f| f.each(stretched)),
-                arrange("Reset rotation", |f| f.each(|g, _| Some(unrotated(g)))),
-            ],
+            transform_clip
+                .into_iter()
+                .chain([Entry::Sep])
+                .chain([
+                    arrange("Center on canvas", |f| centered(&f.placed, f.canvas)),
+                    arrange("Fit to canvas", |f| f.each(fitted)),
+                    arrange("Stretch to canvas", |f| f.each(stretched)),
+                    arrange("Reset rotation", |f| f.each(|g, _| Some(unrotated(g)))),
+                ])
+                .collect(),
         ),
         blending,
         clear_crop,
@@ -1457,6 +1586,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: Default::default(),
+            locked: false,
         }
     }
 
@@ -1495,6 +1625,7 @@ mod tests {
                 overrides: Vec::new(),
                 items,
                 filters: Default::default(),
+                camera: None,
             }],
             ..Collection::default()
         }

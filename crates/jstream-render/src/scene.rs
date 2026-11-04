@@ -148,6 +148,11 @@ pub enum Placement {
     /// into the box by its fit mode, and `fill` is clipped to the box. Non-neutral 3D
     /// draws ADR-0050's drawn polygon.
     Geometry(jstream_protocol::ItemGeometry),
+    /// A layer already drawn in the canvas's own pixels, such as a 3D model's
+    /// ([`crate::Compositor::draw_model`], ADR-0107 decision 6): the image is drawn flat at
+    /// its own size from the canvas's top-left, whatever the scene's camera, and in a 3D
+    /// scene it sorts as an item with this geometry would. Crop is ignored.
+    Layer(jstream_protocol::ItemGeometry),
 }
 
 impl Placement {
@@ -178,6 +183,17 @@ pub struct Item<'a> {
     pub blend: BlendMode,
     /// When false, the item is not drawn and its frame sync is not staged.
     pub visible: bool,
+    /// The camera of the 3D scene the item is in (ADR-0094), or `None` in a 2D scene.
+    /// Through one, a geometry item is placed in the scene's 3D space and seen through
+    /// it, its own `perspective_px` ignored; a legacy placement is drawn as in a 2D scene
+    /// and sorts as if at the canvas centre. The items of one scene carry the same
+    /// camera, so a transition can draw two scenes' items, each through its own.
+    pub camera: Option<jstream_protocol::SceneCamera>,
+    /// Which depth-sorted run it is in: consecutive items sort together only when they
+    /// share both their camera and this. A transition gives a stinger's items a run of
+    /// their own, so they stay over the scenes under them through an equal camera.
+    /// `0` otherwise.
+    pub depth_run: u32,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.
@@ -187,7 +203,10 @@ pub struct Scene<'a> {
     pub canvas: FrameSize,
     /// Clear colour, straight sRGB, drawn under every item.
     pub background: Color,
-    /// Stacking order. The first item is at the bottom.
+    /// Stacking order. The first item is at the bottom. Each run of consecutive items
+    /// seen through the same camera that sorts ([`Item::camera`]), in the same
+    /// [`Item::depth_run`], draws far to near instead, equal depths keeping stacking
+    /// order (ADR-0094 decision 4).
     pub items: &'a [Item<'a>],
 }
 

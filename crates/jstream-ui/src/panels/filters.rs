@@ -3153,6 +3153,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3167,6 +3168,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let collection = Collection {
             scenes: vec![
@@ -3207,6 +3209,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>, variant_of: Option<&str>| SceneInfo {
             overrides: Vec::new(),
@@ -3221,6 +3224,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let nested = |id: &str, scene_id: &str| SourceInfo {
             source_id: SourceId::new(id),
@@ -3298,6 +3302,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3312,6 +3317,7 @@ mod tests {
             items,
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let source = |id: &str, kind: SourceKind| SourceInfo {
             source_id: SourceId::new(id),
@@ -3481,6 +3487,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
             let items = match variant_of {
@@ -3501,6 +3508,7 @@ mod tests {
                 items,
                 transition_in: None,
                 transition_out: None,
+                camera: None,
             }
         };
         let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {

@@ -7,7 +7,7 @@ use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
 use crate::finite::Finite32;
-use crate::geometry::{Canvas, ItemGeometry, PlacementForm};
+use crate::geometry::{Canvas, ItemGeometry, PlacementForm, SceneCamera};
 use crate::hotkey::HotkeyBinding;
 use crate::id::{
     BusId, DeviceId, FolderId, ItemId, LabelId, OutputId, Rev, SceneId, SourceId,
@@ -20,6 +20,7 @@ use crate::mix::VideoMixInfo;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
+use crate::profile::ProfileInfo;
 use crate::settings::Settings;
 use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{
@@ -152,7 +153,8 @@ pub enum Query {
     /// `folder.delete` and `label.delete` alone refuse (their `invalid_argument` lists
     /// those `blockers`). The plan removes the items that place a deleted source, deletes
     /// the `scene` sources that show a deleted scene (and their items), and sets settings
-    /// references to the target to `null`, keeping the sources that hold them. For a
+    /// references to the target to `null`, keeping the sources and transition presets that
+    /// hold them. For a
     /// folder it moves what sits in it up to the folder's parent; for a label it takes
     /// the label off the sources carrying it. It also lists the hotkey bindings the
     /// delete removes with what they name (ADR-0040 §3), which need no edit of their own.
@@ -178,6 +180,28 @@ pub enum Query {
     /// that shows once it restarts.
     #[serde(rename = "font.list")]
     FontList,
+    /// Lists the effect packs in the engine's packs folder (0.72, ADR-0097), ordered by
+    /// pack ID: each one's folder, its kinds while it loads, and the client that last
+    /// wrote it with `pack.write`. A folder whose `effect.toml` doesn't parse is left
+    /// out. Packs are not collection state, so no `rev`. Fails with `unsupported` from an
+    /// engine that loads no packs.
+    #[serde(rename = "pack.list")]
+    PackList,
+    /// Reads one effect pack's files (0.72, ADR-0097): the text of its `effect.toml` and
+    /// `.wgsl` files, and each image's path, size and digest. Past 3 MiB of text in all,
+    /// a file's `text` is left out; read it by `path`. With `path`, only that file, and
+    /// an image's bytes as base64; an image over 2 MiB (`MAX_PACK_IMAGE_BYTES`), which
+    /// only a person can have put there, fails with `too_large`. Fails with `not_found`
+    /// (entity `pack`) for a pack no folder holds, `invalid_argument` for a `path` it
+    /// doesn't have, and `unsupported` from an engine that loads no packs.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack ID.
+        pack: String,
+        /// One file of it, `/`-separated. Omitted for every file.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        path: Option<String>,
+    },
     /// Lists the paired devices (ADR-0044), ordered by ID: each one's name and when it
     /// paired and was last used, never its token. Answered by the server that admits
     /// clients, not the engine: a `Control` with no server in front fails with
@@ -229,6 +253,24 @@ pub enum Query {
     /// whose platform downloads no codec, or that has no codec backend, lists none.
     #[serde(rename = "codec.downloads")]
     CodecDownloads,
+    /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
+    /// drawing thread, per unit of drawing work and its owner (a source's upload or
+    /// chain, a scene's chain or pass, an item's effects, an output's chain), per
+    /// source, the planner, and the CPU of each thread of the process. The engine
+    /// measures all the time, so it needs no start. Runtime state: the result carries
+    /// no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// The window, in seconds, from 1 to 60
+        /// ([`MAX_PROFILE_SECONDS`](crate::MAX_PROFILE_SECONDS)). Omitted, 5. A window
+        /// longer than the engine has read for covers what it has.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        seconds: Option<u32>,
+        /// At most this many entries in each list, the costliest. Omitted, 20; above 200
+        /// ([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        top: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -292,11 +334,14 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::CaptureTargets => "capture.targets",
             Query::FontList => "font.list",
+            Query::PackList => "pack.list",
+            Query::PackRead { .. } => "pack.read",
             Query::DeviceList => "device.list",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
             Query::CodecDownloads => "codec.downloads",
+            Query::ProfileGet { .. } => "profile.get",
         }
     }
 }
@@ -574,6 +619,18 @@ pub enum QueryResult {
         /// The installed fonts, ordered by family, then style, then path.
         fonts: Vec<FontInfo>,
     },
+    /// The result of `pack.list`.
+    #[serde(rename = "pack.list")]
+    PackList {
+        /// The packs, ordered by ID.
+        packs: Vec<crate::PackInfo>,
+    },
+    /// The result of `pack.read`.
+    #[serde(rename = "pack.read")]
+    PackRead {
+        /// The pack's files, ordered by path: every file, or the one `path` named.
+        files: Vec<crate::PackFileInfo>,
+    },
     /// The result of `device.list`. Devices are not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "device.list")]
@@ -614,6 +671,13 @@ pub enum QueryResult {
         /// The downloads, ordered by ID.
         downloads: Vec<CodecDownloadInfo>,
     },
+    /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
+    #[serde(rename = "profile.get")]
+    ProfileGet {
+        /// Where the time went.
+        #[serde(flatten)]
+        profile: ProfileInfo,
+    },
 }
 
 impl QueryResult {
@@ -643,11 +707,14 @@ impl QueryResult {
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::FontList { .. } => "font.list",
+            QueryResult::PackList { .. } => "pack.list",
+            QueryResult::PackRead { .. } => "pack.read",
             QueryResult::DeviceList { .. } => "device.list",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
             QueryResult::CodecDownloads { .. } => "codec.downloads",
+            QueryResult::ProfileGet { .. } => "profile.get",
         }
     }
 }
@@ -855,6 +922,12 @@ pub struct SceneInfo {
     /// parses as none.
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
+    /// Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,
+    /// its override of its parent's camera; the keyframe shows the parent's camera where
+    /// it has none. Omitted for none, so missing (also from an older server) parses as a
+    /// 2D scene.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera: Option<SceneCamera>,
     /// Its items, in stacking order: the first is at the bottom. Always empty for a
     /// keyframe scene, which shows its parent's.
     pub items: Vec<ItemInfo>,
@@ -965,6 +1038,11 @@ pub struct ItemInfo {
     /// empty, so missing (also from an older server) parses as none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<FilterInfo>,
+    /// Whether its canvas box is locked (ADR-0096, since 0.71): see
+    /// [`Edit::ItemSetLocked`](crate::Edit::ItemSetLocked). Omitted while unlocked, so
+    /// missing (also from an older server) parses as unlocked.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub locked: bool,
 }
 
 fn opaque() -> Finite32 {

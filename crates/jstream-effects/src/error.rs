@@ -54,6 +54,14 @@ pub enum PackError {
         /// What is wrong, with a line in the effect's own file when there is one.
         message: String,
     },
+    /// A shader source's image does not decode, or is too large.
+    #[error("{}: {message}", path.display())]
+    Image {
+        /// The image file.
+        path: PathBuf,
+        /// What is wrong.
+        message: String,
+    },
     /// Another pack folder already loaded a pack with this ID.
     #[error("{}: pack `{id}` is already loaded from {}", path.display(), first.display())]
     DuplicatePack {

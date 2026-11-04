@@ -105,7 +105,7 @@ fn family() -> Engine {
 fn x(placement: &Placement) -> f32 {
     match placement {
         Placement::Geometry(geometry) => geometry.center.x.get(),
-        Placement::Legacy(_) => panic!("not a geometry placement"),
+        Placement::Legacy(_) | Placement::Layer(_) => panic!("not a geometry placement"),
     }
 }
 
@@ -868,6 +868,7 @@ fn a_child_appears_and_disappears_inside_a_group_with_its_timing() {
                     Track::Pair { timing, .. } => ("pair", timing),
                     Track::Appear { timing, .. } => ("appear", timing),
                     Track::Disappear { timing, .. } => ("disappear", timing),
+                    Track::Through { enter, .. } => ("through", enter),
                 };
                 (item.to_string(), kind, timing)
             })
@@ -930,6 +931,7 @@ fn a_move_within_a_family_pairs_an_item_only_with_the_same_effects() {
             Track::Pair { .. } => "pair",
             Track::Appear { .. } => "appear",
             Track::Disappear { .. } => "disappear",
+            Track::Through { .. } => "through",
         })
         .collect();
     let pairs = kinds.iter().filter(|k| **k == "pair").count();

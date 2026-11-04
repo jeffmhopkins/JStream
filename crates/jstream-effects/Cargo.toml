@@ -22,12 +22,17 @@ jstream-protocol.workspace = true
 jstream-render.workspace = true
 # WGSL parsing and validation. The same exact version wgpu already brings in.
 naga.workspace = true
+# Shader sources' images (ADR-0093): the PNG and JPEG decoders `jstream-sources` already
+# uses, so nothing new enters the tree.
+png.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 # `effect.toml`. Already in the tree through xtask.
 toml.workspace = true
 tracing.workspace = true
+zune-core.workspace = true
+zune-jpeg.workspace = true
 
 [dev-dependencies]
 # `FrameSize`, for the scene a draw test reads back through.

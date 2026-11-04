@@ -56,6 +56,10 @@ jobs:
       # compile error shows before review (ADR-0063 §14). Its bindings need no Apple SDK.
       - run: rustup target add aarch64-apple-darwin
       - run: cargo clippy -p jstream-platform-macos --all-targets --locked --target aarch64-apple-darwin -- -D warnings
+      # The browser source's CEF backend and helper on Linux (ADR-0095), and the daemon's
+      # wiring of them, type-checked against cef-dll-sys's bundled bindings without
+      # downloading CEF (`dox`); the browser-linux job below builds them for real.
+      - run: cargo clippy -p jstream-browser -p jstream-browser-helper -p jstream-daemon --all-targets --features jstream-browser/dox,jstream-browser/fake,jstream-browser-helper/dox,jstream-daemon/dox --locked -- -D warnings
 
   test:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
@@ -106,6 +110,44 @@ jobs:
         run: cargo test -p jstream-platform-linux --features openh264-download --locked -- --ignored downloads_the_pinned
       - name: Stream to a local receiver
         run: cargo xtask e2e-stream --openh264-download
+
+  # The browser helper on Linux (ADR-0095): builds it with the pinned CEF, which its build
+  # downloads, lays it out as it ships (`cargo xtask browser-linux`), and opens a page
+  # through it end to end: sandboxed, headless and without a GPU, its frames reaching the
+  # engine as CPU frames. Ubuntu's AppArmor stops the unprivileged user namespaces
+  # Chromium's sandbox prefers, so its setuid helper stands in, as on any machine like it.
+  # The laid-out folder is kept as an artifact. Not required: it reports, and a failure is
+  # looked into.
+  browser-linux:
+    if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: The shared libraries CEF needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnss3 libatk1.0-0t64 libatk-bridge2.0-0t64 libcups2t64 \
+            libxcomposite1 libxdamage1 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 \
+            libasound2t64 libxkbcommon0 libdrm2
+      - run: cargo xtask browser-linux --out target/browser-linux
+      - name: Chromium's setuid sandbox
+        run: |
+          sandbox=target/browser-linux/browser/chrome-sandbox
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
+      - name: Open a page through the helper
+        env:
+          JSTREAM_BROWSER_HELPER: ${{ github.workspace }}/target/browser-linux/browser/jstream-browser-helper
+        run: cargo test -p jstream-browser --features cef --locked --test linux_page -- --ignored --nocapture
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-linux
+          path: target/browser-linux
+          if-no-files-found: error
+          retention-days: 14
 
   doc:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))

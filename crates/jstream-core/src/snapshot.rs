@@ -31,10 +31,10 @@ use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide, ItemGeometry,
-    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneId,
-    SceneRole, SourceId, SourceKind, VideoMixId,
+    ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev, SceneCamera,
+    SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
 };
-use jstream_render::transition::{Endpoint, Track};
+use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
@@ -44,8 +44,9 @@ use jstream_sources::CaptureSpec;
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
 use crate::lock;
+use crate::profile::{DrawMeter, Phase};
 use crate::runtime::RenderSnapshot;
-use crate::transition::{self, From, Planned, Running, Visual};
+use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -237,6 +238,12 @@ impl Frame {
         ([self.width, self.height], self.extent)
     }
 
+    /// Every pixel, tightly packed, for tests that compare what a source shows.
+    #[cfg(test)]
+    pub(crate) fn pixels(&self) -> Vec<u8> {
+        self.rgba().to_vec()
+    }
+
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
@@ -353,6 +360,9 @@ impl Boxed {
     fn geometry_of(&self, placement: Placement, crop: Crop) -> Option<ItemGeometry> {
         match placement {
             Placement::Geometry(geometry) => Some(geometry),
+            // A model's layer covers the canvas; its box is the model's pose, not where
+            // the layer's pixels are, so it has none to pair by.
+            Placement::Layer(_) => None,
             Placement::Legacy(transform) => {
                 let [width, height] = self.input?;
                 let transform = jstream_protocol::ItemTransform {
@@ -445,6 +455,9 @@ pub(crate) struct Shot {
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
     backgrounds: BTreeMap<SceneId, Color>,
+    /// The camera each copied 3D scene draws through (ADR-0094), by scene. A scene
+    /// without one isn't here, and is 2D.
+    cameras: BTreeMap<SceneId, PassCamera>,
     /// The frames the copied scenes place, by source.
     frames: BTreeMap<SourceId, Frame>,
     /// The video chains of the sources they place that have one (ADR-0026), and of the
@@ -485,11 +498,79 @@ pub(crate) struct Shot {
 #[derive(Debug, PartialEq)]
 struct Transitioning {
     start: MediaTime,
-    tracks: Vec<(GpuKey, Track)>,
+    /// Each track with the camera its visual is seen through.
+    tracks: Vec<(GpuKey, Track, Seen)>,
     /// The backgrounds it fades between, from the scene it leaves to the one it shows,
     /// over `end_ms`.
     backgrounds: (Color, Color),
+    /// The cameras its tracks are seen through.
+    cameras: TrackCameras,
     end_ms: f32,
+}
+
+/// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TrackCameras {
+    /// The cameras it moves between, from the scene it leaves (or the one camera of what
+    /// was on screen) to the one it shows, `None` for a 2D side.
+    ends: (Option<SceneCamera>, Option<SceneCamera>),
+    /// The camera a stinger's scene is seen through, over both sides: its own, `None`
+    /// for a 2D stinger scene or another kind.
+    overlay: Option<SceneCamera>,
+    /// The preset's own timing, which a moving camera follows.
+    timing: Timing,
+    /// Whether it is a Move, whose tracks share one moving camera; a Fade's leaving
+    /// tracks keep the camera they leave from.
+    pairs: bool,
+    /// The depth run a stinger's items sort in: one past every run held from the
+    /// screen, so a stinger's never sort with those of one it cut short.
+    overlay_run: u32,
+}
+
+impl TrackCameras {
+    /// The camera `track` is seen through `elapsed_ms` into the transition: a Move's
+    /// tracks share the camera moving between the two ends; a Fade's leaving tracks keep
+    /// the one they leave from, and the rest take the one it shows. A stinger's items
+    /// take their own scene's. Outside a Move, what was taken from the screen keeps the
+    /// camera it was seen through then (`seen`); a Move only starts from a screen seen
+    /// through one camera, its first end, so all its tracks share the moving one.
+    fn camera(&self, track: &Track, seen: Seen, elapsed_ms: f32) -> Option<SceneCamera> {
+        if matches!(track, Track::Through { .. }) {
+            return self.overlay;
+        }
+        if let Seen::Held { camera, .. } = seen
+            && !self.pairs
+        {
+            return camera;
+        }
+        let (from, to) = self.ends;
+        if !self.pairs {
+            return match track {
+                Track::Disappear { .. } => from,
+                _ => to,
+            };
+        }
+        match (from, to) {
+            (Some(from), Some(to)) if from != to => {
+                let k = self.timing.progress(elapsed_ms);
+                Some(lerp_camera(&from, &to, k))
+            }
+            _ => to,
+        }
+    }
+}
+
+impl TrackCameras {
+    /// The depth run `track` sorts in (ADR-0094 decision 4): a stinger's items one of
+    /// their own (`overlay_run`), kept when a switch takes them from the screen, so they
+    /// stay over the scenes under them through an equal camera; everything else `0`.
+    fn depth_run(&self, track: &Track, seen: Seen) -> u32 {
+        match seen {
+            Seen::Held { depth_run, .. } => depth_run,
+            Seen::AsPlanned if matches!(track, Track::Through { .. }) => self.overlay_run,
+            Seen::AsPlanned => 0,
+        }
+    }
 }
 
 impl Transitioning {
@@ -516,6 +597,7 @@ impl Default for Shot {
             program: None,
             scenes: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
+            cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
             chains: BTreeMap::new(),
             passes: Vec::new(),
@@ -688,13 +770,37 @@ impl Shot {
         self.transition.as_ref().map(|t| t.tracks.len())
     }
 
+    /// The camera each of the running transition's tracks is seen through
+    /// `elapsed_ms` into it, in drawing order, or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn track_cameras(&self, elapsed_ms: f32) -> Option<Vec<Option<SceneCamera>>> {
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, seen)| t.cameras.camera(track, *seen, elapsed_ms))
+                .collect()
+        })
+    }
+
+    /// The depth run each of the running transition's tracks sorts in, in drawing order,
+    /// or `None` without one, for tests.
+    #[cfg(test)]
+    pub(crate) fn track_depth_runs(&self) -> Option<Vec<u32>> {
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, seen)| t.cameras.depth_run(track, *seen))
+                .collect()
+        })
+    }
+
     /// The running transition's tracks in drawing order, or `None` without one, for
     /// tests.
     #[cfg(test)]
     pub(crate) fn tracks(&self) -> Option<Vec<Track>> {
         self.transition
             .as_ref()
-            .map(|t| t.tracks.iter().map(|(_, track)| *track).collect())
+            .map(|t| t.tracks.iter().map(|(_, track, _)| *track).collect())
     }
 
     /// The layers a transition moves inside a group's layer (ADR-0049 §3), each item
@@ -751,6 +857,7 @@ impl PartialEq for Shot {
             && self.mixes == other.mixes
             && self.scenes == other.scenes
             && self.backgrounds == other.backgrounds
+            && self.cameras == other.cameras
             && self.frames == other.frames
             && self.chains == other.chains
             && self.captures == other.captures
@@ -987,7 +1094,7 @@ fn plan_inner(
             let tracks = planned
                 .tracks
                 .into_iter()
-                .map(|(visual, track)| (key(&visual.image, &shot), track))
+                .map(|(visual, track)| (key(&visual.image, &shot), track, visual.seen))
                 .collect();
             let to = planner
                 .background(&running.to)
@@ -1002,6 +1109,7 @@ fn plan_inner(
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
+                cameras: planner.track_cameras(running),
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -1049,10 +1157,15 @@ fn plan_inner(
         .collect();
     shot.captures = match &shot.transition {
         Some(transition) => placed_captures(shot.passes.iter())
-            .chain(transition.tracks.iter().filter_map(|(key, _)| match key {
-                GpuKey::Capture(spec) => Some(spec.clone()),
-                _ => None,
-            }))
+            .chain(
+                transition
+                    .tracks
+                    .iter()
+                    .filter_map(|(key, _, _)| match key {
+                        GpuKey::Capture(spec) => Some(spec.clone()),
+                        _ => None,
+                    }),
+            )
             .collect(),
         None => captures(&shot.passes),
     };
@@ -1155,7 +1268,14 @@ pub(crate) fn on_screen(
         wake: None,
     };
     let planned = planner.transition(running, &mut shot);
-    planned.on_screen(running.elapsed_ms(now), canvas_size(state.canvas()))
+    let cameras = planner.track_cameras(running);
+    let elapsed_ms = running.elapsed_ms(now);
+    planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
+        Seen::Held {
+            camera: cameras.camera(track, visual.seen, elapsed_ms),
+            depth_run: cameras.depth_run(track, visual.seen),
+        }
+    })
 }
 
 fn canvas_size(canvas: Canvas) -> [f32; 2] {
@@ -1241,7 +1361,7 @@ fn schedule_tracks(shot: &Shot) -> Vec<Pass> {
     let mut passes = Vec::new();
     let mut done = BTreeSet::new();
     let mut path = BTreeSet::new();
-    for (key, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
+    for (key, _, _) in shot.transition.iter().flat_map(|t| &t.tracks) {
         if let GpuKey::Layer(scene, depth) = key {
             visit(shot, scene, *depth, &mut path, &mut done, &mut passes);
         }
@@ -1333,6 +1453,55 @@ impl<'a> Planner<'a, '_> {
         }
     }
 
+    /// The camera the planned scene `id` draws through, if it is a 3D scene (ADR-0094):
+    /// its own, or a keyframe scene's parent's where it has no override.
+    ///
+    /// A keyframe scene always has one, even of a 2D parent, so that a live camera on
+    /// the parent reaches it.
+    fn camera(&self, id: &SceneId) -> Option<PassCamera> {
+        let (scene, _) = self.drawn(id)?;
+        let own = scene.camera().copied();
+        let parent = scene.variant_of().map(|parent| {
+            let committed = self
+                .state
+                .scene(parent)
+                .and_then(|parent| parent.camera().copied());
+            (parent.clone(), committed)
+        });
+        (own.is_some() || parent.is_some()).then_some(PassCamera { own, parent })
+    }
+
+    /// The cameras `running`'s tracks are seen through (ADR-0094 decision 7).
+    fn track_cameras(&self, running: &Running) -> TrackCameras {
+        let committed = |id: &SceneId| self.camera(id).and_then(|camera| camera.committed());
+        TrackCameras {
+            ends: (running.from_camera, committed(&running.to)),
+            overlay: running
+                .run
+                .stinger
+                .as_ref()
+                .and_then(|stinger| stinger.scene.as_ref())
+                .and_then(committed),
+            timing: Timing {
+                delay_ms: 0.0,
+                duration_ms: running.run.duration_ms as f32,
+                easing: running.run.easing,
+            },
+            pairs: running.run.pairs,
+            overlay_run: match &running.from {
+                From::OnScreen(visuals) => visuals
+                    .iter()
+                    .filter_map(|visual| match visual.seen {
+                        Seen::Held { depth_run, .. } => Some(depth_run),
+                        Seen::AsPlanned => None,
+                    })
+                    .max()
+                    .map_or(1, |run| run.saturating_add(1)),
+                From::Scene(_) => 1,
+            },
+        }
+    }
+
     /// The background the planned scene `id` draws under its items, if it has one: a
     /// keyframe scene shows its parent's, and a group none, since it is drawn in the
     /// scene that holds it (ADR-0089 §4).
@@ -1406,6 +1575,17 @@ impl<'a> Planner<'a, '_> {
         // another track reads them.
         if redrawn {
             out.keep_read(planned.tracks.iter().map(|(visual, _)| &visual.image));
+        }
+        // A stinger's scene plays over all of it, its items drawn as they are placed.
+        if let Some(stinger) = &running.run.stinger {
+            let cut_ms = stinger.cut_ms as f32;
+            if let Some(scene) = stinger.scene.as_ref().filter(|id| self.drawn(id).is_some()) {
+                let overlay = self.endpoint(scene, false, out);
+                planned
+                    .tracks
+                    .extend(transition::through(&overlay, &running.run, cut_ms));
+            }
+            planned.end_ms = planned.end_ms.max(running.run.duration_ms as f32);
         }
         planned
     }
@@ -1600,6 +1780,7 @@ impl<'a> Planner<'a, '_> {
             },
             effects: Vec::new(),
             inside: None,
+            seen: Seen::AsPlanned,
         }]
     }
 
@@ -1877,6 +2058,7 @@ impl<'a> Planner<'a, '_> {
                 settings: *item.transition(),
                 effects,
                 inside: None,
+                seen: Seen::AsPlanned,
             });
         }
         path.remove(id);
@@ -1927,6 +2109,9 @@ impl<'a> Planner<'a, '_> {
         out.scenes.insert(id.clone(), placed);
         if let Some(background) = self.background(id) {
             out.backgrounds.insert(id.clone(), background);
+        }
+        if let Some(camera) = self.camera(id) {
+            out.cameras.insert(id.clone(), camera);
         }
         if let Some(chain) = self.scene_chain(id) {
             self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
@@ -1983,7 +2168,8 @@ impl<'a> Planner<'a, '_> {
     /// Whether a filter of `source`'s video chain runs, so a `scene` source shows its
     /// scene as one filtered picture.
     fn filters_scene(&self, source: &Source) -> bool {
-        Chain::of(source, GpuKey::Program, self.assets).is_some()
+        // A scene source has no program, so the shown version is never read.
+        Chain::of(source, GpuKey::Program, 0, self.assets).is_some()
     }
 
     /// What `source`, which is not a scene, shows: [`Self::look`]'s frame or capture,
@@ -1996,7 +2182,9 @@ impl<'a> Planner<'a, '_> {
         if out.chains.contains_key(&owner) {
             return Some(SourceRef::Filtered(id.clone()));
         }
-        match Chain::of(source, key(&image, out), self.assets) {
+        // A shader source's program restarts when its stand-in shows a new frame.
+        let shown = out.frames.get(id).map_or(0, |frame| frame.version);
+        match Chain::of(source, key(&image, out), shown, self.assets) {
             Some(chain) => {
                 // What a `scene_mask` reads is planned like a nested scene.
                 self.add_chain(owner, chain, out);
@@ -2117,7 +2305,45 @@ struct Pass {
     /// What the pass clears to, under its layers: the scene's background, or
     /// transparent.
     background: Color,
+    /// The camera its scene draws through (ADR-0094), `None` for a 2D scene.
+    camera: Option<PassCamera>,
     layers: Vec<Layer>,
+}
+
+/// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
+/// values resolve the same way `State::effective_camera` does.
+#[derive(Clone, Debug, PartialEq)]
+struct PassCamera {
+    /// The scene's own camera, or a keyframe scene's override.
+    own: Option<SceneCamera>,
+    /// For a keyframe scene, its parent and the parent's committed camera.
+    parent: Option<(SceneId, Option<SceneCamera>)>,
+}
+
+impl PassCamera {
+    /// The camera it draws through with live cameras applied: `live` gives the live
+    /// value set on a scene, `Some(None)` for a live removal. A keyframe scene is 2D
+    /// when its parent is, and otherwise draws its override, else its parent's camera.
+    fn resolve(
+        &self,
+        scene: &SceneId,
+        live: impl Fn(&SceneId) -> Option<Option<SceneCamera>>,
+    ) -> Option<SceneCamera> {
+        let own = live(scene).unwrap_or(self.own);
+        let Some((parent, committed)) = &self.parent else {
+            return own;
+        };
+        let parent = live(parent).unwrap_or(*committed)?;
+        Some(own.unwrap_or(parent))
+    }
+
+    /// The camera it draws through with no live values.
+    fn committed(&self) -> Option<SceneCamera> {
+        match &self.parent {
+            None => self.own,
+            Some((_, parent)) => parent.map(|parent| self.own.unwrap_or(parent)),
+        }
+    }
 }
 
 /// One item of a [`Pass`].
@@ -2239,6 +2465,8 @@ impl Shot {
 fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
     let scale = match placement {
         Placement::Legacy(transform) => transform.scale[0].abs().max(transform.scale[1].abs()),
+        // Drawn at its own size.
+        Placement::Layer(_) => 1.0,
         Placement::Geometry(geometry) => {
             let cut = ProtocolCrop {
                 left: crop.left,
@@ -2291,8 +2519,9 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             scene: program.clone(),
             depth: 0,
             key: GpuKey::Layer(program.clone(), 0),
-            // The chain's output has the background in it already.
+            // The chain's output has the background in it already, and is flat.
             background: Color::TRANSPARENT,
+            camera: None,
             layers,
         }];
     }
@@ -2530,6 +2759,7 @@ fn visit_into(
         depth,
         key,
         background: shot.background(id),
+        camera: shot.cameras.get(id).cloned(),
         layers,
     });
 }
@@ -2620,6 +2850,9 @@ fn placement(placement: &GraphPlacement) -> Placement {
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct LiveParams {
     items: BTreeMap<ItemId, LiveItem>,
+    /// Live cameras (ADR-0094), by the scene whose `scene.set_camera` set them: `None`
+    /// is a live removal.
+    cameras: BTreeMap<SceneId, Option<SceneCamera>>,
 }
 
 /// One item's live values: its own, and those addressed to each keyframe scene.
@@ -2705,8 +2938,13 @@ impl LiveParams {
         values: impl IntoIterator<Item = (Option<&'a SceneId>, &'a Edit)>,
     ) -> Self {
         let mut items: BTreeMap<ItemId, LiveItem> = BTreeMap::new();
+        let mut cameras = BTreeMap::new();
         for (keyframe, value) in values {
             let (item_id, placement, cut) = match value {
+                Edit::SceneSetCamera { scene_id, camera } => {
+                    cameras.insert(scene_id.clone(), *camera);
+                    continue;
+                }
                 Edit::ItemSetTransform {
                     item_id, transform, ..
                 } => (
@@ -2738,7 +2976,19 @@ impl LiveParams {
                 fields.crop = cut;
             }
         }
-        Self { items }
+        Self { items, cameras }
+    }
+
+    /// The camera `pass` draws through, with live cameras applied as
+    /// `State::effective_camera` applies committed ones (ADR-0094 §6): the parent's live
+    /// value, a removal included, decides whether a keyframe scene is 3D, and the
+    /// keyframe's own live value replaces its override.
+    fn camera(&self, pass: &Pass) -> Option<SceneCamera> {
+        let live = |scene: &SceneId| self.cameras.get(scene).copied();
+        match &pass.camera {
+            Some(camera) => camera.resolve(&pass.scene, live),
+            None => live(&pass.scene).flatten(),
+        }
     }
 
     /// The own live placement and crop of `item_id`, those not addressed to a keyframe
@@ -3345,6 +3595,33 @@ impl DrawAt {
 pub(crate) fn compose(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    shot: (&Shot, MediaTime),
+    view: View<'_>,
+    live: &LiveParams,
+    captures: &dyn Captures,
+    to: DrawAt,
+) -> Result<Output, RenderError> {
+    compose_metered(
+        compositor,
+        (cache, chains, &mut DrawMeter::default()),
+        shot,
+        view,
+        live,
+        captures,
+        to,
+    )
+}
+
+/// [`compose`], timing each unit of the work into `meter` (ADR-0103): each source's
+/// upload, each capture, each video chain (an item's with its box), each nested pass and
+/// the composite, and the phases they make up. The readback's wait counts toward the
+/// finish phase, not the composite. The caller ends the meter's frame.
+///
+/// # Errors
+/// As for [`compose`].
+pub(crate) fn compose_metered(
+    compositor: &mut Compositor,
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     (shot, at): (&Shot, MediaTime),
     view: View<'_>,
     live: &LiveParams,
@@ -3356,10 +3633,12 @@ pub(crate) fn compose(
         readback,
     } = to;
     let canvas = shot.canvas()?;
+    let uploads = Instant::now();
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
         };
+        let started = Instant::now();
         match &frame.pixels {
             // Sampled where it is, on the context it was painted on. Another compositor
             // (`video.snapshot`'s, or a program stage opened since) can't read it.
@@ -3383,17 +3662,21 @@ pub(crate) fn compose(
                 }
             }
         }
+        meter.upload(source, started);
     }
+    meter.phase_since(Phase::Uploads, uploads);
     let passes = shot.passes_of(view.mix);
     let tracks = shot
         .transition
         .as_ref()
         .filter(|_| shot.shows_program(view.mix));
     let mut fallback = None;
+    let capturing = Instant::now();
     for spec in &shot.captures {
         let Some(capture) = captures.frame(spec) else {
             continue;
         };
+        let started = Instant::now();
         let key = GpuKey::Capture(spec.clone());
         match capture.image {
             CaptureImage::Rgba { size, rgba } => cache.upload(
@@ -3407,9 +3690,20 @@ pub(crate) fn compose(
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
+        meter.capture(spec, started);
         fallback = Some(key);
     }
-    run_chains(compositor, (&mut *cache, &mut *chains), shot, live, at)?;
+    meter.phase_since(Phase::Captures, capturing);
+    let chaining = Instant::now();
+    let ran = run_chains(
+        compositor,
+        (&mut *cache, &mut *chains, &mut *meter),
+        shot,
+        live,
+        at,
+    );
+    meter.phase_since(Phase::Chains, chaining);
+    ran?;
     let stage = view
         .stage
         .then(|| shot.stage_of(view.mix, view.owner))
@@ -3421,7 +3715,13 @@ pub(crate) fn compose(
         && !chains.stage(&stage.mixed)
     {
         // Another output's frame drew this mix and ran its master stage this tick.
-        return finish_stage(compositor, (cache, chains), stage, at, (output, readback));
+        return finish_stage(
+            compositor,
+            (cache, chains, meter),
+            stage,
+            at,
+            (output, readback),
+        );
     }
     let (root, nested) = match (tracks, passes.split_last()) {
         (Some(_), _) => (None, passes),
@@ -3451,12 +3751,14 @@ pub(crate) fn compose(
                             opacity: OPAQUE,
                             blend: BlendMode::Normal,
                             visible: true,
+                            camera: None,
+                            depth_run: 0,
                         }
                     })
                     .collect();
                 let shown = scene(target, Color::BLACK, &items);
                 let Some(stage) = &stage else {
-                    return compositor.render(&shown, readback);
+                    return composite(compositor, meter, &shown, readback);
                 };
                 let layer = cache
                     .get(&stage.mixed)
@@ -3464,12 +3766,19 @@ pub(crate) fn compose(
                         what: "cache",
                         detail: format!("no image for {:?}", stage.mixed),
                     })?;
+                let started = Instant::now();
                 compositor.render_into(&shown, layer)?;
+                let took = meter.phase_since(Phase::Passes, started);
+                meter.composite(took);
             }
             return match &stage {
-                Some(stage) => {
-                    finish_stage(compositor, (cache, chains), stage, at, (output, readback))
-                }
+                Some(stage) => finish_stage(
+                    compositor,
+                    (cache, chains, meter),
+                    stage,
+                    at,
+                    (output, readback),
+                ),
                 None => Err(RenderError::Invalid {
                     what: "output stage",
                     detail: "a frame without an output stage reached it".into(),
@@ -3490,9 +3799,13 @@ pub(crate) fn compose(
         };
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
+            let started = Instant::now();
             fill_items(&mut items, (cache, chains), pass, (at, canvas), live);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
+            let took = meter.phase_since(Phase::Passes, started);
+            meter.pass(&pass.scene, took);
         }
+        let started = Instant::now();
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
         let clear = match (root, tracks) {
             (_, Some(transition)) => {
@@ -3512,22 +3825,30 @@ pub(crate) fn compose(
         match &stage {
             Some(stage) => {
                 compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
+                let took = meter.phase_since(Phase::Passes, started);
+                meter.composite(took);
             }
             None if direct => {
                 let shown = scene(output, clear, &items);
-                return compositor.render(&shown, readback);
+                return composite_from(compositor, meter, &shown, readback, started);
             }
             None => {
                 let layer = image(&GpuKey::Program)?;
                 compositor.render_into(&scene(canvas, clear, &items), layer)?;
                 let placed = [fitted(layer, canvas, output)];
                 let shown = scene(output, Color::BLACK, &placed);
-                return compositor.render(&shown, readback);
+                return composite_from(compositor, meter, &shown, readback, started);
             }
         }
     }
     match &stage {
-        Some(stage) => finish_stage(compositor, (cache, chains), stage, at, (output, readback)),
+        Some(stage) => finish_stage(
+            compositor,
+            (cache, chains, meter),
+            stage,
+            at,
+            (output, readback),
+        ),
         // Every path without a stage returned above.
         None => Err(RenderError::Invalid {
             what: "output stage",
@@ -3547,17 +3868,20 @@ pub(crate) fn compose(
 /// What the compositor reports for the frame's pass.
 fn finish_stage(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     stage: &Stage<'_>,
     at: MediaTime,
     (output, readback): (FrameSize, bool),
 ) -> Result<Output, RenderError> {
+    let started = Instant::now();
     let mut shown = None;
     let mut failed = false;
     for (owner, chain) in [stage.master, stage.output].into_iter().flatten() {
         let key = GpuKey::Filtered(owner.clone());
         if chains.stage(&key) {
+            let running = Instant::now();
             chains.run_one(compositor, cache, (owner, chain), at);
+            meter.chain(owner, running);
         }
         failed |= chains.failed(&key);
         shown = Some(key);
@@ -3573,7 +3897,38 @@ fn finish_stage(
         })
         .into_iter()
         .collect();
-    compositor.render(&scene(output, Color::BLACK, &placed), readback)
+    let drawn = compositor.render(&scene(output, Color::BLACK, &placed), readback);
+    meter.phase_since(Phase::Finish, started);
+    drawn
+}
+
+/// `compositor.render` of `shown`, the program scene's composite into the frame, timed
+/// into `meter` from `started`: the readback's wait counts toward the finish phase, the
+/// rest toward the composite.
+fn composite_from(
+    compositor: &mut Compositor,
+    meter: &mut DrawMeter,
+    shown: &Scene<'_>,
+    readback: bool,
+    started: Instant,
+) -> Result<Output, RenderError> {
+    let drawn = compositor.render(shown, readback);
+    let took = started.elapsed();
+    let waited = compositor.readback_wait().min(took);
+    meter.phase(Phase::Finish, waited);
+    meter.phase(Phase::Passes, took.saturating_sub(waited));
+    meter.composite(took.saturating_sub(waited));
+    drawn
+}
+
+/// [`composite_from`] starting now.
+fn composite(
+    compositor: &mut Compositor,
+    meter: &mut DrawMeter,
+    shown: &Scene<'_>,
+    readback: bool,
+) -> Result<Output, RenderError> {
+    composite_from(compositor, meter, shown, readback, Instant::now())
 }
 
 /// Runs `shot`'s video chains, once per frame of the cache however many mixes draw it
@@ -3586,7 +3941,7 @@ fn finish_stage(
 /// has marked the frame, no later mix of the tick runs them either.
 fn run_chains(
     compositor: &mut Compositor,
-    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     shot: &Shot,
     live: &LiveParams,
     at: MediaTime,
@@ -3596,10 +3951,12 @@ fn run_chains(
     }
     let canvas = shot.canvas()?;
     for step in &shot.chain_steps {
+        let started = Instant::now();
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
                     chains.run_one(compositor, cache, (source, chain), at);
+                    meter.chain(source, started);
                 }
             }
             ChainStep::Box(owner) => {
@@ -3616,6 +3973,8 @@ fn run_chains(
                         Ok(()) => chains.drew_box(owner),
                         Err(error) => chains.fail_box(owner, &error),
                     }
+                    // The box counts toward the item's effects, which run next.
+                    meter.chain(owner, started);
                 }
             }
             ChainStep::Pass(pass) => {
@@ -3626,6 +3985,7 @@ fn run_chains(
                     continue;
                 };
                 compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
+                meter.pass(&pass.scene, started.elapsed());
             }
         }
     }
@@ -3684,6 +4044,7 @@ fn draw_box(
         chains.fail(owner);
         return Ok(());
     };
+    // Flat in its box: the box itself is placed in 3D where its item is.
     let items = [Item {
         image,
         placement: Placement::Geometry(inside),
@@ -3691,6 +4052,8 @@ fn draw_box(
         opacity: OPAQUE,
         blend: BlendMode::Normal,
         visible: true,
+        camera: None,
+        depth_run: 0,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -3784,6 +4147,7 @@ fn fill_items<'a>(
     live: &LiveParams,
 ) {
     let size = [canvas.width() as f32, canvas.height() as f32];
+    let camera = live.camera(pass);
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
         if chains.failed(&layer.image) {
@@ -3798,6 +4162,8 @@ fn fill_items<'a>(
                 opacity: sampled.opacity,
                 blend: sampled.blend,
                 visible: true,
+                camera,
+                depth_run: 0,
             });
         }
         let (placement, crop) = live.apply(layer);
@@ -3815,6 +4181,8 @@ fn fill_items<'a>(
             opacity: layer.opacity,
             blend: layer.blend,
             visible: true,
+            camera,
+            depth_run: 0,
         })
     }));
 }
@@ -3831,7 +4199,7 @@ fn fill_tracks<'a>(
     let elapsed = transition::elapsed_ms(transition.start, at);
     let size = [canvas.width() as f32, canvas.height() as f32];
     items.clear();
-    items.extend(transition.tracks.iter().filter_map(|(key, track)| {
+    items.extend(transition.tracks.iter().filter_map(|(key, track, seen)| {
         if chains.failed(key) {
             return None;
         }
@@ -3843,6 +4211,9 @@ fn fill_tracks<'a>(
             opacity: sampled.opacity,
             blend: sampled.blend,
             visible: true,
+            camera: transition.cameras.camera(track, *seen, elapsed),
+            // A stinger's items sort on their own, over the scenes under them.
+            depth_run: transition.cameras.depth_run(track, *seen),
         })
     }));
 }
@@ -3862,6 +4233,8 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         opacity: OPAQUE,
         blend: BlendMode::Normal,
         visible: true,
+        camera: None,
+        depth_run: 0,
     }
 }
 
@@ -3926,7 +4299,8 @@ fn scale_down(src_w: u32, src_h: u32, rgba: &[u8], dst_w: u32, dst_h: u32) -> Ve
     out
 }
 
-fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
+/// `rgba` as a PNG, for `video.snapshot` and a preview stream's `png` codec.
+pub(crate) fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     let mut buf = Vec::new();
     let mut encoder = png::Encoder::new(&mut buf, width, height);
     encoder.set_color(png::ColorType::Rgba);
@@ -3939,8 +4313,9 @@ fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Result<Vec<u8>, String> {
     Ok(buf)
 }
 
-/// Standard base64 with padding and no line breaks.
-fn base64(data: &[u8]) -> String {
+/// Standard base64 with padding and no line breaks: a `video.snapshot`'s PNG, and an
+/// image `pack.read` returns.
+pub(crate) fn base64(data: &[u8]) -> String {
     const ALPHA: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     let push = |out: &mut String, n: u32, count: usize| {
@@ -3988,8 +4363,9 @@ pub(crate) fn decode_png(bytes: &[u8]) -> Result<(u32, u32, Vec<u8>), String> {
     Ok((info.width, info.height, buf))
 }
 
-/// Standard base64 decode, for tests that check the query's `png` field.
-#[cfg(test)]
+/// Standard base64 with padding decoded, strictly: `=` only at the end of the last
+/// four characters. For a `pack.write`'s images (ADR-0097), which a client sends, and
+/// tests that check `video.snapshot`'s `png` field.
 pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
     fn val(byte: u8) -> Result<u8, String> {
         match byte {
@@ -4006,10 +4382,14 @@ pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
         return Err("base64 length is not a multiple of 4".into());
     }
     let mut out = Vec::with_capacity(bytes.len() / 4 * 3);
-    for chunk in bytes.chunks_exact(4) {
+    let last = bytes.len() / 4;
+    for (index, chunk) in bytes.chunks_exact(4).enumerate() {
         let pad = chunk.iter().rev().take_while(|b| **b == b'=').count();
         if pad > 2 {
             return Err("too much base64 padding".into());
+        }
+        if (pad > 0 && index + 1 != last) || chunk[..4 - pad].contains(&b'=') {
+            return Err("base64 padding before the end".into());
         }
         let mut n = 0u32;
         for (i, byte) in chunk.iter().enumerate() {
@@ -4330,6 +4710,192 @@ pub(crate) mod tests {
         }
     }
 
+    /// A 3D scene's pass carries its camera, and a keyframe scene follows its parent's
+    /// unless it overrides it; a live camera wins, on the keyframe's own scene or on the
+    /// parent it follows (ADR-0094 §6).
+    #[test]
+    fn a_pass_draws_through_its_scenes_camera_and_live_cameras_win() {
+        use super::{FilterAssets, LiveParams, plan_scene};
+        use jstream_graph::Graph;
+        use jstream_protocol::{Canvas, Edit, SceneCamera, Vec3};
+
+        let framing = SceneCamera::framing(Canvas::DEFAULT);
+        let moved = |x: f32| SceneCamera {
+            position: Vec3::new(x, 100.0, 1400.0).expect("finite"),
+            ..framing
+        };
+        let set = |scene: &str, camera: SceneCamera| Edit::SceneSetCamera {
+            scene_id: SceneId::new(scene),
+            camera: Some(camera),
+        };
+        let mut graph = Graph::default();
+        graph
+            .apply(
+                &[
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("main"),
+                        name: "Main".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreate {
+                        scene_id: SceneId::new("flat"),
+                        name: "Flat".into(),
+                        role: None,
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("k"),
+                        variant_of: SceneId::new("main"),
+                        name: "Follows".into(),
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("k2"),
+                        variant_of: SceneId::new("main"),
+                        name: "Overrides".into(),
+                    },
+                    Edit::SceneCreateVariant {
+                        scene_id: SceneId::new("kf"),
+                        variant_of: SceneId::new("flat"),
+                        name: "Flat keyframe".into(),
+                    },
+                    set("main", framing),
+                    set("k2", moved(200.0)),
+                ],
+                None,
+            )
+            .expect("edits");
+        let seen = |live: &LiveParams, program: &str| {
+            let planned = plan_scene(
+                &graph,
+                &SceneId::new(program),
+                &mut |_| None,
+                &FilterAssets::default(),
+            );
+            live.camera(planned.shot.passes.last().expect("a pass"))
+        };
+        let none = LiveParams::default();
+        assert_eq!(seen(&none, "main"), Some(framing));
+        assert_eq!(seen(&none, "k"), Some(framing));
+        assert_eq!(seen(&none, "k2"), Some(moved(200.0)));
+        assert_eq!(seen(&none, "flat"), None);
+
+        let live_main = set("main", moved(500.0));
+        let live = LiveParams::from_values([(None, &live_main)]);
+        assert_eq!(seen(&live, "main"), Some(moved(500.0)));
+        assert_eq!(seen(&live, "k"), Some(moved(500.0)), "it follows");
+        assert_eq!(seen(&live, "k2"), Some(moved(200.0)), "it overrides");
+        let live_k2 = set("k2", moved(700.0));
+        let live = LiveParams::from_values([(None, &live_main), (None, &live_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(moved(700.0)));
+
+        // A live removal of a keyframe's override falls back to its parent's camera.
+        let unset = |scene: &str| Edit::SceneSetCamera {
+            scene_id: SceneId::new(scene),
+            camera: None,
+        };
+        let drop_k2 = unset("k2");
+        let live = LiveParams::from_values([(None, &drop_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(framing), "back to the parent's");
+        let live = LiveParams::from_values([(None, &live_main), (None, &drop_k2)]);
+        assert_eq!(seen(&live, "k2"), Some(moved(500.0)));
+        // A live removal of the parent's camera makes every keyframe 2D, overrides too.
+        let drop_main = unset("main");
+        let live = LiveParams::from_values([(None, &drop_main)]);
+        assert_eq!(seen(&live, "main"), None);
+        assert_eq!(seen(&live, "k"), None);
+        assert_eq!(seen(&live, "k2"), None, "a 2D parent's keyframes are 2D");
+        // A live camera on a 2D parent reaches its keyframes.
+        assert_eq!(seen(&none, "kf"), None);
+        let live_flat = set("flat", moved(300.0));
+        let live = LiveParams::from_values([(None, &live_flat)]);
+        assert_eq!(seen(&live, "flat"), Some(moved(300.0)));
+        assert_eq!(seen(&live, "kf"), Some(moved(300.0)));
+    }
+
+    /// A Move between two 3D scenes moves the camera with the preset's timing; a Fade
+    /// keeps each side's camera on its own tracks (ADR-0094 decision 7).
+    #[test]
+    fn a_move_moves_the_camera_and_a_fade_keeps_each_sides() {
+        use super::Seen;
+        use jstream_protocol::{Canvas, Easing, SceneCamera, Vec3};
+        use jstream_render::transition::{Effect, Timing, Track};
+
+        let from = SceneCamera::framing(Canvas::DEFAULT);
+        let to = SceneCamera {
+            position: Vec3::new(1960.0, 540.0, 1304.0).expect("finite"),
+            ..from
+        };
+        let at = |x: f32| super::Endpoint {
+            geometry: jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(x, 100.0).expect("finite"),
+                jstream_protocol::Size::try_new(100.0, 100.0).expect("size"),
+            )
+            .expect("geometry"),
+            crop: Crop::NONE,
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+        };
+        let timing = Timing {
+            delay_ms: 0.0,
+            duration_ms: 1000.0,
+            easing: Easing::Linear,
+        };
+        let leaving = Track::Disappear {
+            from: at(0.0),
+            effect: Effect::Fade,
+            timing,
+        };
+        let coming = Track::Appear {
+            to: at(0.0),
+            effect: Effect::Fade,
+            timing,
+        };
+        let mut cameras = super::TrackCameras {
+            ends: (Some(from), Some(to)),
+            overlay: None,
+            timing,
+            pairs: true,
+            overlay_run: 1,
+        };
+        let planned = Seen::AsPlanned;
+        let halfway = cameras.camera(&leaving, planned, 500.0).expect("3D");
+        assert_eq!(halfway.position.x.get(), 1460.0);
+        assert_eq!(cameras.camera(&coming, planned, 1000.0), Some(to));
+        cameras.pairs = false;
+        assert_eq!(cameras.camera(&leaving, planned, 500.0), Some(from));
+        assert_eq!(cameras.camera(&coming, planned, 500.0), Some(to));
+        cameras.ends = (Some(from), None);
+        assert_eq!(cameras.camera(&coming, planned, 500.0), None);
+        // A stinger's items are seen through their own scene's camera, or none.
+        let through = Track::Through {
+            at: at(0.0),
+            appear: Effect::Fade,
+            enter: timing,
+            disappear: Effect::Fade,
+            leave: timing,
+        };
+        cameras.ends = (Some(from), Some(to));
+        assert_eq!(
+            cameras.camera(&through, planned, 500.0),
+            None,
+            "a 2D stinger scene"
+        );
+        cameras.overlay = Some(from);
+        assert_eq!(cameras.camera(&through, planned, 500.0), Some(from));
+        // Outside a Move, what a switch took from the screen leaves through the camera
+        // it had then, 2D included, whatever the ends.
+        let held = |camera| Seen::Held {
+            camera,
+            depth_run: 0,
+        };
+        assert_eq!(cameras.camera(&leaving, held(Some(to)), 500.0), Some(to));
+        assert_eq!(cameras.camera(&leaving, held(None), 500.0), None);
+        // A Move starts from a screen seen through one camera, its first end, and
+        // moves it for every track, leaving ones too.
+        cameras.pairs = true;
+        let moving = cameras.camera(&leaving, held(Some(from)), 500.0);
+        assert_eq!(moving.map(|camera| camera.position.x.get()), Some(1460.0));
+    }
+
     /// A scene's background is planned with it, a keyframe scene draws its parent's and
     /// a group none (ADR-0089 §4); a transition fades from one background to the other.
     #[test]
@@ -4407,6 +4973,17 @@ pub(crate) mod tests {
             start: zero(),
             tracks: Vec::new(),
             backgrounds: (Color::BLACK, Color::rgb(1.0, 0.0, 0.0)),
+            cameras: super::TrackCameras {
+                ends: (None, None),
+                overlay: None,
+                timing: jstream_render::transition::Timing {
+                    delay_ms: 0.0,
+                    duration_ms: 1000.0,
+                    easing: jstream_protocol::Easing::Linear,
+                },
+                pairs: false,
+                overlay_run: 1,
+            },
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
@@ -4837,6 +5414,72 @@ pub(crate) mod tests {
         let Some(rgba) = snap(&shot) else { return };
         assert_eq!(at(&rgba, 100, 360), GREEN);
         assert_eq!(at(&rgba, 1100, 360), GREEN);
+    }
+
+    /// A metered frame names each unit it ran: the uploads, the nested scene's pass
+    /// and the program's composite, and its phases add up to no more than the frame
+    /// (ADR-0103).
+    #[test]
+    fn a_metered_frame_names_its_units() {
+        use super::{DrawAt, NoCaptures, compose_metered};
+        use crate::profile::UnitKey;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let right = Placement::Legacy(LegacyTransform {
+            position: [960.0, 0.0],
+            scale: [0.5, 1.0],
+            rotation_deg: 0.0,
+        });
+        let shot = shot(vec![
+            ("program", vec![fill("red"), nest("a", right)]),
+            ("a", vec![fill("green")]),
+        ]);
+        let slot = Arc::new(crate::profile::DrawerSlot::default());
+        let mut meter = slot.meter(Duration::from_millis(33));
+        let mut cache = ResourceCache::new();
+        let started = Instant::now();
+        cache.begin_frame();
+        let output = compose_metered(
+            &mut compositor,
+            (&mut cache, &mut Chains::default(), &mut meter),
+            (&shot, zero()),
+            View::default(),
+            &LiveParams::default(),
+            &NoCaptures,
+            DrawAt::read(FrameSize::new(1280, 720).expect("size")),
+        );
+        drop(cache.end_frame(&compositor));
+        output.expect("drawn");
+        let took = started.elapsed();
+        // The first frame starts the second; one a second later publishes it.
+        meter.end_frame(took, started, drop);
+        assert!(slot.load().is_none(), "nothing published within the second");
+        meter.end_frame(took, started + Duration::from_secs(1), drop);
+        let totals = slot.load().expect("published");
+        assert_eq!(totals.frames, 2);
+        let units: Vec<_> = totals.units.iter().map(|(key, _)| key.clone()).collect();
+        for want in [
+            UnitKey::Upload(SourceId::new("green")),
+            UnitKey::Upload(SourceId::new("red")),
+            UnitKey::Pass(SceneId::new("a")),
+            UnitKey::Composite,
+        ] {
+            assert!(units.contains(&want), "{want:?} in {units:?}");
+        }
+        let (_, pass) = totals
+            .units
+            .iter()
+            .find(|(key, _)| *key == UnitKey::Pass(SceneId::new("a")))
+            .expect("the pass");
+        assert_eq!(pass.frames, 1, "only the drawn frame ran it");
+        let phases: u64 = totals.phases.iter().sum();
+        assert!(phases > 0, "the phases were timed");
+        assert!(
+            u128::from(phases) <= took.as_nanos(),
+            "the phases fit in the frame: {phases} > {took:?}"
+        );
     }
 
     /// Opens whatever adapter opens (software in CI) for a test that drives [`compose`]

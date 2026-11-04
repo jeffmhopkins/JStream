@@ -527,6 +527,7 @@ mod tests {
             opacity: Finite32::ONE,
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
         };
         let keyframe = SceneInfo {
             overrides: Vec::new(),
@@ -541,6 +542,7 @@ mod tests {
             items: Vec::new(),
             transition_in: None,
             transition_out: None,
+            camera: None,
         };
         let mut c = Collection {
             scenes: vec![keyframe],

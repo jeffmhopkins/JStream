@@ -16,6 +16,7 @@
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
 //! `plugin.list` (always empty: the mock runs no plugins),
+//! `profile.get` (always empty: the mock draws nothing),
 //! `state.changed`, `studio.changed` and `output.state_changed` events, per-client undo
 //! and redo, and live-value gestures (`live.set`, `live.cancel`, `live.list`,
 //! `ends_gesture`, takeover and expiry). Each [`MockEngine::connect`] opens one client
@@ -623,6 +624,8 @@ struct Scene {
     meta: jstream_protocol::SceneMeta,
     /// Its options (ADR-0089).
     options: jstream_protocol::SceneOptions,
+    /// Its camera (ADR-0094), or a keyframe scene's override of its parent's.
+    camera: Option<jstream_protocol::SceneCamera>,
     /// Its filters (ADR-0065), settings as given: a video chain only.
     filters: jstream_protocol::FilterChains,
     /// The scene it is a keyframe scene of (ADR-0024 §2), whose items it shows.
@@ -646,6 +649,8 @@ struct Item {
     blend: BlendMode,
     /// Its effects (ADR-0065), settings as given: only the video chain holds any.
     effects: jstream_protocol::FilterChains,
+    /// Whether its canvas box is locked (ADR-0096).
+    locked: bool,
 }
 
 impl State {
@@ -1022,6 +1027,12 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
+            // The mock watches no packs folder (ADR-0097), as an engine without one.
+            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: action.name().into(),
+                });
+            }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         let Some(&state) = self.outputs.get(&output_id) else {
@@ -1156,6 +1167,7 @@ impl State {
                         folder: scene.folder.clone(),
                         meta: scene.meta.clone(),
                         options: scene.options.clone(),
+                        camera: scene.camera,
                     })
                     .collect(),
                 outputs: self.collection.output_infos(),
@@ -1245,6 +1257,12 @@ impl State {
             },
             // The mock describes no kinds, so it lists none.
             Query::KindList => QueryResult::KindList { kinds: Vec::new() },
+            // It loads no packs either (ADR-0097), as an engine without a packs folder.
+            query @ (Query::PackList | Query::PackRead { .. }) => {
+                return Err(ProtocolError::Unsupported {
+                    call: query.name().into(),
+                });
+            }
             Query::DeviceList | Query::UiSettingsGet { .. } => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
@@ -1265,6 +1283,10 @@ impl State {
                         u64::try_from(since.as_millis()).unwrap_or(u64::MAX)
                     }),
                 entries: Vec::new(),
+            },
+            // The mock draws nothing and reads no threads (ADR-0103): an empty profile.
+            Query::ProfileGet { .. } => QueryResult::ProfileGet {
+                profile: jstream_protocol::ProfileInfo::default(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };
@@ -1467,6 +1489,7 @@ impl Collection {
                     folder: None,
                     meta: Default::default(),
                     options: Default::default(),
+                    camera: None,
                     filters: Default::default(),
                     variant_of: None,
                     overrides: keyframe::Overrides::new(),
@@ -1579,6 +1602,12 @@ impl Collection {
                         options: scene.options.clone(),
                     });
                 }
+                if scene.camera.is_some() {
+                    inverse.push(Edit::SceneSetCamera {
+                        scene_id: scene.id.clone(),
+                        camera: scene.camera,
+                    });
+                }
                 let owner = jstream_protocol::FilterOwner::Scene {
                     scene_id: scene.id.clone(),
                 };
@@ -1648,6 +1677,7 @@ impl Collection {
                         opacity,
                         blend,
                         effects: Default::default(),
+                        locked: false,
                     },
                 );
                 vec![Edit::ItemRemove { item_id }]
@@ -1773,6 +1803,14 @@ impl Collection {
                 vec![Edit::ItemSetBlend {
                     item_id,
                     blend: old,
+                }]
+            }
+            Edit::ItemSetLocked { item_id, locked } => {
+                let item = self.existing_item(&item_id)?;
+                let old = std::mem::replace(&mut item.locked, locked);
+                vec![Edit::ItemSetLocked {
+                    item_id,
+                    locked: old,
                 }]
             }
             Edit::SourceCreate {
@@ -1941,6 +1979,26 @@ impl Collection {
                 vec![Edit::OutputSetTarget {
                     output_id,
                     target: old,
+                }]
+            }
+            Edit::OutputSetPath { output_id, path } => {
+                let Some(kind) = self.outputs.get_mut(&output_id) else {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                };
+                if let Some(problem) = record_path_problem(&path) {
+                    return Err(invalid(at, "path", problem));
+                }
+                let OutputKind::Record { path: current, .. } = kind else {
+                    return Err(invalid(
+                        at,
+                        "output_id",
+                        "the output is not a recording output",
+                    ));
+                };
+                let old = std::mem::replace(current, path);
+                vec![Edit::OutputSetPath {
+                    output_id,
+                    path: old,
                 }]
             }
             Edit::OutputDelete { output_id } => {
@@ -2450,6 +2508,7 @@ impl Collection {
                     opacity: item.opacity,
                     blend: item.blend,
                     transition: ItemTransition::default(),
+                    locked: item.locked,
                 })
             })
             .collect()
@@ -2705,6 +2764,12 @@ fn restore_item(
             item_id: item_id.clone(),
             scene_id: None,
             visible: false,
+        });
+    }
+    if item.locked {
+        edits.push(Edit::ItemSetLocked {
+            item_id: item_id.clone(),
+            locked: true,
         });
     }
     let owner = jstream_protocol::FilterOwner::Item {

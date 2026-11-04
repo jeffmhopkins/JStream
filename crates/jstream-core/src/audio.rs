@@ -270,11 +270,15 @@ fn drawn_buses(state: &State) -> BTreeSet<BusId> {
         .collect()
 }
 
-/// Every source a scope source's `audio_source` draws (#459).
+/// Every source a scope source's `audio_source` draws (#459), and a shader source's
+/// that hears audio (ADR-0093).
 fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
     state
         .sources()
         .filter_map(|source| match source.kind() {
+            SourceKind::Builtin { kind } if crate::pack_source::is_pack_kind(kind) => {
+                jstream_sources::heard_source(source.settings())
+            }
             SourceKind::Builtin { kind } => jstream_sources::drawn_source(kind, source.settings()),
             _ => None,
         })

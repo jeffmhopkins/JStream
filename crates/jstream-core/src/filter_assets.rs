@@ -11,14 +11,14 @@
 //!
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0026-source-filter-chains.md
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
-use jstream_protocol::{AssetRoot, Reference, Settings};
+use jstream_protocol::{AssetRoot, Reference, Settings, SourceId};
 use jstream_render::{Compositor, Image, Lut, LutError, RenderError};
-use jstream_sources::{Context, SourceError, StillImage, decode_still};
+use jstream_sources::{AudioScope, Context, SourceError, StillImage, decode_still};
 
-use crate::effect_packs::PackEffects;
+use crate::effect_packs::{PackEffects, PackSources};
 
 /// What a filter reads its asset as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -71,12 +71,15 @@ impl std::fmt::Debug for FilterAsset {
     }
 }
 
-/// What a plan's video filters read: the loaded assets, by key, and the effects of the
-/// loaded effect packs ([`crate::effect_packs`]), by kind.
+/// What a plan's video filters read: the loaded assets, by key, and the effects and
+/// shader sources of the loaded effect packs ([`crate::effect_packs`]), by kind.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct FilterAssets {
     images: HashMap<AssetKey, Arc<FilterAsset>>,
     effects: PackEffects,
+    sources: PackSources,
+    /// The audio scope each shader source that hears audio hears, by source.
+    heard: Arc<BTreeMap<SourceId, Arc<AudioScope>>>,
 }
 
 impl FilterAssets {
@@ -88,6 +91,12 @@ impl FilterAssets {
     #[must_use]
     pub(crate) fn with_effects(self, effects: PackEffects) -> Self {
         Self { effects, ..self }
+    }
+
+    /// These assets with `sources` as the loaded shader sources.
+    #[must_use]
+    pub(crate) fn with_sources(self, sources: PackSources) -> Self {
+        Self { sources, ..self }
     }
 
     /// The loaded asset `key` names.
@@ -105,6 +114,22 @@ impl FilterAssets {
     pub(crate) fn effects(&self) -> &PackEffects {
         &self.effects
     }
+
+    /// The loaded effect packs' shader sources.
+    pub(crate) fn sources(&self) -> &PackSources {
+        &self.sources
+    }
+
+    /// These assets with `heard` as the scopes shader sources hear.
+    #[must_use]
+    pub(crate) fn with_heard(self, heard: Arc<BTreeMap<SourceId, Arc<AudioScope>>>) -> Self {
+        Self { heard, ..self }
+    }
+
+    /// The scopes shader sources hear, by source.
+    pub(crate) fn heard(&self) -> &Arc<BTreeMap<SourceId, Arc<AudioScope>>> {
+        &self.heard
+    }
 }
 
 impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
@@ -112,6 +137,8 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
         Self {
             images: iter.into_iter().collect(),
             effects: PackEffects::default(),
+            sources: PackSources::default(),
+            heard: Arc::default(),
         }
     }
 }

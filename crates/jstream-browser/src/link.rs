@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-use jstream_media::MediaTime;
+use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_platform::{GpuFrame, MediaClock, PlatformError};
 
 use crate::wire::{self, ToEngine, ToHelper};
@@ -43,10 +43,15 @@ pub(crate) struct Paint {
     pub(crate) height: u32,
 }
 
-/// Makes each page's frame importer: the D3D12 import on Windows, a recorder in tests.
+/// Makes each page's frame importer: the D3D12 import on Windows, the slot-file reader
+/// on Linux, a recorder in tests.
 pub(crate) trait Frames: Send + Sync {
-    /// A new page's importer.
-    fn page(&self) -> Box<dyn PageFrames>;
+    /// A new page's importer, for a page of `size`.
+    fn page(&self, size: FrameSize) -> Box<dyn PageFrames>;
+    /// Whether its pages' frames are CPU frames ([`PageFrames::latest_cpu`]).
+    fn on_cpu(&self) -> bool {
+        false
+    }
 }
 
 /// One page's frames on the engine's device.
@@ -54,8 +59,13 @@ pub(crate) trait PageFrames: Send + Sync {
     /// Takes `paint`, which arrived at `pts`, as the page's latest frame. Returns once
     /// the engine no longer reads the helper's texture, which the helper then reuses.
     fn paint(&self, paint: &Paint, pts: MediaTime);
-    /// The latest frame, if any.
+    /// The latest frame on the GPU, if any.
     fn latest(&self) -> Option<GpuFrame>;
+    /// The latest frame in CPU memory, for an importer that reads paints into it (Linux);
+    /// `None`, the default, for one that imports onto the GPU.
+    fn latest_cpu(&self) -> Option<Arc<VideoFrame>> {
+        None
+    }
 }
 
 /// The engine's end of one helper's pipe.
@@ -86,6 +96,54 @@ struct PageLink {
     denied: AtomicU64,
     /// Answered when the helper confirms or refuses the open.
     opened: Mutex<Option<SyncSender<Result<(), String>>>>,
+    /// The reload hold. A paint holds it while it stores its frame, so a reload can't
+    /// slip between its check and its frame.
+    hold: Mutex<Hold>,
+}
+
+/// A page's reload hold.
+struct Hold {
+    /// Reloads asked for that the helper hasn't taken yet ([`ToEngine::Reloading`]).
+    /// Paints that arrive meanwhile are the old document's, and are dropped.
+    reloads: u32,
+    /// Whether the latest frame is shown: false from a reload until the reloaded
+    /// document's first paint, so the page is transparent rather than showing the end
+    /// of its previous run (`restart_on_show`).
+    showing: bool,
+}
+
+impl PageLink {
+    /// Takes one paint, unless it is the old document's while a reload is pending.
+    fn paint(&self, paint: &Paint, pts: MediaTime) {
+        let mut hold = lock(&self.hold);
+        if hold.reloads > 0 {
+            return;
+        }
+        self.frames.paint(paint, pts);
+        hold.showing = true;
+    }
+
+    /// Asked for a reload: hidden until the reloaded document paints.
+    fn reload(&self) {
+        let mut hold = lock(&self.hold);
+        hold.reloads += 1;
+        hold.showing = false;
+    }
+
+    /// The helper took one reload.
+    fn reloading(&self) {
+        let mut hold = lock(&self.hold);
+        hold.reloads = hold.reloads.saturating_sub(1);
+    }
+
+    fn shown<T>(&self, frame: Option<T>) -> Option<T> {
+        frame.filter(|_| lock(&self.hold).showing)
+    }
+
+    #[cfg(test)]
+    fn showing(&self) -> bool {
+        lock(&self.hold).showing
+    }
 }
 
 impl Link {
@@ -160,7 +218,8 @@ impl Link {
     }
 
     /// Copies pages' paints onto the adapter with this LUID from now on, or delivers no
-    /// frames (`None`).
+    /// frames (`None`). Windows only: on Linux the helper paints in software.
+    #[cfg(any(test, windows))]
     pub(crate) fn use_adapter(&self, luid: Option<u64>) {
         self.send(&ToHelper::Adapter { luid });
     }
@@ -175,9 +234,13 @@ impl Link {
         let (tx, rx) = mpsc::sync_channel(1);
         let page = Arc::new(PageLink {
             audio: PageAudio::new(),
-            frames: self.frames.page(),
+            frames: self.frames.page(spec.size),
             denied: AtomicU64::new(0),
             opened: Mutex::new(Some(tx)),
+            hold: Mutex::new(Hold {
+                reloads: 0,
+                showing: true,
+            }),
         });
         {
             let mut pages = lock(&self.pages);
@@ -285,7 +348,7 @@ impl Link {
                         width,
                         height,
                     };
-                    state.frames.paint(&paint, pts);
+                    state.paint(&paint, pts);
                 }
                 // Even for a page closed meanwhile: the helper waits for every slot.
                 self.send(&ToHelper::Released { page, slot });
@@ -317,6 +380,11 @@ impl Link {
             }
             ToEngine::Closed { page } => {
                 tracing::debug!(page, "a browser page closed in the helper");
+            }
+            ToEngine::Reloading { page } => {
+                if let Some(state) = self.page(page) {
+                    state.reloading();
+                }
             }
             ToEngine::Ready | ToEngine::StartFailed { .. } => {
                 tracing::debug!("the browser helper repeated its start answer");
@@ -366,7 +434,15 @@ pub(crate) struct LinkPage {
 
 impl BrowserPage for LinkPage {
     fn frame(&self) -> Option<GpuFrame> {
-        self.page.frames.latest()
+        self.page.shown(self.page.frames.latest())
+    }
+
+    fn paints_on_cpu(&self) -> bool {
+        self.link.frames.on_cpu()
+    }
+
+    fn cpu_frame(&self) -> Option<Arc<VideoFrame>> {
+        self.page.shown(self.page.frames.latest_cpu())
     }
 
     fn set_css(&mut self, css: &str) {
@@ -374,6 +450,13 @@ impl BrowserPage for LinkPage {
             page: self.id,
             css: css.to_owned(),
         });
+    }
+
+    /// Hides the page until the reloaded document paints, so it never shows the end of
+    /// its previous run, then asks the helper to reload it.
+    fn reload(&mut self) {
+        self.page.reload();
+        self.link.send(&ToHelper::Reload { page: self.id });
     }
 
     fn audio(&self) -> &Arc<PageAudio> {
@@ -415,7 +498,7 @@ mod tests {
     use std::io::{PipeReader, PipeWriter};
     use std::path::PathBuf;
 
-    use jstream_media::{FrameSize, Timebase};
+    use jstream_media::Timebase;
     use jstream_platform::{AudioInputHandler, AudioPacket};
 
     use super::*;
@@ -441,7 +524,7 @@ mod tests {
     struct Recorder(Paints);
 
     impl Frames for Recorder {
-        fn page(&self) -> Box<dyn PageFrames> {
+        fn page(&self, _size: FrameSize) -> Box<dyn PageFrames> {
             Box::new(Recorder(Arc::clone(&self.0)))
         }
     }
@@ -651,6 +734,64 @@ mod tests {
         drop(helper);
         thread.join().expect("reader");
         assert!(!link.is_alive());
+    }
+
+    #[test]
+    fn a_reloaded_page_hides_until_the_new_document_paints() {
+        let (link, thread, helper, paints) = connect();
+        let helper = start(&link, helper);
+        let (mut page, mut helper) = open(&link, helper);
+        let frame = |slot| ToEngine::Frame {
+            page: 1,
+            slot,
+            handle: 0x44,
+            width: 640,
+            height: 360,
+        };
+        helper.say(&frame(0));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 0 });
+        assert!(page.page.showing());
+
+        // From the reload the old frame isn't shown, and a paint that left the helper
+        // before it took the reload is dropped, its slot still released.
+        page.reload();
+        assert_eq!(helper.expect(), ToHelper::Reload { page: 1 });
+        assert!(!page.page.showing());
+        helper.say(&frame(1));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 1 });
+        assert_eq!(lock(&paints).len(), 1);
+        assert!(!page.page.showing());
+
+        // Once the helper has taken it, the next paint is the new document's.
+        helper.say(&ToEngine::Reloading { page: 1 });
+        helper.say(&frame(2));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 2 });
+        assert_eq!(lock(&paints).len(), 2);
+        assert!(page.page.showing());
+
+        // Two reloads before the helper takes either: paints stay dropped until it has
+        // taken both.
+        page.reload();
+        page.reload();
+        assert_eq!(helper.expect(), ToHelper::Reload { page: 1 });
+        assert_eq!(helper.expect(), ToHelper::Reload { page: 1 });
+        helper.say(&ToEngine::Reloading { page: 1 });
+        helper.say(&frame(3));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 3 });
+        assert_eq!(lock(&paints).len(), 2);
+        assert!(!page.page.showing());
+        helper.say(&ToEngine::Reloading { page: 1 });
+        helper.say(&frame(4));
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 4 });
+        assert_eq!(lock(&paints).len(), 3);
+        assert!(page.page.showing());
+
+        drop(page);
+        assert_eq!(helper.expect(), ToHelper::Close { page: 1 });
+        link.shutdown();
+        assert_eq!(helper.expect(), ToHelper::Shutdown);
+        drop(helper);
+        thread.join().expect("reader");
     }
 
     #[test]

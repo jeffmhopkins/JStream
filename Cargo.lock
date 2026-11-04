@@ -2816,6 +2816,7 @@ dependencies = [
  "jstream-media",
  "jstream-platform",
  "jstream-platform-windows",
+ "libc",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
@@ -2863,6 +2864,7 @@ name = "jstream-core"
 version = "0.0.0"
 dependencies = [
  "arc-swap",
+ "blake3",
  "futures-core",
  "insta",
  "jstream-audio",
@@ -2958,11 +2960,14 @@ dependencies = [
  "jstream-protocol",
  "jstream-render",
  "naga",
+ "png",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
  "tracing",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -3184,6 +3189,7 @@ dependencies = [
  "gif",
  "image-webp",
  "insta",
+ "jiff",
  "jstream-browser",
  "jstream-media",
  "jstream-platform",
@@ -3203,7 +3209,7 @@ version = "0.0.0"
 
 [[package]]
 name = "jstream-ui"
-version = "0.0.0"
+version = "0.1.0-alpha.3"
 dependencies = [
  "futures-util",
  "jstream-control",

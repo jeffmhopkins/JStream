@@ -261,6 +261,7 @@ fn create(
         folder: None,
         meta: SceneMeta::default(),
         options: SceneOptions::default(),
+        camera: None,
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
         overrides: Overrides::new(),

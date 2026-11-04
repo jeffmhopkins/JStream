@@ -525,3 +525,316 @@ fn an_items_effects_run_once_a_transition_onto_its_scene_ends() {
     );
     assert_eq!(shot.chain_cost([]).item_effects, 1, "and run each frame");
 }
+
+/// A `stinger` preset (`scene`, `cut_ms`).
+fn stinger(id: &str, scene: Option<&str>, duration_ms: u32, cut_ms: u32) -> Edit {
+    let mut settings = Settings::default();
+    if let Some(scene) = scene {
+        settings.insert("scene", json!({"type": "scene", "scene_id": scene}));
+    }
+    settings.insert("cut_ms", json!(cut_ms));
+    Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new(id),
+        name: id.into(),
+        kind: "stinger".into(),
+        duration_ms,
+        easing: Easing::Linear,
+        settings,
+    }
+}
+
+/// A stinger draws the old scene, then the new one from its cut point, and its own
+/// scene's items over both until it ends; without a scene it cuts at the cut point.
+#[test]
+fn a_stinger_plays_its_scene_over_the_cut() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            stinger("sting", Some("c"), 1000, 400),
+            stinger("bare", None, 600, 600),
+        ]),
+    )
+    .expect("presets");
+    let mut events = control.events();
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(started(drain(&mut events)), [Some(("sting".into(), 1000))]);
+    assert_eq!(
+        hub.load().shot().transition_tracks(),
+        Some(3),
+        "a1 until the cut, b1 from it, and c1 over both"
+    );
+    clock.advance(999_000);
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), Some(3), "running");
+    clock.advance(1_000);
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), None, "ended");
+
+    switch(&control, "a", Some("bare")).expect("switch");
+    assert_eq!(started(drain(&mut events)), [Some(("bare".into(), 600))]);
+    assert_eq!(hub.load().shot().transition_tracks(), Some(2));
+}
+
+/// What a stinger draws, read back from the program mix: the stinger scene comes in over
+/// the old picture, the picture under it changes at the cut, and it goes again.
+#[test]
+fn a_snapshot_shows_the_stinger_cover_the_cut() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
+    use std::io::Write;
+
+    fn fill(id: &str, hex: &str) -> Edit {
+        let settings = [
+            ("color", json!(hex)),
+            ("width", json!(1920)),
+            ("height", json!(1080)),
+        ];
+        Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: Settings(
+                settings
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                    .collect(),
+            ),
+            duplicated_from: None,
+        }
+    }
+
+    fn centre(control: &dyn Control) -> Option<[u8; 4]> {
+        let result = match query(control, Query::VideoSnapshot) {
+            Ok(result) => result,
+            Err(error) if error.protocol().is_some_and(is_no_adapter) => {
+                if std::env::var_os("CI").is_some() {
+                    panic!("CI has no wgpu adapter: {error}");
+                }
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "jstream-core: skipping stinger GPU test, no adapter: {error}"
+                );
+                return None;
+            }
+            Err(error) => panic!("video.snapshot failed: {error}"),
+        };
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let bytes = decode_base64(&png).expect("png is base64");
+        let (width, height, rgba) = decode_png(&bytes).expect("png decodes");
+        let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+        Some([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+    }
+
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            create("s"),
+            fill("red", "#ff0000ff"),
+            fill("green", "#00ff00ff"),
+            fill("blue", "#0000ffff"),
+            add("a", "a1", "red"),
+            add("b", "b1", "green"),
+            add("s", "s1", "blue"),
+            stinger("sting", Some("s"), 1000, 500),
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let Some(before) = centre(&control) else {
+        return;
+    };
+    assert_eq!(before, [0xff, 0, 0, 0xff]);
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    clock.advance(250_000);
+    let [red, green, blue, _] = centre(&control).expect("an adapter");
+    assert!(
+        (32..224).contains(&red) && green == 0 && (32..224).contains(&blue),
+        "coming in over the old scene: {red} {green} {blue}"
+    );
+    clock.advance(250_000);
+    assert_eq!(
+        centre(&control),
+        Some([0, 0, 0xff, 0xff]),
+        "covering the cut"
+    );
+    clock.advance(250_000);
+    let [red, green, blue, _] = centre(&control).expect("an adapter");
+    assert!(
+        red == 0 && (32..224).contains(&green) && (32..224).contains(&blue),
+        "going over the new scene: {red} {green} {blue}"
+    );
+    clock.advance(250_000);
+    assert_eq!(centre(&control), Some([0, 0xff, 0, 0xff]), "ended");
+}
+
+/// A scene camera at `x`, otherwise the framing camera (ADR-0094).
+fn camera_at(x: f32) -> jstream_protocol::SceneCamera {
+    let framing = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    jstream_protocol::SceneCamera {
+        position: jstream_protocol::Vec3::new(x, 540.0, 1304.0).expect("finite"),
+        ..framing
+    }
+}
+
+fn set_camera(scene: &str, camera: Option<jstream_protocol::SceneCamera>) -> Edit {
+    Edit::SceneSetCamera {
+        scene_id: SceneId::new(scene),
+        camera,
+    }
+}
+
+/// A switch that cuts short a Fade between two cameras moves no camera: what was on
+/// screen leaves through the camera each item had, and the new scene comes in through
+/// its own, even by a `move` preset (ADR-0094 decision 7).
+#[test]
+fn a_switch_mid_fade_keeps_each_leaving_items_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let (a, b, c) = (camera_at(900.0), camera_at(1000.0), camera_at(1100.0));
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(a)),
+            set_camera("b", Some(b)),
+            set_camera("c", Some(c)),
+            preset("move", "move", 400),
+        ]),
+    )
+    .expect("cameras");
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("fade")).expect("to b");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b)])
+    );
+    clock.advance(100_000);
+    switch(&control, "c", Some("move")).expect("retarget to c");
+    assert_eq!(
+        hub.load().shot().track_cameras(0.0),
+        Some(vec![Some(a), Some(b), Some(c)]),
+        "a1 and b1 leave through their own cameras, c1 arrives through c's"
+    );
+    assert_eq!(
+        hub.load().shot().track_cameras(200.0),
+        Some(vec![Some(a), Some(b), Some(c)])
+    );
+}
+
+/// A stinger's scene is seen through its own camera, or none, over both sides, and
+/// keeps it when a switch cuts the stinger short (ADR-0094 decision 7).
+#[test]
+fn a_stingers_items_keep_their_scenes_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let (a, b) = (camera_at(900.0), camera_at(1000.0));
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(a)),
+            set_camera("b", Some(b)),
+            stinger("sting", Some("c"), 1000, 400),
+        ]),
+    )
+    .expect("presets");
+    let hub = engine.render_hub();
+
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b), None]),
+        "a 2D stinger scene over two 3D ones"
+    );
+    clock.advance(100_000);
+    switch(&control, "a", Some("fade")).expect("cut it short");
+    let cameras = hub.load().shot().track_cameras(0.0).expect("a fade");
+    assert_eq!(
+        cameras.last(),
+        Some(&Some(a)),
+        "a1 comes back through its camera"
+    );
+    assert!(
+        cameras[..cameras.len() - 1].contains(&None),
+        "the stinger's c1 leaves in 2D: {cameras:?}"
+    );
+    let runs = hub.load().shot().track_depth_runs().expect("a fade");
+    assert_eq!(
+        runs.iter().filter(|run| **run == 1).count(),
+        1,
+        "c1 keeps the stinger's own depth run as it leaves: {runs:?}"
+    );
+
+    clock.advance(1_000_000);
+    engine.replan();
+    batch(&control, edits(vec![set_camera("c", Some(b))])).expect("c in 3D");
+    switch(&control, "b", Some("sting")).expect("switch");
+    assert_eq!(
+        hub.load().shot().track_cameras(100.0),
+        Some(vec![Some(a), Some(b), Some(b)]),
+        "a 3D stinger scene through its own camera"
+    );
+    // A stinger that cuts another short sorts its items apart from the held ones.
+    clock.advance(100_000);
+    switch(&control, "a", Some("sting")).expect("cut it short");
+    let runs = hub.load().shot().track_depth_runs().expect("a stinger");
+    assert!(
+        runs.contains(&1) && runs.last() == Some(&2),
+        "held c1 in run 1, the new stinger's c1 in run 2: {runs:?}"
+    );
+}
+
+/// A Move cut short by another Move keeps moving one camera, from where it was, for
+/// every track, so a third quick switch moves too (ADR-0094 decision 7).
+#[test]
+fn moves_cut_short_keep_moving_one_camera() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            set_camera("a", Some(camera_at(900.0))),
+            set_camera("b", Some(camera_at(1000.0))),
+            set_camera("c", Some(camera_at(1100.0))),
+            preset("move", "move", 400),
+        ]),
+    )
+    .expect("cameras");
+    let hub = engine.render_hub();
+    let one_camera = |elapsed_ms: f32| {
+        let cameras = hub.load().shot().track_cameras(elapsed_ms).expect("moving");
+        assert!(cameras.len() > 1, "{cameras:?}");
+        assert!(
+            cameras.windows(2).all(|pair| pair[0] == pair[1]),
+            "one camera for every track: {cameras:?}"
+        );
+        cameras[0].map(|camera| camera.position.x.get())
+    };
+
+    switch(&control, "b", Some("move")).expect("to b");
+    clock.advance(100_000);
+    switch(&control, "c", Some("move")).expect("to c");
+    assert_eq!(
+        one_camera(0.0),
+        Some(925.0),
+        "from a quarter of the way to b"
+    );
+    clock.advance(100_000);
+    switch(&control, "a", Some("move")).expect("back to a");
+    let x = one_camera(0.0).expect("3D");
+    assert!(x > 925.0 && x < 1100.0, "from on the way to c: {x}");
+}

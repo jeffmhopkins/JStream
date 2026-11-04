@@ -12,6 +12,9 @@
 //!   (opacity only), `scale` (toward 65% about its centre while fading), `slide` (toward
 //!   the nearest canvas edge until it is off the canvas, while fading) or `none` (at
 //!   once).
+//! - An item that **passes through** (a `stinger` transition's overlay) appears with
+//!   one effect, stays, and disappears with another: it covers the switch and then
+//!   uncovers it.
 //! - **Clamping:** a spring overshoots by design, so position, size, rotation and depth
 //!   may pass their end values. Values with a hard range are clamped after easing:
 //!   opacity to `[0, 1]`, crop to `[0, source size]`, size to `≥ 0` (an empty box draws
@@ -20,7 +23,10 @@
 //! Docs: docs/adr/0029-transitions.md
 
 use crate::scene::Crop;
-use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
+use jstream_protocol::{
+    BlendMode, Easing, Finite32, ItemGeometry, MAX_FOV_DEG, MIN_FOV_DEG, SceneCamera, Size, Vec2,
+    Vec3,
+};
 
 /// How much of its size a `scale` effect leaves at its end: 65%.
 const SCALE_TO: f32 = 0.65;
@@ -130,6 +136,21 @@ pub enum Track {
         /// When and how it goes.
         timing: Timing,
     },
+    /// An item that comes in, stays, and goes again within the transition: a `stinger`
+    /// transition's overlay. Until `leave` starts it samples as [`Track::Appear`], and
+    /// from then on as [`Track::Disappear`].
+    Through {
+        /// Where it is while it shows.
+        at: Endpoint,
+        /// How it comes in.
+        appear: Effect,
+        /// When and how it comes in.
+        enter: Timing,
+        /// How it goes.
+        disappear: Effect,
+        /// When and how it goes; its delay is when the item starts to go.
+        leave: Timing,
+    },
 }
 
 impl Track {
@@ -149,6 +170,42 @@ impl Track {
             Track::Pair { timing, .. }
             | Track::Appear { timing, .. }
             | Track::Disappear { timing, .. } => timing.end_ms(),
+            Track::Through {
+                disappear: Effect::None,
+                leave,
+                ..
+            } => leave.delay_ms,
+            Track::Through { leave, .. } => leave.end_ms(),
+        }
+    }
+
+    /// The track as it is `elapsed_ms` after the transition started: a
+    /// [`Track::Through`] is its appearing half until it starts to leave, and its
+    /// disappearing half from then on; every other track is itself.
+    fn phase(&self, elapsed_ms: f32) -> Track {
+        match *self {
+            Track::Through {
+                at,
+                appear,
+                enter,
+                disappear,
+                leave,
+            } => {
+                if elapsed_ms < leave.delay_ms {
+                    Track::Appear {
+                        to: at,
+                        effect: appear,
+                        timing: enter,
+                    }
+                } else {
+                    Track::Disappear {
+                        from: at,
+                        effect: disappear,
+                        timing: leave,
+                    }
+                }
+            }
+            track => track,
         }
     }
 
@@ -156,7 +213,7 @@ impl Track {
     /// pixels, or `None` when it draws nothing then (fully transparent, or an empty
     /// box).
     pub fn sample(&self, elapsed_ms: f32, canvas: [f32; 2]) -> Option<Endpoint> {
-        let sampled = match self {
+        let sampled = match self.phase(elapsed_ms) {
             Track::Pair {
                 from,
                 to,
@@ -166,7 +223,7 @@ impl Track {
                 let k = timing.progress(elapsed_ms);
                 Endpoint {
                     geometry: lerp_geometry(&from.geometry, &to.geometry, k),
-                    crop: lerp_crop(from.crop, to.crop, k, *source),
+                    crop: lerp_crop(from.crop, to.crop, k, source),
                     opacity: lerp(from.opacity, to.opacity, k.clamp(0.0, 1.0)),
                     blend: if k < 0.5 { from.blend } else { to.blend },
                 }
@@ -177,7 +234,7 @@ impl Track {
                     _ => timing.progress(elapsed_ms).clamp(0.0, 1.0),
                 };
                 Endpoint {
-                    geometry: away(&to.geometry, 1.0 - k, *effect, canvas),
+                    geometry: away(&to.geometry, 1.0 - k, effect, canvas),
                     crop: to.crop,
                     opacity: to.opacity * k,
                     blend: to.blend,
@@ -193,17 +250,46 @@ impl Track {
                     _ => timing.progress(elapsed_ms),
                 };
                 Endpoint {
-                    geometry: away(&from.geometry, k, *effect, canvas),
+                    geometry: away(&from.geometry, k, effect, canvas),
                     crop: from.crop,
                     opacity: from.opacity * (1.0 - k.clamp(0.0, 1.0)),
                     blend: from.blend,
                 }
             }
+            // `phase` never returns one.
+            Track::Through { .. } => return None,
         };
         let opacity = sampled.opacity.clamp(0.0, 1.0);
         let size = sampled.geometry.size;
         let drawn = opacity > 0.0 && size.width.get() > 0.0 && size.height.get() > 0.0;
         drawn.then_some(Endpoint { opacity, ..sampled })
+    }
+}
+
+/// A scene camera `k` of the way from `from` to `to` (ADR-0094 decision 7): position,
+/// target and field of view linearly, roll the shortest way, and `depth_sort` from `to`.
+/// `k` may pass 1 under a spring; the field of view is then clamped to what a camera may
+/// have. Where the way passes a camera the collection would refuse (its position on its
+/// target), it is `to`.
+pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera {
+    let point = |a: Vec3, b: Vec3| Vec3 {
+        x: finite(lerp(a.x.get(), b.x.get(), k)),
+        y: finite(lerp(a.y.get(), b.y.get(), k)),
+        z: finite(lerp(a.z.get(), b.z.get(), k)),
+    };
+    let camera = SceneCamera {
+        position: point(from.position, to.position),
+        target: point(from.target, to.target),
+        fov_deg: finite(
+            lerp(from.fov_deg.get(), to.fov_deg.get(), k).clamp(MIN_FOV_DEG, MAX_FOV_DEG),
+        ),
+        roll_deg: finite(lerp_angle(from.roll_deg.get(), to.roll_deg.get(), k)),
+        depth_sort: to.depth_sort,
+    };
+    if camera.validate().is_ok() {
+        camera
+    } else {
+        *to
     }
 }
 
@@ -318,7 +404,9 @@ fn away(geometry: &ItemGeometry, k: f32, effect: Effect, [cw, ch]: [f32; 2]) -> 
 mod tests {
     use super::{Effect, Endpoint, Timing, Track, lerp_angle};
     use crate::scene::Crop;
-    use jstream_protocol::{BlendMode, Easing, Finite32, ItemGeometry, Size, Vec2};
+    use jstream_protocol::{
+        BlendMode, Easing, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3,
+    };
 
     const CANVAS: [f32; 2] = [1920.0, 1080.0];
 
@@ -345,6 +433,46 @@ mod tests {
 
     fn centre(e: &Endpoint) -> (f32, f32) {
         (e.geometry.center.x.get(), e.geometry.center.y.get())
+    }
+
+    /// A stinger's overlay item covers the switch and then uncovers it.
+    #[test]
+    fn a_through_track_comes_in_stays_and_goes() {
+        let track = Track::Through {
+            at: at(960.0, 540.0, 400.0, 1080.0),
+            appear: Effect::Slide,
+            enter: Timing {
+                delay_ms: 100.0,
+                duration_ms: 400.0,
+                easing: Easing::Linear,
+            },
+            disappear: Effect::Fade,
+            leave: Timing {
+                delay_ms: 700.0,
+                duration_ms: 300.0,
+                easing: Easing::Linear,
+            },
+        };
+        assert!(track.sample(50.0, CANVAS).is_none(), "not yet in");
+        let entering = track.sample(300.0, CANVAS).expect("coming in");
+        assert!(centre(&entering) != (960.0, 540.0) && entering.opacity < 1.0);
+        for t in [500.0, 600.0, 699.0] {
+            let held = track.sample(t, CANVAS).expect("there");
+            assert_eq!(centre(&held), (960.0, 540.0));
+            assert!((held.opacity - 1.0).abs() < 1e-6);
+        }
+        let leaving = track.sample(850.0, CANVAS).expect("going");
+        assert_eq!(centre(&leaving), (960.0, 540.0));
+        assert!((leaving.opacity - 0.5).abs() < 1e-3);
+        assert!(track.sample(1000.0, CANVAS).is_none(), "gone");
+        assert!((track.end_ms() - 1000.0).abs() < 1e-6);
+        let mut cut = track;
+        if let Track::Through { disappear, .. } = &mut cut {
+            *disappear = Effect::None;
+        }
+        assert!(cut.sample(699.0, CANVAS).is_some());
+        assert!(cut.sample(700.0, CANVAS).is_none());
+        assert!((cut.end_ms() - 700.0).abs() < 1e-6);
     }
 
     #[test]
@@ -389,6 +517,39 @@ mod tests {
         assert!(!before.geometry.flip_h && !before.geometry.flip_v);
         let after = track.sample(500.0, CANVAS).expect("drawn");
         assert!(after.geometry.flip_h && after.geometry.flip_v);
+    }
+
+    /// A camera moves linearly, rolls the shortest way, and keeps its field of view in
+    /// range past the end of a spring (ADR-0094 decision 7).
+    #[test]
+    fn a_camera_moves_between_its_ends() {
+        let point = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let camera = |x: f32, fov: f32, roll: f32| SceneCamera {
+            position: point(x, 0.0, 1000.0),
+            target: point(x, 0.0, 0.0),
+            fov_deg: Finite32::new(fov).expect("finite"),
+            roll_deg: Finite32::new(roll).expect("finite"),
+            depth_sort: true,
+        };
+        let from = camera(0.0, 40.0, 350.0);
+        let to = camera(100.0, 60.0, 10.0);
+        let half = super::lerp_camera(&from, &to, 0.5);
+        assert_eq!(half.position.x.get(), 50.0);
+        assert_eq!(half.fov_deg.get(), 50.0);
+        assert!(
+            (half.roll_deg.get() - 360.0).abs() < 1e-3,
+            "{}",
+            half.roll_deg.get()
+        );
+        let wide = super::lerp_camera(&camera(0.0, 160.0, 0.0), &camera(0.0, 170.0, 0.0), 1.4);
+        assert_eq!(wide.fov_deg.get(), 170.0);
+        // Halfway between a camera and its reverse, position meets target: it is `to`.
+        let reversed = SceneCamera {
+            position: to.target,
+            target: to.position,
+            ..to
+        };
+        assert_eq!(super::lerp_camera(&to, &reversed, 0.5), reversed);
     }
 
     /// A blend mode can't be interpolated, so a pair switches it halfway, as it does

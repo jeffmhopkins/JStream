@@ -4,7 +4,7 @@ use crate::{AudioScopes, CaptureSpec, MediaAudio, SourceError};
 use jstream_browser::BrowserBackend;
 use jstream_media::{AudioFormat, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame, MediaDecoders};
-use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings};
+use jstream_protocol::{AssetRoot, KindDescriptor, Reference, Settings, not_a_reference};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -156,6 +156,17 @@ pub trait SourceKind: Send + Sync {
     /// [`SourceError::NotBuilt`] for a kind that is only described so far, and the
     /// kind's own errors (an unreadable or undecodable asset, a bad setting).
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError>;
+
+    /// Whether a source built from `new` in place of one running with `old` keeps the
+    /// old one's time zero, so its `at` runs on rather than starting again from zero.
+    /// The engine builds a source again for every settings change, since it never
+    /// [`update`](Source::update)s one, and asks this before it does. `false`, the
+    /// default, starts it again. The `timer` kind keeps counting unless its `mode` or
+    /// `duration` changed.
+    fn keeps_time(&self, old: &Settings, new: &Settings) -> bool {
+        let _ = (old, new);
+        false
+    }
 }
 
 /// What sources are created with: where asset references point, how much a decoded
@@ -537,8 +548,33 @@ pub(crate) fn asset(
         Some(Reference::Asset { root, path }) => Ok(Some((root, path))),
         _ => Err(SourceError::Setting {
             param: id.to_owned(),
-            reason: "must be an asset reference or null".into(),
+            reason: not_a_reference("asset"),
         }),
+    }
+}
+
+/// Issue #1081: a value that isn't an asset reference is refused with the reference's
+/// shape, the reason the graph gives for the same value.
+#[cfg(test)]
+mod reference_tests {
+    use super::asset;
+    use crate::SourceError;
+    use jstream_protocol::{Settings, not_a_reference};
+    use serde_json::json;
+
+    #[test]
+    fn a_bare_path_for_an_asset_names_the_shape() {
+        let mut settings = Settings::new();
+        settings.insert("file", json!("/pics/a.png"));
+        let Err(SourceError::Setting { param, reason }) = asset(&settings, "file") else {
+            panic!("a bare path is refused");
+        };
+        assert_eq!(param, "file");
+        assert_eq!(reason, not_a_reference("asset"));
+        assert!(
+            reason.contains(r#"{"type": "asset", "root": "absolute""#),
+            "{reason}"
+        );
     }
 }
 

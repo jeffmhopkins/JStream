@@ -140,7 +140,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    reasons), and in `output.set_path`, which refuses any output but a recording,
+    `output.set_target` on a recording or virtual-camera output (the mock
     accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
@@ -189,7 +190,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `internal`, and its refused deletes carry no `blockers`, except a folder's, a
   label's and a scene's with keyframe scenes. The folder, label and metadata edits
   ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4: `folder.*`, `label.*`,
-  `scene.set_folder`, `scene.set_meta`, `scene.set_options` and `source.set_meta`, in `mock/organise.rs`)
+  `scene.set_folder`, `scene.set_meta`, `scene.set_options`, `scene.set_camera` and `source.set_meta`, in `mock/organise.rs`)
   make the graph's checks with the protocol's own `check_color`, `check_icon`,
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
   background): a missing parent, folder or label, a folder inside itself, a
@@ -198,6 +199,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
+- scene cameras (`scene.set_camera`, in `mock/organise.rs`,
+  [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
+  graph's fields, an override on a keyframe scene refused while its parent has no
+  camera, and removing a parent's camera dropping its keyframes' overrides, which the
+  inverse restores; `SceneInfo.camera` reports each scene's own;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,
@@ -244,12 +250,17 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so
   `plugin.list` lists none;
+- `profile.get` answered with an empty profile: the mock draws nothing and reads no
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md));
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
 - `codec.downloads` listing none, and `codec.download` and `codec.delete` answered with
   `invalid_argument` on `download_id`, as an engine with no codec backend answers them,
   unless `MockEngine::with_codec_downloads` offered downloads: then they are listed, and
   the actions mark one installed or not, fetching nothing;
+- `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
+  as an engine that watches no packs folder answers them
+  ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

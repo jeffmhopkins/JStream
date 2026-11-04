@@ -13,7 +13,7 @@
 //! `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own AAC-LC encoder
 //! (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens,
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
-//! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`), and
+//! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
 //! `NoMediaDecoders`, the stand-in until ADR-0072's media-file decoders exist. `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and
 //! one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
@@ -89,7 +89,7 @@ pub use pipewire::{PipeWire, PipeWireAudio};
 pub use portal::PortalCapture;
 pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token, request_path};
 #[cfg(target_os = "linux")]
-pub use process::LinuxProcessCpu;
+pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 #[cfg(target_os = "linux")]
 pub use secrets::LinuxSecrets;
 pub use session::{Session, SessionKind, SupportTier};

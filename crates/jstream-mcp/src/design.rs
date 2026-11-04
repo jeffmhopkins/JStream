@@ -6,8 +6,12 @@
 //! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
 //! a broadcast designer would: where things go, which sizes, which faces and colours,
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` kind, and how to group,
-//! scroll and animate. Numbers are for a 1920×1080 canvas and scale with it.
+//! settings that make graphics look finished, the `shape` and `timer` kinds, how to
+//! group, scroll and animate, how to use 3D placement and blend modes, how to layer
+//! light by role, mask, and build reflections on glossy surfaces (#1062), how
+//! to build a 3D set with a scene camera (ADR-0094), which transition to use (including
+//! a `stinger`), and when to build a graphic as HTML in a `browser` source, animated on
+//! one clock. Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -48,6 +52,11 @@ A ticker: a full-width bar shape with a label plate at its left, above the text 
 stack; the text source holds the headlines with a separator such as •, is wider than \
 the bar (repeat the headlines if not), and has a `scroll` filter with `speed_x` -80 to \
 -120 (negative moves left) and `gap_x` about 80 so the end doesn't run into the start. \
+A countdown or clock: a `timer` source (`mode` `countdown` with `duration` in seconds \
+and an `end_text` such as LIVE, `stopwatch`, or `clock` with a `clock_format` and an \
+optional IANA `time_zone`), styled like `text`. Its frame keeps one size whatever it \
+shows, so size its item once from `source.sizes`; editing its look keeps it counting, \
+and changing `mode` or `duration` restarts it. \
 A graphic of several parts that should read as one (a scoreboard, a framed camera \
 with its name bar): build it in its own scene, place that scene with a `scene` source, \
 crop the item to the graphic's bounds, and put `rounded_corners` and `drop_shadow` in \
@@ -64,7 +73,98 @@ between them with it. Reveal text with a crop that opens with its plate rather t
 fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 120, \
 200). Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
-second and ease them; a cut beats a slow move. \
+second and ease them; a cut beats a slow move. A variant that overrides an item's \
+geometry stores the whole geometry, so nudging x there also fixes its size and angles \
+against later edits to the item in the parent scene; finish an item's size and angles \
+in the parent first, and override geometry only on the items that move. \
+Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
+interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
+and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
+from `tilt_deg` -90 to 0, or a card that turns in from `turn_deg` 70, reads as a \
+designed move; keep angles under 90 and pair them with opacity. `item.set_blend` sets \
+how an item composites: `screen` or `additive` for light leaks, glints and glows over \
+the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
+items stay `normal`. \
+Layering: build a scene as separate layers by role (the background, what glows or \
+emits light, the light it throws onto nearby surfaces, and the foreground frame or \
+set in front of it), each with its own mask and blend, so lighting and reflections \
+stay consistent when one of them changes. Light is `additive` (or `screen`): glows, \
+flares, beams, sparks. Matter is `normal`: smoke, objects, plates, people. An effect \
+that mixes both (an explosion, a fire) reads as solid only when its matter is drawn \
+normally and just its bright core is added. Masks: `image_mask` cuts an item by an \
+image's alpha or luma (`mode`), and `scene_mask` by a scene's picture, so a mask can \
+be drawn with `shape` sources instead of a file: a `linear` fill from white to black \
+is a ramp with `mode` `luma`, or from white to transparent with the default `alpha`. \
+A file setting, such as an `image` source's `file` or `image_mask`'s `image`, takes an \
+asset reference, `{\"type\": \"asset\", \"root\": \"absolute\", \"path\": \"/path/to/pic.png\"}` \
+(or `root` `collection` with a path relative to the collection file's folder), not a bare \
+path. \
+Reflections on glossy surfaces (a desk, a floor, glass, a screen): reflect the \
+composite the viewer sees, never each layer on its own, or the layers won't line up. \
+Put what is reflected in one scene or group and place it again with a `scene` source, \
+with `flip_v` on and `fit_mode` `stretch`, its top edge on the surface's edge nearest \
+the reflected thing, so each surface mirrors from its own edge; squash its height to \
+suit the viewing angle (flatter for a surface seen at a low angle) and give it a small \
+`blur` in its effects, more for a rougher surface. A mask drawn for the canvas would be \
+stretched over that item's squashed box, not the canvas, so put the flipped item in a \
+group of its own, place the group full-frame and unflipped, and put the `image_mask` \
+(or `scene_mask`) on that outer placement's effects, with `item.set_blend` `additive` \
+and the opacity there. Mask the specific surfaces that would shine, each with a \
+fresnel ramp (stronger toward the edge seen at a grazing angle), never one broad sheen \
+over the whole picture. A glossy edge or rim is the same composite again, unflipped, \
+with a wider blur, an edge mask and `additive`. Blending is in linear light, so a \
+reflection on glass needs a low opacity (often 5-15%), less than the same look needs \
+in a browser: tune it in JStream, and check it over the brightest and the darkest \
+background it will sit on. \
+3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
+`roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
+y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \
+turn it about its centre; its own `perspective_px` is ignored. The canvas is the plane \
+z = 0 seen from straight in front: the framing camera looks at the canvas centre \
+(`target` x 960, y 540, z 0 at 1080p) from `position` z = (height / 2) / tan(fov / 2), \
+about 1304 at the default 45°, and through it a flat item lands exactly on its 2D \
+box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
+low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
+the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
+variant) and a `move` transition, which glides the camera with the items. Put \
+graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
+source of the 3D set. \
+Transitions between scenes: `fade` for calm changes, `move` when the scenes share \
+items, and `stinger` for a branded wipe. A stinger preset (`transition.create`, kind \
+`stinger`, about 800-1200 ms) names a `scene` it plays over the switch and a `cut_ms` \
+(about half the duration) when the picture under it cuts. Build that scene like any \
+graphic: full-height bars, panels or a logo plate that together cover the canvas at \
+the cut. Each of its items comes in by its own `item.set_transition` `appear` effect \
+and `delay_ms`, holds over the cut and goes by its `disappear` effect after it, so \
+`slide` panels close in from the nearest edges and open out again (staggered by \
+40-80 ms with `delay_ms`, or by stacking order with the preset's `stagger_ms`), and \
+`scale` plates pop in and out; for a one-way sweep or anything more choreographed, use \
+an HTML stinger. Make sure the bars cover the whole canvas at `cut_ms`, check \
+with `video.snapshot` mid-switch, and make it the scenes' `transition_in` \
+(`scene.set_transitions`) or name it in the switch. An HTML stinger is a `browser` \
+source with `restart_on_show` on, so it plays from the start each time; the reload \
+takes a page load, during which the stinger is transparent (never the end of its \
+previous run), so start and end its animation transparent, keep it light (inline, \
+no remote assets) and leave a few hundred ms before `cut_ms`. \
+HTML graphics: for a layout the built-in kinds can't draw (rich type, icons, tables, \
+SVG, CSS gradients, blend modes or 3D transforms, choreographed CSS animation), make a \
+`browser` source and give it the whole page in `html`, its CSS and scripts inline. Set \
+its `width` and `height` to the canvas and place its item full-frame, or to the \
+graphic's bounds; the default `css` makes the page transparent, so draw only the \
+graphic and leave `body` without a background. Fonts and images can come from https \
+URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Time-based animation \
+in pages: when several pages show parts of one motion (a background that drifts \
+behind several layers, lights that pulse in step), compute it from the wall clock \
+(`Date.now()`), not from when each page loaded, so separate pages agree; use load time \
+only for an effect that should replay each time it is shown. Keep continuous motion \
+subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
+and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
+per frame than its own length or it flickers. Changing `html` \
+reloads the page, which replays the entrance and blanks it for a moment, so put text \
+that changes during a show in a `text` source over it. If creating the source fails \
+because no browser is available on this system, build the graphic from the built-in \
+kinds instead. \
 Check your work: after each step take a `video.snapshot` and look at it critically \
 (alignment, overlap, legibility, crowding, anything off the safe area) and fix what's \
 wrong before reporting. When a scene is on program, build changes on another scene or \
