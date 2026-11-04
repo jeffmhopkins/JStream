@@ -63,7 +63,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Painter`: `paint(at)` draws the frame for `at` ahead of `frame`, for a source
   whose frames follow something live. Drawing can take milliseconds, so a host that
   asks for frames under a lock paints before taking it, when `next_change` said a
-  frame is due (the engine's `jstream-sources` thread does). The `waveform` and
+  frame is due (the engine's `jstream-sources` thread does). A host that skipped a
+  source nothing showed may paint it once under its lock, to catch it up before it is
+  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
