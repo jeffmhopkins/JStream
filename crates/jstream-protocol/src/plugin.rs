@@ -199,6 +199,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
+    ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
     ("output.set_key", N),

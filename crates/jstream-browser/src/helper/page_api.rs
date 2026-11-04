@@ -238,15 +238,22 @@ wrap_render_process_handler! {
             &self,
             browser: Option<&mut Browser>,
             frame: Option<&mut Frame>,
-            _context: Option<&mut V8Context>,
+            context: Option<&mut V8Context>,
         ) {
-            let (Some(browser), Some(frame)) = (browser, frame) else {
+            let (Some(browser), Some(frame), Some(context)) = (browser, frame, context) else {
                 return;
             };
             if frame.is_main() == 1 {
                 let id = browser.identifier();
+                // Only the context the feed holds: an old document's context can go after
+                // the new one's is made (a reload), and the new feed must stay (#1148).
                 self.granted.with(|granted| {
-                    if let Some(page) = granted.get_mut(&id) {
+                    if let Some(page) = granted.get_mut(&id)
+                        && page
+                            .feed
+                            .as_ref()
+                            .is_some_and(|(held, _)| held.is_same(Some(context)) == 1)
+                    {
                         page.feed = None;
                     }
                 });

@@ -88,7 +88,7 @@ pub use id::{
     ItemId, LabelId, OutputId, PluginId, RequestId, Rev, SceneId, SourceId, TimelineId,
     TransitionPresetId, VideoMixId,
 };
-pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
+pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf, check_asset_path, not_a_reference,

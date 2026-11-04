@@ -83,6 +83,22 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
+    /// The keyframe a scene's placements draw it through changed (ADR-0116, since 0.88):
+    /// a `scene.set_keyframe` set it, or a batch, undo or redo deleted the scene or the
+    /// keyframe scene (`keyframe_id` omitted). Studio state, so it carries no `rev`.
+    #[serde(rename = "scene.keyframe_changed")]
+    SceneKeyframeChanged {
+        /// The placed scene.
+        scene_id: SceneId,
+        /// The keyframe scene it is now drawn through. Omitted for its own values.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        keyframe_id: Option<SceneId>,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
     /// A shared value changed (0.78, ADR-0102 decision 7): a `values.set` gave it a new
     /// value, or removed it. Not collection state, so it carries no `rev`.
     #[serde(rename = "values.changed")]
@@ -335,6 +351,7 @@ impl Event {
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
             Event::StudioChanged { .. } => Some("studio.changed"),
+            Event::SceneKeyframeChanged { .. } => Some("scene.keyframe_changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
             Event::ValuesChanged { .. } => Some("values.changed"),
             Event::TimelineChanged { .. } => Some("timeline.changed"),

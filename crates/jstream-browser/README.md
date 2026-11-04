@@ -252,7 +252,8 @@ What follows is Windows; **On Linux** below says what differs.
   In the renderer, the render-process handler keeps each granted browser's grant, home
   and cache; when a JavaScript context is made in a main frame whose URL the home
   covers, it evaluates the shim before any page script runs, feeds it the cache, and
-  feeds it each later update. A cross-origin navigation (a `data:` page's reload among
+  feeds it each later update, until that context is released (only that one: an old
+  document's context can go after the new one's is made). A cross-origin navigation (a `data:` page's reload among
   them) makes the renderer's new browser object before it destroys the old one with
   the same ID, so the entry is counted and goes only with the last. The shim reports
   only what changed, so the state sent again fires no events. A subframe, a popup, or a main frame on any other

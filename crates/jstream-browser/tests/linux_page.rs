@@ -518,6 +518,16 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
     // A reload starts a new document, which gets the page's state again.
     page.reload();
     wait_for(&*page, [0, 255, 0]);
+    // And it keeps getting updates after it: the old document's context, released after
+    // the new one's was made, doesn't take the new one's feed with it (#1148).
+    let value = |ok: &str| PageData {
+        values: vec![("status.ok".into(), Some(ok.into()))],
+        ..PageData::default()
+    };
+    page.send_data(value("false"));
+    wait_for(&*page, [0, 0, 255]);
+    page.send_data(value("true"));
+    wait_for(&*page, [0, 255, 0]);
     drop(page);
     drop(backend);
     let _ = std::fs::remove_dir_all(&dir);

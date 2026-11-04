@@ -15,6 +15,7 @@ mod frames;
 mod gpu_capture;
 mod history;
 mod item_actions;
+mod keyframe_tracks;
 mod keyframes;
 mod live_values;
 mod packs;
