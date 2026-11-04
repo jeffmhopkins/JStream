@@ -3196,9 +3196,11 @@ dependencies = [
  "jstream-protocol",
  "png",
  "realfft",
+ "serde",
  "serde_json",
  "skrifa",
  "thiserror 2.0.21",
+ "tracing",
  "zune-core",
  "zune-jpeg",
 ]

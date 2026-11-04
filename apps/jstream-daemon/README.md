@@ -97,7 +97,7 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
 
 Not here yet: YouTube sign-in for users (it waits on JStream's own OAuth client,
 [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), YouTube outside Windows (the daemon sets up its OAuth token store
-only there), on Linux a way to download OpenH264 (LNX2) and the UI's warning while
+only there), and on Linux the UI's warning while
 stream keys are in ADR-0071's fallback file, a default collection file, a
 default port and a default token file
 location ([Design › Open questions](#open-questions)).
@@ -609,7 +609,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
-  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  [ROADMAP › M2](../../ROADMAP.md#m2); [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
+  decides it as an opt-in `--lan` flag, not built yet). Pairing is served already, and its device tokens
   are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
   pairing page and the device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on

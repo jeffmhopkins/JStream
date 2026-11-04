@@ -14,6 +14,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
+use crate::panels::codec_downloads::{CodecDownloads, Downloads, Offer};
 use jstream_control::protocol::{
     AudioCodec, AudioEncoding, Edit, EncoderProfile, EncoderProfileId, EncoderProfileInfo,
     HardwarePreference, MixInput, MixResolution, OutputId, OutputInfo, RateControl, SceneId,
@@ -392,9 +393,11 @@ pub(crate) fn Profiles(
     // Which form is open: `None` closed, `Some(None)` a new one, `Some(Some(id))` an edit.
     let encoder_form = RwSignal::new(None::<Option<EncoderProfileId>>);
     let mix_form = RwSignal::new(None::<Option<VideoMixId>>);
+    let codecs = CodecDownloads::load();
     view! {
         <section class="profiles" aria-label="Encoders">
             <h3>"Encoders"</h3>
+            <Downloads state=codecs encoders=encoders />
             <ul class="profile-list">
                 <For
                     each=move || encoders.get()
@@ -442,7 +445,7 @@ pub(crate) fn Profiles(
                 encoder_form
                     .get()
                     .map(|editing| {
-                        view! { <EncoderForm editing=editing encoders=encoders send=send open=encoder_form /> }
+                        view! { <EncoderForm editing=editing encoders=encoders send=send open=encoder_form codecs=codecs /> }
                     })
             }}
         </section>
@@ -512,6 +515,7 @@ fn EncoderForm(
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
     send: Callback<Edit>,
     open: RwSignal<Option<Option<EncoderProfileId>>>,
+    codecs: CodecDownloads,
 ) -> impl IntoView {
     let start = editing
         .as_ref()
@@ -666,6 +670,18 @@ fn EncoderForm(
                         .collect_view()}
                 </select>
             </label>
+            {move || {
+                let (codec, hardware) = draft.with(|d| (d.codec, d.hardware));
+                codecs
+                    .needed_by(codec, hardware)
+                    .map(|download| {
+                        let reason = format!(
+                            "This encoding needs {}, which isn't installed.",
+                            download.name
+                        );
+                        view! { <Offer state=codecs download=download reason=reason /> }
+                    })
+            }}
             <label class="profile-field">
                 <span class="label">"Audio bit rate (kbps, AAC)"</span>
                 <input

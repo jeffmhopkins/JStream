@@ -178,6 +178,12 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::PluginEnable { plugin_id } => {
             format!("Enabled plugin {}", quote(plugin_id.as_str()))
         }
+        Action::CodecDownload { download_id } => {
+            format!("Downloaded codec {}", quote(download_id))
+        }
+        Action::CodecDelete { download_id } => {
+            format!("Deleted codec {}", quote(download_id))
+        }
         Action::PackWrite { pack, files } => {
             let n = files.len();
             let s = if n == 1 { "" } else { "s" };

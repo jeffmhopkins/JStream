@@ -102,6 +102,24 @@ impl MockEngine {
         self
     }
 
+    /// Offers `downloads` as an engine whose platform downloads codecs does (ADR-0061):
+    /// `codec.downloads` lists them, `codec.download` marks one installed and
+    /// `codec.delete` not installed, with nothing fetched. Without it the mock offers
+    /// none, as an engine with no codec backend.
+    #[must_use]
+    pub fn with_codec_downloads(
+        self,
+        downloads: impl IntoIterator<Item = jstream_protocol::CodecDownloadInfo>,
+    ) -> Self {
+        let mut state = lock(&self.shared);
+        state.codec_downloads = downloads.into_iter().collect();
+        state
+            .codec_downloads
+            .sort_by(|a, b| a.download_id.cmp(&b.download_id));
+        drop(state);
+        self
+    }
+
     /// Describes builtin source kinds by their descriptors, so their sources get audio
     /// settings when the kind produces audio, following `always` when it has no video
     /// and `when_shown` when it has (ADR-0028), as the engine does. The mock checks no
@@ -297,6 +315,8 @@ struct State {
     gestures: BTreeMap<(ClientId, GestureId), BTreeMap<Param, Edit>>,
     /// Which gesture holds each parameter: at most one.
     holders: BTreeMap<Param, (ClientId, GestureId)>,
+    /// The codecs [`MockEngine::with_codec_downloads`] offers, ordered by ID.
+    codec_downloads: Vec<jstream_protocol::CodecDownloadInfo>,
 }
 
 /// A parameter a live value overrides: an item's placement or its crop, as the item has
@@ -1049,6 +1069,14 @@ impl State {
                     format!("no effect pack has a kind `{kind_id}`: the engine loads no packs"),
                 ));
             }
+            // A codec `with_codec_downloads` offered is marked installed or not, and
+            // nothing is fetched; any other is refused, as the engine refuses it.
+            Action::CodecDownload { download_id } => {
+                return self.mark_codec(&download_id, true);
+            }
+            Action::CodecDelete { download_id } => {
+                return self.mark_codec(&download_id, false);
+            }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
             // The mock watches no packs folder (ADR-0097), as an engine without one.
@@ -1084,6 +1112,28 @@ impl State {
                 state,
             });
         }
+        Ok(CallResult::action())
+    }
+
+    /// `codec.download` (`installed`) or `codec.delete` of `download_id`.
+    fn mark_codec(
+        &mut self,
+        download_id: &str,
+        installed: bool,
+    ) -> Result<CallResult, ProtocolError> {
+        let Some(download) = self
+            .codec_downloads
+            .iter_mut()
+            .find(|d| d.download_id == download_id)
+        else {
+            return Err(ProtocolError::invalid_argument(
+                "download_id",
+                format!(
+                    "`{download_id}` is not a codec this engine downloads (see `codec.downloads`)"
+                ),
+            ));
+        };
+        download.installed = installed;
         Ok(CallResult::action())
     }
 
@@ -1281,6 +1331,9 @@ impl State {
             // The mock runs no plugins (ADR-0069), so none is installed.
             Query::PluginList => QueryResult::PluginList {
                 plugins: Vec::new(),
+            },
+            Query::CodecDownloads => QueryResult::CodecDownloads {
+                downloads: self.codec_downloads.clone(),
             },
             // The mock keeps no activity log (ADR-0083), so it lists none.
             Query::ActivityList { .. } => QueryResult::ActivityList {
@@ -3538,6 +3591,59 @@ mod tests {
             panic!("a plugin.list result");
         };
         assert!(plugins.is_empty(), "the mock runs no plugins");
+    }
+
+    #[test]
+    fn codec_downloads_are_none_unless_offered() {
+        let (_engine, control) = parity_engine();
+        let Ok(QueryResult::CodecDownloads { downloads }) = query(&*control, Query::CodecDownloads)
+        else {
+            panic!("a codec.downloads result");
+        };
+        assert!(downloads.is_empty(), "the mock has no codec backend");
+        let refused = block_on(control.call(Call::Action {
+            action: Action::CodecDownload {
+                download_id: "openh264".into(),
+            },
+        }))
+        .expect_err("the mock downloads no codec");
+        assert_eq!(code(&refused), Some("invalid_argument"));
+
+        let offered = jstream_protocol::CodecDownloadInfo {
+            download_id: "openh264".into(),
+            name: "Cisco's OpenH264 (software H.264)".into(),
+            codec: jstream_protocol::VideoCodec::H264,
+            version: "2.6.0".into(),
+            notice: "OpenH264 Video Codec provided by Cisco Systems, Inc.".into(),
+            license_url: "https://www.openh264.org/BINARY_LICENSE.txt".into(),
+            license_text: "the licence".into(),
+            installed: false,
+            hardware_encoder: false,
+        };
+        let engine = MockEngine::new().with_codec_downloads([offered]);
+        let control = connected(&engine);
+        let installed = |control: &dyn Control| match query(control, Query::CodecDownloads) {
+            Ok(QueryResult::CodecDownloads { downloads }) => downloads[0].installed,
+            other => panic!("a codec.downloads result: {other:?}"),
+        };
+        assert!(!installed(&*control));
+        for (action, after) in [
+            (
+                Action::CodecDownload {
+                    download_id: "openh264".into(),
+                },
+                true,
+            ),
+            (
+                Action::CodecDelete {
+                    download_id: "openh264".into(),
+                },
+                false,
+            ),
+        ] {
+            block_on(control.call(Call::Action { action })).expect("marked");
+            assert_eq!(installed(&*control), after);
+        }
     }
 
     #[test]

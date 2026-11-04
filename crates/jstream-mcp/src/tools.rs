@@ -139,11 +139,12 @@ pub(crate) const REMOTE_PREFIX: &str = "remote_";
 /// one is an unknown op: YouTube (ADR-0058 §3), installing, granting and re-enabling
 /// plugins (ADR-0069 G1), so an agent can't hand its access to code that outlives the
 /// conversation, and re-enabling an effect quarantined after a GPU device loss (ADR-0087
-/// §4), so an agent can't put a shader that hung the GPU back on air. The protocol keeps
-/// them for the UI. `events.rs` hides these nouns' events from agents too, so an
+/// §4), so an agent can't put a shader that hung the GPU back on air, and downloading or
+/// deleting a codec (ADR-0061), since Cisco's OpenH264 downloads only on a person's
+/// request, after they have seen its licence. The protocol keeps them for the UI. `events.rs` hides these nouns' events from agents too, so an
 /// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`,
 /// which does (ADR-0087 §5).
-pub(crate) const PEOPLE_ONLY: [&str; 3] = ["youtube", "plugin", "effect"];
+pub(crate) const PEOPLE_ONLY: [&str; 4] = ["youtube", "plugin", "effect", "codec"];
 
 /// The nouns whose ops are deprecated, so no tool carries them either: an agent is
 /// never offered a call the engine always refuses. `privacy` (ADR-0080 §4): JStream has

@@ -206,6 +206,34 @@ impl Default for Material {
     }
 }
 
+/// How a model is lit (ADR-0107 decision 4).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Lighting {
+    /// The studio rig, fixed to the camera: a key light above and to the left, a fill
+    /// opposite it, and a soft environment.
+    #[default]
+    Studio,
+    /// Base colour and emission as authored.
+    Unlit,
+}
+
+impl Lighting {
+    /// Its name as a setting spells it.
+    pub fn name(self) -> &'static str {
+        match self {
+            Lighting::Studio => "studio",
+            Lighting::Unlit => "unlit",
+        }
+    }
+
+    /// The lighting a setting names.
+    pub fn from_name(name: &str) -> Option<Self> {
+        [Lighting::Studio, Lighting::Unlit]
+            .into_iter()
+            .find(|lighting| lighting.name() == name)
+    }
+}
+
 /// Whether a texture holds colour (sRGB-encoded) or data (linear).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TextureColor {
