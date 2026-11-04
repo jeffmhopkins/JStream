@@ -176,7 +176,7 @@ impl Param {
 /// `kind`'s value of `param`, or `None` when it has no such field.
 pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
     let f = |v: Finite32| Some(f64::from(v.get()));
-    match (*kind, param) {
+    match (kind.clone(), param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
         | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude) => f(amplitude),
         (MotionKind::Wiggle { frequency_hz, .. }, Param::Frequency) => f(frequency_hz),
@@ -196,7 +196,7 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
 /// is no wrap.
 pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionKind> {
     let v = finite(value as f32);
-    let mut next = *kind;
+    let mut next = kind.clone();
     match (&mut next, param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
         | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude) => *amplitude = v,

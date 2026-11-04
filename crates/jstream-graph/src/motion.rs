@@ -8,10 +8,10 @@
 //! Docs: docs/adr/0099-native-motion-modifiers-and-timelines.md
 
 use crate::apply::invalid;
-use jstream_anim::{Clock, Kind, Modifier, Property, Shape};
+use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Modifier, Property, Shape};
 use jstream_protocol::{
-    MotionClock, MotionKind, MotionModifier, MotionProperty, MotionShape, ProtocolError,
-    check_motion,
+    MotionClock, MotionCurve, MotionKind, MotionMeasure, MotionModifier, MotionProperty,
+    MotionShape, ProtocolError, check_motion,
 };
 
 /// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
@@ -94,6 +94,43 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             rate_per_s: f64::from(rate_per_s.get()),
             wrap: wrap.map(|w| f64::from(w.get())),
         },
+        MotionKind::Audio {
+            measure,
+            low_hz,
+            high_hz,
+            floor_db,
+            ceiling_db,
+            attack_ms,
+            release_ms,
+            curve,
+            from,
+            to,
+            ..
+        } => Kind::Audio(Audio {
+            measure: match measure {
+                MotionMeasure::Level => Measure::Level,
+                MotionMeasure::Peak => Measure::Peak,
+                MotionMeasure::Onset => Measure::Onset,
+                MotionMeasure::Band => Measure::Band {
+                    low_hz: low_hz?.get(),
+                    high_hz: high_hz?.get(),
+                },
+                _ => return None,
+            },
+            floor_db: floor_db.get(),
+            ceiling_db: ceiling_db.get(),
+            attack_ms: attack_ms as f32,
+            release_ms: release_ms as f32,
+            curve: match curve {
+                MotionCurve::Linear => Curve::Linear,
+                MotionCurve::EaseIn => Curve::EaseIn,
+                MotionCurve::EaseOut => Curve::EaseOut,
+                MotionCurve::EaseInOut => Curve::EaseInOut,
+                _ => return None,
+            },
+            from: f64::from(from.get()),
+            to: f64::from(to.get()),
+        }),
         _ => return None,
     })
 }
@@ -141,6 +178,34 @@ mod tests {
                 rate_per_s: f(100_000.0),
                 wrap: Some(f(f32::MIN_POSITIVE)),
             },
+            MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: MotionMeasure::Band,
+                low_hz: Some(f(20.0)),
+                high_hz: Some(f(20.000_002)),
+                floor_db: f(-90.0),
+                ceiling_db: f(-89.999),
+                attack_ms: 0,
+                release_ms: 10_000,
+                curve: MotionCurve::EaseInOut,
+                from: f(-100_000.0),
+                to: f(100_000.0),
+            },
+            MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: MotionMeasure::Onset,
+                low_hz: None,
+                high_hz: None,
+                floor_db: f(-0.001),
+                ceiling_db: f(0.0),
+                attack_ms: 10_000,
+                release_ms: 0,
+                curve: MotionCurve::Linear,
+                from: f(100_000.0),
+                to: f(-100_000.0),
+            },
         ];
         let motion: Vec<MotionModifier> = kinds
             .iter()
@@ -148,7 +213,7 @@ mod tests {
             .map(|(n, kind)| MotionModifier {
                 modifier_id: format!("m-{n}_{}", "x".repeat(50)),
                 property: MotionProperty::ALL[n],
-                kind: *kind,
+                kind: kind.clone(),
                 clock: MotionClock::Shown,
                 enabled: n % 2 == 0,
             })
