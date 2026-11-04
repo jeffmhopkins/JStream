@@ -1303,13 +1303,15 @@ place. A frame without either chain draws as before, with no extra layer. The ed
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
 stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
-of its mix in order. Their filters hold no references (the graph refuses one), so none
-reads a scene or an asset.
+of its mix in order. Their filters hold no scene, source or bus reference (the graph
+refuses one), so none reads a scene, but one may read a file: the asset sync below
+lists the master's and outputs' video filters with the rest, and `plan_stages` hands
+each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile

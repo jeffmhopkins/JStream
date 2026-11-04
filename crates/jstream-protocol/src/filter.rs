@@ -37,7 +37,8 @@ pub enum FilterOwner {
     /// output, and monitoring hears the bus before it. Its video chain (since 0.60)
     /// runs once per frame on each mix an output draws, at the canvas size; the
     /// editing canvas, previews and `video.snapshot` show the mix before it. Its
-    /// filters can't hold a reference.
+    /// filters can't hold a scene, source or bus reference; from 0.80 they may name a
+    /// file (an asset), as an output's may.
     Master,
     /// An output's own chains, which run after the master stage for that output only
     /// (ADR-0080 §2). An output with filters on its audio chain gets its own audio

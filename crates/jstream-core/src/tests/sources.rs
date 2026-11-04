@@ -1021,6 +1021,71 @@ fn a_scene_filters_asset_is_loaded_for_its_chain() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// ADR-0080: the master stage's video filter and an output's get the file they read
+/// too, so a LUT grades the program or one output.
+#[test]
+fn a_master_or_output_filters_asset_is_loaded_for_its_chain() {
+    use crate::chain::ChainOwner;
+    use jstream_protocol::{FilterOwner, OutputId, OutputKind, RecordContainer};
+
+    let dir = temp_dir("stage-filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "invert.cube".into(),
+    }
+    .to_value();
+    let grade = |owner: FilterOwner| Edit::FilterAdd {
+        owner,
+        chain: jstream_protocol::FilterChain::Video,
+        filter_id: jstream_protocol::FilterId::new("grade"),
+        kind: "apply_lut".into(),
+        settings: settings(&[("lut", lut.clone())]),
+        enabled: None,
+        index: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: dir.join("show.mp4").display().to_string(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+            grade(FilterOwner::Master),
+            grade(FilterOwner::Output {
+                output_id: OutputId::new("rec"),
+            }),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    for owner in [
+        ChainOwner::Master(None),
+        ChainOwner::Output(OutputId::new("rec")),
+    ] {
+        let chain = snapshot
+            .shot()
+            .stage_chain(&owner)
+            .unwrap_or_else(|| panic!("{owner}'s chain"));
+        assert!(
+            chain.filters[0].reference.is_some(),
+            "{owner}'s LUT is loaded"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// B12: a filter asset's install re-plans, and that plan can take a source's new frame,
 /// so it announces the sizes that changed at once, as every other re-plan does.
 #[test]

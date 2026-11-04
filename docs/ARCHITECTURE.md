@@ -302,8 +302,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
   `filter.*` edits under the owners `master` and `output`
   ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)): every output has a
   video chain (the virtual camera's is its only one) and the master stage and each
-  output that carries audio an audio chain, and their filters can't hold a reference
-  (a scene, source, bus or asset) yet. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
+  output that carries audio an audio chain, and their filters can't hold a scene,
+  source or bus reference yet; from 0.80 they may name a file (an asset), so a LUT
+  grades the program or one output. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1]) and `blend` (default `normal`; every mode is drawn,
   [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
   browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter

@@ -2543,6 +2543,71 @@ mod tests {
         );
     }
 
+    /// A LUT on the master stage grades every output's frame, and one on an output's
+    /// own chain grades that output's after it, each once its table is loaded; the
+    /// editing canvas shows the mix before them.
+    #[test]
+    fn the_output_stage_reads_its_filters_assets() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let lut: Settings = [(
+            "lut",
+            serde_json::json!({"type": "asset", "root": "app", "path": "invert.cube"}),
+        )]
+        .into_iter()
+        .collect();
+        let key = filter_assets::wanted("apply_lut", &lut).expect("a LUT");
+        let invert = |owner: FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: "apply_lut".into(),
+            settings: lut.clone(),
+            enabled: None,
+            index: None,
+        };
+        let mut g = graph(&[]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                invert(FilterOwner::Master, "m"),
+                invert(output("rec"), "o"),
+            ],
+        );
+        let rec = OutputId::new("rec");
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut views = |shot: &Shot| {
+            let canvas = shot.canvas().expect("canvas");
+            draw_views(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                shot,
+                &[
+                    (snapshot::View::default(), canvas),
+                    (snapshot::View::output(None, None), canvas),
+                    (snapshot::View::output(None, Some(&rec)), canvas),
+                ],
+            )
+        };
+        assert_eq!(
+            views(&shot(&g)),
+            [WHITE, WHITE, WHITE],
+            "no table yet: passed through"
+        );
+        let table = Arc::new(FilterAsset {
+            version: 1,
+            loaded: Loaded::Lut(Lut::parse_cube(INVERT).expect("cube")),
+        });
+        let black = [0, 0, 0, 255];
+        assert_eq!(
+            views(&shot_with(&g, &FilterAssets::from([(key, table)]))),
+            [WHITE, black, WHITE],
+            "the master inverts every output; rec's own inverts it back"
+        );
+    }
+
     /// A virtual camera always draws the program at the canvas size, so its own chain is
     /// planned over the program's master stage even when it names a video mix, and its
     /// frame runs it (#1006).

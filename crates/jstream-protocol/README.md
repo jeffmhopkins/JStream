@@ -212,7 +212,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.80 because a master or
+  output filter may name a file (an asset reference, so Apply LUT grades the program or
+  one output); 0.75 because of the
   `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
   `output.set_path` (#1072); 0.73 because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -771,9 +773,11 @@ from its next start (`output.status` reports it `dedicated`); a virtual camera h
 video chain only, and with a filter gets a render pass of its own but no encoder
 session. An audio filter on an output that carries no audio (a `virtual_cam`) is
 `invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
-`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
-`invalid_argument` on the parameter), since the delete checks follow only a source's
-references. `output.delete`'s
+`output`. Their filters can't hold a scene, source or bus reference yet
+(`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. From 0.80 they may name a file (an asset reference), which is no edge:
+the engine loads it as it does a source's filter's, so `apply_lut` or `image_mask`
+grades the program or one output. Before 0.80 an asset was refused there too. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
 
