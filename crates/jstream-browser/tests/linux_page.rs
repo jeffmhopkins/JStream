@@ -10,9 +10,15 @@
 //! ```
 //!
 //! CI runs it on every Linux build of the helper.
+//!
+//! A second test serves the page over `http` from `127.0.0.1` (#1069): CEF on Linux names
+//! `null` as the initiator of a web source's own first load, which the request policy
+//! must still count as the source's own.
 
 #![cfg(all(target_os = "linux", feature = "cef"))]
 
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -33,14 +39,69 @@ const PAGE: &str = r#"<!doctype html>
 #[test]
 #[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
 fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
+    let dir = temp_dir("file");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, PAGE).expect("the page");
+    paints_red(&dir, PageLocation::File(page_file));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #1069: a page served from this computer loads in a source whose location is local,
+/// through the redirect its server answers the location with.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn a_page_served_from_this_computer_loads() {
+    let dir = temp_dir("http");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("a local port");
+    let port = listener.local_addr().expect("its address").port();
+    // Answers `/` with a redirect to `/index.html`, as dev servers do, and every other
+    // request with the page, until the test ends.
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut reader = BufReader::new(stream.try_clone().expect("the stream"));
+            let mut line = String::new();
+            let _ = reader.read_line(&mut line);
+            let root = line.starts_with("GET / ");
+            while reader.read_line(&mut line).is_ok_and(|n| n > 2) {
+                line.clear();
+            }
+            let _ = if root {
+                write!(
+                    stream,
+                    "HTTP/1.1 302 Found\r\nLocation: /index.html\r\nContent-Length: 0\r\n\
+                     Connection: close\r\n\r\n"
+                )
+            } else {
+                write!(
+                    stream,
+                    "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\
+                     Connection: close\r\n\r\n{PAGE}",
+                    PAGE.len()
+                )
+            };
+        }
+    });
+    // The source's own first load, then its redirect (#1094's review, B3).
+    paints_red(&dir, PageLocation::Web(format!("http://127.0.0.1:{port}/")));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A fresh folder for one test's page and CEF's files.
+fn temp_dir(name: &str) -> PathBuf {
+    let dir =
+        std::env::temp_dir().join(format!("jstream-linux-page-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a temp folder");
+    dir
+}
+
+/// Opens [`PAGE`] from `location` through the helper and checks its paints reach the
+/// engine as CPU frames, its left half red and its right half transparent.
+fn paints_red(dir: &std::path::Path, location: PageLocation) {
     let helper = PathBuf::from(
         std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
     );
-    let dir = std::env::temp_dir().join(format!("jstream-linux-page-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).expect("a temp folder");
-    let page_file = dir.join("index.html");
-    std::fs::write(&page_file, PAGE).expect("the page");
     let backend = CefBackend::new(
         CefConfig {
             helper,
@@ -52,7 +113,7 @@ fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
     backend.use_device(None);
     let (width, height) = (320, 180);
     let page = match backend.open(&PageSpec {
-        location: PageLocation::File(page_file),
+        location,
         size: FrameSize::new(width, height).expect("a size"),
         fps: 30,
         css: DEFAULT_CSS.into(),
@@ -82,9 +143,11 @@ fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
         if Instant::now() >= deadline {
             let log = std::fs::read_to_string(dir.join("cef.log")).unwrap_or_default();
             panic!(
-                "no red paint within {PAINT_TIMEOUT:?} (last frame: {:?})\nCEF's log:\n{log}",
+                "no red paint within {PAINT_TIMEOUT:?} (last frame: {:?}, {} request(s) \
+                 refused)\nCEF's log:\n{log}",
                 page.cpu_frame()
-                    .map(|frame| pixel(&frame, width / 4, height / 2))
+                    .map(|frame| pixel(&frame, width / 4, height / 2)),
+                page.denied_requests()
             );
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -102,5 +165,181 @@ fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
     let stopping = Instant::now();
     drop(backend);
     assert!(stopping.elapsed() < Duration::from_secs(20));
+}
+
+/// Changes colour on every animation frame, so it paints at its frame rate.
+const ANIMATED: &str = r#"<!doctype html>
+<html><body><script>
+let n = 0;
+function step() {
+  n += 1;
+  document.body.style.background = n % 2 ? '#ff0000' : '#0000ff';
+  requestAnimationFrame(step);
+}
+requestAnimationFrame(step);
+</script></body></html>"#;
+
+/// #1071: a hidden page stops painting, and paints again once shown.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn a_hidden_page_stops_painting_until_shown() {
+    let helper = PathBuf::from(
+        std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
+    );
+    let dir = std::env::temp_dir().join(format!("jstream-linux-hidden-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a temp folder");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, ANIMATED).expect("the page");
+    let backend = CefBackend::new(
+        CefConfig {
+            helper,
+            cache_root: dir.join("cef"),
+            log_file: Some(dir.join("cef.log")),
+        },
+        Arc::new(FakeClock::new(Timebase::MILLIS)),
+    );
+    backend.use_device(None);
+    let mut page = backend
+        .open(&PageSpec {
+            location: PageLocation::File(page_file),
+            size: FrameSize::new(64, 36).expect("a size"),
+            fps: 30,
+            css: DEFAULT_CSS.into(),
+            local_network: false,
+        })
+        .expect("the page opened");
+    // Paints arrive while shown.
+    let paints = |page: &dyn jstream_browser::BrowserPage, within: Duration| -> usize {
+        let deadline = Instant::now() + within;
+        let mut last = page.cpu_frame();
+        let mut count = 0;
+        while Instant::now() < deadline {
+            let now = page.cpu_frame();
+            let changed = match (&last, &now) {
+                (Some(a), Some(b)) => !Arc::ptr_eq(a, b),
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            if changed {
+                count += 1;
+                last = now;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        count
+    };
+    let deadline = Instant::now() + PAINT_TIMEOUT;
+    while page.cpu_frame().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        paints(&*page, Duration::from_secs(1)) >= 5,
+        "it paints while shown"
+    );
+
+    page.set_hidden(true);
+    // Let a paint already under way land.
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        paints(&*page, Duration::from_secs(1)),
+        0,
+        "it rests while hidden"
+    );
+
+    page.set_hidden(false);
+    assert!(
+        paints(&*page, Duration::from_secs(2)) >= 5,
+        "it paints again once shown"
+    );
+    drop(page);
+    drop(backend);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// #1151: a reloaded static page shows again. The helper holds a reloading page's paints
+/// until its load ends, and asks CEF for a paint when the hold ends, so a page whose
+/// styled paints all came before that still reaches the engine; never as the white
+/// Chromium can paint a new document with first.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn a_reloaded_static_page_paints_again() {
+    let helper = PathBuf::from(
+        std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
+    );
+    let dir = std::env::temp_dir().join(format!("jstream-linux-reload-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a temp folder");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, PAGE).expect("the page");
+    let backend = CefBackend::new(
+        CefConfig {
+            helper,
+            cache_root: dir.join("cef"),
+            log_file: Some(dir.join("cef.log")),
+        },
+        Arc::new(FakeClock::new(Timebase::MILLIS)),
+    );
+    backend.use_device(None);
+    let (width, height) = (64, 36);
+    let mut page = backend
+        .open(&PageSpec {
+            location: PageLocation::File(page_file),
+            size: FrameSize::new(width, height).expect("a size"),
+            fps: 30,
+            css: DEFAULT_CSS.into(),
+            local_network: false,
+        })
+        .expect("the page opened");
+    let pixel = |frame: &jstream_media::VideoFrame, x: u32, y: u32| -> [u8; 4] {
+        let plane = &frame.planes()[0];
+        let at = y as usize * plane.stride() + x as usize * 4;
+        let p = &plane.data()[at..at + 4];
+        [p[0], p[1], p[2], p[3]]
+    };
+    let red = |frame: &jstream_media::VideoFrame| {
+        pixel(frame, width / 4, height / 2) == [255, 0, 0, 255]
+            && pixel(frame, width * 3 / 4, height / 2)[3] == 0
+    };
+    let wait_red = |page: &dyn jstream_browser::BrowserPage,
+                    not: Option<&Arc<jstream_media::VideoFrame>>|
+     -> Arc<jstream_media::VideoFrame> {
+        let deadline = Instant::now() + PAINT_TIMEOUT;
+        loop {
+            if let Some(frame) = page.cpu_frame() {
+                let fresh = not.is_none_or(|old| !Arc::ptr_eq(old, &frame));
+                assert!(
+                    !fresh || pixel(&frame, width * 3 / 4, height / 2) != [255, 255, 255, 255],
+                    "a white frame reached the engine"
+                );
+                if fresh && red(&frame) {
+                    return frame;
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "no red paint within {PAINT_TIMEOUT:?}"
+            );
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    // Past the hold's end and the repaint it may ask for, no white frame follows either.
+    let settle = |page: &dyn jstream_browser::BrowserPage| {
+        let until = Instant::now() + Duration::from_millis(400);
+        while Instant::now() < until {
+            if let Some(frame) = page.cpu_frame() {
+                assert!(red(&frame), "the page stays as it painted");
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let mut last = wait_red(&*page, None);
+    for _ in 0..5 {
+        page.reload();
+        last = wait_red(&*page, Some(&last));
+        settle(&*page);
+    }
+    drop(page);
+    drop(backend);
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -86,7 +86,16 @@ frame of the page's rate (ADR-0095). Dropping the page closes it.
   so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
   as the file page's, and inside an opted-in HTML page as the HTML page's: there the
   opt-in covers every opaque frame, not only the page's own documents. A request with no initiator is one the browser started (the
-  source's own load, a reload) and is judged as the source's own. The check reads the
+  source's own load, a reload) and is judged as the source's own. CEF on Linux names
+  the opaque origin `null` instead for the source's own first load (#1069), so a
+  main-frame load the helper started, to the source's own web origin with a `null`
+  initiator while the main frame hasn't left it, counts as started by the browser
+  (`check_main_frame_from`). The helper marks the URL it loads (`expect_own_load`): the
+  location when the page opens, the page's URL when it reloads it, and the target when
+  that load is redirected, as CEF asks again for a redirect's target. Only a `GET` of the
+  marked URL takes the mark (`take_own_load`), so any other `null` main-frame load, such
+  as a sandboxed frame a third-party frame made navigating the top, stays opaque, even
+  while a reload is pending. The check reads the
   host Chromium has already canonicalised, so it can't catch a public name that
   resolves to a local address, whether fixed (`*.nip.io`) or by DNS rebinding.
   Chromium's Local Network Access checks are meant to: they ask the page's permission
@@ -134,12 +143,18 @@ What follows is Windows; **On Linux** below says what differs.
   HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
   opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads
   it (`BrowserPage::reload`, which the helper does with CEF's own reload, the custom CSS
-  going in again on load), closes it, tells the helper which adapter to paint on, and shuts it down.
-  A reload hides the page until the reloaded document paints: the helper skips the old
-  document's paints from the reload until the new one starts loading, and says when it
-  took the reload (`Reloading`), and the engine drops paints that left before that, so
-  a `restart_on_show` page is transparent while it reloads, never the end of its last
-  run. The helper sends
+  going in again on load), hides or shows it (`BrowserPage::set_hidden`, which the
+  helper does with CEF's `WasHidden` on its UI thread, so a hidden page stops painting;
+  a hide sent before the browser exists applies when it arrives, #1071), closes it,
+  tells the helper which adapter to paint on, and shuts it down.
+  A reload hides the page until the reloaded document paints for real: the helper skips
+  the page's paints from the reload until the main frame's load has ended or failed and
+  the first paint since its start has been skipped, 500 ms after that start counting
+  as the load's end (`reload_hold.rs`), since Chromium's first paint of a new document can be its
+  blank, opaque white (#1151). It asks for a paint 100 ms after the hold ends if none
+  came, so a static page shows again. It says when it took the reload (`Reloading`), and the engine
+  drops paints that left before that, so a `restart_on_show` page is transparent while
+  it reloads, never the end of its last run nor a white frame. The helper sends
   frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
   the engine's log. A reader thread hands each to its page, stamping frames and audio on
   the media clock as they arrive. When the helper's pipe ends, every page's audio fails

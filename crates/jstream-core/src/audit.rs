@@ -358,11 +358,14 @@ impl Audit {
     }
 
     /// Whether `call` is one the log records: a batch, an undo or redo, or an action
-    /// other than `live.set` and `live.cancel`, whose gestures are logged when they end.
+    /// other than `live.set` and `live.cancel`, whose gestures are logged when they end,
+    /// and `values.set`, which carries data, not a change to the studio, and may come
+    /// many times a second (ADR-0102 decision 7).
     pub(crate) fn records(call: &Call) -> bool {
         match call {
             Call::Action {
-                action: Action::LiveSet { .. } | Action::LiveCancel { .. },
+                action:
+                    Action::LiveSet { .. } | Action::LiveCancel { .. } | Action::ValuesSet { .. },
             } => false,
             Call::Batch(_) | Call::History(_) | Call::Action { .. } => true,
             _ => false,
