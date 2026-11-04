@@ -6,7 +6,9 @@
 //! there: `(center.x, center.y, depth_px)` and its three angles. A [`CameraView`] turns
 //! that pose into ADR-0050's homogeneous plane map with `w = D / f`, so the drawn
 //! polygon, the near plane, `unplace` and edge coverage work unchanged
-//! ([`ItemGeometry::drawn_polygon_seen`]).
+//! ([`ItemGeometry::drawn_polygon_seen`]). A camera may also have a depth of field
+//! (ADR-0108, docs/adr/0108-camera-depth-of-field.md): [`CameraView::blur_at`] is the
+//! blur at a distance along its view.
 
 use super::drawn::MAX_DRAWN_PX;
 use super::{Canvas, CanvasPoint, GeometryError, ItemGeometry, Placed, ProjectedQuad};
@@ -22,9 +24,14 @@ pub const MAX_FOV_DEG: f32 = 170.0;
 pub const DEFAULT_FOV_DEG: f32 = 45.0;
 /// How close a camera's position may come to its target, in scene pixels.
 pub const MIN_CAMERA_DISTANCE: f32 = 0.001;
+/// The largest `blur_px` a camera may have, and the largest blur radius anything is
+/// drawn with, in canvas pixels (ADR-0108).
+pub const MAX_BLUR_PX: f32 = 64.0;
 
 /// Within this angle of straight up or down, a camera's picture takes world `−z` as up
-/// (ADR-0094 decision 3).
+/// looking down and `+z` looking up: the up a camera facing `−z` has as it tilts to that
+/// pole, so such a camera's picture doesn't turn over there (ADR-0111, amending ADR-0094
+/// decision 3; #1047). A camera facing another way still turns over at a pole.
 const UP_FALLBACK_DEG: f64 = 0.01;
 
 /// A point or a direction in a scene's 3D space, in scene pixels: x right, y down, z
@@ -69,12 +76,17 @@ fn is_true(value: &bool) -> bool {
     *value
 }
 
+fn is_zero(value: &Finite32) -> bool {
+    value.get() == 0.0
+}
+
 /// A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.
 ///
 /// A scene with a camera is a **3D scene**: every item in it is placed in the scene's
 /// space by its geometry and seen through the camera, and its own `perspective_px` is
-/// ignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted
-/// `depth_sort` `true`, which is not written.
+/// ignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted
+/// `depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted
+/// `focus_px` no depth of field.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct SceneCamera {
     /// Where the camera is.
@@ -92,6 +104,16 @@ pub struct SceneCamera {
     /// Default `true`.
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub depth_sort: bool,
+    /// The distance along the viewing axis, from the camera, of the plane in focus, in
+    /// scene pixels: above 0 and at most the drawable distance. Absent, everything is in
+    /// focus (ADR-0108).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub focus_px: Option<Finite32>,
+    /// How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far
+    /// behind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of
+    /// field when this is above 0. Default 0 (ADR-0108).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub blur_px: Finite32,
 }
 
 impl SceneCamera {
@@ -115,7 +137,14 @@ impl SceneCamera {
             fov_deg: fov,
             roll_deg: Finite32::ZERO,
             depth_sort: true,
+            focus_px: None,
+            blur_px: Finite32::ZERO,
         }
+    }
+
+    /// The distance from the camera to its target: where Depth of field starts focused.
+    pub fn target_distance(self) -> f32 {
+        length(sub(self.target.get(), self.position.get())) as f32
     }
 
     /// Whether an edit may store this camera.
@@ -124,11 +153,20 @@ impl SceneCamera {
     /// [`GeometryError::FieldOfView`] for a field of view outside 1 to 170 degrees,
     /// [`GeometryError::TooFar`] for a coordinate past [`MAX_DRAWN_PX`], and
     /// [`GeometryError::CameraAtTarget`] when `position` is closer than 0.001 px to
-    /// `target`.
+    /// `target`, [`GeometryError::FocusDistance`] for a `focus_px` not above 0 or past
+    /// [`MAX_DRAWN_PX`], and [`GeometryError::Blur`] for a `blur_px` outside 0 to 64.
     pub fn validate(self) -> Result<(), GeometryError> {
         let fov = self.fov_deg.get();
         if !(MIN_FOV_DEG..=MAX_FOV_DEG).contains(&fov) {
             return Err(GeometryError::FieldOfView);
+        }
+        if let Some(focus) = self.focus_px
+            && !(focus.get() > 0.0 && focus.get() <= MAX_DRAWN_PX)
+        {
+            return Err(GeometryError::FocusDistance);
+        }
+        if !(0.0..=MAX_BLUR_PX).contains(&self.blur_px.get()) {
+            return Err(GeometryError::Blur);
         }
         let near = |v: f64| v.abs() <= f64::from(MAX_DRAWN_PX);
         if !self.position.get().into_iter().all(near) || !self.target.get().into_iter().all(near) {
@@ -151,7 +189,7 @@ impl SceneCamera {
         let position = self.position.get();
         let forward = normalize(sub(self.target.get(), position));
         let up = if forward[1].abs() > UP_FALLBACK_DEG.to_radians().cos() {
-            [0.0, 0.0, -1.0]
+            [0.0, 0.0, -forward[1].signum()]
         } else {
             [0.0, -1.0, 0.0]
         };
@@ -169,6 +207,13 @@ impl SceneCamera {
             focal: focal_length(height, self.fov_deg.get()),
             principal: [canvas.width as f32 * 0.5, height * 0.5],
             depth_sort: self.depth_sort,
+            focus: match self.focus_px {
+                Some(focus) if self.blur_px.get() > 0.0 => Some(Focus {
+                    distance: focus.get(),
+                    blur: self.blur_px.get(),
+                }),
+                _ => None,
+            },
         })
     }
 }
@@ -189,6 +234,16 @@ pub struct CameraView {
     pub(super) focal: f64,
     pub(super) principal: [f32; 2],
     depth_sort: bool,
+    focus: Option<Focus>,
+}
+
+/// A camera's depth of field (ADR-0108): the distance in focus and the blur far away.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Focus {
+    /// The focus plane's distance along the viewing axis, in scene pixels.
+    pub distance: f32,
+    /// The blur radius far behind it, in canvas pixels.
+    pub blur: f32,
 }
 
 impl CameraView {
@@ -200,6 +255,26 @@ impl CameraView {
     /// Whether the scene's items draw far to near ([`SceneCamera::depth_sort`]).
     pub fn depth_sort(&self) -> bool {
         self.depth_sort
+    }
+
+    /// The camera's depth of field, or `None` when everything is in focus.
+    pub fn focus(&self) -> Option<Focus> {
+        self.focus
+    }
+
+    /// The blur radius, in canvas pixels, of a point `distance` along the viewing axis
+    /// (ADR-0108 decision 2): `blur · |distance − focus| / distance`, at most
+    /// [`MAX_BLUR_PX`]; 0 with no depth of field, and [`MAX_BLUR_PX`] at or behind the
+    /// camera.
+    pub fn blur_at(&self, distance: f64) -> f32 {
+        let Some(focus) = self.focus else {
+            return 0.0;
+        };
+        if distance <= 0.0 {
+            return MAX_BLUR_PX;
+        }
+        let r = f64::from(focus.blur) * (distance - f64::from(focus.distance)).abs() / distance;
+        (r as f32).min(MAX_BLUR_PX)
     }
 
     /// How far in front of the camera an item's box centre is, along the viewing axis,

@@ -528,6 +528,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let keyframe = SceneInfo {
             overrides: Vec::new(),

@@ -1,5 +1,7 @@
 //! The pointer, when a capture sends it beside its frames ([`CursorCapture::Metadata`]):
-//! its picture and position, and [`draw_cursor`], which draws it into a CPU frame.
+//! its picture and position, and [`draw_cursor`], which draws it into a CPU frame. Apart
+//! from that, a [`PointerPosition`]: where the pointer is over a capture's frames however
+//! it is shown, for a camera that follows it.
 
 use std::sync::Arc;
 
@@ -72,6 +74,42 @@ pub enum CaptureCursor {
         /// The picture, shared while the pointer's shape doesn't change.
         image: Arc<CursorImage>,
     },
+}
+
+/// Where the pointer's hot spot (the pixel it points at) is over a capture's frames, in
+/// the newest frame's pixels, from its top-left corner
+/// ([`CaptureStream::pointer`](crate::CaptureStream::pointer)). Sub-pixel when the frames
+/// are scaled from the screen's own pixels. It lies outside the frame (negative, or past
+/// its size) while the pointer is off the captured display or window.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PointerPosition {
+    /// Pixels from the frame's left edge.
+    pub x: f32,
+    /// Pixels from the frame's top edge.
+    pub y: f32,
+}
+
+impl PointerPosition {
+    /// The point at `(x, y)` in a target `bounds` wide and high, whose top-left corner is
+    /// at `(left, top)`, all in the screen's coordinates, scaled to a frame of `frame`:
+    /// what a backend that reads the pointer and the target's bounds from the OS reports.
+    /// `None` for empty bounds.
+    pub fn in_frame(
+        point: (f64, f64),
+        origin: (f64, f64),
+        bounds: (f64, f64),
+        frame: FrameSize,
+    ) -> Option<Self> {
+        if !(bounds.0 > 0.0 && bounds.1 > 0.0) {
+            return None;
+        }
+        let scale_x = f64::from(frame.width()) / bounds.0;
+        let scale_y = f64::from(frame.height()) / bounds.1;
+        Some(Self {
+            x: ((point.0 - origin.0) * scale_x) as f32,
+            y: ((point.1 - origin.1) * scale_y) as f32,
+        })
+    }
 }
 
 /// Draws `cursor` into `frame`, blending its alpha over the frame's pixels and clipping
@@ -151,7 +189,7 @@ mod tests {
         ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame, VideoFrameInfo,
     };
 
-    use super::{CaptureCursor, CursorImage, draw_cursor};
+    use super::{CaptureCursor, CursorImage, PointerPosition, draw_cursor};
 
     fn frame(format: PixelFormat, w: u32, h: u32) -> VideoFrame {
         let mut frame = VideoFrame::zeroed(VideoFrameInfo {
@@ -187,6 +225,27 @@ mod tests {
             y,
             image: Arc::new(image),
         }
+    }
+
+    #[test]
+    fn a_pointer_is_placed_in_the_frame_from_the_targets_origin_and_scale() {
+        let frame = FrameSize::new(2880, 1800).expect("size");
+        // A Retina display 1440 x 900 points wide, second from the left.
+        let at = |x, y| PointerPosition::in_frame((x, y), (1920.0, 0.0), (1440.0, 900.0), frame);
+        assert_eq!(at(1920.0, 0.0), Some(PointerPosition { x: 0.0, y: 0.0 }));
+        assert_eq!(
+            at(2000.5, 450.0),
+            Some(PointerPosition { x: 161.0, y: 900.0 })
+        );
+        // On the display to its left: outside the frame, not clamped.
+        assert_eq!(
+            at(1900.0, 10.0),
+            Some(PointerPosition { x: -40.0, y: 20.0 })
+        );
+        assert_eq!(
+            PointerPosition::in_frame((1.0, 1.0), (0.0, 0.0), (0.0, 900.0), frame),
+            None
+        );
     }
 
     #[test]

@@ -7,8 +7,9 @@
 //! completed against the kind's descriptor exactly as a source's are (ADR-0025). Scene
 //! and source references in a source's filter settings are edges of that source
 //! ([`crate::deps`]), so the edits that set them run the cycle check. The master's and
-//! outputs' filters take no references yet: nothing would keep what they name from
-//! being deleted.
+//! outputs' filters take no scene, source or bus reference yet: nothing would keep what
+//! they name from being deleted. They may name a file (an asset reference), which is not
+//! an edge, so a LUT or a mask image grades the program or one output.
 //!
 //! A scene and an item own a video chain each (ADR-0065): a scene's filters and an
 //! item's effects. A keyframe scene owns none, since it shows its parent's. References in
@@ -390,10 +391,11 @@ fn check_chain(
     }
 }
 
-/// Refuses any reference (a scene, source, bus or asset) in the settings of a master
-/// or output filter, naming the parameter as `field_prefix.<id>`. Only a source's,
-/// scene's or item's filters may refer to something: the delete checks follow their
-/// edges, not the master's or an output's.
+/// Refuses a scene, source or bus reference in the settings of a master or output
+/// filter, naming the parameter as `field_prefix.<id>`. Only a source's, scene's or
+/// item's filters may refer to one: the delete checks follow their edges, not the
+/// master's or an output's. A file (an asset reference) is not an edge, so any filter
+/// may name one.
 fn check_no_references(
     owner: &FilterOwner,
     settings: &Settings,
@@ -409,14 +411,14 @@ fn check_no_references(
     ) {
         return Ok(());
     }
-    match settings
-        .iter()
-        .find(|(_, value)| Reference::from_value(value).is_some())
-    {
+    match settings.iter().find(|(_, value)| {
+        Reference::from_value(value)
+            .is_some_and(|reference| !matches!(reference, Reference::Asset { .. }))
+    }) {
         Some((id, _)) => Err(invalid(
             at,
             &format!("{field_prefix}.{id}"),
-            "a master or output filter can't hold a reference yet",
+            "a master or output filter can't hold a scene, source or bus reference yet",
         )),
         None => Ok(()),
     }

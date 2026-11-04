@@ -149,14 +149,16 @@ If the wave is cut first, the queue continues in the next wave.
 depends_on = ["docs/runbooks/waves.md#protocol"]
 -->
 
-Every push to a PR runs CI again and starts a new review round, so a merge of `main` costs
-a full CI run and a reviewer's time. `main` doesn't require a PR to be up to date before it
-merges, so most of those merges buy nothing. The same holds for a PR into a wave.
+Every push to a PR runs CI again, and every push but a merge of the base branch into a
+passed head starts a new review round, so a merge of `main` costs at least a full CI run.
+`main` doesn't require a PR to be up to date before it merges, so most of those merges buy
+nothing. The same holds for a PR into a wave.
 
-- **Merge `main` only when it is needed:** the PR conflicts (GitHub then runs no CI on it),
-  it is the protocol holder and something landed ([Protocol versions](#protocol)), or it
-  needs code that has just landed. Not after every change to `main`, and not to make a PR
-  look fresh while it waits for review.
+- **Merge `main` only when it is needed** (a PR into a wave merges its wave): the PR
+  conflicts (GitHub then runs no CI on it), it has just become the protocol holder or it
+  holds the number and conflicts ([Protocol versions](#protocol)), or it needs code that
+  has just landed. Not after every change to `main`, and not to make a PR look fresh while
+  it waits for review.
 - **One push per round.** Answer every finding, merge `main` if it is needed, set the
   protocol number if it is now the holder, and verify every stale section, then push once.
   Don't push again while a review round or CI is running on the head unless that round has
@@ -164,8 +166,10 @@ merges, so most of those merges buy nothing. The same holds for a PR into a wave
 - **Batch the ledger.** Run `docs verify` for every stale section before the push, never
   one push per section. A conflict that is only in `docs/verified.toml` or a `@generated`
   block is one `docs merge-main` and one push.
-- **Say it is merge-only.** A push whose only commits merge `main` (with its stamp
-  resolutions and `docs verify --merge` restamps) says so on the PR. The reviewer then
-  reviews the merge and its restamps, not the whole PR again
-  ([REVIEW › Gather](../../REVIEW.md#gather)).
+- **A merge keeps a passed review.** When a passed PR merges `main` (with
+  `docs merge-main` and its `docs verify --merge` restamps, in a commit of their own) and
+  its own diff doesn't change, `review-gate` carries the pass to the new head and there is
+  no review round ([ADR-0109](../adr/0109-review-pass-carries-across-base-merges.md)). A
+  conflict resolution that changes the PR's own lines, any other commit in the push, or a
+  PR that hadn't passed gets a normal round.
 - **Draft until it is ready.** CI skips drafts, so a PR still being built stays a draft.

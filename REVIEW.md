@@ -67,13 +67,6 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
    carries PRs you already passed into the wave. Review what they didn't see: the sync
    merge commits that brought `main` in and their conflict resolutions
    (`git show --remerge-diff <merge>`). The full CI on the wave PR covers the rest.
-6. **A merge-only round.** When every commit since the head you last passed merges `main`
-   (or the PR's wave) and restamps sections with `docs verify --merge`, and the builder
-   said so on the PR, review only those commits: the conflict resolutions
-   (`git show --remerge-diff <merge>`) and each restamped section against what the merge
-   brought in. Pass if they hold. A merge that changes the PR's own code, its protocol
-   number or its schema snapshots beyond the merge's own conflicts is not merge-only:
-   review it in full ([waves › Without churn](docs/runbooks/waves.md#churn)).
 
 <a id="checks"></a>
 ## Step 2: Review
@@ -179,7 +172,10 @@ The summary ends with **exactly one** verdict marker line, followed by a human-r
 The `review-gate` check counts only markers posted from the repository owner's account
 (GitHub `author_association = OWNER`), and only those whose `sha` is the current head. Of
 those, the **highest round** decides, and within it any `fail` or `escalate` beats `pass`
-([ADR-0019](docs/adr/0019-review-gate-v2.md)). So:
+([ADR-0019](docs/adr/0019-review-gate-v2.md)). When no marker names the head, a `pass`
+from the latest round carries to it if the head only merges the base branch into the head
+you reviewed, leaving the PR's own diff unchanged
+([ADR-0109](docs/adr/0109-review-pass-carries-across-base-merges.md)). So:
 - post **exactly one** verdict per round, and never run two reviews of the same head at once;
 - a re-review of the same head (for example after a maintainer decision) uses the next round number.
 

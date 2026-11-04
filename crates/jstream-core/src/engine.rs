@@ -40,6 +40,7 @@ use crate::snapshot::{
 };
 use crate::studio::{self, Studio};
 use crate::transition;
+use crate::values::SharedValues;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
@@ -2377,11 +2378,35 @@ impl Engine {
         lock(&self.shared.state).audio.packets(source_id)
     }
 
+    /// Audio source `source_id`'s mixer input and its chain's filters, as the program
+    /// stage's last pass saw them, for tests.
+    #[cfg(test)]
+    pub(crate) fn audio_keyed(&self, source_id: &SourceId) -> Option<crate::audio_sources::Keyed> {
+        lock(&self.shared.state).audio.keyed(source_id)
+    }
+
+    /// The same, as the first pass that recorded `source_id` saw it, for tests.
+    #[cfg(test)]
+    pub(crate) fn first_audio_keyed(
+        &self,
+        source_id: &SourceId,
+    ) -> Option<crate::audio_sources::Keyed> {
+        lock(&self.shared.state).audio.first_keyed(source_id)
+    }
+
     /// Waits until the live sources have built everything asked of them, for tests.
     #[cfg(test)]
     pub(crate) fn settle_sources(&self) -> bool {
         let worker = lock(&self.shared.state).live.worker();
         worker.settled(Duration::from_secs(10))
+    }
+
+    /// How many times the live sources painted `source_id` (ADR-0103's meters), for
+    /// tests.
+    #[cfg(test)]
+    pub(crate) fn paints(&self, source_id: &str) -> u64 {
+        let meters = lock(&self.shared.state).live.meters();
+        meters.paints(&SourceId::new(source_id))
     }
 
     /// Forgets every source's size without telling anyone, as if plans had taken new
@@ -2999,6 +3024,9 @@ struct State {
     stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
+    /// The shared values (ADR-0102 decision 7). Runtime state, like `studio`: never
+    /// saved and not part of `rev`.
+    values: SharedValues,
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
@@ -3358,6 +3386,20 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::ValuesSet { name, value } => {
+                if self.values.set(&name, value.clone())? {
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name,
+                            value,
+                            client_id: client_id.clone(),
+                            request_id: Some(request_id.clone()),
+                        },
+                        wake,
+                    );
+                }
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }) => {
@@ -3445,6 +3487,9 @@ impl State {
                     entries: self.activity.list(*after_seq, *limit),
                 },
                 Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
+                Query::ValuesList { prefix } => QueryResult::ValuesList {
+                    values: self.values.list(prefix.as_deref()),
+                },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self
                         .graph
@@ -3747,6 +3792,8 @@ impl State {
         if !same {
             *source_shots = Arc::new(shots);
         }
+        // Every mix and preview has looked at what it draws: the rest can rest.
+        live.rest_undrawn();
         live.wake_at(wake);
         live.meters().planned(started.elapsed());
         planning.end_ms

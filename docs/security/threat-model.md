@@ -28,7 +28,7 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 |---|---|---|
 | Stream keys | Anyone holding one can broadcast as the user's channel | OS credential store only ([R-SEC-001](../RULES.md#R-SEC-001)); Windows Credential Manager, and the macOS Keychain ([ADR-0063](../adr/0063-macos-platform-support.md)), which the daemon uses where it is live on macOS (#639); and on Linux ([ADR-0071](../adr/0071-linux-secret-store.md)) the Secret Service, else a `0600` plaintext file (see [Secrets](#secrets)), which the daemon uses where it is live on 64-bit Linux (#1016) |
 | YouTube OAuth refresh token | Manages the user's channel (the `youtube` scope) | OS credential store; access tokens stay in memory |
-| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts |
+| Control token | Full control of the engine, by design ([ADR-0006](../adr/0006-mcp-full-access.md)), including every stream key's use | The daemon's token file (user-chosen path); the desktop app's is in memory and new on every start, or with `--mcp` the user-only `token` file in its data folder, reused across starts; the macOS and Linux tester launchers put it on the clipboard for two minutes (see [Server](#server)) |
 | Paired device tokens | Same power as the control token ([ADR-0044](../adr/0044-pairing-remote-browsers.md)) | A digest in the devices file beside the token file; the device's own copy; a browser's in a cookie, once there is a TLS listener |
 | The program and preview video | What the user chose not to broadcast yet (the preview scene) | Engine memory, the virtual camera's shared textures, `video.snapshot` |
 | Local files | Asset paths and recording paths reach the file system | Wherever the user (or a token holder) points them |
@@ -143,7 +143,17 @@ a stolen token, local denial of service.
 **Accepted:** the token is full access with no tiers ([ADR-0006](../adr/0006-mcp-full-access.md)).
 It doesn't expire or rotate; deleting the file and restarting makes a new one. A browser
 can be given the control token through the `Basic` prompt, and then holds it as a cached,
-ambient credential until it is closed. Failed tokens are not delayed or locked out:
+ambient credential until it is closed. The macOS tester launcher
+([mac-testing](../runbooks/mac-testing.md#script)) puts the token on the clipboard so the
+user can paste it into that prompt: for this Mac only (not Universal Clipboard), marked
+concealed and transient so clipboard managers skip it, and cleared after two minutes
+unless something else was copied, even when the window is closed first. Until then any
+app the user runs can read it, sandboxed ones too (which can't read the token file),
+and anything the user pastes into gets it. The Linux tester launcher
+([linux-testing](../runbooks/linux-testing.md#script)) does the same through `wl-copy`,
+`xclip` or `xsel`, and clears it after two minutes unless something else was copied.
+It can't mark the copy concealed, so a clipboard manager may keep it, and any program in
+the user's desktop session can read it while it is there. Failed tokens are not delayed or locked out:
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
@@ -233,7 +243,17 @@ access. A page given as HTML (the `html` setting, loaded as a `data:` URL with a
 origin) loads no local files, and reaches no local targets unless its source sets
 `local_network`, and then only while its main frame stays on a `data:` document. Its
 opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
-opaque frame inside the page (see Gaps).
+opaque frame inside the page (see Gaps). CEF on Linux names the opaque origin `null`, not none, as
+the initiator of a web source's own first load (#1069), so a main-frame load the helper
+itself started, to the source's own origin with a `null` initiator while the main frame
+hasn't left that origin, is judged as the browser's own. The helper marks the URL it
+loads: the location when the page opens, the page's URL when it reloads it, and a
+redirect's target of that load. Only a `GET` of the marked URL takes the mark, so the
+most another `null` main-frame load can win, even racing a reload, is the page the helper
+is loading anyway. Any other one, such as a sandboxed frame with `allow-top-navigation`
+that a third-party frame made navigating the top to a path on a local source's server,
+stays opaque and is refused. The rule holds on every platform, though only Linux is known
+to need it.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
