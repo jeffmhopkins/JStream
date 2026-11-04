@@ -2,7 +2,7 @@
 id = "ADR-0112"
 title = "Assignable zoom bindings for a follow-cursor camera, heard while another app has the focus"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
