@@ -852,10 +852,10 @@ stamp = { hash = "b3:f5003e619f01c5ad", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification and #notes changed for #874/#888 (merge segments kept, fuller equal-hash note kept, piece-level kept dedupe): verify --note/--renote guidance here is unchanged and still holds" }
 
 ["CLAUDE#pr-loop"."body"]
-stamp = { hash = "b3:f50bf78c7a2c63c3", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read: item 6 now cites ADR-0056, which restates ADR-0018's action-pin pre-approval unchanged (decision item 3); Dependabot auto-merge and CI handling still hold; rest of the loop untouched." }
+stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: auto-merge still waits for the base branch's required checks; on wave/* that is review-gate, which item 1 covers" }
+stamp = { hash = "b3:1f6e2ff586d5963f", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d" }
@@ -5718,10 +5718,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:8b4ecdcf072341c3", by = "agent:claude@session_01TssS8PhoWXHPD3nEM3mCEN", note = "ADR-0055: added that a PR into a wave/* branch gets no after-review dispatch (review-gate.yml returns early on base wave/*); verdict format and decide unchanged" }
+stamp = { hash = "b3:1f6e2ff586d5963f", by = "agent:release-thread", note = "Gate paragraph now adds ADR-0109: with no marker for the head, a pass from the latest round carries when the head only merges the base branch into the reviewed head with the PR diff unchanged; matches review-gate.yml's carryCandidate/sameChange/decide (ledger ignored, fails closed on missing patch, 300 files or API error); marker format, one verdict per round and after-review dispatch text unchanged and still hold" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:1fdf8e7084ac49ed", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
+stamp = { hash = "b3:636d0304e24a147c", by = "agent:release-thread", note = "Gate paragraph now adds ADR-0109: with no marker for the head, a pass from the latest round carries when the head only merges the base branch into the reviewed head with the PR diff unchanged; matches review-gate.yml's carryCandidate/sameChange/decide (ledger ignored, fails closed on missing patch, 300 files or API error); marker format, one verdict per round and after-review dispatch text unchanged and still hold" }
 
 ["ROADMAP#endgame"."body"]
 stamp = { hash = "b3:51a30f126bdeee93", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section, whole text re-read: done means every M0-M3 item in docs/progress.toml is done, merged on main with its Windows run passed where it needs one, and an item leaves M3 only when the maintainer moves it to Later; it links README#progress's What's left table generated from needs. Five steps, side by side, ordered by what lands first: 1 land the open waves in milestone order (RUNBOOK-WAVES#landing), build items finishing into their wave; 2 Windows runs by the maintainer, re-run after a later build changes an item; 3 the maintainer's ADR-0058 OAuth client, until which daemon sign-in and signed-in YouTube features stay hidden, and which platforms are supported (Linux first, macOS stays or moves to Later); 4 Linux after its codec-path ADR and macOS after its own ADR, as M3 plans; 5 release check running the M1-M3 demos from a clean checkout, 1.0 being the maintainer's call since it removes the deprecated forms (ADR-0022). All hold against the rows and those docs." }
