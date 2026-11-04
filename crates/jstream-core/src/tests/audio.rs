@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
-fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
+pub(super) fn engine(audio: &FakeAudioIo, clock: &FakeClock) -> Engine {
     engine_with(audio, clock, FakeMediaDecoders::new())
 }
 
@@ -81,7 +81,7 @@ fn game(pid: u32) -> AudioProcess {
 }
 
 /// Waits up to five seconds for `done`.
-fn eventually(mut done: impl FnMut() -> bool) -> bool {
+pub(super) fn eventually(mut done: impl FnMut() -> bool) -> bool {
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline {
         if done() {

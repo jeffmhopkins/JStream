@@ -193,7 +193,9 @@ state machine. Contents:
   [Design](#design)).
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
-  the engine's `AudioScopes`.
+  the engine's `AudioScopes`. A `browser` source granted the page API is told what it
+  shows its page: its visibility, the scenes and the shared values (see *Page API* in
+  [Design](#design)).
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
   on, added when the source is created or turned on and removed when it is deleted or
@@ -749,7 +751,10 @@ feature and `jstream-protocol`'s `fixtures` feature (the differential and parity
 tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `tests/scenarios.rs`, and the CLAP fake hosts), `jstream-youtube`'s `fake` feature
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
-`src/tests/audio.rs`), `jstream-crash` (the crash redaction's `Secrets` fed by the
+`src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
+page's visibility on program and preview, directly and through a nested scene, the two
+scenes, only the values its grant covers and a removal, an update held to the next
+page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
 test plugins of `src/tests/automation.rs`) and `jstream-mcp`
@@ -1353,6 +1358,23 @@ the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. The GPU-time guard of #349 is not built.
 
+**Page API** (`LiveSources::feed_pages`, ADR-0102 decisions 4 to 7). After every plan
+(where the engine also syncs source sizes), after `studio.set_preview`, after a
+`values.set` that changed something, and after live settings redraw the collection, the
+engine hands each running source whose page has the page API (`Source::page_api`) a
+`PageView` of the collection as drawn: whether the program scene shows the source,
+and whether the preview scene does (`activity::shown_sources`: the visible items, and
+through every placed nested scene source to any depth, whatever its audio, a keyframe's
+overrides applied as for audio), the two scenes' IDs and names, and the shared values.
+The source sends its page only what changed, so this costs nothing when no page is
+granted and little when nothing changed, and at most one update per page frame (ADR-0102
+decision 3): what changes within a frame is merged and held, and `page_view` returns
+when it may go. The earliest of those is the sources' page wake, which the sources
+thread wakes for as it does for the plan's own (`LiveSources::wake_at`), so a held
+update goes out a frame later whether or not anything else changes. Each look at a
+source (`look_timed`) hands it the plan's time too (`Source::page_clock`), from which a
+granted page gets its clock anchors.
+
 **Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
 and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
 runs `pack.write`, `pack.delete`, `pack.list` and `pack.read` under the packs' lock, as
@@ -1933,7 +1955,8 @@ step. `values.set` checks the name and size with the protocol's
 shared checks and the 256-name limit, changes nothing on a refusal, and emits
 `values.changed` only when the value really changed. It is not in the activity or audit
 log, as `live.set` isn't: it carries data and may come many times a second.
-`values.list` reads them by name.
+`values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
+*Page API* under [Snapshots](#snapshots)).
 
 <a id="preview-streams"></a>
 ## Preview streams

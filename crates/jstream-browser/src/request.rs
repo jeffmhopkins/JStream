@@ -411,6 +411,16 @@ impl Origin {
     }
 }
 
+/// Whether `a` and `b` are `http` or `https` URLs of the same origin: scheme, host and
+/// port, a default port named or not (the page API's rule for a web page, ADR-0102).
+#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+pub(crate) fn same_web_origin(a: &str, b: &str) -> bool {
+    match (Origin::parse(a), Origin::parse(b)) {
+        (Some(a), Some(b)) => matches!(a.scheme.as_str(), "http" | "https") && a == b,
+        _ => false,
+    }
+}
+
 /// Whether `host` (as [`url_host`] gives it) names this computer or the local network.
 fn is_local(host: &str) -> bool {
     if let Ok(ip) = host.parse::<IpAddr>() {
@@ -716,6 +726,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network: false,
+            page_api: None,
         };
         let page = RequestPolicy::for_page(&spec);
         assert!(!page.local_allowed_from(None));
@@ -732,6 +743,7 @@ mod tests {
 
         let opted = RequestPolicy::for_page(&PageSpec {
             local_network: true,
+            page_api: None,
             ..spec
         });
         assert!(opted.local_allowed_from(None));
@@ -758,6 +770,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network: true,
+            page_api: None,
         });
         // The widget's own origin is refused local targets.
         assert!(deny(opted.check_from(
@@ -873,6 +886,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network: true,
+            page_api: None,
         });
         assert_eq!(
             load(&opted, "http://192.168.1.10:8080/", true),
@@ -946,6 +960,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network: true,
+            page_api: None,
         };
         let allowed = RequestPolicy::for_page(&spec);
         assert!(allowed.local_allowed_from(None));
@@ -955,6 +970,7 @@ mod tests {
         // Without the opt-in, `for_page` refuses as `for_location` does.
         let refused = RequestPolicy::for_page(&PageSpec {
             local_network: false,
+            page_api: None,
             ..spec
         });
         assert!(deny(refused.check(local[0])));
@@ -985,6 +1001,7 @@ mod tests {
             fps: 30,
             css: String::new(),
             local_network,
+            page_api: None,
         }
     }
 
