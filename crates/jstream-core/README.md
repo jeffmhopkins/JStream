@@ -265,7 +265,7 @@ state machine. Contents:
   and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
   legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
   `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
-  never moves one, since every moved value of it is past them too.
+  moves one only where every moved value is back within them (a shrinking modifier).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads

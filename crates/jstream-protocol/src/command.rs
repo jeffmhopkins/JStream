@@ -112,7 +112,7 @@ pub enum Edit {
         /// `effects`.
         effects: Vec<FilterInfo>,
     },
-    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which
     /// move it on the engine's animation clock as each frame is drawn. Without
     /// `scene_id`, or with its own scene's, it writes the item's own list; with a
     /// keyframe scene whose tree holds the item, it writes that keyframe's override.

@@ -124,7 +124,8 @@ pub(crate) fn apply(
             moved.rotation_deg += by.rotation;
             // One past `ItemTransform::check_drawable`'s bounds (stacked scales past
             // `MAX_LEGACY_SCALE`, a value that isn't finite) stays where it is (#1130),
-            // so a stored transform already past them never moves.
+            // so a stored transform already past them moves only where the moved one
+            // is back within them.
             Placement::Legacy(if legacy_drawable(moved) {
                 moved
             } else {

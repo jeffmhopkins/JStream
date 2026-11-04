@@ -39,7 +39,7 @@ pub enum OverrideField {
     Opacity,
     /// Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).
     Effects,
-    /// Its motion modifiers, the whole list (`item.set_motion`, since 0.79, ADR-0099).
+    /// Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).
     Motion,
 }
 
@@ -72,7 +72,7 @@ pub struct ItemOverride {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effects: Option<Vec<FilterInfo>>,
     /// The overridden motion modifiers, which the keyframe moves the item with in place
-    /// of the item's own (since 0.79, ADR-0099). An empty list is an override too: no
+    /// of the item's own (since 0.81, ADR-0099). An empty list is an override too: no
     /// motion there. A Move between two members of a family blends both sides'.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion: Option<Vec<MotionModifier>>,
