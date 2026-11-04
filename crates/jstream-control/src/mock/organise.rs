@@ -317,6 +317,8 @@ impl Collection {
                 let field = match error {
                     jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
                     jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
+                    jstream_protocol::GeometryError::FocusDistance => "camera.focus_px",
+                    jstream_protocol::GeometryError::Blur => "camera.blur_px",
                     _ => "camera",
                 };
                 return Err(invalid(at, field, error.to_string()));

@@ -16,7 +16,7 @@
 //! [`Engine::with_collection_file`](engine::Engine::with_collection_file), the collection
 //! is loaded from a file and saved there after every change.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md, docs/adr/0032-live-edits-and-undo.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, crates/jstream-core/README.md#dependencies, crates/jstream-core/README.md#calls, crates/jstream-core/README.md#undo, crates/jstream-core/README.md#live-values, crates/jstream-core/README.md#program-scene, crates/jstream-core/README.md#privacy, crates/jstream-core/README.md#snapshots, crates/jstream-core/README.md#preview-streams, crates/jstream-core/README.md#events, crates/jstream-core/README.md#drop-counts, crates/jstream-core/README.md#engine-load, crates/jstream-core/README.md#output-stats, crates/jstream-core/README.md#audio-routing, crates/jstream-core/README.md#outputs, crates/jstream-core/README.md#wasm-plugins, crates/jstream-core/README.md#locking, crates/jstream-core/README.md#logging, crates/jstream-core/README.md#audit-log, crates/jstream-core/README.md#collection-file, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md, docs/adr/0032-live-edits-and-undo.md, crates/jstream-core/README.md#shared-values
 
 #![forbid(unsafe_code)]
 
@@ -54,6 +54,7 @@ mod studio;
 #[cfg(test)]
 mod tests;
 mod transition;
+mod values;
 mod youtube;
 
 /// The threads whose panics the engine catches and reports itself, for an app's crash
@@ -82,6 +83,7 @@ pub use runtime::{
     connect_rtmp,
 };
 pub use session::InProcessControl;
+
 pub use snapshot::SourceFrameError;
 pub use youtube::{
     DAILY_QUOTA, HEALTH_INTERVAL, SIGN_IN_TIMEOUT, STATS_INTERVAL, STATS_SLOWDOWN, TOKEN_ACCOUNT,
@@ -95,6 +97,24 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 /// success), so a panic while a lock is held leaves the data consistent.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Why scenes can't be drawn on this machine, when no graphics adapter, hardware or
+/// software, is offered: a host logs it at startup, before the first frame is asked for
+/// (#1073). On Linux it names the software Vulkan driver to install. `None` when an
+/// adapter is offered. It lists adapters without opening a device, which takes a few
+/// milliseconds; call it once, not per frame.
+pub fn no_adapter_warning() -> Option<String> {
+    (!jstream_render::adapter_available()).then(|| {
+        if cfg!(target_os = "linux") {
+            format!(
+                "no graphics adapter, so scenes can't be drawn. {}",
+                jstream_render::NO_ADAPTER_HINT
+            )
+        } else {
+            "no graphics adapter, so scenes can't be drawn".to_owned()
+        }
+    })
 }
 
 // The tests below sit at the crate root because RULES.md names them by path:

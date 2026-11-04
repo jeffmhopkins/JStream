@@ -359,13 +359,13 @@ wrap_load_handler! {
             _error_text: Option<&CefString>,
             _failed_url: Option<&CefString>,
         ) {
-            // An aborted load was replaced by another, whose start ends the hold; the
-            // old document may still be the one painting until then.
+            // An aborted load was replaced by another, whose end or deadline ends the
+            // hold; the old document may still be the one painting until then.
             if let Some(frame) = frame
                 && frame.is_main() == 1
                 && error_code != Errorcode::ABORTED
             {
-                self.page.0.load_started();
+                self.page.0.load_finished();
             }
         }
 

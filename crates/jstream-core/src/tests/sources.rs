@@ -375,6 +375,54 @@ fn a_timer_keeps_counting_through_a_style_change_and_a_density() {
     );
 }
 
+/// #1040: changing a `timer`'s `restart` counter starts its count again from the start,
+/// at the same mode and duration, in one edit.
+#[test]
+fn a_timer_restarts_when_its_restart_counter_changes() {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("t", "timer", countdown.clone()),
+            add("a", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00"
+    );
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("restart", json!(1))]),
+        }),
+    )
+    .expect("restarted");
+    let restarted = settings(&[("duration", json!(60)), ("restart", json!(1))]);
+    assert_eq!(
+        timer_frame(&restarted, 1.0, 0),
+        timer_frame(&countdown, 1.0, 0)
+    );
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&restarted, 1.0, 0),
+        "01:00 again"
+    );
+    clock.advance(3_000);
+    timer_reaches(&engine, &timer_frame(&restarted, 1.0, 3_000), "00:57");
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen
@@ -1021,6 +1069,71 @@ fn a_scene_filters_asset_is_loaded_for_its_chain() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// ADR-0080: the master stage's video filter and an output's get the file they read
+/// too, so a LUT grades the program or one output.
+#[test]
+fn a_master_or_output_filters_asset_is_loaded_for_its_chain() {
+    use crate::chain::ChainOwner;
+    use jstream_protocol::{FilterOwner, OutputId, OutputKind, RecordContainer};
+
+    let dir = temp_dir("stage-filter-asset");
+    fs::write(dir.join("invert.cube"), INVERT).expect("the table");
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let control = connected(&engine);
+    let lut = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "invert.cube".into(),
+    }
+    .to_value();
+    let grade = |owner: FilterOwner| Edit::FilterAdd {
+        owner,
+        chain: jstream_protocol::FilterChain::Video,
+        filter_id: jstream_protocol::FilterId::new("grade"),
+        kind: "apply_lut".into(),
+        settings: settings(&[("lut", lut.clone())]),
+        enabled: None,
+        index: None,
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("pic", "color", color("#ffffff")),
+            add("a", "i1", "pic"),
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: dir.join("show.mp4").display().to_string(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+            grade(FilterOwner::Master),
+            grade(FilterOwner::Output {
+                output_id: OutputId::new("rec"),
+            }),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "the assets were loaded in time");
+    let snapshot = engine.render_hub().load();
+    for owner in [
+        ChainOwner::Master(None),
+        ChainOwner::Output(OutputId::new("rec")),
+    ] {
+        let chain = snapshot
+            .shot()
+            .stage_chain(&owner)
+            .unwrap_or_else(|| panic!("{owner}'s chain"));
+        assert!(
+            chain.filters[0].reference.is_some(),
+            "{owner}'s LUT is loaded"
+        );
+    }
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// B12: a filter asset's install re-plans, and that plan can take a source's new frame,
 /// so it announces the sizes that changed at once, as every other re-plan does.
 #[test]
@@ -1351,4 +1464,45 @@ fn a_scene_sources_chain_is_drawn_where_it_places_its_scene() {
         Some([0xff, 0, 0, 0xff]),
         "the scene's red alone"
     );
+}
+
+/// #1071: a browser page no mix draws is hidden, so it stops painting, and shown again
+/// as soon as one does. A page the program draws stays shown across re-plans.
+#[test]
+fn a_browser_page_rests_while_nothing_draws_it() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let browser = FakeBrowser::new();
+    let engine = Engine::new().with_browser(browser.clone());
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "page",
+                "browser",
+                settings(&[("url", json!("https://example.com/"))]),
+            ),
+            add("a", "i1", "page"),
+        ]),
+    )
+    .expect("created");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while browser.pages().is_empty() && Instant::now() < deadline {
+        engine.replan();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let page = browser.pages().first().cloned().expect("the page opened");
+    for _ in 0..3 {
+        engine.replan();
+    }
+    assert!(!page.hidden(), "the program draws it");
+
+    visible(&control, false);
+    engine.replan();
+    assert!(page.hidden(), "nothing draws it");
+    visible(&control, true);
+    assert!(!page.hidden(), "drawn again");
+    assert_eq!(browser.pages().len(), 1, "the same page throughout");
 }
