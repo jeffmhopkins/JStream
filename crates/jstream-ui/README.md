@@ -1040,8 +1040,10 @@ browser, and `mod.rs` is the component.
   silent, and an `undo_conflict` is explained in the problem bar.
 - **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
   scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
-  parent's, from `Collection::camera_of`) draws each outline through the camera with
-  `project_seen`, and a press hits the box the engine draws on top: the nearest along
+  parent's, from `Collection::camera_of`) draws each outline through the camera as the
+  compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
+  partly behind the camera is outlined, labelled and hit by the part in front of it
+  (`camera::polygon`, #1054), and a press hits the box the engine draws on top: the nearest along
   the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
