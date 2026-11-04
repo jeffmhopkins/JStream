@@ -375,6 +375,54 @@ fn a_timer_keeps_counting_through_a_style_change_and_a_density() {
     );
 }
 
+/// #1040: changing a `timer`'s `restart` counter starts its count again from the start,
+/// at the same mode and duration, in one edit.
+#[test]
+fn a_timer_restarts_when_its_restart_counter_changes() {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let countdown = settings(&[("duration", json!(60))]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("t", "timer", countdown.clone()),
+            add("a", "i1", "t"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&countdown, 1.0, 0),
+        "01:00"
+    );
+    clock.advance(10_000);
+    timer_reaches(&engine, &timer_frame(&countdown, 1.0, 10_000), "00:50");
+
+    batch(
+        &control,
+        Batch::single(Edit::SourceSetSettings {
+            source_id: SourceId::new("t"),
+            patch: settings(&[("restart", json!(1))]),
+        }),
+    )
+    .expect("restarted");
+    let restarted = settings(&[("duration", json!(60)), ("restart", json!(1))]);
+    assert_eq!(
+        timer_frame(&restarted, 1.0, 0),
+        timer_frame(&countdown, 1.0, 0)
+    );
+    assert_eq!(
+        timer_shown(&engine),
+        timer_frame(&restarted, 1.0, 0),
+        "01:00 again"
+    );
+    clock.advance(3_000);
+    timer_reaches(&engine, &timer_frame(&restarted, 1.0, 3_000), "00:57");
+}
+
 /// A `display` or `window` source shows what the pipeline captures for its target:
 /// the primary display by default, the one its `target` names otherwise. Sources that
 /// capture the same thing share one capture, and a window source with no window chosen

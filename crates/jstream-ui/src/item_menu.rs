@@ -1587,6 +1587,7 @@ mod tests {
             blend: Default::default(),
             transition: Default::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         }
     }
 
