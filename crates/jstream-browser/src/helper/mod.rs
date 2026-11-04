@@ -715,6 +715,12 @@ impl PageShared {
             reloading.reload();
             self.host.send(&ToEngine::Reloading { page: self.id });
             drop(reloading);
+            // The reload's main-frame load, of the page's current URL, is the helper's
+            // own (#1069).
+            if let Some(frame) = browser.0.main_frame() {
+                self.policy
+                    .expect_own_load(&CefString::from(&frame.url()).to_string());
+            }
             browser.0.reload();
         } else {
             // No browser yet: its first load is the start the engine waits for.
