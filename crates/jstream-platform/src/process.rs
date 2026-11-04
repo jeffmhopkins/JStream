@@ -33,9 +33,9 @@ pub struct ThreadTime {
 ///
 /// A platform crate implements it on the OS's thread accounting (on Linux
 /// `/proc/self/task`, on Windows the Tool Help thread list with `GetThreadTimes`, on
-/// macOS `task_threads` with `thread_info`), and the host hands it to the engine. Only the engine's control side calls it, when it reads
-/// a profile (about once a second at most), never a real-time thread, so it may make
-/// system calls and allocate.
+/// macOS `task_threads` with `thread_info`), and the host hands it to the engine. Only
+/// the engine's control side calls it, when it reads a profile (about once a second at
+/// most), never a real-time thread, so it may make system calls and allocate.
 pub trait ThreadCpu: Send + Sync {
     /// Every live thread of the process, or `None` if the OS refused to list them. A
     /// thread that ends while it is read may be left out.
