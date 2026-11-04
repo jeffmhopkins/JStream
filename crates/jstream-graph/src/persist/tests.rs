@@ -359,6 +359,35 @@ fn a_virtual_camera_round_trips() {
     assert_eq!(load(&json), Ok(graph));
 }
 
+/// A locked item saves `locked` (ADR-0096) and loads locked; an unlocked one saves
+/// nothing, so the fixture needs no new version.
+#[test]
+fn a_locked_item_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::ItemSetLocked {
+            item_id: ItemId::new("i4"),
+            locked: true,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    assert_eq!(json.matches("\"locked\": true").count(), 1, "{json}");
+    assert!(!json.contains("\"locked\": false"));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(graph.state()));
+    let locked = loaded.ok().and_then(|g| {
+        g.state()
+            .scenes
+            .iter()
+            .flat_map(|s| s.items())
+            .find(|i| i.id().as_str() == "i4")
+            .map(|i| i.to_info().locked)
+    });
+    assert_eq!(locked, Some(true));
+}
+
 /// An output's bus other than the master is saved as `audio_bus`, after the buses
 /// on load, and the master is left out.
 #[test]
