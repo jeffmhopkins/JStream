@@ -146,7 +146,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_effects_space <item-id> box|canvas` sets whether an item's effects run over
   its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
-  item's opacity and blend mode; the engine draws every mode (protocol 0.47).
+  item's opacity and blend mode; the engine draws every mode (protocol 0.47), and
+  `normal_srgb` and `additive_srgb` (0.75) blend as a browser does.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
