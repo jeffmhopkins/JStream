@@ -9,29 +9,135 @@ retired_sections = { "today" = [] }
 
 # JStream
 
-A live-streaming and compositing engine written in Rust: a ground-up rewrite in the spirit of
-OBS, built to be driven equally well by a human or an AI agent.
+[![CI](https://github.com/jeffmhopkins/JStream/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/jeffmhopkins/JStream?include_prereleases&label=release)](https://github.com/jeffmhopkins/JStream/releases)
+[![Status: pre-release](https://img.shields.io/badge/status-pre--release-orange)](#progress)
+[![Built with Rust](https://img.shields.io/badge/built%20with-Rust-dea584)](rust-toolchain.toml)
+[![Agent control: MCP](https://img.shields.io/badge/agent%20control-MCP-8a2be2)](#agents)
+[![Licence: MIT OR Apache-2.0](https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue)](#license)
 
-> **In development.** JStream is not ready for use yet. [Progress](#progress) shows how
-> far each milestone has got, and [ROADMAP.md](ROADMAP.md) has the plan.
+> A live-streaming and compositing engine written in Rust, built from the ground up to be
+> driven equally well by a person or by an AI agent.
 
-- **Stream** to YouTube (RTMPS + YouTube Live API) or any RTMP target
-- **Virtual camera** (an OS-native Windows camera that every app can see)
-- **Scenes, sources, effects**, 3D transforms and crop on a wgpu compositor
-- **Independent video and audio routing**: outputs are not tied to scenes, and audio runs
-  through a bus-matrix mixer
-- **Full agentic control over MCP**: anything the UI can do, an agent can do, except
-  YouTube's account features, which stay with the person
-  ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md))
-- **Headless or desktop**: the engine is a library, embedded in a Tauri app or run as a
-  daemon that serves the same web UI to any browser
+> [!WARNING]
+> **JStream is pre-release software under heavy development.** The releases are alphas:
+> expect bugs, missing features, and scenes or settings that a later version can't open.
+> The control protocol still changes from release to release. Don't rely on it for a show
+> that matters yet. [Progress](#progress) shows how far each milestone has got.
 
-JStream is built to be driven by a person or by an AI agent. The engine is a library with
-one protocol; the web UI, the desktop app, the CLI and MCP are all clients of it, so
-nothing the UI can do is out of an agent's reach, YouTube's account features aside
-([ADR-0001](docs/adr/0001-library-first-engine.md),
-[ADR-0006](docs/adr/0006-mcp-full-access.md)). Windows comes first, and the headless
-engine and MCP come before the GUI ([ADR-0010](docs/adr/0010-headless-first-milestone.md)).
+> [!TIP]
+> **Human?** Start at [For humans](#humans): download an alpha, build a first scene and go
+> live with [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
+
+> [!IMPORTANT]
+> **Agent?** Start at [For agents](#agents). To drive JStream, connect over MCP. To change
+> JStream's code, read [CLAUDE.md](CLAUDE.md) first.
+
+<a id="what"></a>
+## What JStream is
+<!-- @section
+-->
+
+JStream composes scenes from your cameras, screens, media, browser pages and graphics on
+the GPU, mixes their audio, and sends the result to a stream, a recording or a virtual
+camera. It does the job of a streaming studio such as OBS, written again from scratch
+around one idea: **everything is an API**.
+
+- **Stream** over RTMP or RTMPS to YouTube, or to any service that takes a stream key.
+  **Record** to a file at the same time.
+- **Virtual camera**: an OS-native Windows camera that every video-call app can see.
+- **Scenes and sources** on a wgpu compositor: cameras, screen and window capture, media
+  files, images, text, colour and browser sources, with crop, 3D transforms and blend
+  modes.
+- **Effects**: built-in filters on sources, items, scenes and outputs, and shader
+  sources written as WGSL effect packs.
+- **3D scenes**: a scene can have a camera that the items sit in front of, moving through
+  them, with depth of field.
+- **Motion**: native animation, timelines and audio-reactive motion, and transitions
+  with a studio preview.
+- **Independent routing**: outputs take video mixes and audio buses, not scenes, so a
+  stream and a recording can show different things, and audio runs through a bus mixer.
+- **Desktop or headless**: the same engine runs inside the desktop app or as a daemon that
+  serves the web UI to any paired browser.
+
+<a id="different"></a>
+## How it differs from OBS
+<!-- @section
+-->
+
+OBS is mature, battle-tested and has a huge plugin ecosystem; JStream is an alpha and has
+none of that. What JStream does differently is in its design, and each point below is in
+the code today:
+
+| | JStream |
+|---|---|
+| **Agent control** | A built-in MCP server gives an AI agent the same control a person has in the window, apart from account sign-in and installing plugins, so it can build scenes, restyle them, take snapshots to check its work, and undo its own edits ([ADR-0006](docs/adr/0006-mcp-full-access.md)). Steps undo can't take back, such as going live, are marked so the agent asks first. |
+| **One protocol** | The engine is a library behind one versioned, token-authenticated WebSocket protocol. The web UI, the desktop app, the CLI and MCP are all clients of it, so nothing is UI-only ([ADR-0001](docs/adr/0001-library-first-engine.md)). |
+| **Rust core** | The engine is Rust, with `unsafe` code allowed only in the crates that declare it. The real-time audio thread never allocates, locks or blocks, and tests enforce it ([R-RT-001](docs/RULES.md#R-RT-001)). |
+| **Headless first** | The whole engine runs with no window, on a software GPU, a fake clock and fake devices, which is how its tests run, and how a server can host it. |
+| **Outputs apart from scenes** | Outputs consume video mixes and audio buses, so each output can carry its own picture and sound. |
+| **Undo per client** | Edits are undoable per client: an agent's undo never takes back yours. The **Agent activity** panel lists what an agent changed. |
+| **Effects agents can write** | An agent can write its own WGSL shader packs over MCP and use them in a scene straight away ([ADR-0097](docs/adr/0097-agents-write-effect-packs.md)). |
+
+<a id="demos"></a>
+## Demos
+<!-- @section
+-->
+
+Examples of what JStream can do. Each clip links to the video file; the scenes and the
+code behind them live in [StreamingScenes](https://github.com/jeffmhopkins/StreamingScenes),
+not in JStream.
+
+| | |
+|---|---|
+| [![A scene of stacked browser pages, recorded in JStream](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/jstream-nebula.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/starship-cockpit/media/cockpit-jstream.mp4) | **A layered scene, recorded live.** A starship cockpit stacked from browser pages and images, with live cameras on its monitors, effects switched on a hotkey timeline and lights driven by the music. Recorded on Linux with JStream's own `record` output. |
+| [![Depth of field through a scene camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/depth-of-field.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/depth-of-field.mp4) | **Depth of field.** Cards at three depths seen through a scene camera; the focus pulls from one to the next and the blur grows and shrinks. |
+| [![A screen capture seen up close through a moving camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/screen-closeup.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/screen-closeup.mp4) | **A 3D screen close-up.** A screen capture placed flat in a 3D scene, with the camera gliding between close, angled views of it. |
+
+The two camera clips were rendered frame by frame by JStream's compositor, outside the app.
+
+<a id="humans"></a>
+## For humans
+<!-- @section
+-->
+
+> [!NOTE]
+> Windows 11 is the first platform. macOS and Linux builds exist for testers, but their
+> platform work is still in progress; see [Platforms](#platforms).
+
+1. **Try it.** Download the latest alpha from the
+   [releases page](https://github.com/jeffmhopkins/JStream/releases), unzip it and run
+   `jstream.exe`. There is no installer.
+2. **Learn it.** [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through a first
+   scene, going live, recording, the virtual camera and connecting an agent.
+3. **Report what breaks.** Bugs and ideas are welcome as
+   [issues](https://github.com/jeffmhopkins/JStream/issues/new); security problems go
+   privately, as [SECURITY.md](SECURITY.md) says. Until the first release JStream takes no
+   outside code contributions ([CONTRIBUTING.md](CONTRIBUTING.md)).
+
+To build from source instead, see [Build and run](#build).
+
+<a id="agents"></a>
+## For agents
+<!-- @section
+-->
+
+> [!IMPORTANT]
+> There are two ways an agent meets JStream: **driving** a running JStream over MCP, or
+> **building** JStream itself in this repo. They have different entry points.
+
+**Driving JStream.** Start JStream with `--mcp` (or run the daemon), then point your MCP
+client at it: through `jstream-cli mcp`, a stdio proxy, or straight at the streamable HTTP
+endpoint with the token as a bearer token.
+[GETTING-STARTED › Connect an agent](docs/GETTING-STARTED.md#agents) has the steps for
+Claude Desktop and Claude Code. Every tool is described in
+[jstream-mcp](crates/jstream-mcp/README.md), and the protocol behind them in
+[ARCHITECTURE › Control protocol](docs/ARCHITECTURE.md#protocol).
+
+**Building JStream.** JStream is built by AI builder agents and gated by a reviewer agent.
+Read [CLAUDE.md](CLAUDE.md) before changing anything: it explains how the docs, rules and
+ADRs that govern each file are found and kept true, and the PR loop that lands a change.
+[REVIEW.md](REVIEW.md) is the reviewer's brief.
 
 <a id="progress"></a>
 ## Progress

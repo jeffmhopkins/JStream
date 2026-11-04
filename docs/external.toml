@@ -659,3 +659,107 @@ relied_on = "Semantic Versioning 2.0.0: MAJOR.MINOR.PATCH, a pre-release part af
 review_every = "365d"
 status = "unverified"
 checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "readme-ci-badge"
+url = "https://github.com/jeffmhopkins/JStream/actions/workflows/ci.yml/badge.svg"
+relied_on = "The status badge GitHub serves for the ci.yml workflow on the default branch (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "readme-release-badge"
+url = "https://img.shields.io/github/v/release/jeffmhopkins/JStream?include_prereleases&label=release"
+relied_on = "A Shields badge showing the latest GitHub release, prereleases included (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "readme-status-badge"
+url = "https://img.shields.io/badge/status-pre--release-orange"
+relied_on = "A static Shields badge whose label and message come from the URL path (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Static badge; nothing to re-read"
+
+[[external]]
+id = "readme-rust-badge"
+url = "https://img.shields.io/badge/built%20with-Rust-dea584"
+relied_on = "A static Shields badge whose label and message come from the URL path (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Static badge; nothing to re-read"
+
+[[external]]
+id = "readme-mcp-badge"
+url = "https://img.shields.io/badge/agent%20control-MCP-8a2be2"
+relied_on = "A static Shields badge whose label and message come from the URL path (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Static badge; nothing to re-read"
+
+[[external]]
+id = "readme-licence-badge"
+url = "https://img.shields.io/badge/licence-MIT%20OR%20Apache--2.0-blue"
+relied_on = "A static Shields badge whose label and message come from the URL path (README badges row)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Static badge; nothing to re-read"
+
+[[external]]
+id = "streamingscenes-repo"
+url = "https://github.com/jeffmhopkins/StreamingScenes"
+relied_on = "The maintainer's public repo of example scenes and demo media built with JStream, linked from the README's Demos section"
+review_every = "180d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "demo-cockpit-still"
+url = "https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/jstream-nebula.jpg"
+relied_on = "A still from a layered scene recorded in JStream, shown as a demo thumbnail in the README"
+review_every = "180d"
+status = "ok"
+checked_note = "Fetched: HTTP 200"
+
+[[external]]
+id = "demo-cockpit-video"
+url = "https://github.com/jeffmhopkins/StreamingScenes/raw/main/starship-cockpit/media/cockpit-jstream.mp4"
+relied_on = "A layered scene recorded with JStream's record output on Linux, linked as a README demo"
+review_every = "180d"
+status = "ok"
+checked_note = "Fetched: HTTP 302 to the raw file"
+
+[[external]]
+id = "demo-dof-still"
+url = "https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/depth-of-field.jpg"
+relied_on = "A still from the depth-of-field clip, shown as a demo thumbnail in the README"
+review_every = "180d"
+status = "ok"
+checked_note = "Fetched: HTTP 200"
+
+[[external]]
+id = "demo-dof-video"
+url = "https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/depth-of-field.mp4"
+relied_on = "A focus pull through a scene camera with depth of field, rendered by JStream's compositor, linked as a README demo"
+review_every = "180d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "demo-closeup-still"
+url = "https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/screen-closeup.jpg"
+relied_on = "A still from the 3D screen close-up clip, shown as a demo thumbnail in the README"
+review_every = "180d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "demo-closeup-video"
+url = "https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/screen-closeup.mp4"
+relied_on = "A screen capture placed in a 3D scene with a gliding scene camera, rendered by JStream's compositor, linked as a README demo"
+review_every = "180d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
