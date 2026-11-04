@@ -118,6 +118,8 @@ Contents ([Design](#design) explains the choices):
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
+  natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
+  with the followable items, the follow fields and adding a camera modifier tested
   natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -534,7 +536,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
-  Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
+  With a camera on, a scene's own dialog shows `CameraMoves`
+  ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
+  offered while the scene places a display or window capture (`followable`), with the
+  item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
+  hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
+  Camera motion, a list of the camera's modifiers with the Inspector's kinds and fields
+  (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
+  on the position's x. Both are draft fields, which OK sends as
+  `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
+  `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
+  shows neither, since it draws its parent's.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion
+  and follow camera, the follow on the copy of the item it follows. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The

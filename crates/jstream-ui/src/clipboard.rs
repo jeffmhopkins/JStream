@@ -315,8 +315,8 @@ fn shows(collection: &Collection, inner: &SceneId, outer: &SceneId) -> bool {
 
 /// The edits that place `items` in `target`, bottom first, each on top of what is
 /// there, with new IDs from `fresh` (called with the prefix `item` or `filter`). Items
-/// whose source is gone, or whose nested scene shows `target`, are left out. Each new
-/// item's ID is in `placed`, in order. With `offset`, every box moves right and down by
+/// whose source is gone, or whose nested scene shows `target`, are left out. Each placed
+/// item's ID and its copy's are in `placed`, in order. With `offset`, every box moves right and down by
 /// the duplicate's offset.
 fn place_edits(
     collection: &Collection,
@@ -324,7 +324,7 @@ fn place_edits(
     target: &SceneId,
     offset: bool,
     fresh: &mut dyn FnMut(&str) -> String,
-    placed: &mut Vec<ItemId>,
+    placed: &mut Vec<(ItemId, ItemId)>,
 ) -> Vec<Edit> {
     let mut edits = Vec::new();
     for item in items {
@@ -402,7 +402,7 @@ fn place_edits(
             &item.effects,
             fresh,
         ));
-        placed.push(item_id);
+        placed.push((item.item_id.clone(), item_id));
     }
     edits
 }
@@ -453,11 +453,12 @@ pub fn paste_edits(
         fresh,
         &mut placed,
     );
-    (edits, placed)
+    (edits, placed.into_iter().map(|(_, copy)| copy).collect())
 }
 
 /// The batch that duplicates `scene_id` (Duplicate scene, Paste scene) as `new_id`, and
-/// the copy's name. Empty for a missing scene or a keyframe scene.
+/// the copy's name, with its options, camera, camera motion and follow camera (on the
+/// copy of the item it follows). Empty for a missing scene or a keyframe scene.
 pub fn duplicate_scene_edits(
     collection: &Collection,
     scene_id: &SceneId,
@@ -526,6 +527,14 @@ pub fn duplicate_scene_edits(
         &scene.filters.video,
         fresh,
     ));
+    // The camera's motion, and its follow camera on the copy of the item it follows
+    // (ADR-0113), once the items are placed.
+    if !scene.camera_motion.is_empty() {
+        edits.push(Edit::SceneSetCameraMotion {
+            scene_id: new_id.clone(),
+            motion: scene.camera_motion.clone(),
+        });
+    }
     let mut placed = Vec::new();
     edits.extend(place_edits(
         collection,
@@ -535,6 +544,19 @@ pub fn duplicate_scene_edits(
         fresh,
         &mut placed,
     ));
+    let follow = scene.camera_follow.as_ref().and_then(|follow| {
+        let (_, copy) = placed.iter().find(|(id, _)| *id == follow.item_id)?;
+        Some(jstream_control::protocol::CameraFollow {
+            item_id: copy.clone(),
+            ..follow.clone()
+        })
+    });
+    if let Some(follow) = follow {
+        edits.push(Edit::SceneSetCameraFollow {
+            scene_id: new_id,
+            follow: Some(follow),
+        });
+    }
     edits
 }
 
@@ -954,5 +976,48 @@ mod tests {
         let xs: Vec<f32> = edits.iter().filter_map(x_of).collect();
         assert_eq!(xs, [300.0, 900.0]);
         assert!(duplicate_scene_edits(&c, &"kf".into(), "k2".into(), &mut counter()).is_empty());
+    }
+
+    /// ADR-0113: a duplicate keeps the camera's motion, and its follow camera follows the
+    /// copy of the item the original's follows.
+    #[test]
+    fn duplicating_a_scene_keeps_its_camera_moves_on_its_own_items() {
+        use jstream_control::protocol::{CameraFollow, SceneCamera};
+        let mut c = collection();
+        c.scenes[0].camera = Some(SceneCamera::framing(c.canvas));
+        c.scenes[0].camera_motion = vec![jstream_control::protocol::CameraMotionModifier {
+            modifier_id: "sway".into(),
+            property: jstream_control::protocol::CameraProperty::PositionX,
+            kind: crate::panels::motion::sized_kind("Wiggle", 6.0).expect("a kind"),
+            clock: Default::default(),
+            enabled: true,
+        }];
+        c.scenes[0].camera_follow = Some(CameraFollow::of(ItemId::new("a")));
+        let edits = duplicate_scene_edits(&c, &"main".into(), "copy".into(), &mut counter());
+        let copy_of_a = edits
+            .iter()
+            .find_map(|e| match e {
+                Edit::ItemAdd { item_id, .. } => Some(item_id.clone()),
+                _ => None,
+            })
+            .expect("a placed");
+        assert!(edits.iter().any(|e| matches!(
+            e,
+            Edit::SceneSetCameraMotion { scene_id, motion } if scene_id.as_str() == "copy" && motion.len() == 1
+        )));
+        let follow = edits
+            .iter()
+            .find_map(|e| match e {
+                Edit::SceneSetCameraFollow { scene_id, follow } if scene_id.as_str() == "copy" => {
+                    follow.clone()
+                }
+                _ => None,
+            })
+            .expect("a follow camera");
+        assert_eq!(follow.item_id, copy_of_a);
+        assert!(
+            matches!(edits.last(), Some(Edit::SceneSetCameraFollow { .. })),
+            "after the items"
+        );
     }
 }

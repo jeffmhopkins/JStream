@@ -191,6 +191,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("live.set", Class(E)),
     ("live.cancel", Class(E)),
     ("scene.switch", Class(L)),
+    ("scene.zoom_camera", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
     ("output.set_key", N),
@@ -210,7 +211,6 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
-    ("scene.zoom_camera", Class(E)),
     // An item's visibility, as `item.set_visible` changes it (ADR-0101).
     ("item.show", Class(E)),
     ("item.hide", Class(E)),

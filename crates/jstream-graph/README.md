@@ -59,7 +59,8 @@ protocol's types (`Overrides`).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
-  scene's is an override of its parent's), and its items in stacking order, bottom
+  scene's is an override of its parent's), its camera's `camera_motion` and
+  `camera_follow` (ADR-0113, a family's only), and its items in stacking order, bottom
   first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
@@ -382,6 +383,16 @@ with no inverse. The engine draws open gestures' source settings through it
   the variant's override, refused while the parent has no camera, and `State::effective_camera`
   reads the override or the parent's. Removing a parent's camera drops its variants'
   overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
+  `scene.set_camera_motion` and `scene.set_camera_follow` (`camera.rs`,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) write the whole
+  motion list (checked by `check_camera_motion`, field `motion…`) and the follow camera
+  (checked by `CameraFollow::check`, field `follow.…`, its `item_id` an item of the scene
+  whose source is a built-in `display` or `window`), each undone by the old value and
+  refused on a keyframe scene (`invalid_argument`), since they belong to the family. A
+  scene keeps both while it has no camera, and a follow whose item later leaves the
+  scene stays, inert; a deleted scene's inverse restores them after its items
+  (`camera::restore`). `camera_anim_modifiers` turns a motion list into
+  `jstream-anim`'s for the engine.
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
   folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
   listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
@@ -456,7 +467,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 4), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 5), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -489,8 +500,10 @@ existed and needs no schema bump. A keyframe scene writes `variant_of` and its
 `overrides` in item ID order, each omitted for any other scene, so it needed no schema
 bump either. An override's `effects` (ADR-0088), written with each filter's
 `kind_version` and omitted while the keyframe follows the item, is `schema_version` 3,
-and an item's or an override's `motion` (ADR-0099), each omitted while absent, is
-`schema_version` 4. Loading creates the folders top level first, then
+an item's or an override's `motion` (ADR-0099), each omitted while absent, is
+`schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
+omitted while absent, are `schema_version` 5; a follow whose item has left the scene
+isn't written, so reloading never refuses it. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -501,8 +514,8 @@ the engine's; this crate does no I/O.
   migrations from the file's version (`MIGRATIONS[n]` upgrades `n + 1` to `n + 2`: 1 to
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
   changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
-  keyframe override's `effects` the same way, and 3 to 4 an item's and an override's
-  `motion`),
+  keyframe override's `effects` the same way, 3 to 4 an item's and an override's
+  `motion`, and 4 to 5 a scene's `camera_motion` and `camera_follow`),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -523,8 +536,9 @@ the engine's; this crate does no I/O.
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
-  such as one saved before sends existed, keeps every default master send), then
-  hotkeys (`` hotkey `F1` ``). A
+  such as one saved before sends existed, keeps every default master send), then each
+  scene's camera motion and follow camera (once every item exists, which a follow
+  names), then hotkeys (`` hotkey `F1` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a

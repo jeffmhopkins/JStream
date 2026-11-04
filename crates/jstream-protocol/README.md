@@ -65,11 +65,12 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
-  `scene.set_camera`, `label.create`,
+  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `studio.set_preview`, `item.show`,
+  `scene.switch` with its optional `preset_id`, `studio.set_preview`,
+  `scene.zoom_camera`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
@@ -146,7 +147,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
-  overrides and its `camera` (since 0.70; on a keyframe scene its own override), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
+  `camera_motion` and `camera_follow` (ADR-0113, each omitted while absent), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
   `youtube` outputs' audience and the day's quota estimate.
@@ -161,6 +163,15 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
   `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
   shares ([Motion](#motion)).
+- **Camera motion and follow** (`camera_motion.rs`,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
+  `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
+  the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
+  which checks a camera's list as `check_motion` checks an item's; `CameraFollow`, a
+  camera that follows the pointer over a display or window capture (its item, `zoom`,
+  `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
+  `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
+  what `scene.zoom_camera` steps by.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -1774,8 +1785,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  `live.set` and `live.cancel`, and `undo`/`redo` on the plugin's own session), `live`
-  (`scene.switch`) and `outputs` (`output.start`, `output.stop`). Everything else is
+  a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
+  the plugin's own session), `live` (`scene.switch`, and `scene.zoom_camera`, which
+  changes what is on air with no undo step, ADR-0113) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot` and previews (a capture's pixels could leave
   through a granted host), `audio.reset_loudness`, folders and labels themselves
@@ -2002,7 +2014,8 @@ after 1.0:
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
   property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
-  in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
+  in an edit, and the engine draws one as still. `CameraProperty` (ADR-0113) has the
+  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
