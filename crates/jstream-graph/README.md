@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design", "crates/jstream-protocol/README.md#calls", "crates/jstream-protocol/README.md#placement", "crates/jstream-protocol/README.md#batches"]
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,
@@ -115,8 +115,8 @@ with no inverse. The engine draws open gestures' source settings through it
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
   Undo design requires: removing an item is undone by `item.add`, then `item.reorder`,
-  `item.set_crop`, `item.set_visible`, `item.set_transition` and `item.set_locked`
-  only where the item
+  `item.set_crop`, `item.set_visible`, `item.set_transition`, `item.set_locked` and
+  `item.set_effects_space` only where the item
   differed from what `item.add` produces, and deleting a scene by `scene.create` (carrying its `role` for a
   group), `scene.reorder`, `scene.set_transitions` when it had an override, and each
   item's restore. The inverse carries no `expected_rev`: the engine's per-client undo
@@ -382,7 +382,9 @@ with no inverse. The engine draws open gestures' source settings through it
   (`invalid_argument` on `chord`), whether it is already bound (`already_exists`) or
   bound at all (`not_found`, entity `hotkey`), an action that can't be bound
   (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
-  session-only (preview and live), server-answered and YouTube actions), and the objects the action names
+  session-only (preview and live), server-answered and YouTube actions, and a
+  `values.set` whose name or value the call would refuse, at `action.name` or
+  `action.value`), and the objects the action names
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
   `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
   transition preset (a `scene.switch` may name one) removes the bindings that name it, so none dangles: the result's `removed_hotkeys` lists them,
@@ -457,8 +459,8 @@ with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, o
 when there are none, and `transitions` (each preset with its `kind_version`, and the
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
-when set, and an item its `transition` when not the default and `locked` when locked
-(ADR-0096). A source's `audio` is saved
+when set, and an item its `transition` when not the default, `locked` when locked
+(ADR-0096) and `effects_space` when it is `canvas` (ADR-0106). A source's `audio` is saved
 only where it differs from its kind's defaults, except a `webcam`'s, which is always
 saved, so a webcam without it can only come from before webcams had audio (#716). `folders` and `labels` are in their
 orders, each omitted when empty. A scene's `folder`, `labels`, `icon`, `color`,

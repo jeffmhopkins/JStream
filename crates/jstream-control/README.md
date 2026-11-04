@@ -258,6 +258,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
 - `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
   as an engine that watches no packs folder answers them
   ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;
+- `values.set` and `values.list` as the engine runs them
+  ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7): the same
+  name, size and 256-name checks, `values.changed` only when something changed, and no
+  `rev`;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII
