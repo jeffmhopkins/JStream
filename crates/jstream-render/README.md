@@ -491,7 +491,8 @@ taps' spacing (explicit gradients are allowed in the branch), and widens the edg
 coverage to `clamp(d / 2r + 0.5)`. `place` pushes every vertex out by the larger of a
 pixel and the largest blur radius of the shape's corners (`CameraView::blur_at`), the
 largest on a plane; past the edge `w` runs on beyond the corners', so the cap keeps the
-soft edge inside the push and it falls off whole.
+soft edge inside the push and it falls off whole. A vertex that blur pushes past the
+horizon, where it can't be mapped back to the plane, is pushed by a pixel instead.
 Colour is averaged in linear light, so a blur keeps the item's mean light. A 3D model's
 layer (ADR-0107, below) is placed flat, so its `dof` is zero and depth of field doesn't
 blur it yet.
