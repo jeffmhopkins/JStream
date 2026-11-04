@@ -1078,9 +1078,9 @@ centre, stacking order breaking ties; there is still no depth buffer. In a Fade 
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field
-([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment by its distance from
-the focus plane in the same draw: a disc of taps from the item's mips, its edge
-softened to match, with no extra pass or target.
+([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment of a flat item by its
+distance from the focus plane in the same draw: a disc of taps from the item's mips, its
+edge softened to match, with no extra pass or target. A 3D model's layer isn't blurred.
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
