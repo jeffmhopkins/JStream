@@ -1163,6 +1163,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .about-facts dd { margin: 0; overflow-wrap: anywhere; }
 .about-dialog a { color: var(--link); text-decoration: none; }
 .about-dialog a:hover, .about-dialog a:focus-visible { text-decoration: underline; }
+.about-codecs { width: 100%; margin: 0 0 16px; font-size: 12px; text-align: left; }
+.about-codecs-title { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.about-codec { display: grid; gap: 4px; }
+.about-codec-name { margin: 0; }
 .about-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: 12px; }
 .plugin-dialog-body { display: grid; gap: 10px; padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .plugin-dialog-body .field { display: grid; grid-template-columns: 1fr; align-items: start; gap: 0.35rem; margin: 0; }

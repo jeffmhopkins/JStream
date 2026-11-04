@@ -114,7 +114,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
-| HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then About JStream. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, and links to the source, the documentation and the issues. `about.rs`. |
+| HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then About JStream. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. `about.rs`. |
 
 <a id="docking"></a>
 ## Docking and layouts
@@ -494,7 +494,8 @@ not remove them; they move into the prototype's look.
   encoder or a profile asks for software H.264, and the encoder form offers it under the
   hardware choice while the draft would need it. Each offer names Cisco, shows Cisco's
   notice with a link to its licence and the licence's full text under "Licence terms", and downloads only when the person presses its
-  button; once installed, the notice and link stay beside a Delete button.
+  button; once installed, the notice and link stay beside a Delete button, and About
+  lists it with the notice, link and terms ([HD-10](#header)).
 - Mixer: buses, sends, "heard always or when on program", mute, the console-taper fader,
   peak hold, loudness reset, and a monitor on any bus, with its output device.
 - Settings forms generated from kind descriptors, with groups, advanced settings,
