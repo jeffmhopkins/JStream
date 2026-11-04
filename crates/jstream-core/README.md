@@ -570,7 +570,9 @@ state machine. Contents:
   while a mix draws it (`a_waveform_no_mix_draws_is_not_painted`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
-  (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
+  (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
+  starts again at its duration when its `restart` counter changes
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
@@ -1366,7 +1368,7 @@ a newer one. Until its build installs, a source keeps showing what it showed bef
 or nothing. A changed setting always rebuilds the source, live or not, so an
 animation restarts with it, unless its kind keeps the old instance's time zero for that
 change (`Registry::keeps_time`, `SourceKind::keeps_time`): a `timer` keeps counting
-through any change but its `mode` or `duration` (#1027). The build then carries that
+through any change but its `mode`, `duration` or `restart` counter (#1027, #1040). The build then carries that
 time zero (`Entry::anchor`; a build queued while another is in flight keeps what that
 one keeps, so a later style edit can't undo a restart), the thread paints the new
 instance for it as soon as it is created, off the lock, so its first plan already shows
@@ -2543,10 +2545,12 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   disconnect does.
 - **Disabling.** A plugin that traps, runs out of fuel, runs past its deadline or grows
   its memory or table past the cap while handling an event is disabled: its subscription
-  closes, its instance drops, a warning is logged, and `plugin.state_changed` carries
-  `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
+  closes, its instance drops, a warning is logged, `plugins.json` is saved, and then
+  `plugin.state_changed` carries `disabled` with `cpu_limit` (fuel or the deadline), `memory_limit` (a cap; the host
   makes growing past one a trap, `Error::MemoryLimit`) or `trap` (anything else). The
-  engine never re-enables it. `plugin.enable` reads the package again and loads it as an
+  engine never re-enables it. Since the save comes before the event, no save from that
+  run lands after a client that saw the event has rewritten the file (#1123).
+  `plugin.enable` reads the package again and loads it as an
   install does, answering `action_failed` if that fails, which leaves it disabled; for a
   running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
   with `not_found` for a plugin that isn't installed.
