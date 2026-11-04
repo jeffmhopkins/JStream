@@ -716,7 +716,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `rev` change. `studio.get` reads the program scene and `studio.changed` reports every
   change of it, including the ones a batch, undo or redo causes by creating the first scene or
   deleting the program scene.
-- **Item visibility from an action** (protocol 0.76,
+- **Item visibility from an action** (protocol 0.78,
   [ADR-0101](adr/0101-item-show-hide-actions.md)): `item.show`, `item.hide` and
   `item.toggle` change one placement's visibility as `item.set_visible` does, with a
   `rev` and `state.changed` but no undo step, so a hotkey can show or hide an item. On

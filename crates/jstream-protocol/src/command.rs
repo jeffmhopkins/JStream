@@ -1409,7 +1409,7 @@ pub enum Action {
         /// The scene to put on preview.
         scene_id: SceneId,
     },
-    /// Shows an item (0.76, ADR-0101) with its own appear effect, the way a hotkey shows
+    /// Shows an item (0.78, ADR-0101) with its own appear effect, the way a hotkey shows
     /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
     /// with the same `scene_id` rules and the same errors (`not_found` for an item or
     /// scene not in the collection, `invalid_argument` on `scene_id` for a scene whose
@@ -1433,7 +1433,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Hides an item with its own `disappear` effect (0.76, ADR-0101): `item.show`'s
+    /// Hides an item with its own `disappear` effect (0.78, ADR-0101): `item.show`'s
     /// opposite, with the same rules. Hiding an item already hidden succeeds and changes
     /// nothing.
     #[serde(rename = "item.hide")]
@@ -1444,7 +1444,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Shows the item if that placement hides it, else hides it (0.76, ADR-0101), as
+    /// Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as
     /// `item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is
     /// the keyframe's override if it has one, else the item's own.
     #[serde(rename = "item.toggle")]

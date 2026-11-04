@@ -40,7 +40,7 @@ disagree with the picture.
    `{ item_id, scene_id? }`, with `item.set_visible`'s `scene_id` rules and errors. The
    field of an error names the action's field (`scene_id`), not `edits.0.scene_id`.
    `item.toggle` reads the placement's visibility first: a keyframe scene's override if
-   it has one, else the item's own. Protocol 0.76.
+   it has one, else the item's own. Protocol 0.78.
 2. **They change the collection.** The engine applies the `item.set_visible` the action
    stands for: `rev` moves on by one, `state.changed` follows (with no `cause`), and the
    collection saves it. A show of a shown item, or a hide of a hidden one, changes

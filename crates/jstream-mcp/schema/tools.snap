@@ -508,7 +508,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows an item (0.76, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "description": "Shows an item (0.78, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -537,7 +537,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Hides an item with its own `disappear` effect (0.76, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "description": "Hides an item with its own `disappear` effect (0.78, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -566,7 +566,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows the item if that placement hides it, else hides it (0.76, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+                "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -6343,7 +6343,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows an item (0.76, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "description": "Shows an item (0.78, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -6372,7 +6372,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Hides an item with its own `disappear` effect (0.76, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "description": "Hides an item with its own `disappear` effect (0.78, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -6401,7 +6401,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows the item if that placement hides it, else hides it (0.76, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+                "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11122,7 +11122,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows an item (0.76, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "description": "Shows an item (0.78, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11151,7 +11151,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Hides an item with its own `disappear` effect (0.76, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "description": "Hides an item with its own `disappear` effect (0.78, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11180,7 +11180,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows the item if that placement hides it, else hides it (0.76, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+                "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11879,7 +11879,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows an item (0.76, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "description": "Shows an item (0.78, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11908,7 +11908,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Hides an item with its own `disappear` effect (0.76, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "description": "Hides an item with its own `disappear` effect (0.78, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -11937,7 +11937,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Shows the item if that placement hides it, else hides it (0.76, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+                "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",

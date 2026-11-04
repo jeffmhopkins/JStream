@@ -213,9 +213,10 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.76 because of the
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.78 because of the
   `item.show`, `item.hide` and `item.toggle` actions
-  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)); 0.75 because of the
+  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), with 0.76 and 0.77 left
+  to changes that claimed them first; 0.75 because of the
   `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
   `output.set_path` (#1072); 0.73 because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
@@ -904,7 +905,7 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
   `plugin.*` actions (a person installs and grants plugins): each is
   `invalid_argument` on `action.type`. A scene, output, preset or item the action names
-  must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.76,
+  must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.78,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) are the actions that show
   and hide one item: they change its placement's visibility as `item.set_visible` would,
   moving `rev` on with no undo step, and the engine plays the item's own `appear` or
