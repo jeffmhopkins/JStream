@@ -67,13 +67,20 @@ depends_on = ["docs/adr/0019-review-gate-v2.md"]
    carries PRs you already passed into the wave. Review what they didn't see: the sync
    merge commits that brought `main` in and their conflict resolutions
    (`git show --remerge-diff <merge>`). The full CI on the wave PR covers the rest.
-6. **A merge-only round.** When every commit since the head you last passed merges `main`
-   (or the PR's wave) and restamps sections with `docs verify --merge`, and the builder
-   said so on the PR, review only those commits: the conflict resolutions
-   (`git show --remerge-diff <merge>`) and each restamped section against what the merge
-   brought in. Pass if they hold. A merge that changes the PR's own code, its protocol
-   number or its schema snapshots beyond the merge's own conflicts is not merge-only:
-   review it in full ([waves › Without churn](docs/runbooks/waves.md#churn)).
+6. **A merge-only round.** Take the head that holds the latest `pass` marker. When every
+   commit after it either merges `main` (or the PR's wave) or touches only
+   `docs/verified.toml` and `@generated` blocks (check with `git diff --stat` from the
+   last merge to the head), review only those commits:
+   - the conflict resolutions, with `git show --remerge-diff <merge>`;
+   - each restamped section, against what the merge brought in;
+   - `cargo xtask docs for` on the PR's files at the head, against the passed head, so a
+     rule or section that just landed and now applies isn't skipped.
+
+   Pass if they hold. A merge that changes the PR's own code, its protocol number or its
+   schema snapshots beyond the merge's own conflicts is not merge-only: review it in full.
+   Once [ADR-0109](docs/adr/0109-review-pass-carries-across-base-merges.md) carries a pass
+   to such a head by itself, you are asked only when its diff changed
+   ([waves › Without churn](docs/runbooks/waves.md#churn)).
 
 <a id="checks"></a>
 ## Step 2: Review
@@ -201,7 +208,7 @@ wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
 On each new head commit, start a new round:
 
 1. Re-review the **whole** diff against the base, not just the new commits, because fixes
-   can break things.
+   can break things. The exception is a merge-only round ([Gather](#gather) item 6).
 2. For every earlier finding, state its status: **resolved** (cite where), **still open**,
    or **withdrawn** (the builder's rebuttal convinced you, and say why).
 3. New findings get new IDs.
