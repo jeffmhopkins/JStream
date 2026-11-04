@@ -369,9 +369,10 @@ It has:
   licence `deny.toml` allows only at build time), checks the library's SHA-256, and
   writes it through a temporary file of its own (process ID and a counter, so two
   downloads at once never share one) and a rename. Another process sharing the data
-  folder may be writing its own, so the next write or `remove` deletes another
-  process's temporary file only once it is stale: untouched for ten minutes and either
-  its process is gone or it is a day old. A
+  folder may be writing its own, so the next write or `remove` deletes a temporary file
+  only once it is stale: untouched for ten minutes and either its process is gone or it
+  is a day old. One with this process's own ID counts as gone after ten minutes, since
+  an earlier run can have had the same ID (in a container the daemon is always PID 1). A
   download that doesn't match is discarded and reported, never written. `remove` deletes
   it. `VaapiCodecs` offers it
   through `Codecs::downloads` (ID `OPENH264_DOWNLOAD_ID`, `openh264`, with

@@ -129,22 +129,32 @@ fn installs_checks_and_removes() {
     assert_eq!(mode(&dir.join("codecs/openh264")), 0o700);
 
     // A second install replaces it, and deletes a stale temporary file a run that
-    // stopped mid-write left. This process's own in-flight ones are kept, and so is
-    // another process's that was written to moments ago: it may be mid-download.
+    // stopped mid-write left, even one with this process's ID (an earlier run's, as
+    // when the daemon is always PID 1). A file written to moments ago is kept, ours or
+    // another process's: it may be mid-download.
     let file = pin().file_name;
     let at = |name: String| dir.join(format!("codecs/openh264/{name}"));
     let left = at(format!("{file}.0.7.part"));
     let fresh = at(format!("{file}.0.8.part"));
     let ours = at(format!("{file}.{}.999.part", std::process::id()));
+    let earlier_ours = at(format!("{file}.{}.998.part", std::process::id()));
     let unrelated = at(format!("{file}x.0.7.part"));
     write_aged(&left, HOUR);
     write_aged(&fresh, std::time::Duration::ZERO);
-    write_aged(&ours, HOUR);
+    write_aged(&ours, std::time::Duration::ZERO);
+    write_aged(&earlier_ours, HOUR);
     write_aged(&unrelated, HOUR);
     store.install(&fetch).expect("installs again");
     assert!(!left.exists(), "a stale temporary file is deleted");
     assert!(fresh.exists(), "a fresh one may be in flight");
-    assert!(ours.exists(), "this process's own are in flight");
+    assert!(
+        ours.exists(),
+        "this process's own fresh one may be in flight"
+    );
+    assert!(
+        !earlier_ours.exists(),
+        "an earlier run with our ID left a stale one"
+    );
     assert!(unrelated.exists(), "another file's name is left alone");
 
     write_aged(&left, HOUR);

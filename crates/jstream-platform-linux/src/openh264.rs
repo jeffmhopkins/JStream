@@ -206,7 +206,8 @@ impl OpenH264Store {
             .map_err(|e| io_error("storing the OpenH264 library", &e))
     }
 
-    /// Deletes the library, and any temporary file an earlier run left behind. Afterwards
+    /// Deletes the library, and any stale temporary file a write left behind (see
+    /// [`sweep_parts`](Self::sweep_parts)), but not one a write may still be writing. Afterwards
     /// software H.264 reports not installed. Removing what isn't there succeeds.
     ///
     /// # Errors
@@ -301,12 +302,14 @@ impl OpenH264Store {
         result
     }
 
-    /// Deletes the temporary files that writes by other processes left behind. `write`
-    /// names each `<library>.<process ID>.<n>.part`. This process's own are in flight
-    /// and kept. Another process sharing the data folder (a second daemon, or the CLI
-    /// while the daemon downloads) may be writing one right now, so a file from another
-    /// process ID is deleted only when [`part_is_stale`] says so. Best effort: a file
-    /// it can't list, read the age of or delete stays.
+    /// Deletes the temporary files that writes left behind. `write` names each
+    /// `<library>.<process ID>.<n>.part`. Another process sharing the data folder (a
+    /// second daemon, or the CLI while the daemon downloads) may be writing one right
+    /// now, so a file is deleted only when [`part_is_stale`] says so. A file with this
+    /// process's ID counts as one whose process is gone: this process's own writes are
+    /// as quick as anyone's, so one untouched for [`PART_GRACE`] was left by an earlier
+    /// run that had the same ID (in a container the daemon is always PID 1). Best
+    /// effort: a file it can't list, read the age of or delete stays.
     fn sweep_parts(&self) {
         let Ok(entries) = fs::read_dir(&self.dir) else {
             return;
@@ -327,9 +330,6 @@ impl OpenH264Store {
                 .strip_prefix('.')
                 .and_then(|m| m.split('.').next())
                 .and_then(|p| p.parse::<u32>().ok());
-            if pid == Some(std::process::id()) {
-                continue;
-            }
             let Some(age) = entry
                 .metadata()
                 .and_then(|m| m.modified())
@@ -338,7 +338,12 @@ impl OpenH264Store {
             else {
                 continue;
             };
-            if part_is_stale(pid, age, process_is_running) {
+            let running: fn(u32) -> bool = if pid == Some(std::process::id()) {
+                |_| false
+            } else {
+                process_is_running
+            };
+            if part_is_stale(pid, age, running) {
                 let _ = fs::remove_file(entry.path());
             }
         }
