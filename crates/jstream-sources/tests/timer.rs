@@ -213,7 +213,7 @@ fn a_live_update_redraws_the_value_shown() {
 }
 
 #[test]
-fn only_mode_and_duration_restart_the_count() {
+fn only_mode_duration_and_restart_restart_the_count() {
     let registry = Registry::builtin();
     let old = settings(&[]);
     let keeps = |patch: &[(&str, Value)]| registry.keeps_time("timer", &old, &settings(patch));
@@ -222,6 +222,10 @@ fn only_mode_and_duration_restart_the_count() {
     assert!(keeps(&[("end_text", json!("LIVE"))]));
     assert!(!keeps(&[("mode", json!("stopwatch"))]));
     assert!(!keeps(&[("duration", json!(60))]));
+    assert!(
+        !keeps(&[("restart", json!(1))]),
+        "#1040: the restart counter"
+    );
     assert!(
         !registry.keeps_time("text", &old, &old),
         "other kinds start again"
