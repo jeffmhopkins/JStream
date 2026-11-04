@@ -46,8 +46,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, SceneRole,
-    SourceKind, Vec2,
+    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
+    SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
