@@ -6006,7 +6006,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         "opacity": {
           "$ref": "#/$defs/Finite32",
           "default": 1.0,
-          "description": "Its alpha multiplier, from 0 to 1. Missing (from a server older than this field)\nparses as 1."
+          "description": "Its opacity, from 0 to `MAX_OPACITY` (4): up to 1 an alpha multiplier, and above 1\n(since 0.83, #1101) a gain on its light, as `item.set_opacity` sets it. Missing\n(from a server older than this field) parses as 1."
         },
         "placement": {
           "$ref": "#/$defs/PlacementForm",
