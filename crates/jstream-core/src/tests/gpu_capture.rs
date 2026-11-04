@@ -661,6 +661,8 @@ impl jstream_browser::BrowserPage for PaintedPage {
 
     fn reload(&mut self) {}
 
+    fn set_hidden(&mut self, _hidden: bool) {}
+
     fn audio(&self) -> &Arc<jstream_browser::PageAudio> {
         &self.audio
     }

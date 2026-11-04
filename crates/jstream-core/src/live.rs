@@ -174,6 +174,11 @@ struct Running {
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
     planned: u64,
+    /// The last plan any mix looked at it in (the program's, a video mix's or a
+    /// preview's), or the plan current when it was built.
+    looked: u64,
+    /// Whether it was told no mix draws it ([`Source::set_drawn`], #1071).
+    resting: bool,
     /// The texture it showed last, for a source that paints on the GPU.
     shown_gpu: Option<(GpuFrame, Frame)>,
     /// Its own size, which its frames are placed at, for a kind that draws them at a
@@ -611,6 +616,8 @@ impl LiveSources {
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
                 planned: plan,
+                looked: plan,
+                resting: false,
                 shown_gpu: None,
                 extent: built.extent,
                 size: built.size,
@@ -804,6 +811,10 @@ impl LiveSources {
             }
             running.planned = plan;
         }
+        running.looked = plan;
+        if std::mem::take(&mut running.resting) {
+            running.source.set_drawn(true);
+        }
         if let Some(context) = &self.context {
             let next = next_program_frame(now);
             if let Some(texture) = running.source.gpu_frame() {
@@ -867,6 +878,20 @@ impl LiveSources {
 
     /// Ends a plan of the program mix: a source's sound is heard while the plan reached
     /// it.
+    /// After a plan of the program mix and every mix and preview drawn with it: tells
+    /// each source none of them looked at that nothing draws it, so a kind that costs
+    /// something while drawn (a `browser` page) can rest (#1071). A source looked at
+    /// again is told it is drawn as it is looked at ([`Self::look`]).
+    pub(crate) fn rest_undrawn(&mut self) {
+        let plan = self.plan;
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            if running.looked != plan && !running.resting {
+                running.resting = true;
+                running.source.set_drawn(false);
+            }
+        }
+    }
+
     pub(crate) fn end_plan(&self) {
         let plan = self.plan;
         for running in self.entries.values().filter_map(|e| e.running.as_ref()) {

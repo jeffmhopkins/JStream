@@ -1400,3 +1400,44 @@ fn a_scene_sources_chain_is_drawn_where_it_places_its_scene() {
         "the scene's red alone"
     );
 }
+
+/// #1071: a browser page no mix draws is hidden, so it stops painting, and shown again
+/// as soon as one does. A page the program draws stays shown across re-plans.
+#[test]
+fn a_browser_page_rests_while_nothing_draws_it() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let browser = FakeBrowser::new();
+    let engine = Engine::new().with_browser(browser.clone());
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "page",
+                "browser",
+                settings(&[("url", json!("https://example.com/"))]),
+            ),
+            add("a", "i1", "page"),
+        ]),
+    )
+    .expect("created");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while browser.pages().is_empty() && Instant::now() < deadline {
+        engine.replan();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let page = browser.pages().first().cloned().expect("the page opened");
+    for _ in 0..3 {
+        engine.replan();
+    }
+    assert!(!page.hidden(), "the program draws it");
+
+    visible(&control, false);
+    engine.replan();
+    assert!(page.hidden(), "nothing draws it");
+    visible(&control, true);
+    assert!(!page.hidden(), "drawn again");
+    assert_eq!(browser.pages().len(), 1, "the same page throughout");
+}
