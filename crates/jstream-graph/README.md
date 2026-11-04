@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-graph/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-graph", "docs/ARCHITECTURE.md#data-model", "crates/jstream-protocol/README.md#design", "crates/jstream-protocol/README.md#calls", "crates/jstream-protocol/README.md#placement", "crates/jstream-protocol/README.md#batches"]
 -->
 
 The scene graph of a collection, and the only code that changes it. Layer 2: plain data,

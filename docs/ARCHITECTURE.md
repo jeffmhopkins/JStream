@@ -625,8 +625,8 @@ fence doesn't allocate, lock or wait, so [R-RT-001](RULES.md#R-RT-001) and
 <a id="protocol"></a>
 ## Control protocol
 <!-- @section
-covers = ["crates/jstream-protocol/**", "crates/jstream-control/**", "crates/jstream-server/**"]
-depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md"]
+covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**", "crates/jstream-control/src/**", "crates/jstream-server/src/**"]
+depends_on = ["docs/adr/0013-command-model.md", "docs/adr/0006-mcp-full-access.md", "crates/jstream-protocol/README.md#design", "crates/jstream-protocol/README.md#compatibility", "crates/jstream-protocol/README.md#errors"]
 -->
 
 The wire format, versioning, error codes and compatibility policy are designed in
