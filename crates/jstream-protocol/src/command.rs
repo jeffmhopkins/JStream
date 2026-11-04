@@ -826,7 +826,9 @@ pub enum Edit {
     /// scene or doesn't show a display or window capture, and for a number
     /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
     /// leaves the follow in place and inert until it is set again or an undo brings the
-    /// item back. Inverse: `scene.set_camera_follow` with the previous value.
+    /// item back. The follow camera reads the pointer only where the program is drawn
+    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
+    /// Inverse: `scene.set_camera_follow` with the previous value.
     #[serde(rename = "scene.set_camera_follow")]
     SceneSetCameraFollow {
         /// The scene to change.

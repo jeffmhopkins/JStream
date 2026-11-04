@@ -1182,8 +1182,11 @@ transition's ends, carry the family's `CameraMoves`, which `compose` applies to 
 camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
 once per frame time, then the camera's motion), with the zoom steps from the live
 values. Such a shot changes with time, so it redraws each frame. Each compositor keeps
-its own springs, so the snapshot and preview threads follow the pointer apart from the
-render thread, from rest.
+its own springs. The preview thread draws with the captures, so its follow camera
+follows the pointer apart from the render thread, from rest. The snapshot thread draws
+with no captures (`NoCaptures`), so it gets no pointer: `video.snapshot` and a frame
+sheet show a follow camera at rest, aimed at the box's centre, though the camera's motion
+still plays.
 
 **Video chains** (`chain.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md),
 roadmap V0). Planning copies each reached source's video chain into the `Shot`: its

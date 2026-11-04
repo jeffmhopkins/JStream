@@ -4104,7 +4104,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. Inverse: `scene.set_camera_follow` with the previous value.",
+          "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
           "properties": {
             "follow": {
               "anyOf": [
