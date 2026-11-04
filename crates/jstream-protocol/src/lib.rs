@@ -89,7 +89,7 @@ pub use live::{
 pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
 pub use motion::{
     MAX_MOTION_ID_LEN, MAX_MOTION_MODIFIERS, MotionClock, MotionKind, MotionModifier,
-    MotionProblem, MotionProperty, MotionShape, check_motion,
+    MotionProblem, MotionProperty, MotionShape, check_motion, check_motion_id,
 };
 pub use organise::{
     FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon, parse_rgba,

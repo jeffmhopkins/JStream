@@ -455,9 +455,11 @@ not remove them; they move into the prototype's look.
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md), `panels/motion.rs`):
   the "Motion" section, folded, with the modifier count as its hint, lists the item's
   motion modifiers. Each is a row with Moves (X, Y, Scale, Rotation, Tilt, Turn, Depth,
-  Opacity or a crop edge), How (Wiggle, Oscillate with its Shape, or Drift), that kind's
-  fields (Amount, Speed, Detail and Seed; Amount, Period and Phase; Rate and Wrap),
-  Starts (In step, or When shown), an On check and Remove. "+ Add motion" adds a gentle
+  Opacity or a crop edge), How (Wiggle, Oscillate with its Shape, Drift, or Shake), that
+  kind's fields (Amount, Speed, Detail and Seed; Amount, Period and Phase; Rate and Wrap;
+  Amount, Speed, Decay and Length), Starts (In step, When shown, or When fired), an On
+  check, Fire on a row that starts when fired (it sends `item.trigger_motion` for that
+  modifier, #1107) and Remove. "+ Add motion" adds a gentle
   X wiggle, up to 8. Each change sends `item.set_motion` with the whole list; in a
   keyframe it writes the keyframe's own list, so a Move can calm or quicken the motion.
   The engine draws it each frame; the canvas shows the item at its values.

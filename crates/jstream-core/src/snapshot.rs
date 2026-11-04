@@ -572,6 +572,9 @@ pub(crate) struct Shot {
     /// (ADR-0099), as the engine set it ([`Shot::set_shown`]). An item missing here is
     /// at its start.
     shown: BTreeMap<ItemId, MediaTime>,
+    /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
+    /// it ([`Shot::set_fired`]). A modifier never fired here is still.
+    fired: motion::Fired,
 }
 
 /// A transition as a shot draws it (ADR-0029): each item's track in drawing order and
@@ -693,6 +696,7 @@ impl Default for Shot {
             stages: BTreeMap::new(),
             moves: false,
             shown: BTreeMap::new(),
+            fired: motion::Fired::default(),
         }
     }
 }
@@ -824,6 +828,21 @@ impl Shot {
     /// When `item` was first drawn, if this shot knows.
     fn shown_at(&self, item: &ItemId) -> Option<MediaTime> {
         self.shown.get(item).copied()
+    }
+
+    /// Sets when each item's `triggered` modifiers were last fired ([`motion::Fired`]).
+    pub(crate) fn set_fired(&mut self, fired: motion::Fired) {
+        self.fired = fired;
+    }
+
+    /// What `item`'s `motion` adds at `at`, on its clocks as this shot knows them.
+    fn motion_at(
+        &self,
+        item: &ItemId,
+        motion: &[jstream_anim::Modifier],
+        at: MediaTime,
+    ) -> jstream_anim::Offsets {
+        motion::offsets(motion, at, self.shown_at(item), self.fired.of(item))
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -993,7 +1012,7 @@ impl Shot {
                 .iter()
                 .map(|layer| {
                     let (item, modifiers) = &layer.motion.to;
-                    let by = motion::offsets(modifiers, at, self.shown_at(item));
+                    let by = self.motion_at(item, modifiers, at);
                     let (placement, crop, opacity) =
                         motion::apply(&by, layer.placement, layer.crop, layer.opacity);
                     (layer.item.clone(), placement, crop, opacity)
@@ -1015,7 +1034,8 @@ impl Shot {
             t.tracks
                 .iter()
                 .map(|(key, track, _, moved)| {
-                    let by = moved.offsets(track, elapsed_ms, at, |item| self.shown_at(item));
+                    let by =
+                        moved.offsets(track, elapsed_ms, |item, m| self.motion_at(item, m, at));
                     track
                         .sample(elapsed_ms, canvas)
                         .map(|end| moved_track(self.is_canvas_box(key), &by, end))
@@ -1028,6 +1048,12 @@ impl Shot {
     #[cfg(test)]
     pub(crate) fn shown(&self) -> &BTreeMap<ItemId, MediaTime> {
         &self.shown
+    }
+
+    /// When `item`'s `triggered` modifier `id` was last fired, for tests.
+    #[cfg(test)]
+    pub(crate) fn fired_at(&self, item: &ItemId, id: &str) -> Option<MediaTime> {
+        self.fired.of(item)?.at(id)
     }
 
     /// What scene `id` places, bottom first, as it is drawn with the live values in
@@ -1070,6 +1096,7 @@ impl PartialEq for Shot {
             && self.stages == other.stages
             && self.moves == other.moves
             && self.shown == other.shown
+            && self.fired == other.fired
     }
 }
 
@@ -4287,7 +4314,7 @@ fn draw_box(
         boxed.placement,
         boxed.crop,
     );
-    let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item));
+    let by = shot.motion_at(&boxed.item, &boxed.motion, at);
     let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
@@ -4414,7 +4441,7 @@ fn fill_items<'a>(
             let elapsed = transition::elapsed_ms(*start, at);
             let by = layer
                 .motion
-                .offsets(track, elapsed, at, |item| shot.shown_at(item));
+                .offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
             let sampled = moved_track(
                 shot.is_canvas_box(&layer.image),
                 &by,
@@ -4434,7 +4461,7 @@ fn fill_items<'a>(
         let (placement, crop) = live.apply(layer);
         // Its motion moves it on top of its live values (ADR-0099).
         let (item, modifiers) = &layer.motion.to;
-        let by = motion::offsets(modifiers, at, shot.shown_at(item));
+        let by = shot.motion_at(item, modifiers, at);
         let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
         let (placement, crop) = match &layer.boxed {
             Some(boxed) => {
@@ -4490,7 +4517,7 @@ fn fill_tracks<'a>(
                 if chains.failed(key) {
                     return None;
                 }
-                let by = moved.offsets(track, elapsed, at, |item| shot.shown_at(item));
+                let by = moved.offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
                 let sampled =
                     moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
                 Some(Item {

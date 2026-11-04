@@ -167,7 +167,10 @@ each frame from one clock, so every item, mask and nested scene showing the same
 modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
 one, and give a keyframe scene its own list (`scene_id`) to calm or quicken it across a \
 `move`. Use `clock` `shown` for motion that should start fresh each time the item is \
-shown. Keep continuous motion \
+shown. For a one-shot jolt or shake (an impact, a kick), add an `impulse` modifier \
+(`amplitude`, `frequency_hz`, `decay_per_s`, `duration_ms`) on `clock` `triggered` and \
+fire it with `item.trigger_motion`, instead of stepping the item call by call; fire a \
+group's item to shake the group and its masks together. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. Changing `html` \

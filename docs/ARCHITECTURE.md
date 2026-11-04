@@ -660,7 +660,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
-  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)).
+  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.82 a
+  modifier can be a one-shot `impulse` on the `triggered` clock, which the action
+  `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
+  the program scene.
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -1041,7 +1044,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
-  scenes, continuous motion with `item.set_motion`, layering light, masks and reflections, 3D sets through a scene camera, and
+  scenes, continuous motion with `item.set_motion` and one-shot jolts that
+  `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
   ([jstream-mcp › Design](../crates/jstream-mcp/README.md#design)).

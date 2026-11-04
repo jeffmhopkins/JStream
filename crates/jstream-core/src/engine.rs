@@ -2989,6 +2989,9 @@ struct State {
     /// When each item the program mix draws was first drawn: the origin of its motion
     /// modifiers' `shown` clock (ADR-0099).
     shown_since: crate::motion::ShownSince,
+    /// When each item's `triggered` motion modifiers were last fired, by
+    /// `item.trigger_motion` (#1107): the origin of their clock.
+    fired: crate::motion::Fired,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3339,6 +3342,31 @@ impl State {
         self.sync_sizes(wake);
     }
 
+    /// Fires `item_id`'s `triggered` motion modifiers (#1107): the one `modifier_id`
+    /// names, or all of them, from now. The program shot is planned again, so the render
+    /// thread draws the fire from its next frame.
+    fn trigger_motion(
+        &mut self,
+        item_id: &jstream_protocol::ItemId,
+        modifier_id: Option<&str>,
+    ) -> Result<(), ProtocolError> {
+        if let Some(id) = modifier_id
+            && let Err(reason) = jstream_protocol::check_motion_id(id)
+        {
+            return Err(ProtocolError::invalid_argument("modifier_id", reason));
+        }
+        if self.graph.state().item(item_id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            });
+        }
+        let now = self.live.now();
+        self.fired.fire(item_id, modifier_id, now);
+        self.publish_render();
+        Ok(())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -3405,6 +3433,13 @@ impl State {
                         wake,
                     );
                 }
+                return Ok(CallResult::action());
+            }
+            Action::ItemTriggerMotion {
+                item_id,
+                modifier_id,
+            } => {
+                self.trigger_motion(&item_id, modifier_id.as_deref())?;
                 return Ok(CallResult::action());
             }
             other @ (Action::PairingStart
@@ -3859,6 +3894,7 @@ impl State {
             source_shots,
             source_copies,
             shown_since,
+            fired,
             shared,
             ..
         } = self;
@@ -3888,6 +3924,7 @@ impl State {
         }
         let shown = shown_since.update(&planning.shot.drawn_items(), now);
         planning.shot.set_shown(shown);
+        planning.shot.set_fired(fired.clone());
         render.publish(planning.shot);
         // Each previewed scene, after the program mix's plan has ended, so it reaches
         // no source: a preview never makes a source shown or heard (ADR-0028).

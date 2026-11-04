@@ -1252,3 +1252,132 @@ fn a_canvas_space_items_motion_leaves_its_layer_over_the_canvas() {
     assert!(xs(1.0).iter().any(Option::is_some), "{:?}", xs(1.0));
     assert_eq!(xs(1.0), xs(3.0), "the canvas layers stay where they are");
 }
+
+// Triggered motion (#1107): still until `item.trigger_motion` fires it, then from then.
+
+fn trigger(
+    control: &dyn Control,
+    item: &str,
+    modifier: Option<&str>,
+) -> Result<(), jstream_protocol::ProtocolError> {
+    let action = Action::ItemTriggerMotion {
+        item_id: ItemId::new(item),
+        modifier_id: modifier.map(Into::into),
+    };
+    block_on(control.call(Call::Action { action }))
+        .map(|_| ())
+        .map_err(|e| match e {
+            jstream_control::ControlError::Protocol(wire) => wire.error,
+            other => panic!("not a protocol error: {other}"),
+        })
+}
+
+/// `a1`'s motion: `jolt`, a 500 ms impulse of 40 px along y at 2 Hz that doesn't decay,
+/// and `drift`, 100 px a second along x, both on the `triggered` clock.
+fn jolt_and_drift() -> Edit {
+    use jstream_protocol::{MotionClock, MotionKind, MotionModifier, MotionProperty};
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    Edit::ItemSetMotion {
+        item_id: ItemId::new("a1"),
+        scene_id: None,
+        motion: vec![
+            MotionModifier {
+                modifier_id: "jolt".into(),
+                property: MotionProperty::Y,
+                kind: MotionKind::Impulse {
+                    amplitude: f(40.0),
+                    frequency_hz: f(2.0),
+                    decay_per_s: f(0.0),
+                    duration_ms: 500,
+                },
+                clock: MotionClock::Triggered,
+                enabled: true,
+            },
+            MotionModifier {
+                modifier_id: "drift".into(),
+                property: MotionProperty::X,
+                kind: MotionKind::Drift {
+                    rate_per_s: f(100.0),
+                    wrap: None,
+                },
+                clock: MotionClock::Triggered,
+                enabled: true,
+            },
+        ],
+    }
+}
+
+/// `a1`'s centre as the program draws it `after` seconds past when `id` was fired, or
+/// at `after` seconds on the engine's clock if it never was.
+fn a1_after(engine: &Engine, id: &str, after: f64) -> (f32, f32) {
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let origin = shot
+        .fired_at(&ItemId::new("a1"), id)
+        .map_or(0.0, |at| at.as_secs_f64());
+    let moved = shot
+        .moved_at(&SceneId::new("a"), secs(origin + after))
+        .expect("the program draws a");
+    let (_, placement, _, _) = moved
+        .iter()
+        .find(|(item, ..)| item.as_str() == "a1")
+        .expect("a1");
+    let jstream_render::Placement::Geometry(g) = placement else {
+        panic!("a1 has a box");
+    };
+    (g.center.x.get(), g.center.y.get())
+}
+
+#[test]
+fn a_triggered_modifier_is_still_until_fired_then_runs_from_the_fire() {
+    let engine = family();
+    let control = connected(&engine);
+    apply(&control, vec![jolt_and_drift()]);
+    switch(&control, "a", None);
+    let (_, y0) = a1_after(&engine, "jolt", 0.0);
+    assert_eq!(
+        a1_after(&engine, "jolt", 5.0),
+        (100.0, y0),
+        "never fired: still"
+    );
+
+    // Firing one moves only that one, from the fire: a quarter of a 2 Hz swing is its
+    // peak, and past its 500 ms it is still again.
+    trigger(&control, "a1", Some("jolt")).expect("fires");
+    let near = |(x, y): (f32, f32), (ex, ey): (f32, f32)| {
+        assert!(
+            (x - ex).abs() < 0.01 && (y - ey).abs() < 0.01,
+            "({x}, {y}) is not ({ex}, {ey})"
+        );
+    };
+    near(a1_after(&engine, "jolt", 0.125), (100.0, y0 + 40.0));
+    near(a1_after(&engine, "jolt", 0.6), (100.0, y0));
+
+    // Firing every one starts the drift too, and restarts the jolt.
+    trigger(&control, "a1", None).expect("fires");
+    near(a1_after(&engine, "drift", 0.125), (112.5, y0 + 40.0));
+    near(a1_after(&engine, "drift", 2.0), (300.0, y0));
+}
+
+#[test]
+fn a_fire_names_an_item_and_a_well_formed_modifier() {
+    let engine = family();
+    let control = connected(&engine);
+    match trigger(&control, "nope", None) {
+        Err(jstream_protocol::ProtocolError::NotFound { entity, id }) => {
+            assert_eq!(
+                (entity, id.as_str()),
+                (jstream_protocol::EntityKind::Item, "nope")
+            );
+        }
+        other => panic!("not a not_found: {other:?}"),
+    }
+    match trigger(&control, "a1", Some("has space")) {
+        Err(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) => {
+            assert_eq!(field, "modifier_id")
+        }
+        other => panic!("not an invalid_argument: {other:?}"),
+    }
+    // A modifier the item doesn't hold is no error: a keyframe can override its list.
+    trigger(&control, "a1", Some("elsewhere")).expect("fires nothing");
+}

@@ -705,6 +705,18 @@ fn sway() -> Vec<MotionModifier> {
             clock: MotionClock::Engine,
             enabled: false,
         },
+        MotionModifier {
+            modifier_id: "jolt".into(),
+            property: MotionProperty::Y,
+            kind: MotionKind::Impulse {
+                amplitude: f(18.0),
+                frequency_hz: f(1.5),
+                decay_per_s: f(4.0),
+                duration_ms: 700,
+            },
+            clock: MotionClock::Triggered,
+            enabled: true,
+        },
     ]
 }
 
@@ -1239,6 +1251,15 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::ItemToggle {
             item_id: ItemId::new("itm_1"),
             scene_id: None,
+        },
+        // Fires an item's triggered motion: one modifier, then all of them (#1107).
+        Action::ItemTriggerMotion {
+            item_id: ItemId::new("itm_1"),
+            modifier_id: Some("jolt".into()),
+        },
+        Action::ItemTriggerMotion {
+            item_id: ItemId::new("itm_1"),
+            modifier_id: None,
         },
     ]
 }

@@ -110,16 +110,17 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// `scene.switch` does change what a running stream shows): switching the program or
 /// preview scene, showing or hiding an item (ADR-0101: the opposite action brings the
 /// picture back, though in a keyframe a hide's new override stays until
-/// `item.clear_override`), a live value and its cancel, the loudness meter's reset, and a preview stream
-/// (which MCP can't receive anyway). A tool whose actions are all here
+/// `item.clear_override`), a live value and its cancel, the loudness meter's reset, a fired motion (#1107, which
+/// stills itself) and a preview stream (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 10] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 11] = [
     "audio.reset_loudness",
     "item.hide",
     "item.show",
     "item.toggle",
+    "item.trigger_motion",
     "live.cancel",
     "live.set",
     "preview.subscribe",
