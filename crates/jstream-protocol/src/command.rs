@@ -1626,9 +1626,9 @@ pub enum Action {
     /// drawn through a keyframe of its own that overrides an item in this scene's tree,
     /// that keyframe draws it instead. What each placed scene draws through is studio
     /// state like the program scene: it changes no `rev`, is never undone or saved, and
-    /// `studio.get` reports it. When program draws the scene, the change plays as a
-    /// transition preset's Move from what is on screen, pairing each item with itself,
-    /// as `item.show` does. Emits `scene.keyframe_changed`. Fails with `not_found` for a
+    /// `studio.get` reports it. When program draws the scene and the preset is a `move`
+    /// or `fade`, the change plays as its Move from what is on screen, pairing each item
+    /// with itself, as `item.show` does; any other kind switches at once. Emits `scene.keyframe_changed`. Fails with `not_found` for a
     /// scene, keyframe or preset the collection doesn't have, and with
     /// `invalid_argument` when `scene_id` is itself a keyframe scene or `keyframe_id`
     /// isn't one of its keyframe scenes.

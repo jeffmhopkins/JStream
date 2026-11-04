@@ -347,7 +347,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   the `timeline.*` edits and actions and `source.restart` answer `internal`, and
-  `studio.get` lists no timeline playing;
+  `studio.get` lists no timeline playing. So do keyframe tracks
+  ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
+  `internal`, and `studio.get` lists no placed keyframe;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
   `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"

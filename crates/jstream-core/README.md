@@ -220,7 +220,9 @@ state machine. Contents:
   own layer, chains and boxes, under an internal scene ID (`view_id`, a control
   character, the group's length and both IDs; a collection scene with that ID wins)
   and drawn at `State::items_through`; a group it doesn't override is drawn as itself,
-  so the layer stays shared. A Move within the family flattens a group over the whole
+  so the layer stays shared. A placed scene switched to a keyframe of its own
+  (`scene.set_keyframe`, [Keyframe tracks](#keyframe-tracks)) is drawn through the same
+  kind of view, unless the placing keyframe overrides its tree. A Move within the family flattens a group over the whole
   canvas into its children, which pair by item and move between the two sides'
   values. A group that doesn't flatten (placed elsewhere, or with a blend, chain,
   effects or motion) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
@@ -322,6 +324,10 @@ state machine. Contents:
   studio state beside the program scene, whose cues the live ticker fires on the
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
   restarts a live source (`LiveSources::restart`).
+- **Keyframe tracks** (`engine.rs`,
+  [ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): the keyframe each placed scene
+  is switched to, studio state beside the program scene that `scene.set_keyframe` sets
+  ([Keyframe tracks](#keyframe-tracks)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
@@ -817,7 +823,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   no undo step; it adds its steps to the family's zoom count and publishes the live
   values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
   `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
-  [Timelines](#timelines)),
+  [Timelines](#timelines)), `scene.set_keyframe` (see
+  [Keyframe tracks](#keyframe-tracks)),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
   `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
@@ -1160,6 +1167,34 @@ deprecated `privacy.set` is refused with `unsupported` and audited as a refusal,
 The calls go in 1.0. What a microphone records is decided by the collection: a webcam's
 paired microphone opens only while its audio is on and the source has at least one send
 (see *Audio sources* below), so a webcam no bus hears never records.
+
+<a id="keyframe-tracks"></a>
+## Keyframe tracks
+<!-- @section
+covers = ["crates/jstream-core/src/tests/keyframe_tracks.rs"]
+depends_on = ["crates/jstream-protocol/README.md#keyframe-tracks", "docs/adr/0116-keyframe-tracks.md"]
+-->
+
+The engine keeps the keyframe each placed scene is switched to
+([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)) in `placed_keyframes`, studio
+state like the program scene: no `rev`, never undone or saved, listed by `studio.get`'s
+`keyframes`.
+- **Drawing:** `refresh_shown` hands the planners a copy of the collection with the
+  switched keyframes in `State::placed_keyframes` (`Graph::with_placed_keyframes`),
+  beside the open gestures' live settings. The snapshot planner (`Planner::nested`)
+  draws a placed scene through the view `view_id(scene, keyframe)`, unless the placing
+  scene's own keyframe overrides an item in its tree, which keeps drawing it. Audio
+  activity (`reachable`) follows the same view, so a child the keyframe hides is silent.
+- **A switch** (`set_keyframe`) checks the scene, keyframe and preset, and does nothing
+  when the scene already shows that keyframe. When program draws the scene
+  (`State::draws`) and isn't the scene itself, and the preset (the default one when
+  none is named) is a `move` or `fade`, it takes what is on screen (`screen_now`),
+  switches, and runs the transition from that screen to program as now drawn, as
+  `item.show` does; `preset_run` builds it. It then redraws and sends
+  `scene.keyframe_changed`.
+- **Removal:** after every batch, undo or redo, `changed` releases each switch whose
+  scene or keyframe scene the collection no longer holds (`reconcile_keyframes`), with
+  `scene.keyframe_changed` and no `keyframe_id`.
 
 <a id="snapshots"></a>
 ## Snapshots
@@ -2222,7 +2257,8 @@ brings the mixer in line with the collection under the collection lock:
   inputs are not sources and keep sending to the master at unity.
 - each such input's activity gain (`activity.rs`, ADR-0028's "shown"): 1 for a source
   that follows `always`; for a `when_shown` one, `min(1, Σ w)` over the roots that
-  reach it through visible items and nested scene sources whose audio is on, into
+  reach it through visible items (at the keyframe a placed scene is switched to,
+  [Keyframe tracks](#keyframe-tracks)) and nested scene sources whose audio is on, into
   scenes whose `include_audio` option is on
   ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)). The roots are the
   program scene (weight 1, whatever its own `include_audio`) and every nested scene
