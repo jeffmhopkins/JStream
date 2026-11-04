@@ -1626,9 +1626,9 @@ pub enum Action {
     /// runs its action as the call would run, with the effects that call has (a
     /// `scene.switch` emits `studio.changed`, an `item.show` moves `rev`), credited to the
     /// client that started the timeline. A transition a cue starts takes the cue's exact
-    /// time as its start, so a late tick doesn't delay what is seen. A timeline plays
-    /// whichever scene is on program. Fails with `not_found` for a timeline the
-    /// collection doesn't hold.
+    /// time as its start, so a late tick doesn't delay what is seen. It plays whatever
+    /// scene is on program, since each cue names its own target. Fails with `not_found`
+    /// for a timeline the collection doesn't hold.
     #[serde(rename = "timeline.play")]
     TimelinePlay {
         /// The timeline to play.

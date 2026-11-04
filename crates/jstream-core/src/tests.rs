@@ -21,6 +21,7 @@ mod packs;
 mod preview;
 mod source_sizes;
 mod sources;
+mod timelines;
 mod transitions;
 mod values;
 #[cfg(all(windows, feature = "hw-tests"))]

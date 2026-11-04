@@ -5,8 +5,8 @@
 
 use jstream_protocol::{
     BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, FolderId, ItemId,
-    LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TimelineId, TransitionPresetId,
-    VideoMixId,
+    LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TimelineId,
+    TransitionPresetId, VideoMixId,
 };
 use std::collections::BTreeSet;
 

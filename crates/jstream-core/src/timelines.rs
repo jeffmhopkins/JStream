@@ -322,7 +322,10 @@ mod tests {
         let _ = playing.advance(&id, &t, 300 * MS);
         assert_eq!(playing.next_due(&id, &t), Some(1000 * MS));
         let (fires, step) = playing.advance(&id, &t, 1300 * MS).unwrap_or_default();
-        assert_eq!(fires.iter().map(|f| (f.cue, f.pass)).collect::<Vec<_>>(), [(0, 1)]);
+        assert_eq!(
+            fires.iter().map(|f| (f.cue, f.pass)).collect::<Vec<_>>(),
+            [(0, 1)]
+        );
         assert_eq!(
             step,
             Some(Step::Looped {

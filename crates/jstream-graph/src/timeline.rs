@@ -48,7 +48,11 @@ fn set(
     }
     let timelines = &mut state.scenes[si].timelines;
     if !timelines.contains_key(id) && timelines.len() >= MAX_TIMELINES {
-        return Err(invalid(at, "timeline", "a scene holds at most 32 timelines"));
+        return Err(invalid(
+            at,
+            "timeline",
+            "a scene holds at most 32 timelines",
+        ));
     }
     let old = timelines.insert(id.clone(), timeline.clone());
     Ok(vec![match old {

@@ -292,7 +292,10 @@ mod tests {
             &[0],
         );
         let json = serde_json::to_value(&t).unwrap();
-        assert_eq!(json["loop"], serde_json::json!({"range": {"from_ms": 200, "to_ms": 800}}));
+        assert_eq!(
+            json["loop"],
+            serde_json::json!({"range": {"from_ms": 200, "to_ms": 800}})
+        );
         assert_eq!(json["cues"][0]["action"]["type"], "item.show");
         let once: TimelineInfo =
             serde_json::from_value(serde_json::json!({"timeline_id": "t", "duration_ms": 5}))

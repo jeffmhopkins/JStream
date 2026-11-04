@@ -184,7 +184,18 @@ fire it with `item.trigger_motion`, instead of stepping the item call by call; f
 group's item to shake the group and its masks together. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
-per frame than its own length or it flickers. Changing `html` \
+per frame than its own length or it flickers. \
+A timed sequence (a build-up of reveals, a run of hits at set times, an intro then a \
+loop) belongs in a timeline, not in a page: `timeline.set` stores in a scene a \
+`timeline_id` (unique in the collection), a `duration_ms`, a `loop` (`once`, `loop`, \
+or a `range` with `from_ms` and `to_ms` for an intro then a loop) and `cues` in time order, \
+each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
+`item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`, \
+`source.restart` (a page or video from its start) or another timeline's `play`, `stop` \
+or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
+hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
+after a first play read `timeline.cue_fired` in `events` for errors. \
+Changing `html` \
 reloads the page, which replays the entrance and blanks it for a moment, so put text \
 that changes during a show in a `text` source over it. If creating the source fails \
 because no browser is available on this system, build the graphic from the built-in \

@@ -286,7 +286,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.85 because of
+`PROTOCOL_VERSION` is 0.87 because of timelines: `timeline.set`, `timeline.delete`,
+`timeline.play`, `timeline.stop`, `timeline.seek`, `source.restart`,
+`SceneInfo.timelines`, `studio.get`'s `timelines`, the `timeline.changed` and
+`timeline.cue_fired` events and the `timeline` entity kind
+([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md), a placeholder number the
+release queue sets); 0.85 because of
 `scene.set_camera_motion`, `scene.set_camera_follow`, the action `scene.zoom_camera`,
 `SceneInfo.camera_motion` and `SceneInfo.camera_follow`
 ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)); 0.84 because of `item.trigger_motion`, the `impulse` motion kind
@@ -2118,6 +2123,49 @@ class. Its `named_objects` is the item, so a hotkey binding to it goes with the 
 During a scene switch a moving item keeps moving: a matched pair blends its two sides'
 motion by the transition's progress, an appearing item moves as its new scene says and a
 disappearing one as its old scene said.
+
+<a id="timelines"></a>
+## Timelines
+<!-- @section
+covers = ["crates/jstream-protocol/src/timeline.rs"]
+depends_on = ["docs/adr/0114-timelines-on-the-wire.md"]
+-->
+
+Since 0.87 a scene holds timelines
+([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md) decision 4,
+[ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md), `timeline.rs`):
+`SceneInfo.timelines`, ordered by ID, each a `TimelineInfo` of timed cues.
+- **Shape:** a `timeline_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`,
+  unique across the collection, so an action names it alone), a `name`, a
+  `duration_ms` (at most one hour), a `loop` (`once`, `loop`, or
+  `{"range": {"from_ms", "to_ms"}}` for an intro then a loop) and at most 256 `cues`,
+  each `{at_ms, action}`, in time order. A scene holds at most 32. A cue a loop would
+  never reach (at or past where it jumps back, or past a `once` timeline's end) is
+  refused. `TimelineInfo::problem` is the check every implementation shares.
+- **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
+  `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
+  `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an
+  edit, so playing a timeline adds nothing to an undo history.
+- **Edits:** `timeline.set {scene_id, timeline}` stores one whole, new or in place of
+  the scene's own, and is undone by `timeline.delete` or by `timeline.set` with the old
+  one. An ID another scene holds is `already_exists`. `timeline.delete {timeline_id}`
+  removes one, with the hotkeys bound to it (`removed_hotkeys`). The objects a cue names
+  are not checked: a cue naming a deleted object stays, inert, and fails when it fires.
+  Plugins may not use either edit (`never`), since cues run actions the edit class
+  can't.
+- **Playing** is studio state, like the program scene. `timeline.play {timeline_id}`
+  plays from the start, `timeline.seek {timeline_id, at_ms}` from `at_ms`, running at
+  once the last cue before it for each state it sets (`Action::cue_state`: the program
+  scene, one placement's visibility, one shared value), and `timeline.stop` stops it
+  where it is. A cue runs as its call would, credited to the client that started the
+  timeline, at the cue's exact time on the animation clock. `studio.get` lists the
+  timelines playing (`PlayingTimeline`: where each is, and its pass).
+  `timeline.changed` reports a start, a seek, a loop, an end, a stop or a removal
+  (`TimelineChange`, which parses an unknown value as `unknown`), and
+  `timeline.cue_fired` each cue, with the error its action got.
+- **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
+  effect pack's shader source from its beginning, whatever its `restart_on_show`; other
+  kinds have nothing to restart. Plugins need the `live` class for it.
 
 <a id="geometry"></a>
 ## Item geometry

@@ -28,10 +28,15 @@ const V3: &str = include_str!("fixtures/v3.json");
 /// must.
 const V4: &str = include_str!("fixtures/v4.json");
 
-/// A collection file at schema version 5, the current one: version 4 with a camera on
-/// scene `a`, its camera motion and a follow camera on a display capture (ADR-0113). The
-/// same rule applies once version 6 exists.
+/// A collection file at schema version 5: version 4 with a camera on scene `a`, its
+/// camera motion and a follow camera on a display capture (ADR-0113). It must keep
+/// loading as version 1 must.
 const V5: &str = include_str!("fixtures/v5.json");
+
+/// A collection file at schema version 6, the current one: version 5 with a timeline in
+/// scene `a` and a hotkey that plays it (ADR-0114). The same rule applies once version 7
+/// exists.
+const V6: &str = include_str!("fixtures/v6.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -308,6 +313,55 @@ fn v5_graph() -> Graph {
     graph
 }
 
+/// The v5 fixture's collection, plus timeline `t_intro` in scene `a`, which switches to
+/// scene `b`, shows an item and plays itself from a range, and hotkey `F6` that plays it
+/// (ADR-0114), in one more batch: rev 7.
+fn v6_graph() -> Graph {
+    use jstream_protocol::{Action, Chord, TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
+    let mut graph = v5_graph();
+    let applied = graph.apply(
+        &[
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    timeline_id: TimelineId::new("t_intro"),
+                    name: "Intro".into(),
+                    duration_ms: 3000,
+                    looping: TimelineLoop::Range {
+                        from_ms: 1000,
+                        to_ms: 3000,
+                    },
+                    cues: vec![
+                        TimelineCue {
+                            at_ms: 0,
+                            action: Action::SceneSwitch {
+                                scene_id: SceneId::new("b"),
+                                preset_id: None,
+                            },
+                        },
+                        TimelineCue {
+                            at_ms: 1500,
+                            action: Action::ItemShow {
+                                item_id: ItemId::new("i_screen"),
+                                scene_id: None,
+                            },
+                        },
+                    ],
+                },
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F6"),
+                action: Action::TimelinePlay {
+                    timeline_id: TimelineId::new("t_intro"),
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -371,15 +425,30 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v5_graph().to_collection_json(), V5);
+    assert_eq!(v6_graph().to_collection_json(), V6);
 }
 
 #[test]
-fn the_v5_fixture_loads_exactly() {
+fn the_v6_fixture_loads_exactly() {
+    let expected = v6_graph();
+    let loaded = load(V6);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 5 upgrades unchanged: it has no timelines, and one there is refused.
+#[test]
+fn the_v5_fixture_loads_and_refuses_timelines() {
     let expected = v5_graph();
     let loaded = load(V5);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(6)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+    let mut value: Value = serde_json::from_str(V5).unwrap_or_default();
+    value["scenes"][0]["timelines"] = json!([]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 5, .. })
+    ));
 }
 
 /// Version 4 upgrades unchanged: it has no camera motion or follow camera, and one there

@@ -3643,10 +3643,8 @@ impl State {
         };
         let schedule = crate::timelines::schedule(info);
         if let Some(playing) = self.timelines.stop(timeline_id) {
-            let position = schedule.position(
-                playing.started_ns,
-                crate::timelines::ns(self.action_now()),
-            );
+            let position =
+                schedule.position(playing.started_ns, crate::timelines::ns(self.action_now()));
             self.subscribers.emit(
                 &Event::TimelineChanged {
                     timeline_id: timeline_id.clone(),
@@ -3677,7 +3675,9 @@ impl State {
             return;
         };
         let (cue, pass) = (fire.cue, fire.pass);
-        let outer = self.cue_at.replace(crate::timelines::media_time(fire.at_ns));
+        let outer = self
+            .cue_at
+            .replace(crate::timelines::media_time(fire.at_ns));
         let result = self.action(&by.0, &by.1, c.action.0.clone(), wake);
         self.cue_at = outer;
         self.subscribers.emit(
@@ -3979,13 +3979,12 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
-                    timelines: self.timelines.report(
-                        crate::timelines::ns(self.live.now()),
-                        |id| {
+                    timelines: self
+                        .timelines
+                        .report(crate::timelines::ns(self.live.now()), |id| {
                             let (_, info) = self.graph.state().timeline(id)?;
                             Some(crate::timelines::schedule(info))
-                        },
-                    ),
+                        }),
                 },
                 Query::DeviceList | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));

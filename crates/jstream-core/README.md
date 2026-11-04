@@ -789,6 +789,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
   no undo step; it adds its steps to the family's zoom count and publishes the live
   values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
+  `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
+  [Timelines](#timelines)),
   and `item.show`, `item.hide` and `item.toggle`
   ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
   `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
@@ -1076,6 +1078,46 @@ leaves through that camera, a stinger's items still over what they covered, and 
 screen seen through one camera (a Move cut short) moves it toward the new scene's, for
 every track; one seen through several (a Fade or stinger between cameras) makes the
 switch a Fade (`transition::shared_camera`).
+
+<a id="timelines"></a>
+## Timelines
+<!-- @section
+covers = ["crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/tests/timelines.rs"]
+depends_on = ["crates/jstream-protocol/README.md#timelines", "docs/adr/0114-timelines-on-the-wire.md"]
+-->
+
+The engine plays timelines ([ADR-0114](../../docs/adr/0114-timelines-on-the-wire.md))
+as studio state beside the program scene (`timelines.rs`): `Timelines` keeps, for each
+one playing, when its pass 0 started on the animation clock (the media clock the sources
+and the render thread draw on, in nanoseconds), how far its cues have fired, its pass,
+and the client and request that started it. Nothing of it is saved or undone.
+- **Schedule:** a stored `TimelineInfo` becomes `jstream-anim`'s `Timeline` (`schedule`),
+  whose `due` gives each cue's exact fire time in a window, `seek` the state cues a seek
+  runs, and `position` where it is. `Timelines::advance` takes the cues due up to now,
+  marks them fired (a half-open window, so each fires once a pass) and reports a new
+  pass (`looped`) or the end of a `once` timeline (`ended`, which stops it);
+  `next_due` is the next cue or pass boundary.
+- **Ticks:** the live ticker (`live_tick`, which also sends coalesced `live.changed`
+  events) runs `timeline_tick`, then sleeps until the next timeline is due, as well as
+  until its gestures are. A tick runs every playing timeline's due cues in time order
+  across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
+  it at the cue's time, so that timeline's first cues are due in the next round.
+  `timeline.play` and `timeline.seek` from a client run a tick before they return and
+  start the ticker while a timeline plays (`start_ticker`).
+- **A cue** runs through `State::action`, as the call would, credited to the client
+  and request that started the timeline, with `cue_at` set to its exact time:
+  `action_now` gives that time to `scene.switch`, `item.show`/`hide`/`toggle` and
+  `item.trigger_motion`, so the transition, appear effect or fire it starts begins at
+  the cue's time, however late the tick. Its result is `timeline.cue_fired`'s `error`.
+- **Seek:** `timeline.seek` validates `at_ms` (within a `once` timeline's length, before
+  a loop's jump back), starts the clock `at_ms` earlier, and runs at once the state cues
+  before `at_ms` that `Timeline::seek` keeps.
+- **Removal:** after every batch, undo or redo, `changed` stops each timeline the
+  collection no longer holds (`reconcile_timelines`), with `timeline.changed` `removed`.
+- **`source.restart`** calls `LiveSources::restart`, which restarts the source's running
+  instance (`Source::restart`, at its own time now): a `browser` page reloads, a `media`
+  file seeks to 0 and an effect pack's stand-in starts its program again. A source with
+  no running instance has nothing to restart.
 
 <a id="privacy"></a>
 ## No privacy screen

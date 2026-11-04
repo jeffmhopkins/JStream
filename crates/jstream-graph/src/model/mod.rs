@@ -74,8 +74,7 @@ use jstream_protocol::{
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
     OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
     SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
-    TransitionPresetId,
-    TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
     builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;

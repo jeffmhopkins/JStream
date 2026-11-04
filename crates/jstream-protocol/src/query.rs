@@ -3,7 +3,6 @@
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
-use crate::timeline::{PlayingTimeline, TimelineInfo};
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
@@ -26,6 +25,7 @@ use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
 use crate::profile::ProfileInfo;
 use crate::settings::Settings;
+use crate::timeline::{PlayingTimeline, TimelineInfo};
 use crate::transition::{ItemTransition, TransitionsInfo};
 use crate::youtube::{
     AudienceStatsInfo, BroadcastInfo, BroadcastListStatus, BroadcastType, QuotaInfo, StreamInfo,
