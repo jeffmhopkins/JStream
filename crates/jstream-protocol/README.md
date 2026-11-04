@@ -1984,10 +1984,12 @@ function in this crate so the compositor and the UI share one implementation.
   `perspective_px` ignored. `project_seen`, `drawn_polygon_seen` and `unplace_seen`
   take the camera's `CameraView` and build ADR-0050's homogeneous map with `w = D / f`
   (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
-  plane and the polygon clipping are the same. The picture's up is −y, or −z within
-  0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
-  neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way for an
-  editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
+  plane and the polygon clipping are the same. The picture's up is −y, or within
+  0.01° of the pole −z looking straight down and +z looking straight up, so a camera
+  facing −z keeps its picture upright as it tilts to either pole
+  ([ADR-0111](../../docs/adr/0111-camera-up-at-the-poles.md), #1047). Through `SceneCamera::framing` an item
+  with neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way
+  for an editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
   drags an item to.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio

@@ -334,19 +334,26 @@ fn drawn(
     };
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
-        let target = push_out(edges[(i + len - 1) % len], edges[i], corner, by);
-        // A pushed point that can't be mapped back through a camera keeps the vertex,
-        // as one past the near plane does.
-        let pushed = match geometry.unplace_seen(view, target) {
-            Ok(Some(local)) => match geometry.drawn_vertex_seen(view, content, local) {
-                Ok(pushed) => pushed,
+        let pushed_by = |by: f32| -> Result<Option<DrawnVertex>, RenderError> {
+            let target = push_out(edges[(i + len - 1) % len], edges[i], corner, by);
+            Ok(match geometry.unplace_seen(view, target) {
+                Ok(Some(local)) => match geometry.drawn_vertex_seen(view, content, local) {
+                    Ok(pushed) => pushed,
+                    Err(_) if view.is_some() => None,
+                    Err(err) => return Err(placement_error(err)),
+                },
+                Ok(None) => None,
                 Err(_) if view.is_some() => None,
                 Err(err) => return Err(placement_error(err)),
-            },
-            Ok(None) => None,
-            Err(_) if view.is_some() => None,
-            Err(err) => return Err(placement_error(err)),
+            })
         };
+        // A point pushed by a large blur that can't be mapped back (past the horizon) is
+        // pushed by a pixel instead, so it keeps its anti-aliasing band (#1122 review
+        // N5); one that still can't (past the near plane) keeps the vertex.
+        let mut pushed = pushed_by(by)?;
+        if pushed.is_none() && by > PUSH_OUT {
+            pushed = pushed_by(PUSH_OUT)?;
+        }
         vertices[i] = vertex(&pushed.unwrap_or(*corner));
     }
     Ok(Some(Shape {
@@ -867,6 +874,48 @@ mod tests {
             "{accepted} accepted, {neutral} neutral"
         );
         assert!(neutral > 5_000, "{neutral} neutral");
+    }
+
+    /// #1122 review N5: pushed out by a large blur, a floor's far corners near the horizon
+    /// can't be mapped back to the plane; they are pushed by a pixel instead, so they
+    /// keep their anti-aliasing band rather than stay where the polygon ends.
+    #[test]
+    fn a_push_that_misses_the_plane_falls_back_to_a_pixel() {
+        use jstream_protocol::{Canvas, SceneCamera, Vec3};
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let at = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let camera = SceneCamera {
+            position: at(960.0, 500.0, 600.0),
+            target: at(960.0, 540.0, 0.0),
+            focus_px: Finite32::new(100.0),
+            blur_px: Finite32::new(64.0).expect("finite"),
+            ..SceneCamera::framing(canvas)
+        };
+        let view = camera.view(canvas).expect("a valid camera");
+        // A floor running from under the camera far toward the horizon.
+        let mut floor = ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(960.0, 560.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 60_000.0).expect("positive"),
+        )
+        .expect("geometry");
+        floor.tilt_deg = Finite32::new(90.0).expect("finite");
+        floor.depth_px = Finite32::new(-29_000.0).expect("finite");
+        let shape = super::shape_seen(64, 64, Placement::Geometry(floor), Crop::NONE, Some(&view))
+            .expect("a stored geometry never fails its frame")
+            .expect("the floor is drawn");
+        let len = shape.vertices().len();
+        for (i, v) in shape.vertices().iter().enumerate() {
+            let distance = |e: [f32; 3]| e[0] * v.canvas[0] + e[1] * v.canvas[1] + e[2];
+            let outside = distance(shape.edges[(i + len - 1) % len]).min(distance(shape.edges[i]));
+            assert!(
+                outside < -0.5,
+                "vertex {i} at {:?} isn't pushed out: {outside}",
+                v.canvas
+            );
+        }
     }
 
     /// #1046: a box with neutral 3D so large that its content overflows `f32` draws

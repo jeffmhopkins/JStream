@@ -4,14 +4,16 @@
 //!
 //! The engine draws the picture under the boxes. This module only has to agree with
 //! it, and it does so through the same `jstream-protocol` functions the compositor
-//! uses (`project_seen`, `CameraView::depth_of` and `CameraView::on_plane`).
+//! uses (`drawn_polygon_seen`, clipped to the near plane as the compositor clips it,
+//! `CameraView::depth_of` and `CameraView::on_plane`).
 //!
-//! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md
+//! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md,
+//! docs/adr/0111-camera-up-at-the-poles.md
 
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
-    CameraView, Canvas, CanvasPoint, Finite32, ItemGeometry, Placed, SceneCamera, SceneId, Size,
-    Vec2, Vec3,
+    CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, SceneCamera, SceneId,
+    Size, Vec2, Vec3,
 };
 
 /// The camera an orbit or dolly shows until the collection has it, kept with the scene it
@@ -85,28 +87,47 @@ pub fn view(camera: Option<SceneCamera>, canvas: Canvas) -> Option<CameraView> {
     camera?.view(canvas).ok()
 }
 
-/// The box's four corners on the canvas through `view`, or `None` when any is behind the
-/// camera or not finite.
-pub fn corners(geometry: &ItemGeometry, view: &CameraView) -> Option<[Point; 4]> {
-    let quad = geometry.project_seen(Some(view)).ok()?;
-    let mut out = [Point { x: 0.0, y: 0.0 }; 4];
-    for (slot, corner) in out.iter_mut().zip(quad.corners) {
-        let Placed::At(at) = corner else {
-            return None;
-        };
-        *slot = Point { x: at.x, y: at.y };
-    }
-    Some(out)
+/// The part of the box in front of the camera, as the compositor draws it: the whole box
+/// clipped to the near plane, three to five corners on the canvas (#1054). `None` when
+/// none of it is in front of the camera or it is seen edge-on. Convex, as a clipped
+/// rectangle is.
+pub fn polygon(geometry: &ItemGeometry, view: &CameraView) -> Option<Vec<Point>> {
+    let width = geometry.size.width.get();
+    let height = geometry.size.height.get();
+    let whole_box = ContentRect {
+        left: -width * 0.5,
+        top: -height * 0.5,
+        width,
+        height,
+        u0: 0.0,
+        v0: 0.0,
+        u1: 1.0,
+        v1: 1.0,
+    };
+    let polygon = geometry.drawn_polygon_seen(Some(view), &whole_box).ok()??;
+    let points: Vec<Point> = polygon
+        .vertices()
+        .iter()
+        .map(|v| Point {
+            x: v.canvas.x,
+            y: v.canvas.y,
+        })
+        .collect();
+    (points.len() >= 3 && points.iter().all(|p| p.x.is_finite() && p.y.is_finite()))
+        .then_some(points)
 }
 
-/// Whether `point` is inside the box as the camera shows it: inside its four projected
-/// corners, either winding (a box seen from behind is mirrored).
+/// Whether `point` is inside the box as the camera shows it: inside the part of it in
+/// front of the camera, either winding (a box seen from behind is mirrored).
 pub fn contains(geometry: &ItemGeometry, view: &CameraView, point: Point) -> bool {
-    let Some(quad) = corners(geometry, view) else {
+    let Some(outline) = polygon(geometry, view) else {
         return false;
     };
+    let len = outline.len();
     let side = |a: Point, b: Point| (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
-    let sides = [0, 1, 2, 3].map(|i| side(quad[i], quad[(i + 1) % 4]));
+    let sides: Vec<f32> = (0..len)
+        .map(|i| side(outline[i], outline[(i + 1) % len]))
+        .collect();
     sides.iter().all(|s| *s >= 0.0) || sides.iter().all(|s| *s <= 0.0)
 }
 
@@ -136,21 +157,21 @@ pub fn topmost_at<'a, T>(
     best.map(|(_, id)| id)
 }
 
-/// The box's outline through the camera as SVG `points`, or empty when a corner is
-/// behind it.
+/// The outline of the part of the box in front of the camera as SVG `points`, or empty
+/// when none of it is.
 pub fn outline(geometry: &ItemGeometry, view: &CameraView) -> String {
-    corners(geometry, view).map_or_else(String::new, |quad| {
-        quad.iter().fold(String::new(), |mut points, at| {
+    polygon(geometry, view).map_or_else(String::new, |outline| {
+        outline.iter().fold(String::new(), |mut points, at| {
             points.push_str(&format!("{},{} ", at.x, at.y));
             points
         })
     })
 }
 
-/// The upright box around the box as the camera shows it, for a marquee to touch, or
-/// `None` when it isn't wholly in front of the camera.
+/// The upright box around the part of the box in front of the camera, for a marquee to
+/// touch and a label to sit on, or `None` when none of it is.
 pub fn screen_box(geometry: &ItemGeometry, view: &CameraView) -> Option<ItemGeometry> {
-    let quad = corners(geometry, view)?;
+    let quad = polygon(geometry, view)?;
     let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for at in quad {
         left = left.min(at.x);
@@ -254,7 +275,22 @@ pub fn finite(value: f32, fallback: Finite32) -> Finite32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::FitMode;
+    use jstream_control::protocol::{FitMode, Placed};
+
+    /// The box's four corners through `view` by `project_seen`, or `None` when any is
+    /// behind the camera or not finite: what `polygon` agrees with for a box wholly in
+    /// front.
+    fn corners(geometry: &ItemGeometry, view: &CameraView) -> Option<[Point; 4]> {
+        let quad = geometry.project_seen(Some(view)).ok()?;
+        let mut out = [Point { x: 0.0, y: 0.0 }; 4];
+        for (slot, corner) in out.iter_mut().zip(quad.corners) {
+            let Placed::At(at) = corner else {
+                return None;
+            };
+            *slot = Point { x: at.x, y: at.y };
+        }
+        Some(out)
+    }
 
     const CANVAS: Canvas = Canvas {
         width: 1920,
@@ -445,6 +481,40 @@ mod tests {
         assert!((distance(back) / distance(start) - (0.5f32).exp()).abs() < 0.001);
         let close = dolly(start, -100_000.0);
         assert!((distance(close) - MIN_DOLLY_PX).abs() < 0.01);
+    }
+
+    /// #1054: an item passing beside the camera, partly behind it, is outlined, labelled
+    /// and clicked by the part in front of it, which is what the compositor draws.
+    #[test]
+    fn an_item_partly_behind_the_camera_is_outlined_and_hit_by_its_front() {
+        let seen = framing();
+        let camera_z = SceneCamera::framing(CANVAS).position.z.get();
+        // 200 px in front of the camera and just below its axis, tilted nearly flat and
+        // long enough to reach well behind it.
+        let mut g = item(960.0, 560.0, 100.0, 2000.0, camera_z - 200.0);
+        g.tilt_deg = Finite32::new(80.0).expect("finite");
+        assert!(
+            corners(&g, &seen).is_none(),
+            "a corner is behind the camera"
+        );
+        let front = polygon(&g, &seen).expect("its front is drawn");
+        assert!((3..=5).contains(&front.len()), "{front:?}");
+        let Placed::At(centre) =
+            seen.place(Vec3::new(960.0, 560.0, camera_z - 200.0).expect("finite"))
+        else {
+            panic!("the centre is in front");
+        };
+        let centre = Point {
+            x: centre.x,
+            y: centre.y,
+        };
+        assert!(
+            contains(&g, &seen, centre),
+            "its centre, at {centre:?}, is hit"
+        );
+        assert!(!contains(&g, &seen, Point { x: 100.0, y: 100.0 }));
+        assert!(!outline(&g, &seen).is_empty());
+        assert!(screen_box(&g, &seen).is_some());
     }
 
     #[test]
