@@ -221,8 +221,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of
   `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
   `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
-  0.74 because of `output.set_path` (#1072); 0.73 because of the
-  `profile.get` query
+  0.75 because of the `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74
+  because of `output.set_path` (#1072); 0.73 because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
   (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
@@ -742,12 +742,15 @@ parameters), so a reader of 0.7 messages sees no change for those.
 
 All of this is added in 0.22. A placement has an `opacity`, an alpha multiplier from 0 to 1 (default 1), and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
 sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
+`normal_srgb` and `additive_srgb` (0.75) are `normal` and `additive` mixed in
+sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
+same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain
@@ -1758,7 +1761,7 @@ after 1.0:
   clients skip. An unknown error code still has its `message`. From 0.9, an output's
   `OutputKind`, `RtmpTarget` and `RecordContainer` parse an unknown `type` or value as
   `Unknown` too, so later output kinds won't break a 0.9 client. Not yet covered: a new
-  value of a string enum (`OutputState`, `EntityKind`) inside a known message breaks an
+  value of a string enum (`OutputState`, `EntityKind`, `BlendMode`) inside a known message breaks an
   older client's parse, so adding one needs open question 8 settled first. The same
   break happened once, in 0.9 itself: `OutputKind` had no fallback in 0.7 and 0.8, so a
   0.7 or 0.8 client can't parse `output.list` or `state.get` once a `record` output
@@ -1781,7 +1784,12 @@ after 1.0:
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.75): a later kind or
   property won't break a 0.75 client's `state.get`. `check_motion` refuses an `Unknown`
-  in an edit, and the engine draws one as still.
+  in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
+  `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
+  0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
+  whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
+  `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
+  break counts as a minor bump, are part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -2083,11 +2091,12 @@ described above.
    `live.changed`, meters) will need opt-in subscriptions. Until then every client
    receives a tick about once a second while the pipeline runs, and up to 30
    `live.changed` a second per gesture while someone drags.
-8. **Unknown values in string enums.** `OutputState` and `EntityKind` have no `Unknown`
-   fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
+8. **Unknown values in string enums.** `OutputState`, `EntityKind` and `BlendMode` have no
+   `Unknown` fallback, so adding a value breaks older clients that parse it. Add fallbacks, or treat
    a new value as a major change? `OutputKind`, `RtmpTarget` and `RecordContainer` have
    fallbacks from 0.9 and `KindCategory` from 0.30, but 0.9's `record` kind already breaks 0.7 and 0.8 clients reading
-   outputs (see Compatibility); kept as a minor bump until this is decided.
+   outputs, and 0.75's `_srgb` blend modes break older clients reading items (see
+   Compatibility); kept as a minor bump until this is decided.
 9. **Schema delivery.** The schema lives in an `insta` snapshot. Should `xtask gen-schema`
    also publish a plain `.json` file for non-Rust clients?
 10. **ADR.** Should the envelope, tagging and compatibility policy above be recorded as an
