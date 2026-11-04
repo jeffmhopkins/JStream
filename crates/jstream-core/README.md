@@ -576,7 +576,7 @@ state machine. Contents:
 
 Not here yet: live audio values (faders), the audio and outputs snapshots, and the
 platform's Windows devices. See
-[Design › Not yet](#design).
+[Not yet](#not-yet).
 
 Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
 every subsystem, and it must sit above `jstream-server` and `jstream-mcp` so that none
@@ -585,8 +585,8 @@ of the clients can reach it.
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["crates/jstream-core/src/**", "crates/jstream-core/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#design", "crates/jstream-control/README.md#design"]
+covers = ["crates/jstream-core/src/lib.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/session.rs"]
+depends_on = ["docs/ARCHITECTURE.md#protocol", "docs/adr/0013-command-model.md", "crates/jstream-protocol/README.md#design", "crates/jstream-protocol/README.md#calls", "crates/jstream-control/README.md#design"]
 -->
 
 ### Engine and sessions
@@ -633,7 +633,11 @@ WebSocket API does, minus serialization:
   is ever installed. That is also how the mock answers, so the differential script
   sends `plugin.enable` and `plugin.grant` for a plugin that isn't installed.
 
-### Dependencies
+<a id="dependencies"></a>
+## Dependencies
+<!-- @section
+covers = ["crates/jstream-core/Cargo.toml", "crates/jstream-core/src/private_file.rs"]
+-->
 
 `jstream-protocol` (the messages), `jstream-control` (the `Control` trait),
 `jstream-graph` (the collection and every edit rule), `jstream-media` (frames, the
@@ -676,7 +680,12 @@ are in lower layers
 ([R-ARCH-002](../../docs/RULES.md#R-ARCH-002)), and none of the clients depends on this
 crate.
 
-### Calls
+<a id="calls"></a>
+## Calls
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/session.rs", "crates/jstream-core/src/history.rs", "crates/jstream-core/src/kinds.rs"]
+depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crates/jstream-protocol/README.md#batches"]
+-->
 
 Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
@@ -764,7 +773,12 @@ delete, and a keyframe scene with a role deleted and undone. It leaves out an
 clients were developed against, and `jstream-graph` the only implementation of the edit rules
 here.
 
-### Undo and redo
+<a id="undo"></a>
+## Undo and redo
+<!-- @section
+covers = ["crates/jstream-core/src/history.rs"]
+depends_on = ["crates/jstream-protocol/README.md#undo"]
+-->
 
 Per client ([ADR-0013](../../docs/adr/0013-command-model.md),
 [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)), in `history.rs`, under the
@@ -818,7 +832,12 @@ collection lock:
 - **Not steps:** actions (outputs, stream keys, live values), queries and history
   calls. A gesture's step is its committing batch.
 
-### Live values
+<a id="live-values"></a>
+## Live values
+<!-- @section
+covers = ["crates/jstream-core/src/gesture.rs"]
+depends_on = ["crates/jstream-protocol/README.md#live-values"]
+-->
 
 Live values ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)) live in
 `gesture.rs`'s table, under the collection lock, and reach the render thread through
@@ -887,7 +906,12 @@ the render parameter channel, never through the collection:
   its adopted generation in the same handover, and the `live` parameters of filter and
   effect kinds.
 
-### Program scene
+<a id="program-scene"></a>
+## Program scene
+<!-- @section
+covers = ["crates/jstream-core/src/studio.rs", "crates/jstream-core/src/transition.rs"]
+depends_on = ["crates/jstream-protocol/README.md#transitions"]
+-->
 
 The program scene is runtime state in `studio.rs`, under the collection lock beside the
 outputs' state, not in the graph
@@ -979,7 +1003,11 @@ screen seen through one camera (a Move cut short) moves it toward the new scene'
 every track; one seen through several (a Fade or stinger between cameras) makes the
 switch a Fade (`transition::shared_camera`).
 
-### No privacy screen
+<a id="privacy"></a>
+## No privacy screen
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs"]
+-->
 
 JStream has no privacy screen
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §4). The
@@ -989,7 +1017,12 @@ The calls go in 1.0. What a microphone records is decided by the collection: a w
 paired microphone opens only while its audio is on and the source has at least one send
 (see *Audio sources* below), so a webcam no bus hears never records.
 
-### Snapshots
+<a id="snapshots"></a>
+## Snapshots
+<!-- @section
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
+-->
 
 `video.snapshot` returns the program mix as a PNG
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)): the program
@@ -1668,7 +1701,12 @@ call's future waits for the snapshot thread, so an async host's worker thread is
 free while the GPU renders, reads back and the PNG is encoded. This query is
 control-plane work, not the render thread.
 
-### Preview streams
+<a id="preview-streams"></a>
+## Preview streams
+<!-- @section
+covers = ["crates/jstream-core/src/preview/**"]
+depends_on = ["crates/jstream-protocol/README.md#binary-streams"]
+-->
 
 `preview.subscribe` ([jstream-protocol › Design](../jstream-protocol/README.md#design))
 sends the program mix, as `video.snapshot` draws it, to the session that asked. The
@@ -1790,7 +1828,12 @@ snapshot, so the preview shows the transition onto the new program scene, then t
 scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
 program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.
 
-### Events
+<a id="events"></a>
+## Events
+<!-- @section
+covers = ["crates/jstream-core/src/events.rs"]
+depends_on = ["crates/jstream-protocol/README.md#events"]
+-->
 
 Each `events()` call opens an independent subscription with an unbounded queue, so no
 event is dropped ([jstream-control open question 1](../jstream-control/README.md#design)
@@ -1806,7 +1849,11 @@ woken after the engine's lock is released. A stream ends, after what it buffered
 its session is dropped or when the engine goes away (its last handle and session);
 an ended stream stays ended.
 
-### Drop counts (`stats.tick`)
+<a id="drop-counts"></a>
+## Drop counts (`stats.tick`)
+<!-- @section
+covers = ["crates/jstream-core/src/drops.rs"]
+-->
 
 [R-RT-004](../../docs/RULES.md#R-RT-004) says overload drops are counted and reported in
 `stats.tick`. The stages already count. The engine does not count a second time.
@@ -1858,7 +1905,11 @@ and their sources load the counters those handles expose. `drops` runs on the sa
 thread and must not call back into the engine. The fake capture generates a frame when
 it is read, so it does not simulate mailbox skips.
 
-### Engine load (`stats.tick`'s `load`)
+<a id="engine-load"></a>
+## Engine load (`stats.tick`'s `load`)
+<!-- @section
+covers = ["crates/jstream-core/src/load.rs"]
+-->
 
 Each tick also carries the engine's load (protocol 0.48; `load.rs`): the milliseconds
 since the engine started, the program frames drawn so far, the process's CPU time and
@@ -1876,7 +1927,11 @@ holds the engine weakly and emits a tick about once a second while no program st
 `jstream-stats` thread runs, ending once the last engine handle is gone. The daemon and
 the desktop app start it; tests and an embedding host call `emit_stats_tick` as before.
 
-### Output stats (`stats.tick`'s `outputs`)
+<a id="output-stats"></a>
+## Output stats (`stats.tick`'s `outputs`)
+<!-- @section
+covers = ["crates/jstream-core/src/output_stats.rs"]
+-->
 
 Each tick also lists every running output's live stats (protocol 0.57;
 `output_stats.rs`). The output thread counts each packet the muxer takes while the
@@ -1908,7 +1963,12 @@ just while it reconnects. Under the collection lock the engine then makes an out
 `reconnecting` `poor`. The stop drops the meter with the output's drop guard, so the
 next tick leaves the output out. A virtual camera output has no meter yet.
 
-### Audio routing (`meters.tick`)
+<a id="audio-routing"></a>
+## Audio routing (`meters.tick`)
+<!-- @section
+covers = ["crates/jstream-core/src/audio.rs", "crates/jstream-core/src/activity.rs", "crates/jstream-core/src/filters.rs"]
+depends_on = ["crates/jstream-protocol/README.md#audio"]
+-->
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md)'s mixer lives in the program stage,
 so the collection's audio reaches it only while an output runs. When the program
@@ -2022,7 +2082,12 @@ and never allocate after) and publishes through atomics (`MasterMeters`). An
 restarts the integrated loudness. With no program stage running, no `meters.tick` is
 emitted and `audio.reset_loudness` does nothing.
 
-### Outputs
+<a id="outputs"></a>
+## Outputs
+<!-- @section
+covers = ["crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/youtube.rs", "crates/jstream-core/src/runtime/pipeline.rs", "crates/jstream-core/src/runtime/publish.rs", "crates/jstream-core/src/runtime/sink.rs", "crates/jstream-core/src/runtime/vcam.rs"]
+depends_on = ["crates/jstream-protocol/README.md#outputs"]
+-->
 
 An output's configuration is collection state (`output.create`, `output.set_target`,
 `output.set_path`, `output.delete`, kept by `jstream-graph`); a running output keeps the
@@ -2487,7 +2552,12 @@ the log while `connect_rtmp` refuses an empty key, and checks that a plain `rtmp
 URL to another machine logs one warning naming the host and nothing from the path,
 and that `rtmps://` and loopback log none.
 
-### WASM plugins
+<a id="wasm-plugins"></a>
+## WASM plugins
+<!-- @section
+covers = ["crates/jstream-core/src/plugins/**"]
+depends_on = ["crates/jstream-protocol/README.md#plugins"]
+-->
 
 The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in process
 (ADR-0075), under ADR-0069's limits and grants. With a plugin folder, it saves them
@@ -2590,7 +2660,11 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   `plugin.uninstall` yet, so an unwanted plugin stays saved, disabled, until
   `plugins.json` is edited).
 
-### Locking
+<a id="locking"></a>
+## Locking
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/session.rs"]
+-->
 
 `std::sync::Mutex` locks, always taken in one order: a session's identity lock (held
 by `hello` while it registers the client), then the start lock (held by
@@ -2659,7 +2733,11 @@ running outputs' polls and then their audience readings have a mutex each, taken
 that order, and the quota estimate's is a leaf, taken under the client's to charge a
 call and never while taking another.
 
-### Logging
+<a id="logging"></a>
+## Logging
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/session.rs"]
+-->
 
 Spans and events go through `tracing` ([R-RS-005](../../docs/RULES.md#R-RS-005)); the
 crate installs no subscriber, the host app does. Each session has an `info` span
@@ -2674,7 +2752,11 @@ name and protocol version, and a call before `hello` are `debug`. Only names, ID
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)).
 
-### Audit log
+<a id="audit-log"></a>
+## Audit log
+<!-- @section
+covers = ["crates/jstream-core/src/audit.rs", "crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/private_file.rs"]
+-->
 
 Every agent action goes to the audit log
 ([ADR-0006](../../docs/adr/0006-mcp-full-access.md),
@@ -2740,7 +2822,11 @@ are UTC, RFC 3339 to the millisecond, formatted without a date crate.
 `jstream-daemon` injects an `AuditFile` in its log directory
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
-### Collection file
+<a id="collection-file"></a>
+## Collection file
+<!-- @section
+covers = ["crates/jstream-core/src/collection.rs", "crates/jstream-core/src/private_file.rs"]
+-->
 
 `Engine::with_collection_file(path)` loads the collection from `path`
 (`jstream-graph`'s `Graph::with_collection_json`, checked against the engine's kinds)
@@ -2771,7 +2857,10 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 `jstream-daemon`'s `--collection` option turns this on
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
 
-### Not yet
+<a id="not-yet"></a>
+## Not yet
+<!-- @section
+-->
 
 - **Live audio values** (faders and sends) and kind parameters marked `live`
   (see *Live values*).

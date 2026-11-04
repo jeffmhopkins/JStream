@@ -376,7 +376,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 ## Design
 <!-- @section
 covers = ["apps/jstream-daemon/src/**", "apps/jstream-daemon/Cargo.toml", "apps/jstream-daemon/build.rs"]
-depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "docs/ARCHITECTURE.md#persistence"]
+depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/README.md#design", "crates/jstream-core/README.md#snapshots", "crates/jstream-core/README.md#outputs", "crates/jstream-core/README.md#wasm-plugins", "crates/jstream-core/README.md#logging", "crates/jstream-core/README.md#audit-log", "docs/ARCHITECTURE.md#persistence"]
 -->
 
 - **One engine, a session per connection.** `serve.rs` builds one `Engine` and hands
