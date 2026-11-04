@@ -1446,7 +1446,9 @@ pub enum Action {
     },
     /// Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as
     /// `item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is
-    /// the keyframe's override if it has one, else the item's own.
+    /// the keyframe's override if it has one, else the item's own. An action takes no
+    /// `expected_rev` or idempotency key, so a retried toggle flips twice: a caller that
+    /// may retry sends `item.show` or `item.hide`, which are safe to repeat.
     #[serde(rename = "item.toggle")]
     ItemToggle {
         /// The item to show or hide.

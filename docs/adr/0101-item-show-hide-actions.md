@@ -41,17 +41,22 @@ disagree with the picture.
    field of an error names the action's field (`scene_id`), not `edits.0.scene_id`.
    `item.toggle` reads the placement's visibility first: a keyframe scene's override if
    it has one, else the item's own. Protocol 0.78.
-2. **They change the collection.** The engine applies the `item.set_visible` the action
-   stands for: `rev` moves on by one, `state.changed` follows (with no `cause`), and the
-   collection saves it. A show of a shown item, or a hide of a hidden one, changes
-   nothing and emits nothing.
+2. **They change the collection.** This extends [ADR-0013](0013-command-model.md)'s split,
+   in which only edits change the collection: these are actions that do, through the
+   edit they stand for. The engine applies the `item.set_visible` the action stands for:
+   `rev` moves on by one, `state.changed` follows (with no `cause`), and the collection
+   saves it. A show of a shown item, or a hide of a hidden one, changes nothing and emits
+   nothing. As actions they take no `expected_rev` and no idempotency key (R-API-004
+   covers edits), so `item.show` and `item.hide` are the safe ones to retry: a retried
+   `item.toggle` flips twice.
 3. **They are never an undo step**, as ADR-0024 §5 and
    [ADR-0013](0013-command-model.md) require of an action. The change is logged for undo
    conflicts like a batch, so another client's undo that would overwrite it fails with
    `undo_conflict` rather than silently undoing a press. The sender's own undo still
    reaches its last batch.
-4. **The item's own effect plays on program.** When the program scene's tree holds the
-   item ([`tree_items`] of its family), the engine runs a Move from what is on screen to
+4. **The item's own effect plays on program.** When the change shows or hides the item
+   on program (the program scene's tree holds it, [`tree_items`] of its family, and
+   program's own placement of it is the one that changed), the engine runs a Move from what is on screen to
    the program scene, pairing every item with itself ([ADR-0049 §3](0049-keyframe-scene-model-and-evaluation.md) pairing within a
    family). Everything else holds still, and only the changed item appears or
    disappears, with its `appear` or `disappear` effect, after its `delay_ms` and with
@@ -74,8 +79,12 @@ disagree with the picture.
    `delete.plan` lists them. Plugins get them with the `edit` class, as
    `item.set_visible`. MCP's `item` tool carries them, and they are in `REVERSIBLE_ACTIONS`
    ([ADR-0098](0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)): the opposite
-   action takes one back, as a `scene.switch` back does, so they don't make it destructive. The web UI binds them from an
-   item's Inspector (Hotkeys: Toggle, Show, Hide).
+   action brings the picture back, as a `scene.switch` back does, so they don't make it
+   destructive. In a keyframe with no visibility override, a hide writes one and the show
+   after it leaves it in place: the keyframe no longer follows its parent's visibility of
+   the item until `item.clear_override` takes the override away. The web UI binds them
+   from an item's Inspector (Hotkeys: Toggle, Show, Hide), naming the keyframe when the
+   item is shown in one.
 
 [`tree_items`]: ../../crates/jstream-graph/src/model/mod.rs
 

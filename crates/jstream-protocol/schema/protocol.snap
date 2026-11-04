@@ -466,7 +466,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own.",
+          "description": "Shows the item if that placement hides it, else hides it (0.78, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
           "properties": {
             "item_id": {
               "$ref": "#/$defs/ItemId",

@@ -1181,12 +1181,20 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 </div>
             </Fold>
         </Show>
-        // Keys that show and hide the item with its own effects (ADR-0101).
+        // Keys that show and hide the item with its own effects (ADR-0101). In a keyframe
+        // scene they change that keyframe's own placement of the item.
         {move || {
-            let item_id = ids.get_value().0;
-            let toggle = jstream_control::protocol::Action::ItemToggle { item_id: item_id.clone(), scene_id: None };
-            let show = jstream_control::protocol::Action::ItemShow { item_id: item_id.clone(), scene_id: None };
-            let hide = jstream_control::protocol::Action::ItemHide { item_id, scene_id: None };
+            let (item_id, scene) = ids.get_value();
+            let scene_id = keyframe_of.with(Option::is_some).then_some(scene);
+            let toggle = jstream_control::protocol::Action::ItemToggle {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+            };
+            let show = jstream_control::protocol::Action::ItemShow {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+            };
+            let hide = jstream_control::protocol::Action::ItemHide { item_id, scene_id };
             view! {
                 <Fold title="Hotkeys" open=false>
                     <HotkeyRow label="Toggle" action=toggle />

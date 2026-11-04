@@ -3633,16 +3633,25 @@ impl State {
             })?;
             Some((program.clone(), run))
         });
-        // What is on screen before the change, which the item's effect starts from.
-        let from = run
-            .as_ref()
-            .map(|(program, run)| self.screen_now(program, run, now));
+        // What is on screen before the change, which the item's effect starts from, and
+        // whether program showed the item then.
+        let from = run.as_ref().map(|(program, run)| {
+            let shown = self.graph.state().visible_in(&item_id, Some(program));
+            (self.screen_now(program, run, now), shown)
+        });
         let applied = self
             .graph
             .apply_with_running(&edits, None, &running)
             .map_err(action_field)?;
         self.history
             .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        // A placement program doesn't draw (another keyframe's, or the item's own under
+        // a program keyframe that overrides it) changes nothing there, so it starts no
+        // run, and a transition in flight keeps its own.
+        let from = from.and_then(|(from, shown)| {
+            let program = &run.as_ref()?.0;
+            (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
+        });
         if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
             let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);

@@ -415,7 +415,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
   the parent's), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
-  the item's `item.toggle`, `item.show` or `item.hide`, as a scene's Hotkey row is,
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
   source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its

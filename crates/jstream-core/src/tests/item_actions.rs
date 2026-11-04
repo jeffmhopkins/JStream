@@ -342,3 +342,81 @@ fn a_hotkey_binds_a_toggle_and_goes_with_its_item() {
         "the undo brings the binding back with the item"
     );
 }
+
+/// A `fade` default preset that runs for a minute, so a switch is still in flight when
+/// the test acts.
+fn slow_fade_default() -> Vec<Edit> {
+    let mut list = fade_default();
+    if let Edit::TransitionCreate { duration_ms, .. } = &mut list[0] {
+        *duration_ms = 60_000;
+    }
+    list
+}
+
+fn switch(control: &dyn Control, scene: &str) {
+    act(
+        control,
+        Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: None,
+        },
+    )
+    .expect("switches");
+}
+
+/// A placement program doesn't draw changes nothing on screen: a keyframe of the program
+/// scene that program isn't showing starts no run.
+#[test]
+fn a_toggle_of_a_placement_program_doesnt_draw_starts_no_run() {
+    let mut extra = fade_default();
+    extra.push(Edit::SceneCreateVariant {
+        scene_id: SceneId::new("k"),
+        variant_of: SceneId::new("a"),
+        name: "K".into(),
+    });
+    let engine = scene(extra);
+    let control = connected(&engine);
+    act(&control, toggle("a2", Some("k"))).expect("toggles k's placement");
+    assert_eq!(tracks(&engine), None, "a on program shows no change");
+}
+
+/// A press while a switch is in flight retargets it from what is on screen, so the
+/// item appears over the rest of the switch; a press program doesn't see leaves the
+/// switch as it was.
+#[test]
+fn a_press_during_a_switch_continues_it_and_one_program_doesnt_see_leaves_it() {
+    let mut extra = slow_fade_default();
+    extra.extend([
+        create("b"),
+        add("b", "b1", "red"),
+        add("b", "b2", "red"),
+        hidden("b2", None),
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("bk"),
+            variant_of: SceneId::new("b"),
+            name: "BK".into(),
+        },
+    ]);
+    let engine = scene(extra);
+    let control = connected(&engine);
+    switch(&control, "b");
+    let switching = tracks(&engine).expect("the switch runs");
+    act(&control, toggle("b2", Some("bk"))).expect("toggles bk's placement");
+    assert_eq!(
+        tracks(&engine).as_ref(),
+        Some(&switching),
+        "program doesn't draw bk, so the switch runs on as it was"
+    );
+    act(&control, show("b2")).expect("shows b2");
+    let tracks = tracks(&engine).expect("still running");
+    assert!(
+        tracks.iter().any(|track| matches!(
+            track,
+            Track::Appear {
+                effect: Effect::Fade,
+                ..
+            }
+        )),
+        "b2 fades in over the rest of the switch: {tracks:?}"
+    );
+}
