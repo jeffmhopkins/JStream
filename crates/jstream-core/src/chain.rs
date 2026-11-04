@@ -2436,6 +2436,73 @@ mod tests {
         );
     }
 
+    /// `cam` in the left half of the canvas, flipped upside down, with a vignette on the
+    /// item. In box space the vignette is the box's ellipse; with its effects in canvas
+    /// space (ADR-0106) it is drawn over the placed item, so it is the canvas's ellipse,
+    /// whatever the item's place and flip, and the right half stays clear.
+    #[test]
+    fn golden_a_vignette_in_canvas_space_is_the_canvas() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(16.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+        geometry.flip_v = true;
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry,
+                },
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BWWWWWWB........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWB........
+            BWWWWWWB........
+            ",
+            "in box space the ellipse is the box's",
+        );
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("cam"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            }],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BBWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            BWWWWWWW........
+            BBBWWWWW........
+            ",
+            "in canvas space the ellipse is the canvas's, cut to the item",
+        );
+    }
+
     /// A `color_correction` filter `id` multiplying by `colour` on `owner`'s video chain.
     fn multiply(owner: FilterOwner, id: &str, colour: &str) -> Edit {
         Edit::FilterAdd {

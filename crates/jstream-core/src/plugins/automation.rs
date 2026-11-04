@@ -81,6 +81,10 @@ pub(crate) struct Registry {
     /// engine, so other tests' installs don't wait too.
     #[cfg(test)]
     pub(crate) running_delay_ms: AtomicU64,
+    /// For tests: how long a run's [`Instance::disable`] waits before it saves, so a save
+    /// that landed after the report would come late enough to see (#1123).
+    #[cfg(test)]
+    pub(crate) disable_save_delay_ms: AtomicU64,
 }
 
 struct Entry {
@@ -893,7 +897,12 @@ impl Instance {
     }
 
     /// Disables this run after `error`: the plugin's events stop, the entry says why,
-    /// and `plugin.state_changed` reports it. Its instance drops when the thread returns.
+    /// the plugins file is saved, and then `plugin.state_changed` reports it. Its instance
+    /// drops when the thread returns.
+    ///
+    /// The save comes first so that a client which has seen the report also sees the file
+    /// that holds it. Otherwise this thread's save could still land after the client had
+    /// read and rewritten the file, putting the old contents back (#1123).
     fn disable(&self, error: &PluginError) {
         let reason = match error {
             PluginError::OutOfFuel | PluginError::Deadline => PluginDisabledReason::CpuLimit,
@@ -920,8 +929,15 @@ impl Instance {
             (running.events, entry.name.clone())
         };
         events::close(events);
-        disabled(&engine, &self.plugin_id, reason, name);
+        #[cfg(test)]
+        thread::sleep(std::time::Duration::from_millis(
+            engine
+                .automation()
+                .disable_save_delay_ms
+                .load(Ordering::Relaxed),
+        ));
         save(&engine);
+        disabled(&engine, &self.plugin_id, reason, name);
     }
 }
 

@@ -40,6 +40,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   takes (`item.set_transform`, `item.set_geometry`, `item.set_crop`, `source.set_settings`,
   `scene.set_camera`), so every
   implementation agrees.
+
+<a id="contents-commands"></a>
+## Contents: commands
+<!-- @section
+covers = ["crates/jstream-protocol/src/command.rs"]
+-->
+
 - **Commands** (`command.rs`): `Edit` (`scene.create`, `scene.create_variant`,
   `scene.rename`, `scene.delete`,
   `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
@@ -56,7 +63,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
@@ -67,11 +74,18 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `pack.write`, `pack.delete`), with
+  `effect.enable`, `pack.write`, `pack.delete`, `values.set`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action; `Batch`, whose
   optional `ends_gesture` commits a gesture; and the `Command`/`CommandClass`
   classification view.
+
+<a id="contents-state"></a>
+## Contents: collection state
+<!-- @section
+covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/output.rs", "crates/jstream-protocol/src/hotkey.rs", "crates/jstream-protocol/src/encoder.rs", "crates/jstream-protocol/src/mix.rs", "crates/jstream-protocol/src/audio.rs", "crates/jstream-protocol/src/organise.rs", "crates/jstream-protocol/src/query.rs"]
+-->
+
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   `FilterOwner` (tagged `type`: `source`, `master`, `output`, `scene`, `item` and
   `keyframe`),
@@ -109,6 +123,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
   `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
   implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
+
+<a id="contents-calls"></a>
+## Contents: queries, kinds and events
+<!-- @section
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+-->
+
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
   `output.list`, `output.status`, `encoder.list`, `video_mix.list`, `bus.list`,
   `video.snapshot`, `kind.list`,
@@ -116,7 +137,7 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `pack.list`,
-  `pack.read` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
@@ -161,8 +182,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `stats.tick` (with `DropCounts`, `EngineLoad`, `ChainCost` and each running output's
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
-  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed` and
-  `gpu.device_lost`.
+  `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
+  `gpu.device_lost` and `values.changed`.
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -171,14 +192,21 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   person grants, with `check`, which returns the `forbidden` error, and `problem`),
   `settings_reach` and `Reach` (the hosts and files a settings map names),
   `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
-  `PluginRequest`, what `plugin.list` reports ([Plugins](#design)).
+  `PluginRequest`, what `plugin.list` reports ([Plugins](#plugins)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`, `png`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
-  queues frames applies ([Binary streams](#design)).
+  queues frames applies ([Binary streams](#binary-streams)).
+
+<a id="contents-errors"></a>
+## Contents: errors, IDs and numbers
+<!-- @section
+covers = ["crates/jstream-protocol/src/error.rs", "crates/jstream-protocol/src/id.rs", "crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/finite.rs"]
+-->
+
 - **Errors** (`error.rs`): `ProtocolError`, a `thiserror` enum whose variants have stable
   codes, `Blocker`, the `blockers` detail of a refused delete, and `WireError`, its wire
   form with a message.
@@ -188,6 +216,13 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Numbers** (`finite.rs`): `Finite32`, the only float type on the wire, which rejects
   NaN, infinity and out-of-range numbers at construction and deserialization. Computed
   results (`CanvasPoint`, `ContentRect`, `LegacyQuad`) use plain `f32`.
+
+<a id="contents-geometry"></a>
+## Contents: geometry
+<!-- @section
+covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/src/geometry/**"]
+-->
+
 - **Geometry** (`geometry.rs`): [`ItemGeometry`](src/geometry.rs), `Canvas`,
   `PlacementForm` and the shared placement formula
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). `project` places the
@@ -195,10 +230,12 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
   `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
   ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
-  a geometry ([Item geometry](#design)). `geometry/camera.rs` holds the scene camera
+  a geometry ([Item geometry](#geometry)). `geometry/camera.rs` holds the scene camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
-  and `CameraView`, the camera seen on one canvas. `drawn_polygon_seen`, `unplace_seen`,
+  and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
+  depth-of-field blur at a distance along its view
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
@@ -212,141 +249,162 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.79 because `item.set_opacity`,
-  `item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101), with
-  0.76 to 0.78 left to changes that claimed them first; 0.75 because of the `normal_srgb` and
-  `additive_srgb` blend modes (ADR-0105); 0.74 because of `output.set_path` (#1072); 0.73
-  because of the `profile.get` query
-  ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
-  effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
-  (`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
-  limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
-  may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
-  binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
-  codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
-  left to a change that claimed it first; 0.70 because of `scene.set_camera` and
-  `SceneInfo.camera`, a live value too
-  ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
-  `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
-  takes a source's settings whose kind marks them `live` (`source.set_settings`,
-  [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
-  `stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
-  `stage_chains`, `stage_layers` and `stage_passes`, #980,
-  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.65 added
-  `scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
-  leaves a scene's audio out of every nesting of it and whose `background` is the
-  colour a scene is drawn over
-  ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.64 let the
-  engine's `compressor` audio filter kind take a sidechain `key`, a `source` reference it ducks
-  under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
-  engine accepts it); 0.63 made a keyframe
-  scene override an item's effects
-  ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
-  `ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
-  `keyframe` filter owner); 0.62 added the
-  `too_large` error and `Welcome.max_request_bytes`, a message over the server's request
-  limit refused with the connection kept open
-  ([ADR-0074](../../docs/adr/0074-too-large-requests.md)); 0.61 blamed a GPU device
-  loss on the effect-pack kinds that drew before it, which are quarantined
-  until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
-  `quarantined` and the `effect.enable` action, [Effect quarantine](#design)); 0.60
-  made the master stage and every output take video filters on their `video` chain
-  (ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
-  `chain`); 0.59 made outputs carry
-  audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
-  output as a `bus.delete` blocker ([Audio](#design)); 0.58 added the
-  `plugin.list` query, the installed WASM plugins with what each manifest asks for and
-  what a person granted ([Plugins](#design)); 0.57 added
-  `stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
-  added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
-  (a projector of the source); 0.55 made a keyframe
-  scene override the children of the groups in its parent's tree (#846; no wire
-  change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
-  add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
-  #846; no wire change); 0.52 added
-  `ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
-  ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.51 added the
-  `activity.list` query, the engine's recent activity with a sentence for each call
-  ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); 0.50 added the
-  `capture_target` parameter type, which a `display` or `window` source's `target` has, so
-  a UI can offer what `capture.targets` lists ([Kinds](#design)); 0.49 made
-  `preview.subscribe` take a `source`, a draft source the collection doesn't hold
-  (`PreviewDraft`, [Binary streams](#design)); 0.48 added `stats.tick`'s `load`, the
-  engine's frame and CPU totals (`EngineLoad`); 0.47 made the engine draw, and so
-  accept, every blend mode
-  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
-  `preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
-  session ([Binary streams](#design)); 0.45 made scenes
-  carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
-  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
-  `hardware_session_limit` error (`output.start` refused a new hardware video session
-  while other outputs held hardware sessions, ADR-0080 §3); 0.43 added scene filters
-  and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
-  `FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
-  `KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
-  `BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.41 added the `VideoCodec`
-  values `hevc` and `av1`, which an encoder profile now accepts; 0.40 added runtime
-  source sizes (the `source.sizes` query and the `source.size_changed` event,
-  `SourceSize`); 0.39 added keyframe
-  scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
-  `overrides`, the batch result's `dropped_overrides`, and placement edits whose
-  `scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
-  estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
-  `StatsPolling`); 0.37 added
-  `output.status`'s `cleartext` (#562); 0.36 added
-  the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
-  shows in the capture; on by default, which is what those kinds did before); 0.35
-  added WASM plugins ([Plugins](#design): `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.34 made
-  the engine accept non-neutral 3D (`tilt_deg`, `turn_deg`, `depth_px` and
-  `perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
-  drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
-  unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
-  privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`, since deprecated by
-  [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) and the `dedicated`
-  flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
-  `flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
-  `scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
-  `labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
-  `label` `delete.plan` targets, entity kinds and blockers); 0.30 added
-  transition presets and studio mode's preview (the `transition.*` edits,
-  `scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
-  `studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
-  `transition` entity kind and kind category); 0.29 added the master stage's and
-  outputs' filter chains (the `master` and `output` filter owners,
-  `OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
-  (the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
-  `state.get` and `output.list`); 0.27 added the `capture.targets` query;
-  0.26 added live values ([Live values](#design): `live.set`, `live.cancel`, `live.list`, the
-  `live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
-  hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
-  `hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
-  references (the `bus` parameter type and reference, which the `waveform` and
-  `spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
-  `bus.delete` refused while one refers to its bus), 0.23 YouTube
-  ([YouTube](#design): the `youtube.*` commands and events, the `youtube`
-  RTMP target, and the YouTube actions' `ActionResult`s,
-  [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), 0.22
-  opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
-  `filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
-  [ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
-  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)), 0.21 pairing
-  (`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
-  `unsupported` error and the `device` entity kind,
-  [ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
-  the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
-  frame), 0.19 audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
-  `audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
-  `scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
-  `studio.changed`, 0.15 `delete.plan` and the
-  `blockers` detail on `invalid_argument`, 0.14 references
-  and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
-  profiles and session sharing, 0.12 groups (`scene.set_role`,
-  `item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
-  and the geometry wire surface ([Item geometry](#design)), 0.10 the `history` calls,
-  0.9 the `record` output kind, 0.8 the kind queries and settings, 0.7 the output
-  edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
-  `video.snapshot`.
+  reflection as the geometry's flip.
+
+<a id="versions"></a>
+## Protocol versions
+<!-- @section
+covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
+-->
+
+`PROTOCOL_VERSION` is 0.83 because `item.set_opacity`,
+`item.add` and a keyframe override take an opacity above 1, to `MAX_OPACITY` (#1101), with
+0.79 to 0.82 left to changes that claimed them first; 0.78 because of the shared values `values.set`, `values.list`
+and `values.changed` (`values.rs`,
+[ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); 0.77 because of
+`SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
+([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)); 0.76
+because of `item.set_effects_space` and `ItemInfo.effects_space`
+([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)); 0.75 because of the
+`normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74 because of
+`output.set_path` (#1072); 0.73 because of the `profile.get` query
+([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
+effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
+(`pack.rs`: `PackFile`, `PackContent`, `PackInfo`, `PackFileInfo` and the write's
+limits, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)), which agents
+may call and no plugin is granted but `pack.list` and `pack.read`, and no hotkey
+binds; 0.71 because of `item.set_locked`, `ItemInfo.locked` and the `png` preview
+codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), with 0.69
+left to a change that claimed it first; 0.70 because of `scene.set_camera` and
+`SceneInfo.camera`, a live value too
+([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.68 because of the
+`font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
+takes a source's settings whose kind marks them `live` (`source.set_settings`,
+[ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
+`stats.tick`'s `chains` counts the output stage's video chains too (`ChainCost`'s
+`stage_chains`, `stage_layers` and `stage_passes`, #980,
+[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)); 0.65 added
+`scene.set_options` and `SceneInfo`'s flattened `SceneOptions`, whose `include_audio`
+leaves a scene's audio out of every nesting of it and whose `background` is the
+colour a scene is drawn over
+([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)); 0.64 let the
+engine's `compressor` audio filter kind take a sidechain `key`, a `source` reference it ducks
+under (ADR-0028; no wire change: `kind.describe` reports the new parameter and the
+engine accepts it); 0.63 made a keyframe
+scene override an item's effects
+([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md):
+`ItemOverride.effects`, `OverrideField`'s `effects`, `item.set_effects` and the
+`keyframe` filter owner); 0.62 added the
+`too_large` error and `Welcome.max_request_bytes`, a message over the server's request
+limit refused with the connection kept open
+([ADR-0074](../../docs/adr/0074-too-large-requests.md)); 0.61 blamed a GPU device
+loss on the effect-pack kinds that drew before it, which are quarantined
+until a person re-enables them (#349: the `gpu.device_lost` event, `KindSummary`'s
+`quarantined` and the `effect.enable` action, [Effect quarantine](#quarantine)); 0.60
+made the master stage and every output take video filters on their `video` chain
+(ADR-0080; no wire change: earlier minors refused them with `invalid_argument` on
+`chain`); 0.59 made outputs carry
+audio buses: `OutputInfo.audio_buses`, the `output.set_audio_buses` edit, and an
+output as a `bus.delete` blocker ([Audio](#audio)); 0.58 added the
+`plugin.list` query, the installed WASM plugins with what each manifest asks for and
+what a person granted ([Plugins](#plugins)); 0.57 added
+`stats.tick`'s `outputs`, each running output's live stats (`OutputStatsInfo`); 0.56
+added `preview.subscribe`'s `source_id`, a stream of one of the collection's sources alone
+(a projector of the source); 0.55 made a keyframe
+scene override the children of the groups in its parent's tree (#846; no wire
+change); 0.54 added `stats.tick`'s `chains`, what scene filter chains and item effects
+add to each frame (`ChainCost`); 0.53 made the engine take live values on a keyframe scene (`live.set`,
+#846; no wire change); 0.52 added
+`ui_settings.set` and `ui_settings.get`, the UI settings the server keeps
+([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)); 0.51 added the
+`activity.list` query, the engine's recent activity with a sentence for each call
+([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)); 0.50 added the
+`capture_target` parameter type, which a `display` or `window` source's `target` has, so
+a UI can offer what `capture.targets` lists ([Kinds](#kinds)); 0.49 made
+`preview.subscribe` take a `source`, a draft source the collection doesn't hold
+(`PreviewDraft`, [Binary streams](#binary-streams)); 0.48 added `stats.tick`'s `load`, the
+engine's frame and CPU totals (`EngineLoad`); 0.47 made the engine draw, and so
+accept, every blend mode
+([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md); no wire change); 0.46 added
+`preview.subscribe`'s `scene_id`, a preview stream of any scene, and its 16 streams a
+session ([Binary streams](#binary-streams)); 0.45 made scenes
+carry labels (`SceneMeta`'s `labels`, set by `scene.set_meta`;
+[ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)); 0.44 added the
+`hardware_session_limit` error (`output.start` refused a new hardware video session
+while other outputs held hardware sessions, ADR-0080 §3); 0.43 added scene filters
+and item effects ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md):
+`FilterOwner`'s `scene` and `item`, `SceneInfo.filters`, `ItemInfo.effects` and
+`KindDescriptor.max_outset_px`); 0.42 added bus monitors (`bus.set_monitor`,
+`BusInfo`'s `monitor`, `BusMonitor` and `MonitorTap`); 0.41 added the `VideoCodec`
+values `hevc` and `av1`, which an encoder profile now accepts; 0.40 added runtime
+source sizes (the `source.sizes` query and the `source.size_changed` event,
+`SourceSize`); 0.39 added keyframe
+scenes (`scene.create_variant`, `item.clear_override`, `SceneInfo`'s `variant_of` and
+`overrides`, the batch result's `dropped_overrides`, and placement edits whose
+`scene_id` names a keyframe scene); 0.38 added YouTube audience stats and the quota
+estimate (the `youtube.stats` event and query, `AudienceStatsInfo`, `QuotaInfo`,
+`StatsPolling`); 0.37 added
+`output.status`'s `cleartext` (#562); 0.36 added
+the `show_cursor` setting of the `display` and `window` kinds (whether the pointer
+shows in the capture; on by default, which is what those kinds did before); 0.35
+added WASM plugins ([Plugins](#plugins): `plugin.install`, `plugin.grant`, `plugin.enable`,
+`plugin.state_changed`, the `forbidden` error and the `plugin` entity kind); 0.34 made
+the engine accept non-neutral 3D (`tilt_deg`, `turn_deg`, `depth_px` and
+`perspective_px`, which earlier minors rejected with `invalid_argument`, are stored and
+drawn (ADR-0050) when the compositor can draw them (`check_drawable`); the wire form is
+unchanged, so a client that sends only neutral 3D sees no difference); 0.33 added the
+privacy screen (`privacy.set`, `privacy.get`, `privacy.changed`, since deprecated by
+[ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) and the `dedicated`
+flag on an output's encoder session; 0.32 added the geometry flips (`ItemGeometry`'s
+`flip_h` and `flip_v`); 0.31 added folders, labels and organisation metadata (the `folder.*` and `label.*` edits,
+`scene.set_folder`, `scene.set_meta`, `source.set_meta`, `state.get`'s `folders` and
+`labels`, `SceneInfo`'s `folder` and `meta`, `SourceInfo`'s `meta`, the `folder` and
+`label` `delete.plan` targets, entity kinds and blockers); 0.30 added
+transition presets and studio mode's preview (the `transition.*` edits,
+`scene.set_transitions`, `item.set_transition`, `scene.switch`'s `preset_id`,
+`studio.set_preview`, `studio.changed`'s `preview_scene` and `transition`, and the
+`transition` entity kind and kind category); 0.29 added the master stage's and
+outputs' filter chains (the `master` and `output` filter owners,
+`OutputInfo.filters` and `state.get`'s `master`); 0.28 added video mixes
+(the `video_mix.*` edits, `output.set_video_mix`, `video_mix.list` and the mixes in
+`state.get` and `output.list`); 0.27 added the `capture.targets` query;
+0.26 added live values ([Live values](#live-values): `live.set`, `live.cancel`, `live.list`, the
+`live.changed` and `live.ended` events, and `Batch.ends_gesture`); 0.25 added
+hotkeys (`hotkey.set`, `hotkey.clear`, `state.get`'s `hotkeys`, `delete.plan`'s
+`hotkeys` and the batch result's `removed_hotkeys`); 0.24 added bus
+references (the `bus` parameter type and reference, which the `waveform` and
+`spectrum` kinds' `audio` setting uses, a `bus` `delete.plan` target, and
+`bus.delete` refused while one refers to its bus), 0.23 YouTube
+([YouTube](#youtube): the `youtube.*` commands and events, the `youtube`
+RTMP target, and the YouTube actions' `ActionResult`s,
+[ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), 0.22
+opacity, blend and filter chains (`item.set_opacity`, `item.set_blend`, the
+`filter.*` edits, `SourceInfo.filters` and the `filter` entity kind,
+[ADR-0023](../../docs/adr/0023-placements-references-and-clones.md),
+[ADR-0026](../../docs/adr/0026-source-filter-chains.md)), 0.21 pairing
+(`pairing.start`, `device.list`, `device.revoke`, `ActionResult`, the
+`unsupported` error and the `device` entity kind,
+[ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), 0.20
+the preview streams (`preview.subscribe`, `preview.unsubscribe` and the binary
+frame), 0.19 audio (sources' audio, buses, sends, `bus.list`, `meters.tick` and
+`audio.reset_loudness`), 0.18 the `virtual_cam` output kind, 0.17
+`scene.create`'s optional `role`, 0.16 `scene.switch`, `studio.get` and
+`studio.changed`, 0.15 `delete.plan` and the
+`blockers` detail on `invalid_argument`, 0.14 references
+and clones (`item.set_source`, `duplicated_from`), 0.13 encoder
+profiles and session sharing, 0.12 groups (`scene.set_role`,
+`item.move`, a scene's `role` and the placement edits' `scene_id`), 0.11 the canvas
+and the geometry wire surface ([Item geometry](#geometry)), 0.10 the `history` calls,
+0.9 the `record` output kind, 0.8 the kind queries and settings, 0.7 the output
+edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
+`video.snapshot`.
+
+<a id="contents-schema"></a>
+## Contents: schema and parity fixture
+<!-- @section
+covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/parity.rs", "crates/jstream-protocol/src/fixtures.rs"]
+-->
+
 - **Schema** (`schema.rs`): `json_schema()`, snapshot-tested in
   [`schema/protocol.snap`](schema/protocol.snap), with every fixture message's wire form in
   [`schema/examples.snap`](schema/examples.snap).
@@ -382,8 +440,8 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["crates/jstream-protocol/src/**", "crates/jstream-protocol/schema/**"]
-depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002", "docs/RULES.md#R-API-004", "docs/RULES.md#R-ARCH-006"]
+covers = ["crates/jstream-protocol/src/lib.rs", "crates/jstream-protocol/src/envelope.rs", "crates/jstream-protocol/src/version.rs"]
+depends_on = ["docs/RULES.md#R-API-001", "docs/RULES.md#R-API-002"]
 -->
 
 This is the protocol's design. It is a proposal, so the maintainer can steer it: the open
@@ -451,7 +509,12 @@ with an error that names it. Externally tagged enums nest every value one level 
 under its name, adjacently tagged ones need a second `content` key, and untagged ones
 give useless parse errors and ambiguous schemas.
 
-### Edits, actions and queries
+<a id="calls"></a>
+## Edits, actions and queries
+<!-- @section
+covers = ["crates/jstream-protocol/src/command.rs", "crates/jstream-protocol/src/envelope.rs", "crates/jstream-protocol/src/query.rs"]
+depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-ARCH-006"]
+-->
 
 Following [ADR-0013](../../docs/adr/0013-command-model.md), every command is exactly one
 of two classes ([R-ARCH-006](../../docs/RULES.md#R-ARCH-006)):
@@ -502,7 +565,11 @@ dependency: deleting the original is allowed, `SourceInfo` then omits the link, 
 nests another scene. Positions are indexes: scenes in display order, items in stacking
 order with 0 at the bottom.
 
-### Groups and placement addressing
+<a id="placement"></a>
+## Groups and placement addressing
+<!-- @section
+covers = ["crates/jstream-protocol/src/command.rs", "crates/jstream-protocol/src/keyframe.rs"]
+-->
 
 [ADR-0024](../../docs/adr/0024-scene-structure.md) §1 makes a group a scene with
 `role: group` (protocol 0.12). `SceneRole` is `scene` or `group`. `scene.create` takes
@@ -581,7 +648,11 @@ keeps the addressing of the edit it undoes.
   variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
   variants, and the `scene` sources that show them, before it.
 
-### Audio
+<a id="audio"></a>
+## Audio
+<!-- @section
+covers = ["crates/jstream-protocol/src/audio.rs"]
+-->
 
 [ADR-0028](../../docs/adr/0028-audio-model-v2.md) makes audio part of the collection
 (0.19). An **audio source** is one whose kind has audio (`KindDescriptor.audio`), or a
@@ -643,10 +714,14 @@ another either; a routing check comes with the first thing that could. `follow`'
 protocol only stores it.
 
 Levels and loudness are runtime state: `meters.tick` carries them (see
-[Events](#design)), never a query, and `audio.reset_loudness` restarts the master's
+[Events](#events)), never a query, and `audio.reset_loudness` restarts the master's
 integrated loudness, an action because it changes no collection state.
 
-### Kinds and settings
+<a id="kinds"></a>
+## Kinds and settings
+<!-- @section
+covers = ["crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs"]
+-->
 
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) decides the shape. A
 `builtin` source's `kind` is a kind ID, and its settings travel beside it, as a
@@ -725,17 +800,21 @@ never a type per kind.
   setting refers to it (`settings.<param>`, or `filters.<filter_id>.<param>` for a
   filter's setting).
   `delete.plan` returns
-  the batch that removes them with the target (see [Queries](#design)). Hotkey
+  the batch that removes them with the target (see [Queries](#queries)). Hotkey
   bindings are never blockers: a delete removes the bindings that name its target
   (below).
 
 `SourceInfo` reports `settings`, omitted when empty (a `scene` source, or a kind with no
 parameters), so a reader of 0.7 messages sees no change for those.
 
-### Opacity, blend and filters
+<a id="filters"></a>
+## Opacity, blend and filters
+<!-- @section
+covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/finite.rs"]
+-->
 
 All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha multiplier (default 1), and from
-0.79 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
+0.83 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
 `additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
 `difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
@@ -809,6 +888,12 @@ for one. Settings values keep non-integer JSON numbers as `f64`, parsed to the n
 one (serde_json's `float_roundtrip`), so a message with a long number still serializes
 and parses back to itself.
 
+<a id="outputs"></a>
+## Outputs and stream keys
+<!-- @section
+covers = ["crates/jstream-protocol/src/output.rs"]
+-->
+
 Outputs are collection state too: `output.create` adds one, stopped, with its
 `OutputKind`; `output.set_target` changes where an RTMP output sends, from its next
 `output.start`; `output.delete` removes one, and is refused with `invalid_argument`
@@ -839,7 +924,7 @@ client reads it as `Unknown`. The
 stream key is not collection state: it is a secret held in the OS credential store,
 so it is set with the `output.set_key` action and removed with `output.clear_key`. A
 `youtube` target (0.23) names a broadcast instead of a URL: its ingest and key come
-from YouTube on each `output.start` ([YouTube](#design)), so it needs no
+from YouTube on each `output.start` ([YouTube](#youtube)), so it needs no
 `output.set_key`. Its ID must be ASCII letters, digits, `-` and `_`, at most 128 bytes.
 It is write-only ([R-SEC-001](../../docs/RULES.md#R-SEC-001)): no response, event,
 error, query or log carries it, and `output.status` reports only `key_set`. A key is
@@ -860,6 +945,12 @@ removed by the engine guarding it, as a deleted output's runtime state is droppe
 changed, so this changes no `PROTOCOL_VERSION`. Its errors carry fixed reasons that
 never quote the key.
 
+<a id="encoder-profiles"></a>
+## Encoder profiles
+<!-- @section
+covers = ["crates/jstream-protocol/src/encoder.rs"]
+-->
+
 Encoder profiles (0.13) are collection state as well
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)).
 `encoder.create` and `encoder.update` take a `profile_id`, a `name` and an
@@ -876,6 +967,12 @@ no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe 
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
+
+<a id="hotkeys"></a>
+## Hotkeys
+<!-- @section
+covers = ["crates/jstream-protocol/src/hotkey.rs"]
+-->
 
 Hotkey bindings (0.25) are collection state too
 ([ADR-0024 §5](../../docs/adr/0024-scene-structure.md),
@@ -922,6 +1019,12 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+<a id="organisation"></a>
+## Folders, labels and scene options
+<!-- @section
+covers = ["crates/jstream-protocol/src/organise.rs", "crates/jstream-protocol/src/geometry/camera.rs"]
+-->
+
 Folders, labels and organisation metadata are collection state too
 ([ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4). They change no
 rendering, switching or nesting. Folders organise the scene list as a tree: an ordered
@@ -949,11 +1052,16 @@ fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
 `position` and `target` (`Vec3`, scene pixels, x right, y down, z toward the viewer),
-`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0) and `depth_sort`
-(default `true`, not written while true). A camera omitted removes it. The edit refuses a
-field of view out of range (`edits.N.camera.fov_deg`), a coordinate past the drawable
-limit (`edits.N.camera`) and a position closer than 0.001 px to the target
-(`edits.N.camera.target`). On a keyframe scene it sets the variant's override, refused
+`fov_deg` (vertical, 1 to 170, default 45), `roll_deg` (default 0), `depth_sort`
+(default `true`, not written while true), and since 0.77 a depth of field: `focus_px`,
+the distance along the view of the plane in focus (absent, everything is in focus), and
+`blur_px`, the blur radius of a point infinitely far behind it, 0 to 64 (default 0, not
+written while 0) ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). A camera
+omitted removes it. The edit refuses a field of view out of range
+(`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
+position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
+not above 0 or past the drawable limit (`edits.N.camera.focus_px`) and a blur outside 0
+to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, refused
 while its parent has no camera; removing the parent's camera drops its variants'
 overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
@@ -967,6 +1075,12 @@ takes the label off its sources and scenes, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.
+
+<a id="video-mixes"></a>
+## Video mixes
+<!-- @section
+covers = ["crates/jstream-protocol/src/mix.rs"]
+-->
 
 Video mixes (0.28) are collection state too: what an output's video shows.
 `video_mix.create` and `video_mix.update` take a `mix_id`, a `name` and a `VideoMix`: an
@@ -987,7 +1101,11 @@ its next `output.start`, like an encoder profile. A virtual camera keeps the mix
 names but always shows the program at the canvas size, and its own video chain runs
 over that (#1006).
 
-### Transitions and studio mode
+<a id="transitions"></a>
+## Transitions and studio mode
+<!-- @section
+covers = ["crates/jstream-protocol/src/transition.rs"]
+-->
 
 [ADR-0029](../../docs/adr/0029-transitions.md) and
 [ADR-0037](../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md) decide
@@ -1018,6 +1136,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   as `ItemInfo.locked`, omitted while false. It is an editing aid a client honours by
   not dragging the box; the engine still applies every edit to a locked item. It
   belongs to the item, so it takes no `scene_id` and a keyframe doesn't override it.
+- `item.set_effects_space {item_id, space}` sets where an item's effects run
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md), 0.76): `box`, the
+  default, over its cropped, fitted box before it is placed, or `canvas`, over a
+  canvas-sized layer it is drawn into where it is placed, which then covers the canvas
+  with the item's opacity and blend. So a canvas-sized mask lines up with the canvas
+  however the item is moved, scaled, turned or flipped. Reported as
+  `ItemInfo.effects_space`, omitted while `box`. Like a lock it belongs to the item:
+  no `scene_id`, and a keyframe doesn't override it. A canvas-space item never glides
+  in a Move.
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
@@ -1029,7 +1156,12 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 `Easing::apply` is the one easing function every implementation evaluates, so the UI's
 preview of a transition and the engine's render agree.
 
-### Batches, revisions and `expected_rev`
+<a id="batches"></a>
+## Batches, revisions and `expected_rev`
+<!-- @section
+covers = ["crates/jstream-protocol/src/command.rs"]
+depends_on = ["docs/RULES.md#R-API-004"]
+-->
 
 Edits are only sent inside a `Batch`; a single edit is a batch of one.
 
@@ -1051,7 +1183,11 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   omitted when there are none) and `dropped_overrides` when it dropped keyframe
   overrides (0.39; omitted when there are none). Queries that read collection state report the `rev` they read.
 
-### Queries
+<a id="queries"></a>
+## Queries
+<!-- @section
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+-->
 
 Queries read and never change `rev`. Those that read the collection state carry the
 `rev` they read, so a client can send its next batch with that `expected_rev`:
@@ -1241,11 +1377,15 @@ An item is reported with its `source_id`, `placement` form, `transform`, `geomet
 `crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
 filters: every property an
 edit sets, so a client can compute any edit, or its inverse, from what it read
-([Item geometry](#design) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
+([Item geometry](#geometry) says what `transform` and `geometry` hold for each form). The shapes (`SourceInfo`, `SceneInfo`, `ItemInfo`) mirror `jstream-graph`'s model,
 which produces them (`Graph::query`). As the model grows (settings, filters, effects)
 they gain fields, which older clients ignore.
 
-### Undo
+<a id="undo"></a>
+## Undo
+<!-- @section
+covers = ["crates/jstream-protocol/src/history.rs"]
+-->
 
 Undo is per client ([ADR-0013](../../docs/adr/0013-command-model.md)): each applied batch
 becomes one undo step on the history of the `client_id` that sent it. The protocol
@@ -1263,7 +1403,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
-`item.set_transition` and `item.set_locked` the removed item needs, and undoing `scene.delete` is
+`item.set_transition`, `item.set_locked` and `item.set_effects_space` the removed item
+needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1336,7 +1477,11 @@ exactly. A new edit that can't state its inverse in edits needs new edits first.
   steps; a gesture's step is its committing batch. The engine
   keeps 100 steps per client by default, in memory, for the session's lifetime.
 
-### Live values
+<a id="live-values"></a>
+## Live values
+<!-- @section
+covers = ["crates/jstream-protocol/src/live.rs"]
+-->
 
 Live values (0.26) keep a drag, a fader move or a live dialog to one batch and one undo
 step ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)). A client opens a **gesture**,
@@ -1394,7 +1539,11 @@ named by a `gesture_id` it chooses, and sends its values as it goes:
 `live.set` and `live.cancel` are actions: never undoable, never batchable, answering
 `{"kind":"action"}`.
 
-### Events
+<a id="events"></a>
+## Events
+<!-- @section
+covers = ["crates/jstream-protocol/src/event.rs"]
+-->
 
 After `welcome`, the server pushes every event to every client.
 
@@ -1526,13 +1675,17 @@ After `welcome`, the server pushes every event to every client.
 - `youtube.status_changed {auth}` and `youtube.health_changed {output_id, broadcast_id,
   stream_id, status, health, issues}` (0.23), and `youtube.stats {output_id,
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
-  [YouTube](#design).
+  [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
-  under [Plugins](#design).
+  under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
-  [Effect quarantine](#design).
+  [Effect quarantine](#quarantine).
 
-### YouTube
+<a id="youtube"></a>
+## YouTube
+<!-- @section
+covers = ["crates/jstream-protocol/src/youtube.rs"]
+-->
 
 JStream signs in to one Google account, once, with the full `youtube` scope
 ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md), keeping ADR-0041 §4), and every
@@ -1584,7 +1737,11 @@ Values mirrored from YouTube (`life_cycle`, `privacy`, `status`, `health`, `seve
 have an `other` value, so a value YouTube adds later still parses. Text from YouTube is
 untrusted and shown as plain text. Chat and the featured message come later.
 
-### Plugins
+<a id="plugins"></a>
+## Plugins
+<!-- @section
+covers = ["crates/jstream-protocol/src/plugin.rs"]
+-->
 
 WASM automation plugins (0.35, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)) call the API through
 a scoped `Control`, which checks every call against the plugin's grant before it reaches
@@ -1666,7 +1823,11 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
 
-### Effect quarantine
+<a id="quarantine"></a>
+## Effect quarantine
+<!-- @section
+covers = ["crates/jstream-protocol/src/pack.rs"]
+-->
 
 A WGSL effect pack is validated, not bounded: a shader that loops too long can hang the
 GPU, and the OS resets the device (#349,
@@ -1709,7 +1870,38 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
 
-### Errors
+<a id="shared-values"></a>
+## Shared values
+<!-- @section
+covers = ["crates/jstream-protocol/src/values.rs"]
+-->
+
+Since 0.78 a client can keep **shared values**: named JSON values the engine holds for
+browser source pages and agents to read
+([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7, `values.rs`).
+They are not collection state: never saved, no `rev`, no undo step. They are not
+ADR-0032's live values either, which are a gesture's uncommitted edits.
+- **`values.set {name, value?}`** is an action. It sets `name` to `value`, or removes it
+  when `value` is `null` or left out; inside a value `null` is ordinary JSON. A name is
+  dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes (`check_value_name`); a
+  value is at most 16 KiB as compact JSON (`check_value_size`, `MAX_VALUE_BYTES`); the
+  store holds at most 256 names (`MAX_VALUES`). Each limit is `invalid_argument` on
+  `name` or `value`, and nothing changes.
+- **`values.changed {name, value?}`** goes to every client when a set changes something,
+  with no `value` for a removal. Setting the value a name already has sends nothing.
+- **`values.list {prefix?}`** answers `SharedValue`s ordered by name: all, or the name
+  `prefix` and those below it (`prefix_covers`: `status` covers `status.text`, not
+  `statusbar`).
+- A hotkey may bind `values.set`, checked at bind time as the call is: a binding with a
+  bad name or an oversized value is refused (`bind_problem`), so a saved binding never
+  fails every press. Its value is then saved with the binding. A plugin may call
+  `values.list` (class `read`), never `values.set`, which no class names yet.
+
+<a id="errors"></a>
+## Errors
+<!-- @section
+covers = ["crates/jstream-protocol/src/error.rs"]
+-->
 
 `ProtocolError` is a `thiserror` enum ([R-RS-003](../../docs/RULES.md#R-RS-003)). On the
 wire (`WireError`) it is its stable `code`, its detail fields, and a `message` for
@@ -1737,7 +1929,12 @@ people and agents. Clients match on `code`, never on `message`.
 An error that isn't tied to a request (a failed handshake, or a message too broken to
 read an `id` from) has no `id`.
 
-### Schema and compatibility
+<a id="compatibility"></a>
+## Schema and compatibility
+<!-- @section
+covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/schema/**"]
+depends_on = ["docs/RULES.md#R-API-001"]
+-->
 
 `json_schema()` generates the JSON Schema (draft 2020-12) of every message from the
 Rust types with `schemars`. Each type is a named definition, so the MCP server can hand
@@ -1793,7 +1990,12 @@ after 1.0:
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)), so code that picks a
   chain matches it exhaustively.
 
-### Item geometry
+<a id="geometry"></a>
+## Item geometry
+<!-- @section
+covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/src/geometry/**"]
+depends_on = ["docs/RULES.md#R-API-001"]
+-->
 
 [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) defines an item's box as
 `ItemGeometry` ([`geometry.rs`](src/geometry.rs)): `center` and `size` in canvas pixels,
@@ -1816,10 +2018,12 @@ function in this crate so the compositor and the UI share one implementation.
   `perspective_px` ignored. `project_seen`, `drawn_polygon_seen` and `unplace_seen`
   take the camera's `CameraView` and build ADR-0050's homogeneous map with `w = D / f`
   (`D` the distance along the viewing axis, `f = (H / 2) / tan(fov / 2)`), so the near
-  plane and the polygon clipping are the same. The picture's up is −y, or −z within
-  0.01° of looking straight up or down. Through `SceneCamera::framing` an item with
-  neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way for an
-  editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
+  plane and the polygon clipping are the same. The picture's up is −y, or within
+  0.01° of the pole −z looking straight down and +z looking straight up, so a camera
+  facing −z keeps its picture upright as it tilts to either pole
+  ([ADR-0111](../../docs/adr/0111-camera-up-at-the-poles.md), #1047). Through `SceneCamera::framing` an item
+  with neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way
+  for an editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
   drags an item to.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
@@ -1918,10 +2122,14 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   [R-API-001](../../docs/RULES.md#R-API-001): an older peer ignores them, so it shows a
   flipped item unflipped, and one that writes the geometry back drops the flip.
 - **Not in 0.11:** `source.sizes` and `source.size_changed` (decision 4), which arrived
-  in 0.40 ([Queries](#design), [Events](#design)), and live geometry values, which
-  arrived in 0.26 with `live.set` ([Live values](#design)).
+  in 0.40 ([Queries](#queries), [Events](#events)), and live geometry values, which
+  arrived in 0.26 with `live.set` ([Live values](#live-values)).
 
-### Binary streams
+<a id="binary-streams"></a>
+## Binary streams
+<!-- @section
+covers = ["crates/jstream-protocol/src/preview.rs"]
+-->
 
 Preview video travels as WebSocket binary messages, one `BinaryFrame` each, alongside
 the JSON text messages of the same connection (0.20,
@@ -2038,7 +2246,7 @@ described above.
    R-ARCH-006 needs no change. The same ADR adds live values for continuous gestures
    (`live.set`, `live.cancel`, `live.changed`), committed by one batch; those are built
    for item placements and crops and, since 0.67, a source's live settings
-   ([Live values](#design)), not yet for audio faders.
+   ([Live values](#live-values)), not yet for audio faders.
 5. **Actions that change collection state.** Settled by
    [ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md): the program
    scene is runtime state, not collection state, so `scene.switch` is an action that
@@ -2064,7 +2272,7 @@ described above.
     [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built in 0.7:
     `builtin` stays, its `kind` names a kind the engine describes (`kind.list`,
     `kind.describe`), and settings travel beside it as a map validated against that
-    kind's descriptor ([Kinds and settings](#design)). No new `SourceKind` variants. Not
+    kind's descriptor ([Kinds and settings](#kinds)). No new `SourceKind` variants. Not
     built yet: the `kind.changed` event, `asset.list`, storing an
     absolute path under a known root in relative form, and kind versions on stored
     settings, which come with persistence.
@@ -2072,4 +2280,4 @@ described above.
     [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md) and built:
     rejection stays the only delete, with no cascading edit. The error lists every
     blocker in `blockers`, and the `delete.plan` query returns the batch that removes
-    the target and its blockers ([Edits, actions and queries](#design)).
+    the target and its blockers ([Edits, actions and queries](#calls)).

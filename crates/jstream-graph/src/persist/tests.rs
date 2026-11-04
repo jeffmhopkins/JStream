@@ -388,6 +388,30 @@ fn a_locked_item_round_trips() {
     assert_eq!(locked, Some(true));
 }
 
+/// A canvas-space item saves `effects_space` (ADR-0106) and loads in canvas space; a
+/// box-space one saves nothing, so the fixture needs no new version.
+#[test]
+fn a_canvas_space_item_round_trips() {
+    let mut graph = fixture_graph();
+    let applied = graph.apply(
+        &[Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new("i4"),
+            space: jstream_protocol::EffectsSpace::Canvas,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    let json = graph.to_collection_json();
+    assert_eq!(
+        json.matches("\"effects_space\": \"canvas\"").count(),
+        1,
+        "{json}"
+    );
+    assert!(!json.contains("\"effects_space\": \"box\""));
+    let loaded = load(&json);
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(graph.state()));
+}
+
 /// An output's bus other than the master is saved as `audio_bus`, after the buses
 /// on load, and the master is left out.
 #[test]

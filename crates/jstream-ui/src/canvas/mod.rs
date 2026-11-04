@@ -936,13 +936,9 @@ pub fn Canvas() -> impl IntoView {
             Action::Orbit { scene, start, .. } => {
                 let gesture = live.with_value(Clone::clone);
                 live.set_value(None);
-                // Committed only while the canvas still shows the scene the drag moved: if
-                // another is shown now (the first deleted, say), the drag is dropped.
-                let still =
-                    layout.with_untracked(|l| l.as_ref().and_then(shown_scene) == Some(&scene));
+                let shown = layout.with_untracked(|l| l.as_ref().and_then(shown_scene).cloned());
                 let moved = camera_preview.with_untracked(|p| {
-                    camera::Preview::camera_in(p.as_ref(), Some(&scene), None)
-                        .filter(|c| keep && still && *c != start)
+                    camera::Preview::to_commit(p.as_ref(), &scene, shown.as_ref(), keep, start)
                 });
                 match (moved, gesture) {
                     (Some(camera), Some(gesture)) => {

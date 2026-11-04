@@ -24,8 +24,8 @@
 
 use crate::scene::Crop;
 use jstream_protocol::{
-    BlendMode, Easing, Finite32, ItemGeometry, MAX_FOV_DEG, MIN_FOV_DEG, SceneCamera, Size, Vec2,
-    Vec3,
+    BlendMode, Easing, Finite32, ItemGeometry, MAX_BLUR_PX, MAX_DRAWN_PX, MAX_FOV_DEG, MIN_FOV_DEG,
+    SceneCamera, Size, Vec2, Vec3,
 };
 
 /// How much of its size a `scale` effect leaves at its end: 65%.
@@ -277,6 +277,26 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
         y: finite(lerp(a.y.get(), b.y.get(), k)),
         z: finite(lerp(a.z.get(), b.z.get(), k)),
     };
+    // Depth of field (ADR-0108 decision 6): an end with no focus is focused where the
+    // other is, with no blur, so the blur fades in or out.
+    let blur = |c: &SceneCamera| {
+        if c.focus_px.is_some() {
+            c.blur_px.get()
+        } else {
+            0.0
+        }
+    };
+    let (focus_px, blur_px) = match (from.focus_px, to.focus_px) {
+        (Some(a), Some(b)) => (
+            Some(finite(
+                lerp(a.get(), b.get(), k).clamp(f32::MIN_POSITIVE, MAX_DRAWN_PX),
+            )),
+            lerp(from.blur_px.get(), to.blur_px.get(), k),
+        ),
+        (Some(at), None) | (None, Some(at)) => (Some(at), lerp(blur(from), blur(to), k)),
+        (None, None) => (None, lerp(from.blur_px.get(), to.blur_px.get(), k)),
+    };
+    let blur_px = finite(blur_px.clamp(0.0, MAX_BLUR_PX));
     let camera = SceneCamera {
         position: point(from.position, to.position),
         target: point(from.target, to.target),
@@ -285,6 +305,8 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
         ),
         roll_deg: finite(lerp_angle(from.roll_deg.get(), to.roll_deg.get(), k)),
         depth_sort: to.depth_sort,
+        focus_px,
+        blur_px,
     };
     if camera.validate().is_ok() {
         camera
@@ -530,6 +552,8 @@ mod tests {
             fov_deg: Finite32::new(fov).expect("finite"),
             roll_deg: Finite32::new(roll).expect("finite"),
             depth_sort: true,
+            focus_px: None,
+            blur_px: Finite32::ZERO,
         };
         let from = camera(0.0, 40.0, 350.0);
         let to = camera(100.0, 60.0, 10.0);
@@ -550,6 +574,42 @@ mod tests {
             ..to
         };
         assert_eq!(super::lerp_camera(&to, &reversed, 0.5), reversed);
+    }
+
+    /// ADR-0108 decision 6: focus and blur move linearly; a camera with no focus is taken
+    /// as focused where the other is, with no blur, so the blur fades in or out.
+    #[test]
+    fn a_cameras_focus_moves_between_its_ends() {
+        let point = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let camera = |focus: Option<f32>, blur: f32| SceneCamera {
+            position: point(0.0, 0.0, 1000.0),
+            target: point(0.0, 0.0, 0.0),
+            fov_deg: Finite32::new(45.0).expect("finite"),
+            roll_deg: Finite32::ZERO,
+            depth_sort: true,
+            focus_px: focus.and_then(Finite32::new),
+            blur_px: Finite32::new(blur).expect("finite"),
+        };
+        let pulled = super::lerp_camera(&camera(Some(400.0), 4.0), &camera(Some(800.0), 8.0), 0.25);
+        assert_eq!(pulled.focus_px.map(Finite32::get), Some(500.0));
+        assert_eq!(pulled.blur_px.get(), 5.0);
+        let fading_in = super::lerp_camera(&camera(None, 30.0), &camera(Some(600.0), 10.0), 0.5);
+        assert_eq!(fading_in.focus_px.map(Finite32::get), Some(600.0));
+        assert_eq!(
+            fading_in.blur_px.get(),
+            5.0,
+            "a camera with no focus has no blur"
+        );
+        let fading_out = super::lerp_camera(&camera(Some(600.0), 10.0), &camera(None, 0.0), 0.75);
+        assert_eq!(fading_out.focus_px.map(Finite32::get), Some(600.0));
+        assert_eq!(fading_out.blur_px.get(), 2.5);
+        let overshoot =
+            super::lerp_camera(&camera(Some(600.0), 60.0), &camera(Some(600.0), 64.0), 1.5);
+        assert_eq!(
+            overshoot.blur_px.get(),
+            64.0,
+            "a spring past the end keeps blur in range"
+        );
     }
 
     /// A blend mode can't be interpolated, so a pair switches it halfway, as it does

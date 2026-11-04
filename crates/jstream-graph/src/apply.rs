@@ -591,6 +591,7 @@ fn apply_edit(
                 effects: Chains::default(),
                 transition: ItemTransition::default(),
                 locked: false,
+                effects_space: jstream_protocol::EffectsSpace::Box,
             });
             Ok(vec![Edit::ItemRemove {
                 item_id: item_id.clone(),
@@ -1022,6 +1023,16 @@ fn apply_edit(
                 locked: old,
             }])
         }
+        Edit::ItemSetEffectsSpace { item_id, space } => {
+            let (si, ii) = state
+                .item_index(item_id)
+                .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+            let old = std::mem::replace(&mut state.scenes[si].items[ii].effects_space, *space);
+            Ok(vec![Edit::ItemSetEffectsSpace {
+                item_id: item_id.clone(),
+                space: old,
+            }])
+        }
         other => Err(unsupported(at, "type", &format!("`{}`", other.name()))),
     }
 }
@@ -1239,6 +1250,12 @@ fn restore_item(
         edits.push(Edit::ItemSetLocked {
             item_id: item.id.clone(),
             locked: true,
+        });
+    }
+    if !item.effects_space.is_box() {
+        edits.push(Edit::ItemSetEffectsSpace {
+            item_id: item.id.clone(),
+            space: item.effects_space,
         });
     }
     // Its effects belong to the placement (ADR-0065 §3), in order after `item.add`.
