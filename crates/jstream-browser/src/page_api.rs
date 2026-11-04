@@ -59,7 +59,7 @@ impl PageData {
             + self
                 .values
                 .iter()
-                .map(|(name, value)| 8 + name.len() + value.as_ref().map_or(0, String::len))
+                .map(|(name, value)| 9 + name.len() + value.as_ref().map_or(0, String::len))
                 .sum::<usize>()
     }
 
@@ -76,7 +76,7 @@ impl PageData {
         }];
         for value in self.values {
             let last = out.last_mut().map(|last| {
-                last.bytes() + 8 + value.0.len() + value.1.as_ref().map_or(0, String::len)
+                last.bytes() + 9 + value.0.len() + value.1.as_ref().map_or(0, String::len)
             });
             match (out.last_mut(), last) {
                 (Some(current), Some(bytes)) if bytes <= MAX_PAGE_DATA_BYTES => {

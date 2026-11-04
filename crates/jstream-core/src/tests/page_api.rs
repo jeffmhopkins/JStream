@@ -81,6 +81,22 @@ impl Seen {
         }
     }
 
+    /// Takes what the page is sent until `done` holds, moving the clock on a millisecond
+    /// at a time: an update held back to keep to one per page frame goes out once a
+    /// frame has passed.
+    fn until(
+        &mut self,
+        clock: &FakeClock,
+        page: &FakePageState,
+        mut done: impl FnMut(&Self) -> bool,
+    ) -> bool {
+        eventually(|| {
+            clock.advance(1_000);
+            self.take(page);
+            done(self)
+        })
+    }
+
     fn shown(&self) -> (bool, bool) {
         let source = self.source.as_ref().expect("visibility was sent");
         (
@@ -140,10 +156,8 @@ fn a_granted_page_follows_its_visibility_the_scenes_and_its_values() {
 
     let mut seen = Seen::default();
     let scene = |id: &str| json!({ "id": id, "name": id.to_uppercase() });
-    assert!(eventually(|| {
-        seen.take(&page);
-        seen.source.is_some() && seen.scenes.is_some()
-    }));
+    assert!(seen.until(&clock, &page, |seen| seen.source.is_some()
+        && seen.scenes.is_some()));
     assert_eq!(seen.shown(), (true, true));
     assert_eq!(
         seen.scenes,
@@ -154,33 +168,21 @@ fn a_granted_page_follows_its_visibility_the_scenes_and_its_values() {
     // Only the values the grant covers reach the page, and a removal does too.
     set_value(&control, "status.text", Some(json!("On air")));
     set_value(&control, "counter.a", Some(json!(2)));
-    seen.take(&page);
-    assert_eq!(
-        seen.values,
-        BTreeMap::from([("status.text".to_owned(), Some(json!("On air")))])
-    );
+    let on_air = BTreeMap::from([("status.text".to_owned(), Some(json!("On air")))]);
+    assert!(seen.until(&clock, &page, |seen| seen.values == on_air));
     set_value(&control, "status.text", None);
-    seen.take(&page);
-    assert_eq!(
-        seen.values,
-        BTreeMap::from([("status.text".to_owned(), None)])
-    );
+    let removed = BTreeMap::from([("status.text".to_owned(), None)]);
+    assert!(seen.until(&clock, &page, |seen| seen.values == removed));
 
     // Preview on `c` hides it there; program on `b` still shows it, through `inner`.
     set_preview(&control, "c");
-    seen.take(&page);
-    assert_eq!(seen.shown(), (true, false));
+    assert!(seen.until(&clock, &page, |seen| seen.shown() == (true, false)));
     block_on(control.call(switch_call("b"))).expect("scene.switch");
-    assert!(eventually(|| {
-        seen.take(&page);
-        seen.scenes == Some(json!({ "program": scene("b"), "preview": scene("c") }))
-    }));
+    let b_and_c = Some(json!({ "program": scene("b"), "preview": scene("c") }));
+    assert!(seen.until(&clock, &page, |seen| seen.scenes == b_and_c));
     assert_eq!(seen.shown(), (true, false));
     block_on(control.call(switch_call("c"))).expect("scene.switch");
-    assert!(eventually(|| {
-        seen.take(&page);
-        seen.shown() == (false, false)
-    }));
+    assert!(seen.until(&clock, &page, |seen| seen.shown() == (false, false)));
     let source = seen.source.as_ref().expect("visibility");
     assert!(source["shownAt"].is_number(), "{source}");
 

@@ -387,15 +387,19 @@ impl Source for BrowserSource {
         self.feed.is_some()
     }
 
-    fn page_view(&mut self, view: &PageView<'_>) {
-        if let Some(feed) = &mut self.feed {
-            let data = feed.view(view);
+    fn page_view(&mut self, view: &PageView<'_>) -> Option<MediaTime> {
+        let feed = self.feed.as_mut()?;
+        let data = feed.view(view);
+        feed.post(data);
+        if let Some(data) = feed.flush(view.now) {
             self.page.send_data(data);
         }
+        feed.due()
     }
 
     /// Sends a clock anchor when one is due, its lead taking in how old the page's
-    /// latest frame is now: frames are stamped on the media clock as they arrive.
+    /// latest frame is now (frames are stamped on the media clock as they arrive), with
+    /// whatever else is waiting, once a page frame has passed since the last update.
     fn page_clock(&mut self, now: MediaTime) {
         let Some(feed) = &mut self.feed else {
             return;
@@ -407,10 +411,13 @@ impl Source for BrowserSource {
             .or_else(|| self.page.cpu_frame().map(|frame| frame.info().pts));
         let age = pts.map(|pts| now.as_secs_f64() - pts.as_secs_f64());
         if let Some(clock) = feed.clock(now, age) {
-            self.page.send_data(PageData {
+            feed.post(PageData {
                 clock: Some(clock),
                 ..PageData::default()
             });
+        }
+        if let Some(data) = feed.flush(now) {
+            self.page.send_data(data);
         }
     }
 }

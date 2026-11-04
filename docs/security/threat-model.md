@@ -280,11 +280,12 @@ document of a page given as HTML. Data flows one way: the engine filters it to t
 grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
 updates in the renderer only from the browser process, and its client drops every
 process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A
-page has no path to the engine. Each granted page gets a request context of its own, so
-that no other source's page shares its renderer, and a compromised renderer holds only
-its own grant; that CEF keeps such pages in separate renderer processes is not yet
-checked on a run. Whatever a page is granted, a web page can send off the machine:
-preview scene names matter most, and once built, a microphone bus's bands.
+page has no path to the engine. A compromised renderer holds only what the sources
+sharing its renderer were granted; each granted page gets a request context of its own,
+which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
+granted, a web page can send off the machine: preview scene names matter most, and once
+built, a microphone bus's bands. The engine has no studio mode to leave, so a page
+granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
 ## Files and decoders

@@ -55,7 +55,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); only such a source
   is handed a `PageView` (`page_view`: the clock now, whether it is shown on program and
   on preview, the two scenes and every shared value) after anything that can change
-  one, and the clock now on each look (`page_clock`). Both do nothing by default.
+  one, and the clock now on each look (`page_clock`). Both do nothing by default;
+  `page_view` returns when an update it held to keep to one per page frame may go, so
+  the engine looks again then.
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -400,7 +402,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   covered values, with a removal for one that went or left the grant's cover; and a
   clock anchor first, every 250 ms after that, and at once when the clock goes back or
   jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
-  the page's latest frame when the engine looks at it. `youtube_chat` never sets any
+  the page's latest frame when the engine looks at it. Updates go at most once per frame
+  of `fps`: what changes sooner is merged (the latest visibility, scenes and anchor, and
+  each value's latest), held, and sent once the frame has passed, a held anchor moved to
+  the clock's time as it goes. `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,

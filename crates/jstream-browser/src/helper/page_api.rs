@@ -14,9 +14,9 @@
 //! it everything the cache holds; each later update goes to it as it arrives. CEF calls
 //! all of these on the renderer's main thread, so the state is that thread's own.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::os::raw::c_int;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use cef::*;
 
@@ -107,9 +107,17 @@ struct Granted {
     browsers: usize,
 }
 
-thread_local! {
-    /// The renderer's granted browsers, by browser ID.
-    static GRANTED: RefCell<HashMap<c_int, Granted>> = RefCell::new(HashMap::new());
+/// The renderer's granted browsers, by browser ID. The app holds it and hands it to each
+/// render-process handler it gives CEF, which calls them on the renderer's main thread.
+#[derive(Clone, Default)]
+pub(crate) struct Grants(Arc<Mutex<HashMap<c_int, Granted>>>);
+
+impl Grants {
+    /// Runs `f` on the map. The lock is let go when it returns, so JavaScript, which can
+    /// call back into the handler, always runs outside it.
+    fn with<T>(&self, f: impl FnOnce(&mut HashMap<c_int, Granted>) -> T) -> T {
+        f(&mut self.0.lock().unwrap_or_else(PoisonError::into_inner))
+    }
 }
 
 /// Hands `data` to the shim's update function in `context`.
@@ -127,7 +135,9 @@ fn feed(context: &V8Context, function: &V8Value, data: &PageData) {
 }
 
 wrap_render_process_handler! {
-    pub(crate) struct PageApiRenderer;
+    pub(crate) struct PageApiRenderer {
+        granted: Grants,
+    }
 
     impl RenderProcessHandler {
         fn on_browser_created(
@@ -150,7 +160,7 @@ wrap_render_process_handler! {
                 values: info.bool(Some(&KEY_VALUES.into())) == 1,
             };
             let id = browser.identifier();
-            GRANTED.with_borrow_mut(|granted| {
+            self.granted.with(|granted| {
                 granted
                     .entry(id)
                     .and_modify(|page| page.browsers += 1)
@@ -167,7 +177,7 @@ wrap_render_process_handler! {
         fn on_browser_destroyed(&self, browser: Option<&mut Browser>) {
             if let Some(browser) = browser {
                 let id = browser.identifier();
-                GRANTED.with_borrow_mut(|granted| {
+                self.granted.with(|granted| {
                     if let Some(page) = granted.get_mut(&id) {
                         page.browsers = page.browsers.saturating_sub(1);
                         if page.browsers == 0 {
@@ -194,9 +204,9 @@ wrap_render_process_handler! {
             }
             let url = CefString::from(&frame.url()).to_string();
             let id = browser.identifier();
-            // No borrow is held while JavaScript runs: a listener could make a frame,
+            // No lock is held while JavaScript runs: a listener could make a frame,
             // whose context this handler is then called for.
-            let Some((api, full)) = GRANTED.with_borrow_mut(|granted| {
+            let Some((api, full)) = self.granted.with(|granted| {
                 let page = granted.get_mut(&id)?;
                 page.feed = None;
                 page.home.covers(&url).then(|| (page.api, page.cache.full()))
@@ -217,7 +227,7 @@ wrap_render_process_handler! {
                 return;
             };
             feed(context, &function, &full);
-            GRANTED.with_borrow_mut(|granted| {
+            self.granted.with(|granted| {
                 if let Some(page) = granted.get_mut(&id) {
                     page.feed = Some((context.clone(), function));
                 }
@@ -235,7 +245,7 @@ wrap_render_process_handler! {
             };
             if frame.is_main() == 1 {
                 let id = browser.identifier();
-                GRANTED.with_borrow_mut(|granted| {
+                self.granted.with(|granted| {
                     if let Some(page) = granted.get_mut(&id) {
                         page.feed = None;
                     }
@@ -261,7 +271,7 @@ wrap_render_process_handler! {
                 return 0;
             };
             let id = browser.identifier();
-            let feeding = GRANTED.with_borrow_mut(|granted| {
+            let feeding = self.granted.with(|granted| {
                 let page = granted.get_mut(&id)?;
                 page.cache.merge(&data);
                 page.feed.clone()
@@ -274,7 +284,7 @@ wrap_render_process_handler! {
     }
 }
 
-/// The render-process handler.
-pub(crate) fn renderer() -> RenderProcessHandler {
-    PageApiRenderer::new()
+/// The render-process handler, over the renderer's one map of grants.
+pub(crate) fn renderer(granted: &Grants) -> RenderProcessHandler {
+    PageApiRenderer::new(granted.clone())
 }

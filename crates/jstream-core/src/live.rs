@@ -80,6 +80,11 @@ pub(crate) struct LiveSources {
     /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
     /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
+    /// When the last plan asked to be re-planned ([`Self::wake_at`]), and when a granted
+    /// page has an update still to send ([`Self::feed_pages`]): the thread wakes at the
+    /// earlier.
+    plan_wake: Option<MediaTime>,
+    page_wake: Option<MediaTime>,
     ctx: Context,
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
@@ -251,6 +256,8 @@ impl LiveSources {
             registry: Arc::new(Registry::builtin()),
             ctx: Context::default(),
             entries: BTreeMap::new(),
+            plan_wake: None,
+            page_wake: None,
             tickets: 0,
             worker: Arc::new(Worker::new(
                 Arc::new(SystemClock::new()),
@@ -673,6 +680,9 @@ impl LiveSources {
     ) {
         let granted = |entry: &Entry| entry.running.as_ref().is_some_and(|r| r.source.page_api());
         if !self.entries.values().any(granted) {
+            if self.page_wake.take().is_some() {
+                self.set_wake();
+            }
             return;
         }
         let on_program = program.map(|scene| crate::activity::shown_sources(state, scene));
@@ -682,11 +692,12 @@ impl LiveSources {
             Some((scene.id().as_str(), scene.name()))
         };
         let now = self.now();
+        let mut due = None;
         for (source_id, entry) in &mut self.entries {
             let Some(running) = entry.running.as_mut().filter(|r| r.source.page_api()) else {
                 continue;
             };
-            running.source.page_view(&PageView {
+            let at = running.source.page_view(&PageView {
                 now,
                 program: on_program
                     .as_ref()
@@ -698,6 +709,13 @@ impl LiveSources {
                 preview_scene: scene(preview),
                 values,
             });
+            due = crate::snapshot::earliest(due, at);
+        }
+        // An update held back to keep to one per page frame goes on the plan that wakes
+        // the thread when it is due, shown or not.
+        if self.page_wake != due {
+            self.page_wake = due;
+            self.set_wake();
         }
     }
 
@@ -944,8 +962,15 @@ impl LiveSources {
         Some(audio)
     }
 
-    /// Asks the thread to re-plan at `at`, or at no set time.
+    /// Asks the thread to re-plan at `at`, or at no set time, for the plan: it also wakes
+    /// for a granted page's held update ([`Self::feed_pages`]).
     pub(crate) fn wake_at(&mut self, at: Option<MediaTime>) {
+        self.plan_wake = at;
+        self.set_wake();
+    }
+
+    fn set_wake(&mut self) {
+        let at = crate::snapshot::earliest(self.plan_wake, self.page_wake);
         if at.is_some() {
             self.start();
         }

@@ -150,7 +150,8 @@ pub(crate) struct Feed {
     fps: u32,
     source: Option<String>,
     scenes: Option<String>,
-    values: BTreeMap<String, String>,
+    /// The covered values as last sent.
+    values: BTreeMap<String, Value>,
     program: bool,
     preview: bool,
     shown_at: Option<f64>,
@@ -159,6 +160,11 @@ pub(crate) struct Feed {
     anchored: Option<f64>,
     /// The mean age of the page's frames when the engine looks at them, in seconds.
     age: Option<f64>,
+    /// What is still to be sent, merged: updates go at most once per page frame
+    /// (ADR-0102 decision 3).
+    pending: PageData,
+    /// The clock time the last update was sent.
+    sent: Option<f64>,
 }
 
 impl Feed {
@@ -175,7 +181,78 @@ impl Feed {
             preview_shown_at: None,
             anchored: None,
             age: None,
+            pending: PageData::default(),
+            sent: None,
         }
+    }
+
+    /// Adds `data` to what is still to be sent: a later clock, visibility or scenes
+    /// replaces the earlier, and a later value replaces the same name's.
+    pub(crate) fn post(&mut self, data: PageData) {
+        let pending = &mut self.pending;
+        if data.clock.is_some() {
+            pending.clock = data.clock;
+        }
+        if data.source.is_some() {
+            pending.source = data.source;
+        }
+        if data.scenes.is_some() {
+            pending.scenes = data.scenes;
+        }
+        for (name, value) in data.values {
+            match pending.values.iter_mut().find(|(n, _)| *n == name) {
+                Some(entry) => entry.1 = value,
+                None => pending.values.push((name, value)),
+            }
+        }
+    }
+
+    /// What is still to be sent, if a page frame has passed since the last update at
+    /// `now` (or the clock went back), else `None`, keeping it. A clock anchor in it is
+    /// moved to `now`.
+    pub(crate) fn flush(&mut self, now: MediaTime) -> Option<PageData> {
+        let now = now.as_secs_f64();
+        if self.pending.is_empty() || !now.is_finite() {
+            return None;
+        }
+        let ready = self
+            .sent
+            .is_none_or(|sent| now < sent || now - sent >= self.frame());
+        if !ready {
+            return None;
+        }
+        self.sent = Some(now);
+        let mut data = std::mem::take(&mut self.pending);
+        // A held anchor says what the clock reads as it is sent, not when it was made.
+        if let Some((_, lead)) = data.clock {
+            data.clock = Some((now, lead));
+            self.anchored = Some(now);
+        }
+        Some(data)
+    }
+
+    /// When what is still to be sent may go, on the media clock, or `None` with nothing
+    /// pending.
+    pub(crate) fn due(&self) -> Option<MediaTime> {
+        if self.pending.is_empty() {
+            return None;
+        }
+        let at = self.sent.map_or(0.0, |sent| sent + self.frame());
+        // Rounded up to a microsecond, so the update is never early.
+        let micros = (at * 1e6).ceil();
+        Some(MediaTime::new(
+            if micros.is_finite() {
+                micros as i64
+            } else {
+                i64::MAX
+            },
+            jstream_media::Timebase::MICROS,
+        ))
+    }
+
+    /// One page frame, in seconds.
+    fn frame(&self) -> f64 {
+        1.0 / f64::from(self.fps)
     }
 
     /// The update `view` makes: what changed since the last, and a clock anchor when
@@ -215,27 +292,20 @@ impl Feed {
         }
         if !self.grant.values.is_empty() {
             let grant = &self.grant;
-            let now: BTreeMap<&String, String> = view
-                .values
-                .iter()
-                .filter(|(name, _)| grant.covers(name))
-                .map(|(name, value)| (name, value.to_string()))
-                .collect();
-            for name in self.values.keys() {
-                if !now.contains_key(name) {
+            let values = &mut self.values;
+            values.retain(|name, _| {
+                let kept = view.values.contains_key(name) && grant.covers(name);
+                if !kept {
                     data.values.push((name.clone(), None));
                 }
-            }
-            for (name, text) in now {
-                if self.values.get(name) != Some(&text) {
-                    data.values.push((name.clone(), Some(text)));
+                kept
+            });
+            // Compared as values, so only a changed one is written out as text.
+            for (name, value) in view.values.iter().filter(|(name, _)| grant.covers(name)) {
+                if values.get(name) != Some(value) {
+                    values.insert(name.clone(), value.clone());
+                    data.values.push((name.clone(), Some(value.to_string())));
                 }
-            }
-            for (name, value) in &data.values {
-                match value {
-                    Some(text) => self.values.insert(name.clone(), text.clone()),
-                    None => self.values.remove(name),
-                };
             }
         }
         data
@@ -403,6 +473,56 @@ mod tests {
         values.remove("status.text");
         let removed = feed.view(&view(&values, true, 2100));
         assert_eq!(removed.values, [("status.text".to_owned(), None)]);
+    }
+
+    #[test]
+    fn a_feed_sends_at_most_one_update_per_page_frame() {
+        let grant = Grant {
+            scenes: false,
+            values: vec![Covered::Below("counter".into())],
+        };
+        // 50 a second: one page frame is 20 ms.
+        let mut feed = Feed::new(grant, 50);
+        let value = |n: i64| PageData {
+            values: vec![("counter.a".to_owned(), Some(n.to_string()))],
+            ..PageData::default()
+        };
+        assert_eq!(feed.due(), None, "nothing pending");
+        feed.post(value(1));
+        assert_eq!(
+            feed.flush(at(1000)),
+            Some(value(1)),
+            "the first goes at once"
+        );
+        // Three more within the frame merge into one, the latest winning.
+        feed.post(value(2));
+        feed.post(PageData {
+            source: Some("{}".to_owned()),
+            ..PageData::default()
+        });
+        feed.post(value(3));
+        assert_eq!(feed.flush(at(1010)), None);
+        assert_eq!(
+            feed.due(),
+            Some(MediaTime::new(1_020_000, Timebase::MICROS))
+        );
+        let merged = feed.flush(at(1020)).expect("a frame has passed");
+        assert_eq!(merged.source.as_deref(), Some("{}"));
+        assert_eq!(merged.values, value(3).values);
+        assert_eq!(feed.due(), None);
+        // A held anchor goes out as the clock reads when it is sent.
+        feed.post(PageData {
+            clock: Some((1.03, 0.02)),
+            ..PageData::default()
+        });
+        assert_eq!(feed.flush(at(1030)), None);
+        assert_eq!(
+            feed.flush(at(1045)).and_then(|data| data.clock),
+            Some((1.045, 0.02))
+        );
+        // A clock that went back sends at once.
+        feed.post(value(4));
+        assert_eq!(feed.flush(at(500)), Some(value(4)));
     }
 
     #[test]

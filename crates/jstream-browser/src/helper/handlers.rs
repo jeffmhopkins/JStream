@@ -16,7 +16,9 @@ use super::PageShared;
 pub(crate) struct Page(pub(crate) Arc<PageShared>);
 
 wrap_app! {
-    pub(crate) struct JstreamApp;
+    pub(crate) struct JstreamApp {
+        granted: super::page_api::Grants,
+    }
 
     impl App {
         fn on_before_command_line_processing(
@@ -54,14 +56,14 @@ wrap_app! {
 
         // Used only in renderer processes: the page API (ADR-0102, `page_api.rs`).
         fn render_process_handler(&self) -> Option<RenderProcessHandler> {
-            Some(super::page_api::renderer())
+            Some(super::page_api::renderer(&self.granted))
         }
     }
 }
 
 /// The browser process's app.
 pub(crate) fn app() -> App {
-    JstreamApp::new()
+    JstreamApp::new(super::page_api::Grants::default())
 }
 
 wrap_task! {

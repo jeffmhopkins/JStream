@@ -674,8 +674,8 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 (`src/tests/youtube.rs`), `jstream-browser`'s `fake` feature (the browser pages in
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
-scenes, only the values its grant covers and a removal, nothing more once nothing
-changes, and nothing at all for a page without the grant), `jstream-crash` (the crash redaction's `Secrets` fed by the
+scenes, only the values its grant covers and a removal, an update held to the next
+page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
 test plugins of `src/tests/automation.rs`) and `jstream-mcp`
@@ -1203,9 +1203,13 @@ and whether the preview scene does (`activity::shown_sources`: the visible items
 through every placed nested scene source to any depth, whatever its audio, a keyframe's
 overrides applied as for audio), the two scenes' IDs and names, and the shared values.
 The source sends its page only what changed, so this costs nothing when no page is
-granted and little when nothing changed. Each look at a source (`look_timed`) hands it
-the plan's time too (`Source::page_clock`), from which a granted page gets its clock
-anchors.
+granted and little when nothing changed, and at most one update per page frame (ADR-0102
+decision 3): what changes within a frame is merged and held, and `page_view` returns
+when it may go. The earliest of those is the sources' page wake, which the sources
+thread wakes for as it does for the plan's own (`LiveSources::wake_at`), so a held
+update goes out a frame later whether or not anything else changes. Each look at a
+source (`look_timed`) hands it the plan's time too (`Source::page_clock`), from which a
+granted page gets its clock anchors.
 
 **Packs written over the protocol** (`pack_store.rs`, `Packs::write`, `delete`, `list`
 and `read`, [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)). The engine
