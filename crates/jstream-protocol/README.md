@@ -257,7 +257,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.78 because of the shared values `values.set`, `values.list`
+`PROTOCOL_VERSION` is 0.79 because a master or output filter may name a file (an
+asset reference, so Apply LUT grades the program or one output; no wire change:
+earlier minors refused it with `invalid_argument` on the parameter); 0.78 because of
+the shared values `values.set`, `values.list`
 and `values.changed` (`values.rs`,
 [ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); 0.77 because of
 `SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
@@ -850,9 +853,11 @@ from its next start (`output.status` reports it `dedicated`); a virtual camera h
 video chain only, and with a filter gets a render pass of its own but no encoder
 session. An audio filter on an output that carries no audio (a `virtual_cam`) is
 `invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
-`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
-`invalid_argument` on the parameter), since the delete checks follow only a source's
-references. `output.delete`'s
+`output`. Their filters can't hold a scene, source or bus reference yet
+(`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. From 0.79 they may name a file (an asset reference), which is no edge:
+the engine loads it as it does a source's filter's, so `apply_lut` or `image_mask`
+grades the program or one output. Before 0.79 an asset was refused there too. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
 
