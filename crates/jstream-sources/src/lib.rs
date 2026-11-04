@@ -60,8 +60,8 @@ pub use jstream_browser::BrowserBackend;
 pub use media::MediaAudio;
 pub use registry::Registry;
 pub use scope::{
-    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, drawn_source, heard_scope,
-    heard_source,
+    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, RawMeasure, drawn_source,
+    heard_scope, heard_source,
 };
 pub use source::{
     AssetRoots, Context, Limits, Painter, Source, SourceAudio, SourceKind, needs_restart,

@@ -49,6 +49,19 @@ impl Default for Metered {
     }
 }
 
+/// What the latest window measured, before any fall: what an audio-reactive modifier
+/// ([ADR-0100](../../../../docs/adr/0100-audio-reactive-motion-modifiers.md)) follows,
+/// through attack and release times of its own.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct RawMeasure {
+    /// RMS level of the window, 0 to 1.
+    pub level: f32,
+    /// Peak absolute sample of the window, 0 to 1.
+    pub peak: f32,
+    /// 1 when the level jumped above its recent average in this window, else 0.
+    pub onset: f32,
+}
+
 /// Measures an [`AudioScope`] frame by frame.
 pub struct AudioMeter {
     fft: Arc<dyn RealToComplex<f32>>,
@@ -65,6 +78,10 @@ pub struct AudioMeter {
     /// The slow level an onset is measured against.
     slow: f32,
     metered: Metered,
+    raw: RawMeasure,
+    /// The sample rate of the window `output` holds the spectrum of, or 0 when it holds
+    /// none (silence, or no measure yet).
+    spectrum_rate: u32,
 }
 
 impl std::fmt::Debug for AudioMeter {
@@ -103,6 +120,8 @@ impl AudioMeter {
             last: None,
             slow: 0.0,
             metered: Metered::default(),
+            raw: RawMeasure::default(),
+            spectrum_rate: 0,
         }
     }
 
@@ -143,6 +162,11 @@ impl AudioMeter {
         m.peak = peak.min(1.0).max(m.peak * fall);
         let jumped = level > self.slow * 1.5 + 0.02;
         m.onset = if jumped { 1.0 } else { m.onset * fall };
+        self.raw = RawMeasure {
+            level,
+            peak: peak.min(1.0),
+            onset: if jumped { 1.0 } else { 0.0 },
+        };
         self.slow = level + (self.slow - level) * SLOW.powf(frames);
 
         for (n, sample) in m.wave.iter_mut().enumerate() {
@@ -157,6 +181,7 @@ impl AudioMeter {
                 .process_with_scratch(&mut self.input, &mut self.output, &mut self.scratch)
                 .is_ok()
         };
+        self.spectrum_rate = if transformed { rate } else { 0 };
         if !transformed {
             for band in &mut m.bands {
                 *band *= fall;
@@ -180,6 +205,38 @@ impl AudioMeter {
             *band = super::spectrum::height(power).max(*band * fall);
         }
         &self.metered
+    }
+
+    /// The latest window's level, peak and onset as [`measure`](Self::measure) last
+    /// measured them, before any fall.
+    pub fn raw(&self) -> RawMeasure {
+        self.raw
+    }
+
+    /// The amplitude of the latest window's spectrum between `low_hz` and `high_hz`: the
+    /// square root of its bins' summed power, scaled so that a full-scale sine inside
+    /// the band reads 1 (ADR-0100 decision 2). A band narrower than one bin reads the bin
+    /// it falls in. 0 before a measure, after one that heard silence, and for a band
+    /// that isn't a finite, rising range. Allocates nothing.
+    pub fn band(&self, low_hz: f32, high_hz: f32) -> f32 {
+        let rate = self.spectrum_rate;
+        if rate == 0 || !(low_hz.is_finite() && high_hz.is_finite() && low_hz < high_hz) {
+            return 0.0;
+        }
+        let bin_hz = rate as f32 / WINDOW as f32;
+        let last = self.output.len() - 1;
+        let first = ((low_hz / bin_hz).round().max(0.0) as usize).min(last);
+        let end = ((high_hz / bin_hz).round().max(0.0) as usize).clamp(first + 1, last + 1);
+        let power: f32 = self.output[first..end].iter().map(|c| c.norm_sqr()).sum();
+        // A Hann-windowed sine of amplitude A puts A²·N²·3/32 in the one-sided spectrum
+        // (Parseval), wherever it falls between bins.
+        let full_scale = (WINDOW as f32) * (3.0f32 / 32.0).sqrt();
+        let amplitude = power.sqrt() / full_scale;
+        if amplitude.is_finite() {
+            amplitude.min(1.0)
+        } else {
+            0.0
+        }
     }
 }
 
@@ -214,6 +271,42 @@ mod tests {
         // The ring stands still: after a quarter second it is silence, falling.
         let later = *meter.measure(&scope, 16 + STILL_MS);
         assert!(later.level < heard.level && later.wave.iter().all(|&s| s == 0.0));
+    }
+
+    /// The raw readout and a band's amplitude: a full-scale sine reads 1 in a band that
+    /// holds it, nearly nothing in one that doesn't, and every raw value is the window's
+    /// own, with no fall.
+    #[test]
+    fn a_band_reads_a_sine_inside_it_at_full_scale() {
+        let scope = AudioScope::new();
+        let mut meter = AudioMeter::new();
+        assert_eq!(meter.band(20.0, 20_000.0), 0.0, "nothing measured yet");
+        // 1003 Hz, between bins, at half scale.
+        let samples: Vec<f32> = (0..WINDOW)
+            .flat_map(|n| {
+                let s = 0.5 * (std::f32::consts::TAU * 1003.0 * n as f32 / 48_000.0).sin();
+                [s, s]
+            })
+            .collect();
+        scope.push(48_000, &samples);
+        meter.measure(&scope, 16);
+        let inside = meter.band(800.0, 1200.0);
+        assert!((inside - 0.5).abs() < 0.03, "{inside}");
+        let wide = meter.band(20.0, 20_000.0);
+        assert!(
+            (wide - inside).abs() < 0.01,
+            "a wider band isn't diluted: {wide}"
+        );
+        assert!(meter.band(40.0, 120.0) < 0.01);
+        assert_eq!(meter.band(1200.0, 800.0), 0.0);
+        assert_eq!(meter.band(f32::NAN, 800.0), 0.0);
+        let raw = meter.raw();
+        assert!((raw.level - 0.5 / 2f32.sqrt()).abs() < 0.01, "{raw:?}");
+        assert!((raw.peak - 0.5).abs() < 0.01 && raw.onset == 1.0, "{raw:?}");
+        // The ring stands still: silence reads at once, with no fall.
+        meter.measure(&scope, 16 + STILL_MS);
+        assert_eq!(meter.raw(), RawMeasure::default());
+        assert_eq!(meter.band(800.0, 1200.0), 0.0);
     }
 
     /// A non-finite sample is heard as silence, so every value stays finite.
