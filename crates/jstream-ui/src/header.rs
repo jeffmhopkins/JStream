@@ -1,5 +1,6 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
-//! the File, Edit, View and Layout menus, the stats readout (frame rate, dropped frames
+//! the File, Edit, View, Layout and Help menus (Help's links and About dialog are in
+//! `about.rs`), the stats readout (frame rate, dropped frames
 //! and CPU), Studio mode,
 //! Record, and Go Live / End stream. The View and Layout menus change the workspace's
 //! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
@@ -8,6 +9,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking
 
+use crate::about::{self, About, Link};
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
 use crate::dock::PanelId;
@@ -225,15 +227,16 @@ enum Menu {
     Edit,
     View,
     Layout,
+    Help,
 }
 
 impl Menu {
     /// The menus along the bar, left to right: View and Layout only with a dock.
     fn bar(dock: bool) -> &'static [Menu] {
         if dock {
-            &[Menu::File, Menu::Edit, Menu::View, Menu::Layout]
+            &[Menu::File, Menu::Edit, Menu::View, Menu::Layout, Menu::Help]
         } else {
-            &[Menu::File, Menu::Edit]
+            &[Menu::File, Menu::Edit, Menu::Help]
         }
     }
 
@@ -252,6 +255,7 @@ impl Menu {
             Menu::Edit => "edit",
             Menu::View => "view",
             Menu::Layout => "layout",
+            Menu::Help => "help",
         }
     }
 }
@@ -300,6 +304,8 @@ pub fn Header(
     let dropped = RwSignal::new(Dropped::default());
     let engine_load = RwSignal::new(Load::default());
     let open = RwSignal::new(None::<Menu>);
+    let about_open = RwSignal::new(false);
+    let protocol = Signal::derive(move || info.with(|i| i.protocol.clone()));
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
     let dock = use_context::<DockState>().map(|d| d.0);
@@ -523,7 +529,7 @@ pub fn Header(
             class="app-header"
             data-rev=move || info.with(|i| i.rev.clone())
         >
-            <span class="brand"><span class="brand-mark"></span>"JStream"</span>
+            <span class="brand"><img class="brand-mark" src=about::ICON alt="" width="22" height="22" />"JStream"</span>
             {move || open.get().map(|_| view! {
                 <div class="menu-catcher" on:pointerdown=move |_| open.set(None)></div>
             })}
@@ -676,6 +682,28 @@ pub fn Header(
                     </Show>
                 </div>
             })}
+            <div class="top-menu" data-menu=Menu::Help.key()>
+                {menu_button(Menu::Help, "Help".into_any())}
+                <Show when=move || open.get() == Some(Menu::Help)>
+                    <div class="dropdown" role="menu" aria-label="Help" on:keydown=dropdown_keys(Menu::Help)>
+                        {Link::MENU.into_iter().map(|link| about::menu_link(link, move || open.set(None))).collect_view()}
+                        <div class="menu-sep"></div>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
+                                about_open.set(true);
+                            }
+                        >
+                            "About JStream"
+                        </button>
+                    </div>
+                </Show>
+            </div>
+            <Show when=move || about_open.get()>
+                <About protocol=protocol close=move || about_open.set(false) />
+            </Show>
             <span class="spacer"></span>
             <span
                 class="readout"
@@ -827,12 +855,14 @@ mod tests {
     fn the_arrow_keys_move_along_the_bar_and_wrap() {
         let bar = Menu::bar(true);
         assert_eq!(Menu::File.beside(bar, 1), Menu::Edit);
-        assert_eq!(Menu::Layout.beside(bar, 1), Menu::File);
-        assert_eq!(Menu::File.beside(bar, -1), Menu::Layout);
+        assert_eq!(Menu::Layout.beside(bar, 1), Menu::Help);
+        assert_eq!(Menu::Help.beside(bar, 1), Menu::File);
+        assert_eq!(Menu::File.beside(bar, -1), Menu::Help);
         // Without a dock the bar has no View or Layout.
         let bar = Menu::bar(false);
-        assert_eq!(Menu::Edit.beside(bar, 1), Menu::File);
-        assert_eq!(Menu::File.beside(bar, -1), Menu::Edit);
+        assert_eq!(Menu::Edit.beside(bar, 1), Menu::Help);
+        assert_eq!(Menu::Help.beside(bar, 1), Menu::File);
+        assert_eq!(Menu::File.beside(bar, -1), Menu::Help);
     }
 
     #[test]

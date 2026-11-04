@@ -140,7 +140,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     checks and reasons, which never repeat the URL), and deleting an output while it
     runs, which the engine refuses through `Graph::apply_with_running`;
   - recording paths in `output.create` (`jstream-graph`'s platform-independent rule and
-    reasons), `output.set_target` on a recording or virtual-camera output (the mock
+    reasons), and in `output.set_path`, which refuses any output but a recording,
+    `output.set_target` on a recording or virtual-camera output (the mock
     accepts a `virtual_cam` output, as the engine does), and an `unknown` output kind,
     RTMP target or container;
   - encoder profiles: `EncoderProfile::problem`'s ranges in `encoder.create` and
@@ -250,8 +251,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so
   `plugin.list` lists none;
+- `profile.get` answered with an empty profile: the mock draws nothing and reads no
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md));
 - `effect.enable` answered with `invalid_argument` on `kind_id`, as an engine that loads
   no effect packs answers it: the mock quarantines nothing;
+- `pack.write`, `pack.delete`, `pack.list` and `pack.read` answered with `unsupported`,
+  as an engine that watches no packs folder answers them
+  ([ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): the mock has no disk;
 - the stream-key actions with the engine's checks and errors. `output.set_key` answers
   `not_found` for an output not in the collection, then `invalid_argument` (field
   `key`) for an empty or over-long key, or one with whitespace, control or non-ASCII

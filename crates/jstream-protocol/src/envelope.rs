@@ -207,6 +207,12 @@ impl CallResult {
 #[serde(tag = "type")]
 #[non_exhaustive]
 pub enum ActionResult {
+    /// The answer to `pack.write` (0.72): the pack as now loaded.
+    #[serde(rename = "pack.write")]
+    PackWrite {
+        /// The pack.
+        pack: crate::PackInfo,
+    },
     /// The answer to `pairing.start`: the one-time pairing code, sent to the client that
     /// started pairing and to no one else (ADR-0044).
     #[serde(rename = "pairing.start")]
@@ -245,7 +251,7 @@ pub enum ActionResult {
         broadcast: BroadcastInfo,
     },
     /// The answer to `scene.switch_and_watch`: the frame sheet of the program mix from
-    /// the switch on (since 0.71).
+    /// the switch on (since 0.76).
     #[serde(rename = "scene.switch_and_watch")]
     SceneSwitchAndWatch {
         /// The sheet.

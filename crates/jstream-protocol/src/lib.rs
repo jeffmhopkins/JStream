@@ -27,10 +27,12 @@ mod live;
 mod mix;
 mod organise;
 mod output;
+mod pack;
 #[cfg(feature = "fixtures")]
 pub mod parity;
 mod plugin;
 mod preview;
+mod profile;
 mod query;
 mod schema;
 mod settings;
@@ -69,7 +71,7 @@ pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
     FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX,
     MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    SceneCamera, Size, Vec3, legacy_quad,
+    SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
@@ -81,7 +83,7 @@ pub use id::{
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField};
 pub use kind::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
-    VisibleIf, check_asset_path,
+    VisibleIf, check_asset_path, not_a_reference,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
@@ -94,6 +96,10 @@ pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
     rtmp_url_sends_key_in_cleartext,
 };
+pub use pack::{
+    MAX_PACK_FILES, MAX_PACK_IMAGE_BYTES, MAX_PACK_WRITE_BYTES, PackContent, PackFile,
+    PackFileInfo, PackInfo,
+};
 pub use plugin::{
     PLUGIN_SCOPES, PluginClass, PluginDenial, PluginDisabledReason, PluginGrant, PluginInfo,
     PluginRequest, PluginScope, PluginState, Reach, plugin_classes, plugin_may_bind, plugin_scope,
@@ -102,6 +108,11 @@ pub use plugin::{
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
     PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
+};
+pub use profile::{
+    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
+    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
+    ThreadProfile, UnitProfile,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,

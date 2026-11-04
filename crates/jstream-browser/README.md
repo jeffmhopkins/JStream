@@ -134,8 +134,13 @@ What follows is Windows; **On Linux** below says what differs.
   HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
   opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads
   it (`BrowserPage::reload`, which the helper does with CEF's own reload, the custom CSS
-  going in again on load), closes it, tells the helper which adapter to paint on, and shuts it down. The helper sends
-  frames, audio, audio failures, refused-request counts (never URLs) and warnings for
+  going in again on load), closes it, tells the helper which adapter to paint on, and shuts it down.
+  A reload hides the page until the reloaded document paints: the helper skips the old
+  document's paints from the reload until the new one starts loading, and says when it
+  took the reload (`Reloading`), and the engine drops paints that left before that, so
+  a `restart_on_show` page is transparent while it reloads, never the end of its last
+  run. The helper sends
+  frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
   the engine's log. A reader thread hands each to its page, stamping frames and audio on
   the media clock as they arrive. When the helper's pipe ends, every page's audio fails
   (`DeviceLost`), unless the engine was shutting it down.

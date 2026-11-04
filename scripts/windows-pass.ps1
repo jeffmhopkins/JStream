@@ -92,6 +92,7 @@ $Sources = [ordered]@{
     'pr726' = 'pull/726/head'
     'pr685' = 'pull/685/head'
     'pr573' = 'pull/573/head'
+    'pr1083' = 'pull/1083/head'
 }
 
 # --- The checks --------------------------------------------------------------------------
@@ -116,6 +117,7 @@ $Tasks = @(
     @{ Id = 'webcam';         Src = 'pr726'; Issues = '#673, #726';      Fn = 'Webcam';        Title = 'MJPEG webcam and its paired microphone';        Needs = 'a webcam (with a microphone), ffprobe, you' }
     @{ Id = 'cursor';         Src = 'pr685'; Issues = '#690 (part)';     Fn = 'Cursor';        Title = 'CursorCapture::Hidden unit tests';              Needs = '' }
     @{ Id = 'clap';           Src = 'pr573'; Issues = '#573 (#342 re-run)'; Fn = 'Clap';       Title = 'CLAP plugin host with the unnamed shared block'; Needs = 'a .clap effect in Common Files\CLAP' }
+    @{ Id = 'help-links';     Src = 'pr1083'; Issues = '#1084 (#1083)';  Fn = 'HelpLinks';     Title = 'Help and About links open the default browser'; Needs = 'trunk, wasm-bindgen, you' }
 )
 
 # Open hardware items this pass can't run, and why. They go into the report as is.
@@ -954,6 +956,23 @@ function Test-Preview {
         Ask 'follows edits' 'Does it follow committed edits (after you release a drag; live drag is #747) and scene switches?'
         Ask 'backlog recovers' 'After a slow moment (drag a big window around), does it recover at the next keyframe, within 2 s?'
         Ask 'JPEG fallback' 'If the decoder fails, does the canvas fall back to JPEG rather than showing "No preview"? (skip if you can''t force a failure)'
+    } finally { Stop-Native $app }
+}
+
+function Test-HelpLinks {
+    $trunk = Find-Tool 'trunk'
+    if (-not $trunk -or -not (Find-Tool 'wasm-bindgen')) { Skip 'help-links' 'needs trunk and wasm-bindgen (the preview check can install them)'; return }
+    $src = Get-Source 'pr1083'
+    $ui = Join-Path $src 'crates\jstream-ui'
+    $code = Invoke-Logged $trunk @('build', '--release') (Join-Path $OutDir 'trunk-build-pr1083.log') $ui
+    if ($code -ne 0) { Fail 'UI build' "trunk build exited $code"; return }
+    if (-not (Build 'pr1083' @('jstream-desktop'))) { return }
+    $app = Start-Native (Bin 'pr1083' 'jstream') @('--ui-dir', (Join-Path $ui 'dist'))
+    try {
+        if (-not (Prompt-Do 'The desktop app is open. Choose Help > Report an issue.')) { Skip 'help-links' 'skipped by you'; return }
+        Ask 'help link' 'Did the default browser open github.com/jeffmhopkins/JStream/issues/new, with the JStream window still on the app and no second JStream window?'
+        if (-not (Prompt-Do 'Choose Help > About JStream, then click "Source code on GitHub" and "MIT".')) { Skip 'about links' 'skipped by you'; return }
+        Ask 'about links' 'Did each open in the default browser the same way, with the About dialog showing the icon and the version?'
     } finally { Stop-Native $app }
 }
 
