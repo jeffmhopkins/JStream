@@ -718,11 +718,11 @@ checked_note = "Not loaded from the builder sandbox"
 
 [[external]]
 id = "demo-cockpit-still"
-url = "https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/jstream-nebula.jpg"
+url = "https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/nebula.jpg"
 relied_on = "A still from a layered scene recorded in JStream, shown as a demo thumbnail in the README"
 review_every = "180d"
 status = "ok"
-checked_note = "Fetched: HTTP 200"
+checked_note = "Re-fetched after jstream-nebula.jpg left StreamingScenes main: HTTP 200"
 
 [[external]]
 id = "demo-cockpit-video"

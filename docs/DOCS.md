@@ -695,8 +695,8 @@ differs. Two of them come from ADR `@doc` metadata
 It also generates one block from data rather than from docs:
 
 - **The `progress` block** in `README.md`: first a table of the releases with how many
-  of their items are merged, in review or planned, and each release's items (the next
-  release's open, its unfinished items first); then the same table for the milestones,
+  of their items are merged, in review or planned, and each release's items, unfinished items
+  first (the next release's list open); then the same table for the milestones,
   the project's goals, and each milestone's items, all from `docs/progress.toml`. That
   file lists the releases (a `version`, a `goal`, and the git `tag` once one has
   shipped; tagged releases come first), the milestones, and each roadmap item's

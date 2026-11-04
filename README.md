@@ -53,8 +53,8 @@ around one idea: **everything is an API**.
   sources written as WGSL effect packs.
 - **3D scenes**: a scene can have a camera that the items sit in front of, moving through
   them, with depth of field.
-- **Motion**: native animation, timelines and audio-reactive motion, and transitions
-  with a studio preview.
+- **Transitions** with a studio preview, and keyframe scenes that animate between
+  layouts. Native motion and audio-reactive motion on items are coming in alpha.4.
 - **Independent routing**: outputs take video mixes and audio buses, not scenes, so a
   stream and a recording can show different things, and audio runs through a bus mixer.
 - **Desktop or headless**: the same engine runs inside the desktop app or as a daemon that
@@ -71,7 +71,7 @@ the code today:
 
 | | JStream |
 |---|---|
-| **Agent control** | A built-in MCP server gives an AI agent the same control a person has in the window, apart from account sign-in and installing plugins, so it can build scenes, restyle them, take snapshots to check its work, and undo its own edits ([ADR-0006](docs/adr/0006-mcp-full-access.md)). Steps undo can't take back, such as going live, are marked so the agent asks first. |
+| **Agent control** | A built-in MCP server gives an AI agent the same control a person has in the window, apart from YouTube's account features and installing or granting plugins, so it can build scenes, restyle them, take snapshots to check its work, and undo its own edits ([ADR-0006](docs/adr/0006-mcp-full-access.md)). Steps undo can't take back, such as going live, are marked so the agent asks first. |
 | **One protocol** | The engine is a library behind one versioned, token-authenticated WebSocket protocol. The web UI, the desktop app, the CLI and MCP are all clients of it, so nothing is UI-only ([ADR-0001](docs/adr/0001-library-first-engine.md)). |
 | **Rust core** | The engine is Rust, with `unsafe` code allowed only in the crates that declare it. The real-time audio thread never allocates, locks or blocks, and tests enforce it ([R-RT-001](docs/RULES.md#R-RT-001)). |
 | **Headless first** | The whole engine runs with no window, on a software GPU, a fake clock and fake devices, which is how its tests run, and how a server can host it. |
@@ -90,7 +90,7 @@ not in JStream.
 
 | | |
 |---|---|
-| [![A scene of stacked browser pages, recorded in JStream](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/jstream-nebula.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/starship-cockpit/media/cockpit-jstream.mp4) | **A layered scene, recorded live.** A starship cockpit stacked from browser pages and images, with live cameras on its monitors, effects switched on a hotkey timeline and lights driven by the music. Recorded on Linux with JStream's own `record` output. |
+| [![A scene of stacked browser pages, recorded in JStream](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/nebula.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/starship-cockpit/media/cockpit-jstream.mp4) | **A layered scene, recorded live.** A starship cockpit stacked from browser pages and images, with live cameras on its monitors; its effects and music-driven lights are the scene's own pages. Recorded on Linux with JStream's own `record` output. |
 | [![Depth of field through a scene camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/depth-of-field.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/depth-of-field.mp4) | **Depth of field.** Cards at three depths seen through a scene camera; the focus pulls from one to the next and the blur grows and shrinks. |
 | [![A screen capture seen up close through a moving camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/screen-closeup.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/screen-closeup.mp4) | **A 3D screen close-up.** A screen capture placed flat in a 3D scene, with the camera gliding between close, angled views of it. |
 
