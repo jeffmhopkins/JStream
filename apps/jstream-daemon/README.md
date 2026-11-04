@@ -162,7 +162,8 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   with health `poor`, and its uptime keeps counting. Once the server is back, the output
   reconnects by itself and goes `active`. It stays `poor` while the video lost in the
   outage is inside the health's ten-second window (#994). The new connection opens on a
-  keyframe, with audio.
+  keyframe, with audio, and the test stops the output only once the receiver's file
+  holds 2.5 s of video after the reconnect, not on the output's own frame count (#1141).
 - **The daemon binary on its own backends** (`binary.rs`). The built `jstream-daemon`
   runs as a user runs it, on the Linux backends `serve.rs` builds, with no fakes and
   nothing in process. Its data, config and log folders are in the test's scratch
