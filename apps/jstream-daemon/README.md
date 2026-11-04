@@ -609,7 +609,8 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   the server's `Host`, `Origin` and token checks apply unchanged
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
   option to listen on other addresses until remote browsers need it (with TLS,
-  [ROADMAP › M2](../../ROADMAP.md#m2)). Pairing is served already, and its device tokens
+  [ROADMAP › M2](../../ROADMAP.md#m2); [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
+  decides it as an opt-in `--lan` flag, not built yet). Pairing is served already, and its device tokens
   are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
   pairing page and the device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on

@@ -601,7 +601,10 @@ the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crat
    feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
    `jstream-outputs`' RTMPS, so that needs no further governance change. What depends on
    TLS (pairing beyond loopback, the pairing page, the device cookie) is built behind
-   `ServerConfig::tls`, which the listener will set.
+   `ServerConfig::tls`, which the listener will set. How the certificate is made and
+   trusted is decided in [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md):
+   self-signed, made on the host and pinned by its fingerprint, on an opt-in second
+   listener for the network that admits device tokens only.
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
