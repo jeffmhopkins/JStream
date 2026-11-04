@@ -35,6 +35,8 @@ mod link;
 mod page;
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 mod permission;
+#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+mod reload_hold;
 mod request;
 #[cfg(any(
     test,

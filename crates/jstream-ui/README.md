@@ -573,8 +573,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
   virtual camera, which has no sound, has a video chain only. The Add filter dialog
-  won't add a kind whose settings name a scene, a source, a bus or a file there
-  (`refers`: the engine refuses those references yet), and, for an output whose video
+  won't add a kind whose settings name a scene, a source or a bus there (`refers`:
+  the engine refuses those references yet), though one that names a file, such as
+  Apply LUT, goes on them as on any chain, and, for an output whose video
   chain is empty, reads `output.status` and states what its first video filter costs
   (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
   encoder sessions in use now, or for the virtual camera, which opens no encoder

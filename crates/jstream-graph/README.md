@@ -205,7 +205,8 @@ with no inverse. The engine draws open gestures' source settings through it
   ADR-0080, an output that doesn't exist being `not_found`; a scene and an item: video
   only, [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), that the
   chain has room, that the kind is a filter kind of that chain (`kind`), that a master
-  or output filter's settings hold no reference (a scene, source, bus or asset), the
+  or output filter's settings hold no scene, source or bus reference (a file, an
+  asset reference, is allowed: it is no edge), the
   settings exactly as a source's, the index, and the cycle check (a source's filter's
   references are edges of the source, a scene filter's and an item effect's of the
   scene); it is undone by `filter.remove`. `filter.remove` is undone by the
