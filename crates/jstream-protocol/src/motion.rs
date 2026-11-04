@@ -1,5 +1,5 @@
 //! Motion modifiers on the wire ([ADR-0099](../../../docs/adr/0099-native-motion-modifiers-and-timelines.md)
-//! decision 3, since 0.75).
+//! decision 3, since 0.79).
 //!
 //! An item, a group's item included, holds an ordered list of at most
 //! [`MAX_MOTION_MODIFIERS`] modifiers ([`MotionModifier`]). Each changes one property
@@ -52,7 +52,7 @@ pub enum MotionProperty {
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
     /// A property this version of the protocol doesn't know, from a newer server, so a
-    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// 0.79 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
     #[serde(other)]
     #[schemars(skip)]
@@ -92,7 +92,7 @@ pub enum MotionShape {
     /// A sawtooth: rises from -1 to 1 over each period, then jumps back.
     Saw,
     /// A shape this version of the protocol doesn't know, from a newer server, so a
-    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// 0.79 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
     #[serde(other)]
     #[schemars(skip)]
@@ -152,7 +152,7 @@ pub enum MotionKind {
         wrap: Option<Finite32>,
     },
     /// A kind this version of the protocol doesn't know, from a newer server, so a
-    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// 0.79 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
     #[serde(other)]
     #[schemars(skip)]
@@ -176,7 +176,7 @@ pub enum MotionClock {
     /// or source preview, the modifier is at its start.
     Shown,
     /// A clock this version of the protocol doesn't know, from a newer server, so a
-    /// 0.75 client can still read `state.get`. Never sent; the engine refuses it in an
+    /// 0.79 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
     #[serde(other)]
     #[schemars(skip)]

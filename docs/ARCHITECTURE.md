@@ -651,7 +651,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   result lists the overrides it dropped (`dropped_overrides`, ADR-0040 §1). Since 0.63,
   `item.set_effects` writes a keyframe's override of an item's effects whole, and the
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
-  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.75,
+  ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.79,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
   whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's

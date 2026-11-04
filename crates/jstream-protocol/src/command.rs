@@ -112,7 +112,7 @@ pub enum Edit {
         /// `effects`.
         effects: Vec<FilterInfo>,
     },
-    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which
     /// move it on the engine's animation clock as each frame is drawn. Without
     /// `scene_id`, or with its own scene's, it writes the item's own list; with a
     /// keyframe scene whose tree holds the item, it writes that keyframe's override.
@@ -1938,7 +1938,7 @@ impl Crop {
 ///
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). They blend in linear light,
-/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),
+/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.79),
 /// which blend sRGB-encoded values.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -1963,11 +1963,11 @@ pub enum BlendMode {
     Difference,
     /// Like difference, with lower contrast.
     Exclusion,
-    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,
+    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.79,
     /// #1096): a soft overlay designed in a browser keeps its strength, where `normal`
     /// mixes linear light and a faint veil over a dark backdrop comes out brighter.
     NormalSrgb,
-    /// Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in
+    /// Additive in sRGB-encoded values (since 0.79, #1096): the encoded colours add as in
     /// a browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha
     /// is source-over, so the two differ inside a translucent layer.
     AdditiveSrgb,

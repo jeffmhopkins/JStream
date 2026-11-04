@@ -1026,7 +1026,7 @@ pub struct ItemInfo {
     /// missing (also from an older server) parses as unlocked.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub locked: bool,
-    /// Its motion modifiers (ADR-0099, since 0.75), first first, which move it on the
+    /// Its motion modifiers (ADR-0099, since 0.79), first first, which move it on the
     /// engine's animation clock as each frame is drawn: see [`MotionModifier`]. Written
     /// whole by `item.set_motion`. Omitted while empty, so missing (also from an older
     /// server) parses as none.

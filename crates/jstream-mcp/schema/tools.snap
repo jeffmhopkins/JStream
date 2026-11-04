@@ -756,7 +756,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.79),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -805,12 +805,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.79,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.79, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -1074,7 +1074,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -3932,7 +3932,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "motion",
-                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.75, ADR-0099).",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.79, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -6782,7 +6782,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.79),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -6831,12 +6831,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.79,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.79, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -7100,7 +7100,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -9958,7 +9958,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "motion",
-                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.75, ADR-0099).",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.79, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -10572,7 +10572,7 @@ source: crates/jstream-mcp/src/tests.rs
       "inputSchema": {
         "$defs": {
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.79),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -10621,12 +10621,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.79,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.79, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -11160,7 +11160,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "motion",
-                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.75, ADR-0099).",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.79, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -11338,7 +11338,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -12700,7 +12700,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.79),\nwhich blend sRGB-encoded values.",
             "oneOf": [
               {
                 "const": "normal",
@@ -12749,12 +12749,12 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.79,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
                 "type": "string"
               },
               {
                 "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "description": "Additive in sRGB-encoded values (since 0.79, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -13018,7 +13018,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.75), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.79), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -15872,7 +15872,7 @@ source: crates/jstream-mcp/src/tests.rs
               },
               {
                 "const": "motion",
-                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.75, ADR-0099).",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.79, ADR-0099).",
                 "type": "string"
               }
             ]

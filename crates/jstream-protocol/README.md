@@ -131,9 +131,9 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it (its `effects` since 0.63, its `motion` since 0.75), `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63, its `motion` since 0.79), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped.
-- **Motion** (`motion.rs`, since 0.75,
+- **Motion** (`motion.rs`, since 0.79,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
   `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
@@ -218,10 +218,11 @@ Contents (a deliberately small first cut; [Design](#design) describes the whole 
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.75 because of
+  reflection as the geometry's flip. `PROTOCOL_VERSION` is 0.79 because of
   `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
-  `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
-  0.75 because of the `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74
+  `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)),
+  with 0.76 to 0.78 left to changes that claimed them first; 0.75 because of the
+  `normal_srgb` and `additive_srgb` blend modes (ADR-0105); 0.74
   because of `output.set_path` (#1072); 0.73 because of the `profile.get` query
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); 0.72 because of the
   effect-pack commands `pack.write`, `pack.delete`, `pack.list` and `pack.read`
@@ -1782,8 +1783,8 @@ after 1.0:
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.75): a later kind or
-  property won't break a 0.75 client's `state.get`. `check_motion` refuses an `Unknown`
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.79): a later kind or
+  property won't break a 0.79 client's `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
@@ -1800,7 +1801,7 @@ after 1.0:
 
 ### Motion
 
-Since 0.75 an item carries continuous motion
+Since 0.79 an item carries continuous motion
 ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md), `motion.rs`):
 `ItemInfo.motion`, an ordered list of at most 8 `MotionModifier`s that the engine
 evaluates as each frame is drawn. A modifier never writes the item's values: `state.get`
