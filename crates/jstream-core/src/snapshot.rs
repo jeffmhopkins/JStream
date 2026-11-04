@@ -4261,9 +4261,18 @@ fn scene<'a>(canvas: FrameSize, background: Color, items: &'a [Item<'a>]) -> Sce
     }
 }
 
+/// A render error as the caller sees it. No adapter is the machine's setup, not an engine
+/// fault, so it is `action_failed`, as `output.start` reports it, with the driver to
+/// install named on Linux (#1073); every other failure is `internal`.
 fn from_render(err: RenderError) -> ProtocolError {
-    ProtocolError::Internal {
-        reason: err.to_string(),
+    if err.is_no_adapter() {
+        ProtocolError::ActionFailed {
+            reason: err.to_string(),
+        }
+    } else {
+        ProtocolError::Internal {
+            reason: err.to_string(),
+        }
     }
 }
 
@@ -4421,7 +4430,11 @@ pub(crate) fn decode_base64(text: &str) -> Result<Vec<u8>, String> {
 /// Whether `error` is the compositor finding no adapter. Tests skip on that outside CI.
 #[cfg(test)]
 pub(crate) fn is_no_adapter(error: &ProtocolError) -> bool {
-    matches!(error, ProtocolError::Internal { reason } if reason.starts_with("no wgpu adapter"))
+    matches!(
+        error,
+        ProtocolError::ActionFailed { reason } | ProtocolError::Internal { reason }
+            if reason.starts_with("no wgpu adapter")
+    )
 }
 
 #[cfg(test)]
@@ -4437,7 +4450,7 @@ pub(crate) mod tests {
         BlendMode, Canvas, Edit, ItemId, ProtocolError, QueryResult, Rev, SceneId, SourceId,
     };
     use jstream_render::{
-        Compositor, Crop, LegacyTransform, OpenOptions, Placement, ResourceCache,
+        Compositor, Crop, LegacyTransform, OpenOptions, Placement, RenderError, ResourceCache,
     };
     use jstream_sources::CaptureSpec;
     use std::collections::BTreeMap;
@@ -6280,6 +6293,34 @@ pub(crate) mod tests {
                 "tick {index} kept the program layer"
             );
         }
+    }
+
+    /// #1073: no adapter is `action_failed`, and on Linux names the driver to install.
+    #[test]
+    fn no_adapter_is_action_failed_and_names_the_driver() {
+        let error = super::from_render(RenderError::NoAdapter {
+            detail: "vulkan drivers/libraries could not be loaded".into(),
+        });
+        let ProtocolError::ActionFailed { reason } = &error else {
+            panic!("{error:?}");
+        };
+        assert!(
+            reason.starts_with("no wgpu adapter: vulkan drivers"),
+            "{reason}"
+        );
+        assert_eq!(
+            reason.contains("mesa-vulkan-drivers"),
+            cfg!(target_os = "linux"),
+            "{reason}"
+        );
+        assert!(is_no_adapter(&error));
+        // Any other render failure is still the engine's.
+        assert!(matches!(
+            super::from_render(RenderError::Device {
+                detail: "lost".into()
+            }),
+            ProtocolError::Internal { .. }
+        ));
     }
 
     /// A failed adapter open is answered from the cache until its wait is over, and

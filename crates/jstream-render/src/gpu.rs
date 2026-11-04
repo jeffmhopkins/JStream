@@ -108,6 +108,19 @@ fn watch(device: &wgpu::Device) -> Arc<Faults> {
     faults
 }
 
+/// Whether any wgpu backend offers an adapter, hardware or software, without opening a
+/// device. A host checks it at startup to warn that compositing will fail
+/// ([`NO_ADAPTER_HINT`](crate::error::NO_ADAPTER_HINT), #1073) before the first frame
+/// is asked for.
+pub fn adapter_available() -> bool {
+    let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
+    desc.flags = wgpu::InstanceFlags::empty().with_env();
+    desc.backends = wgpu::Backends::all();
+    let instance = wgpu::Instance::new(desc);
+    ready(instance.enumerate_adapters(wgpu::Backends::all()))
+        .is_none_or(|adapters| !adapters.is_empty())
+}
+
 impl Gpu {
     pub(crate) fn open(options: OpenOptions) -> Result<Self, RenderError> {
         // Debug builds would otherwise require the Khronos validation layer, which CI
@@ -147,10 +160,12 @@ impl Gpu {
             return opened;
         }
         // A hardware adapter can be returned and still refuse its device (limits below
-        // the defaults, a removed or hung GPU), so that falls back to software too.
+        // the defaults, a removed or hung GPU), so that falls back to software too. There
+        // is an adapter then, so a missing software one is a device failure, not
+        // `NoAdapter`, and carries no driver hint.
         or_software(opened, || {
-            let adapter = request(&instance, true).map_err(|detail| RenderError::NoAdapter {
-                detail: format!("software adapter: {detail}"),
+            let adapter = request(&instance, true).map_err(|detail| RenderError::Device {
+                detail: format!("no software adapter: {detail}"),
             })?;
             Self::from_adapter(adapter)
         })
