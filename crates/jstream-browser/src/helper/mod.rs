@@ -40,6 +40,7 @@ use std::time::Duration;
 
 use ::cef::{BrowserSettings, CefString, ImplBrowser, ImplBrowserHost, ImplFrame, LogSeverity};
 
+use crate::reload_hold::ReloadHold;
 use crate::wire::{self, ToEngine, ToHelper};
 use crate::{PageSpec, RequestPolicy, css_script};
 #[cfg(windows)]
@@ -359,7 +360,7 @@ impl Host {
             hidden: AtomicBool::new(false),
             textures: PageTextures::default(),
             paint_warned: AtomicBool::new(false),
-            reloading: Mutex::new(false),
+            reloading: Mutex::new(ReloadHold::default()),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
             policy: RequestPolicy::for_page(spec),
@@ -459,11 +460,12 @@ pub(crate) struct PageShared {
     textures: PageTextures,
     /// Whether a failed paint was reported since the last good one.
     paint_warned: AtomicBool,
-    /// Set from a reload until the reloaded document starts loading: the old document's
-    /// paints meanwhile are skipped, so the engine never shows them after the reload.
-    /// A paint holds it from its check until its frame is sent, and a reload holds it
-    /// until [`ToEngine::Reloading`] is sent, so no old frame follows that message.
-    reloading: Mutex<bool>,
+    /// Held from a reload until the reloaded document has loaded: the old document's paints
+    /// and the new one's first, which can be opaque white (#1151), are skipped, so the
+    /// engine shows neither. A paint holds the lock from its check until its frame is
+    /// sent, and a reload holds it until [`ToEngine::Reloading`] is sent, so no old frame
+    /// follows that message.
+    reloading: Mutex<ReloadHold>,
     /// Channels in the page's current audio stream (`OnAudioStreamStarted`).
     pub(crate) channels: AtomicUsize,
     pub(crate) host: Arc<Host>,
@@ -512,15 +514,15 @@ impl PageShared {
         self.host.browser_closed();
     }
 
-    /// The main frame started loading a document (`OnLoadStart`), or ended or failed
-    /// loading one: paints from here are the new document's, so a reload's hold ends.
-    pub(crate) fn load_started(&self) {
-        *lock(&self.reloading) = false;
+    /// The main frame ended or failed loading a document: a reload's hold ends, the new
+    /// document's style now deciding what it paints (#1151).
+    pub(crate) fn load_finished(&self) {
+        lock(&self.reloading).load_finished();
     }
 
     /// The main frame finished loading: applies the custom CSS to the new document.
     pub(crate) fn loaded(&self, frame: &::cef::Frame) {
-        self.load_started();
+        self.load_finished();
         let css = lock(&self.css).clone();
         run_script(frame, &css_script(&css));
     }
@@ -537,7 +539,7 @@ impl PageShared {
     #[cfg(windows)]
     pub(crate) fn paint(&self, handle: *mut c_void) {
         let reloading = lock(&self.reloading);
-        if *reloading {
+        if !reloading.takes_paint() {
             return;
         }
         let painted = {
@@ -558,7 +560,7 @@ impl PageShared {
     #[cfg(target_os = "linux")]
     pub(crate) fn paint(&self, bgra: &[u8], width: u32, height: u32) {
         let reloading = lock(&self.reloading);
-        if *reloading {
+        if !reloading.takes_paint() {
             return;
         }
         let painted = self
@@ -649,7 +651,7 @@ impl PageShared {
         let browser = lock(&self.browser);
         if let Some(browser) = browser.as_ref() {
             let mut reloading = lock(&self.reloading);
-            *reloading = true;
+            reloading.reload();
             self.host.send(&ToEngine::Reloading { page: self.id });
             drop(reloading);
             browser.0.reload();
