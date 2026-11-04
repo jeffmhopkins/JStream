@@ -921,6 +921,8 @@ pub struct Item {
     /// Whether its canvas box is locked (ADR-0096): an editing aid the engine stores and
     /// reports, and never enforces.
     pub(crate) locked: bool,
+    /// Where its effects run (ADR-0106): over its box, or over the canvas once placed.
+    pub(crate) effects_space: jstream_protocol::EffectsSpace,
 }
 
 impl Item {
@@ -963,6 +965,12 @@ impl Item {
     /// placement's cropped, fitted box, before its opacity and blend.
     pub fn effects(&self) -> &[Filter] {
         &self.effects.video
+    }
+
+    /// Where its effects run (ADR-0106): over its box before it is placed, or over the
+    /// canvas after.
+    pub fn effects_space(&self) -> jstream_protocol::EffectsSpace {
+        self.effects_space
     }
 
     /// Its transition settings (ADR-0029 §6).

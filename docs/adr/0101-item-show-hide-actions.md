@@ -40,7 +40,7 @@ disagree with the picture.
    `{ item_id, scene_id? }`, with `item.set_visible`'s `scene_id` rules and errors. The
    field of an error names the action's field (`scene_id`), not `edits.0.scene_id`.
    `item.toggle` reads the placement's visibility first: a keyframe scene's override if
-   it has one, else the item's own. Protocol 0.78.
+   it has one, else the item's own. Protocol 0.80.
 2. **They change the collection.** This extends [ADR-0013](0013-command-model.md)'s split,
    in which only edits change the collection: these are actions that do, through the
    edit they stand for. The engine applies the `item.set_visible` the action stands for:

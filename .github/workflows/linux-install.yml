@@ -1,0 +1,193 @@
+# linux-install: the one-command Linux install (scripts/linux/, docs/runbooks/linux-testing.md).
+# `lint` runs shellcheck on the scripts; `ubuntu` runs the installer end to end on
+# ubuntu-latest from this checkout, browser sources included, then starts the installed
+# launcher's daemon and loads its UI; `fedora` does the same in a Fedora container, which
+# checks the dnf package names. The pins in scripts/install-tools.txt are checked by
+# mac-install's `pins` job. Not a required check: it runs only when the installer or what
+# it builds could change.
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0056).
+
+name: linux-install
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "scripts/linux/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "xtask/src/browser_linux.rs"
+      - ".github/workflows/linux-install.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/linux/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "xtask/src/browser_linux.rs"
+      - ".github/workflows/linux-install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax and shellcheck
+        run: |
+          bash -n scripts/linux/install.sh
+          bash -n scripts/linux/jstream
+          shellcheck --severity=style scripts/linux/install.sh scripts/linux/jstream
+
+  ubuntu:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      JSTREAM_BUILD_DIR: /tmp/jstream-build
+      JSTREAM_APP_DIR: /tmp/jstream-app
+      JSTREAM_BIN_DIR: /tmp/jstream-bin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install from this checkout
+        run: bash scripts/linux/install.sh --source . --no-open
+      - name: The app folder is complete
+        run: |
+          set -euo pipefail
+          app="$JSTREAM_APP_DIR"
+          for f in jstream jstream-daemon ui/index.html NOTICE.txt browser/jstream-browser-helper browser/libcef.so; do
+            [ -e "$app/$f" ] || { echo "::error::the install has no $f"; exit 1; }
+          done
+          grep -q 'Via Licensing Alliance' "$app/NOTICE.txt"
+          # Ubuntu restricts unprivileged user namespaces, so the installer makes it setuid.
+          [ "$(stat -c '%U %a' "$app/browser/chrome-sandbox")" = "root 4755" ] ||
+            { echo "::error::chrome-sandbox isn't setuid root"; exit 1; }
+          desktop-file-validate "${XDG_DATA_HOME:-$HOME/.local/share}/applications/jstream.desktop" || true
+          "$app/jstream-daemon" --version
+      # The launcher the menu entry runs: it must print the daemon's PID, the UI URL and the
+      # token, the URL must serve the UI, and --stop must stop it.
+      - name: The launcher starts the daemon and its UI loads
+        run: |
+          set -euo pipefail
+          out=$("$JSTREAM_APP_DIR/jstream" --print)
+          pid=$(sed -n 1p <<<"$out")
+          url=$(sed -n 2p <<<"$out")
+          token=$(sed -n 3p <<<"$out")
+          [ -n "$token" ] || { echo "::error::the launcher printed no token"; exit 1; }
+          echo "daemon $pid serving $url"
+          "$JSTREAM_APP_DIR/jstream" --running
+          # The UI is behind HTTP Basic, the token as the password (any user name).
+          status=$(curl -s -o page.html -w '%{http_code}' -u "tester:$token" "$url")
+          "$JSTREAM_APP_DIR/jstream" --stop
+          if "$JSTREAM_APP_DIR/jstream" --running; then echo "::error::--stop left it running"; exit 1; fi
+          [ "$status" = 200 ] || { echo "::error::the UI answered $status"; exit 1; }
+          grep -q '<html' page.html || { echo "::error::the UI page isn't HTML"; exit 1; }
+      # The installed browser folder (CEF stripped of its symbols, the sandbox as installed)
+      # paints a page: a red browser source on program shows red in the program snapshot.
+      - name: A browser source renders from the install
+        run: |
+          set -euo pipefail
+          out=$("$JSTREAM_APP_DIR/jstream" --print)
+          python3 - "$(sed -n 2p <<<"$out")" "$(sed -n 3p <<<"$out")" <<'PY'
+          import base64, json, sys, time, urllib.request, zlib
+          url, token = sys.argv[1], sys.argv[2]
+          meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientCapabilities": {},
+                  "io.modelcontextprotocol/clientInfo": {"name": "linux-install", "version": "1"}}
+          def call(tool, op):
+              body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                                 "params": {"_meta": meta, "name": tool, "arguments": {"op": op}}}).encode()
+              req = urllib.request.Request(url + "mcp", body, {
+                  "Authorization": "Bearer " + token, "Content-Type": "application/json",
+                  "Accept": "application/json, text/event-stream"})
+              result = json.load(urllib.request.urlopen(req))["result"]
+              if result.get("isError"):
+                  sys.exit(f"{tool} {op['type']}: {result['structuredContent']}")
+              return result
+          call("source", {"type": "source.create", "source_id": "red", "name": "Red",
+                          "kind": {"type": "builtin", "kind": "browser"},
+                          "settings": {"html": "<body style='margin:0;background:#f00'></body>",
+                                       "width": 320, "height": 180}})
+          call("scene", {"type": "scene.create", "scene_id": "s", "name": "S"})
+          call("item", {"type": "item.add", "scene_id": "s", "item_id": "i", "source_id": "red"})
+          call("scene", {"type": "scene.switch", "scene_id": "s"})
+          for _ in range(60):
+              time.sleep(1)
+              png = next(c["data"] for c in call("video", {"type": "video.snapshot"})["content"]
+                         if c["type"] == "image")
+              with open("snapshot.png", "wb") as f:
+                  f.write(base64.b64decode(png))
+              # The PNG's top-left pixel, decoded with the standard library.
+              data = base64.b64decode(png)
+              pos, idat = 8, b""
+              while pos < len(data):
+                  n = int.from_bytes(data[pos:pos + 4], "big")
+                  kind = data[pos + 4:pos + 8]
+                  if kind == b"IDAT":
+                      idat += data[pos + 8:pos + 8 + n]
+                  pos += 12 + n
+              raw = zlib.decompress(idat)
+              # The first pixel of row 0 is stored as is under every PNG filter.
+              if raw[1:4] == b"\xff\x00\x00":
+                  print("the browser source paints")
+                  break
+          else:
+              sys.exit("the program snapshot never showed the red page (snapshot.png)")
+          PY
+          "$JSTREAM_APP_DIR/jstream" --stop
+      - name: Uninstall
+        run: |
+          set -euo pipefail
+          bash scripts/linux/install.sh --uninstall --purge
+          [ ! -e "$JSTREAM_APP_DIR" ] || { echo "::error::--uninstall left $JSTREAM_APP_DIR"; exit 1; }
+
+  # The dnf package names, and a build on Fedora's toolchain. The container runs as root,
+  # which the installer refuses for testers (Chromium won't run its sandbox as root), so
+  # JSTREAM_ALLOW_ROOT lets it build there.
+  fedora:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container: fedora:43
+    env:
+      JSTREAM_ALLOW_ROOT: "1"
+      JSTREAM_BUILD_DIR: /tmp/jstream-build
+      JSTREAM_APP_DIR: /tmp/jstream-app
+      JSTREAM_BIN_DIR: /tmp/bin
+    steps:
+      - name: What checkout and the cache need
+        run: dnf install -y -q git tar gzip zstd findutils procps-ng
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Install from this checkout
+        run: bash scripts/linux/install.sh --source . --no-open
+      - name: The launcher starts the daemon and its UI loads
+        run: |
+          set -euo pipefail
+          for f in jstream-daemon ui/index.html browser/jstream-browser-helper browser/libcef.so; do
+            [ -e "$JSTREAM_APP_DIR/$f" ] || { echo "::error::the install has no $f"; exit 1; }
+          done
+          out=$("$JSTREAM_APP_DIR/jstream" --print)
+          url=$(sed -n 2p <<<"$out")
+          token=$(sed -n 3p <<<"$out")
+          status=$(curl -s -o /dev/null -w '%{http_code}' -u "tester:$token" "$url")
+          "$JSTREAM_APP_DIR/jstream" --stop
+          [ "$status" = 200 ] || { echo "::error::the UI answered $status"; exit 1; }

@@ -715,10 +715,25 @@ fn a_panic_without_a_message_is_named() {
     assert!(changes.kinds.is_empty());
 }
 
-/// The test compositor, or `None` (a skip) where no adapter exists outside CI.
-pub(crate) fn compositor() -> Option<jstream_render::Compositor> {
+/// The test compositor, with the lock that keeps it the only one open.
+///
+/// Fields drop in declaration order, so the device is destroyed while the lock is held
+/// for as long as this value is kept whole.
+pub(crate) struct Opened {
+    pub(crate) compositor: jstream_render::Compositor,
+    _lock: std::sync::MutexGuard<'static, ()>,
+}
+
+/// The test compositor, or `None` (a skip) where no adapter exists outside CI. One at a
+/// time: WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`, when several
+/// tests create and drop Dx12 devices at once, as jstream-render's tests found (#1124).
+pub(crate) fn compositor() -> Option<Opened> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _lock = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     match jstream_render::Compositor::open(jstream_render::OpenOptions::headless()) {
-        Ok(compositor) => Some(compositor),
+        Ok(compositor) => Some(Opened { compositor, _lock }),
         Err(err) if err.is_no_adapter() && std::env::var_os("CI").is_none() => None,
         Err(err) => panic!("opening the compositor failed: {err}"),
     }
@@ -762,9 +777,10 @@ pub(crate) fn near(got: &[u8], expected: &[u8], tol: u8) {
 
 #[test]
 fn an_effect_draws_through_the_render_harness_and_reloads() {
-    let Some(mut compositor) = compositor() else {
+    let Some(mut opened) = compositor() else {
         return;
     };
+    let compositor = &mut opened.compositor;
     let temp = Temp::new("draw");
     retro(&temp.0, MANIFEST, SCANLINES);
     let pack = Pack::load(&temp.0, PRELUDE).expect("pack loads");
@@ -784,7 +800,7 @@ fn an_effect_draws_through_the_render_harness_and_reloads() {
         .apply_filter(&mut filter, &input, clock)
         .expect("apply");
     near(
-        &read(&mut compositor, &out),
+        &read(compositor, &out),
         &[188, 188, 188, 255, 188, 188, 188, 255],
         2,
     );
@@ -795,7 +811,7 @@ fn an_effect_draws_through_the_render_harness_and_reloads() {
         .apply_filter(&mut filter, &input, clock)
         .expect("apply");
     near(
-        &read(&mut compositor, &out),
+        &read(compositor, &out),
         &[255, 0, 0, 255, 255, 0, 0, 255],
         2,
     );
@@ -815,7 +831,7 @@ fn an_effect_draws_through_the_render_harness_and_reloads() {
         .expect("apply");
     // The defaults: 240 lines put both pixels on even (darkened) rows.
     near(
-        &read(&mut compositor, &out),
+        &read(compositor, &out),
         &[0, 0, 188, 255, 0, 0, 188, 255],
         2,
     );

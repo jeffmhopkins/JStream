@@ -12,8 +12,8 @@
 use crate::audit::AuditEntry;
 use jstream_graph::State;
 use jstream_protocol::{
-    Action, ActivityEntry, Call, Edit, FilterOwner, Finite32, HistoryOp, ItemId, LiveOutcome,
-    MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, SceneId, SourceId,
+    Action, ActivityEntry, Call, Edit, EffectsSpace, FilterOwner, Finite32, HistoryOp, ItemId,
+    LiveOutcome, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS, SceneId, SourceId,
 };
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -299,6 +299,14 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
             "{} {}",
             if *locked { "Locked" } else { "Unlocked" },
             item(state, item_id)
+        ),
+        Edit::ItemSetEffectsSpace { item_id, space } => format!(
+            "Made the effects of {} run over {}",
+            item(state, item_id),
+            match space {
+                EffectsSpace::Canvas => "the canvas",
+                _ => "its box",
+            }
         ),
         Edit::ItemSetTransition { item_id, .. } => {
             format!(

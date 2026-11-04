@@ -3,8 +3,8 @@
 //!
 //! A countdown or stopwatch counts on the media clock from the source's time zero, the
 //! `at` its frames are asked for at. The engine keeps that zero when it builds a timer
-//! again for a change that doesn't restart it (every setting but `mode` and
-//! `duration`, [`SourceKind::keeps_time`]) and when it draws it at another density, so
+//! again for a change that doesn't restart it (every setting but `mode`, `duration`
+//! and the `restart` counter, [`SourceKind::keeps_time`]) and when it draws it at another density, so
 //! editing a timer's look or resizing its item keeps the count going. A clock shows the
 //! wall-clock time in the machine's time zone, or the one `time_zone` names.
 //!
@@ -108,6 +108,20 @@ impl TimerKind {
                 "A countdown's length. Changing it restarts the count.",
             ),
             p(
+                "restart",
+                "Restart",
+                ParamType::Int {
+                    min: Some(0),
+                    max: None,
+                    step: Some(1),
+                    unit: None,
+                },
+                json!(0),
+                false,
+                "A counter: any change to it starts the count again from its start, \
+                 keeping Mode and Duration. Its value means nothing else.",
+            ),
+            p(
                 "format",
                 "Format",
                 options(&FORMATS),
@@ -183,10 +197,10 @@ impl SourceKind for TimerKind {
         }))
     }
 
-    /// Only `mode` and `duration` restart the count; any other change, the font
-    /// included, keeps it.
+    /// Only `mode`, `duration` and the `restart` counter restart the count; any other
+    /// change, the font included, keeps it.
     fn keeps_time(&self, old: &Settings, new: &Settings) -> bool {
-        ["mode", "duration"]
+        ["mode", "duration", "restart"]
             .iter()
             .all(|id| old.get(id) == new.get(id))
     }
