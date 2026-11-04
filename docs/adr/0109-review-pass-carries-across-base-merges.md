@@ -2,14 +2,14 @@
 id = "ADR-0109"
 title = "A review pass carries across merges of the base branch"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0109: A review pass carries across merges of the base branch
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Amends [ADR-0019](0019-review-gate-v2.md): its gate considers only markers for the head
