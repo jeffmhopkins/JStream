@@ -295,8 +295,9 @@ fn macos_backends() -> anyhow::Result<Backends> {
 /// them lists the audio backend's devices and probes the VA-API render nodes, and opens
 /// nothing else: capture asks the portal only when a pipeline first uses it. A machine
 /// without a GPU composites on the engine's own software device (`open_capture` in core
-/// logs it), and one without a desktop session has no screen capture but streams every
-/// other source.
+/// logs it), Mesa's lavapipe Vulkan driver. When that driver is missing too, the daemon
+/// warns at startup and names the package to install. A machine without a desktop
+/// session has no screen capture but streams every other source.
 ///
 /// # Errors
 /// When neither PipeWire nor ALSA can be used (the message names both reasons and how
@@ -314,6 +315,11 @@ fn linux_backends() -> anyhow::Result<Backends> {
         audio = ?set.audio_backend,
         "Linux backends"
     );
+    // The software device is a Vulkan driver (lavapipe), which a fresh install may lack:
+    // say so now rather than at the first frame (#1073).
+    if let Some(warning) = jstream_core::no_adapter_warning() {
+        tracing::warn!("{warning}");
+    }
     if let Some(error) = &set.pipewire_unavailable {
         tracing::warn!(
             %error,
