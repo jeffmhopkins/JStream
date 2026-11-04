@@ -5142,7 +5142,7 @@ stamp = { hash = "b3:77128185cfd77dcc", by = "agent:claude", note = "#1075 adds 
 stamp = { hash = "b3:c05145541d9fdb27", by = "agent:claude", note = "Re-read Design against the PR's whole change: the docking bullet says Agent activity (panels/agent.rs) reads activity.list, leaves out JStream's own UIs, asks again after state.changed, studio.changed, output.state_changed, live.ended and events.dropped and every 5 seconds, and sits beside Outputs in the Live layout; only Live chat and Stream stats still wait. style.css adds the activity-log rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
-stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1162 N1: codec_downloads.rs changed only in doc comments (module header's About bullet, CodecDownloads' readers, condition 4 for About); the Help paragraph's About text still matches" }
+stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1119: the Help paragraph now says About lists each codec codec.downloads reports installed (OpenH264 on Linux) with name, version, notice, licence link and folded full text, read each time it opens and absent with none installed or before 0.69, matching InstalledCodecs in codec_downloads.rs, about.rs and the .about-codecs styles in style.css; review N1: the N1 commit changed only codec_downloads.rs doc comments (module header's About bullet, CodecDownloads' readers, condition 4 for About); the Help paragraph's About text still matches" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
@@ -5226,7 +5226,7 @@ stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Docking
 stamp = { hash = "b3:724c4ea3b27505f8", by = "agent:claude", note = "#1119: the Help paragraph now says About lists each codec codec.downloads reports installed (OpenH264 on Linux) with name, version, notice, licence link and folded full text, read each time it opens and absent with none installed or before 0.69, matching InstalledCodecs in codec_downloads.rs, about.rs and the .about-codecs styles in style.css" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:45f9544fc519d5d0", by = "agent:claude", note = "#1162 N1: the codec_downloads.rs entry now names InstalledCodecs, the About dialog's list of installed downloads, beside the offer; codec_downloads.rs changed only in doc comments (About as a reader, condition 4)" }
+stamp = { hash = "b3:45f9544fc519d5d0", by = "agent:claude", note = "#1119: the About contents entry now says the dialog lists each installed third-party codec through codec_downloads::InstalledCodecs, as about.rs renders it; codec_downloads.rs gained installed() and InstalledCodecs, which the Outputs entry's codec_downloads already covers; review N1: the codec_downloads.rs entry now names InstalledCodecs, the About dialog's list of installed downloads, beside the offer; the N1 commit changed only codec_downloads.rs doc comments (About as a reader, condition 4)" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -5313,7 +5313,7 @@ stamp = { hash = "b3:77128185cfd77dcc", by = "agent:claude", note = "#1075 adds 
 stamp = { hash = "b3:c05145541d9fdb27", by = "agent:claude", note = "Re-read Purpose after agent.rs's module doc was reworded so rustdoc links nothing private; the panel overview still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
-stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1162 N1: the codec_downloads.rs entry now names InstalledCodecs, the About dialog's list of installed downloads, beside the offer; codec_downloads.rs changed only in doc comments (About as a reader, condition 4)" }
+stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1119: the About contents entry now says the dialog lists each installed third-party codec through codec_downloads::InstalledCodecs, as about.rs renders it; codec_downloads.rs gained installed() and InstalledCodecs, which the Outputs entry's codec_downloads already covers; review N1: the codec_downloads.rs entry now names InstalledCodecs, the About dialog's list of installed downloads, beside the offer; the N1 commit changed only codec_downloads.rs doc comments (About as a reader, condition 4)" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/confirm.rs"]
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
@@ -5424,7 +5424,7 @@ stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/codec-downloads.spec.js"]
-stamp = { hash = "b3:0e218b83caa5ed2d", by = "agent:claude", note = "#1162 N2: codec-downloads.spec.js now counts codec.downloads queries in its route and waits for About's re-read before asserting none listed; the harness text is unaffected" }
+stamp = { hash = "b3:0e218b83caa5ed2d", by = "agent:claude", note = "#1119: codec-downloads.spec.js only adds About checks over the same mock routes; the harness text (trunk build, mock daemon, Chromium) is unchanged and holds; review N2: codec-downloads.spec.js now counts codec.downloads queries in its route and waits for About's re-read before asserting none listed; the harness text is unaffected" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.spec.js gained a fonts test using the existing connect fixture and page.request against the daemon's URL, loading all five bundled faces; the daemon, seed and setup are unchanged. | kept from the merged side: fixtures.js: connect waits for header.app-header, new disconnect (File menu) and rev (header data-rev), now listed in the Harness bullet; connect.spec.js uses the disconnect fixture and the File menu; outputs.spec.js adds header Record steps using connect and inspectorPage as described. Daemon, console-error and setup behaviour unchanged." }
@@ -5532,7 +5532,7 @@ stamp = { hash = "b3:e4c9da41bb20c50f", by = "agent:claude-window-picker", note 
 stamp = { hash = "b3:1a68e3c3e43d8957", by = "agent:obs-ui-thread", note = "clipboard.spec.js: only the doc comments rename Scene objects to Sources; it uses connect and rev as the harness describes, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/codec-downloads.spec.js"]
-stamp = { hash = "b3:0e218b83caa5ed2d", by = "agent:claude", note = "#1162 N2: the Codec downloads bullet (Delete takes it out of About) still matches; the spec now waits for About's codec.downloads re-read before checking, so the check proves it" }
+stamp = { hash = "b3:0e218b83caa5ed2d", by = "agent:claude", note = "#1119: the Codec downloads bullet now says About lists the installed download with notice, link and terms and that Delete takes it out of About, as codec-downloads.spec.js checks; review N2: the Codec downloads bullet (Delete takes it out of About) still matches; the spec now waits for About's codec.downloads re-read before checking, so the check proves it" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/connect.spec.js"]
 stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Connecting entry says the bundled Plex Sans and Mono load from the page's origin and fonts/OFL.txt is served; connect.spec.js's test loads each of the five faces (Sans 400/600/700, Mono 400/600) and reads OFL.txt. | kept from the merged side: connect.spec.js: File menu shows URL and protocol, Escape closes it, Disconnect through it, as the Connecting bullet says; outputs.spec.js: Go Live and End stream from the header and the header's Record starting and stopping a recording, as the Outputs bullet says." }
@@ -6480,7 +6480,7 @@ stamp = { hash = "b3:e374bf2e8d45cd98", by = "agent:vcam-optin-561", note = "re-
 stamp = { hash = "b3:61d5c9e46ca8096c", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/panels/codec_downloads.rs"]
-stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1162 N1: codec_downloads.rs changed only in doc comments; the OpenH264 bullet's About clause still matches InstalledCodecs" }
+stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1119: the OpenH264 bullet now adds that About lists the installed codec with the notice, link and terms (HD-10), as InstalledCodecs in codec_downloads.rs does; review N1: the N1 commit changed only codec_downloads.rs doc comments; the OpenH264 bullet's About clause still matches InstalledCodecs" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/plugins.rs"]
 stamp = { hash = "b3:4aed4ce2c9c85cd5", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "plugins.rs changed only doc wording on the reopen after a failed enable and a test for a failed list while the dialog is open; the Plugins feature bullet (list, install, grant dialog contents, grant-and-turn-on) still holds" }
