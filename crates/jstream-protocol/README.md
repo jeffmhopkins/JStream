@@ -148,7 +148,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
-  `camera_motion` and `camera_follow` (ADR-0113, each omitted while absent), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  `camera_motion` and `camera_follow` (since 0.84, ADR-0113, each omitted while absent), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG. `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
   `youtube` outputs' audience and the day's quota estimate.
@@ -163,7 +163,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
   `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
   shares ([Motion](#motion)).
-- **Camera motion and follow** (`camera_motion.rs`,
+- **Camera motion and follow** (`camera_motion.rs`, since 0.84,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
   the target's x, y and z, `fov`, `roll`, `focus` and `blur`) and `check_camera_motion`,
@@ -279,7 +279,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.81 because of
+`PROTOCOL_VERSION` is 0.84 because of
+`scene.set_camera_motion`, `scene.set_camera_follow`, the action `scene.zoom_camera`,
+`SceneInfo.camera_motion` and `SceneInfo.camera_follow`
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), with 0.82 and 0.83
+left to changes that claimed them first; 0.81 because of
 `item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
 `motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
 0.80 because of the
@@ -2014,7 +2018,7 @@ after 1.0:
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
   property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
-  in an edit, and the engine draws one as still. `CameraProperty` (ADR-0113) has the
+  in an edit, and the engine draws one as still. `CameraProperty` (ADR-0113, 0.84) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the

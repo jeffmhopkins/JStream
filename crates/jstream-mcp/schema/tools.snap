@@ -595,7 +595,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -2826,7 +2826,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -2852,7 +2852,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -7087,7 +7087,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -9318,7 +9318,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -9344,7 +9344,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -13596,7 +13596,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -15827,7 +15827,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -15853,7 +15853,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -19586,7 +19586,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's camera motion (ADR-0113): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
+                "description": "Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
                     "default": [],
@@ -19612,7 +19612,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item removes it, in the same edit.\nInverse: `scene.set_camera_follow` with the previous value.",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -19710,7 +19710,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Zooms a scene's follow camera (ADR-0113 §4): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
+                "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a\nwheel chord can run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",

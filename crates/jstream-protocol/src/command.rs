@@ -801,7 +801,7 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
     },
-    /// Sets a scene's camera motion (ADR-0113): the whole list of modifiers that change
+    /// Sets a scene's camera motion (ADR-0113, since 0.84): the whole list of modifiers that change
     /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
     /// keyframe scene, which draws its parent's, and for a list `check_camera_motion`
     /// refuses. A scene without a camera keeps the list, which draws nothing until it has
@@ -814,7 +814,7 @@ pub enum Edit {
         #[serde(default)]
         motion: Vec<CameraMotionModifier>,
     },
-    /// Sets or removes a scene's follow camera (ADR-0113): a camera that glides after the
+    /// Sets or removes a scene's follow camera (ADR-0113, since 0.84): a camera that glides after the
     /// pointer over a display or window capture in the scene. It belongs to the scene
     /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
     /// scene or doesn't show a display or window capture, and for a number
@@ -1525,7 +1525,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Zooms a scene's follow camera (ADR-0113 §4): multiplies its live zoom by 1.25 per
+    /// Zooms a scene's follow camera (ADR-0113 §4, since 0.84): multiplies its live zoom by 1.25 per
     /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
     /// edit: nothing is stored or undone, and the zoom starts again at the follow camera's
     /// own `zoom` when it changes or the engine restarts. One step a call, so a hotkey or a

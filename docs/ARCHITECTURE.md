@@ -714,7 +714,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `scene.set_camera_follow` a camera that glides after the pointer over a display or
   window capture, each set on the family's scene; the action `scene.zoom_camera` steps
   a follow camera's live zoom, with no `rev` change
-  ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md)).
+  ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.84).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));
