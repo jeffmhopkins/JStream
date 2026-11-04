@@ -1,0 +1,139 @@
+# mac-install: the one-command macOS install (scripts/mac/, docs/runbooks/mac-testing.md).
+# `pins` checks the scripts on Linux; `install` runs the installer end to end on
+# macos-latest from this checkout, then runs the installed launcher and loads the UI.
+# Not a required check: it runs only when the installer or what it pins could change.
+# Editing this file is a governance change (R-GOV-001).
+
+# Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
+# Dependabot proposes updates (ADR-0056).
+
+name: mac-install
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "scripts/mac/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "apps/jstream-daemon/Info.plist"
+      - ".github/workflows/mac-install.yml"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/mac/**"
+      - "scripts/install-tools.txt"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "crates/jstream-ui/Trunk.toml"
+      - "crates/jstream-ui/index.html"
+      - "apps/jstream-daemon/Info.plist"
+      - ".github/workflows/mac-install.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mac-install-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pins:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Syntax and shellcheck
+        run: |
+          bash -n scripts/mac/install.sh
+          bash -n scripts/mac/jstream.sh
+          shellcheck --severity=warning scripts/mac/install.sh scripts/mac/jstream.sh
+      # scripts/install-tools.txt pins the same trunk, wasm-bindgen and binaryen releases as
+      # the UI builds in ci.yml and after-review.yml, and its wasm-bindgen matches Cargo.lock.
+      - name: Pins match CI and Cargo.lock
+        run: |
+          set -euo pipefail
+          pins=scripts/install-tools.txt
+          fail=0
+          check() { # <tool in pins> <variable in the workflows>
+            local tool=$1 name=$2 file want got
+            for want in $(awk -v t="$tool" '$1 == t { print $2 }' "$pins" | sort -u); do
+              for file in .github/workflows/ci.yml .github/workflows/after-review.yml; do
+                for got in $(sed -n "s/^ *$name: //p" "$file" | sort -u); do
+                  if [ "$got" != "$want" ]; then
+                    echo "::error file=$pins::$tool is $want here but $name is $got in $file"
+                    fail=1
+                  fi
+                done
+              done
+            done
+          }
+          check trunk TRUNK_VERSION
+          check wasm-bindgen WASM_BINDGEN_VERSION
+          check binaryen BINARYEN_VERSION
+          locked=$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/"/, "", $3); print $3; exit }' Cargo.lock)
+          for want in $(awk '$1 == "wasm-bindgen" { print $2 }' "$pins" | sort -u); do
+            if [ "$locked" != "$want" ]; then
+              echo "::error file=$pins::Cargo.lock has wasm-bindgen $locked but the pins say $want"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+  install:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      # The `runner` context isn't available in a job's `env`, so the folders are set here.
+      - name: Install folders in the runner's temp folder
+        run: |
+          echo "JSTREAM_BUILD_DIR=$RUNNER_TEMP/jstream-build" >> "$GITHUB_ENV"
+          echo "JSTREAM_APP_DIR=$RUNNER_TEMP/Applications" >> "$GITHUB_ENV"
+      - name: Install from this checkout
+        run: bash scripts/mac/install.sh --source . --no-open
+      - name: What was installed
+        run: |
+          set -euo pipefail
+          test -x "$JSTREAM_APP_DIR/JStream.command"
+          install="$JSTREAM_BUILD_DIR/install"
+          test -f "$install/ui/index.html"
+          test -f "$install/clipboard.js"
+          "$install/jstream-daemon" --version
+          codesign --verify --verbose=2 "$install/jstream-daemon"
+      # The launcher, without the clipboard and the browser: it prints the UI's URL once
+      # the daemon serves, and the URL must serve the UI with the token as the Basic
+      # password. Then SIGTERM must stop it and the daemon.
+      - name: The launcher starts the daemon and its UI loads
+        run: |
+          set -euo pipefail
+          install="$JSTREAM_BUILD_DIR/install"
+          JSTREAM_NO_BROWSER=1 "$install/jstream.sh" > launcher.out &
+          launcher=$!
+          for _ in $(seq 1 300); do
+            grep -q '^http' launcher.out && break
+            sleep 0.1
+          done
+          url=$(head -1 launcher.out)
+          [ -n "$url" ] || { echo "::error::the launcher printed no URL"; exit 1; }
+          token=$(tr -d '[:space:]' < "$HOME/Library/Application Support/JStream/token")
+          status=$(curl -s -o page.html -w '%{http_code}' -u "tester:$token" "$url")
+          [ "$status" = 200 ] || { echo "::error::the UI answered $status"; exit 1; }
+          grep -q '<html' page.html || { echo "::error::the UI page isn't HTML"; exit 1; }
+          kill -TERM "$launcher"
+          for _ in $(seq 1 300); do
+            pgrep -f "$install/jstream-daemon" >/dev/null || exit 0
+            sleep 0.1
+          done
+          echo "::error::the daemon outlived its launcher by 30 seconds"
+          exit 1
+      # clipboard.js compiles as JavaScript for Automation (running it needs a person to
+      # check the clipboard, so the hardware run does that).
+      - name: clipboard.js compiles
+        run: osacompile -l JavaScript -o "$RUNNER_TEMP/clipboard.scpt" "$JSTREAM_BUILD_DIR/install/clipboard.js"

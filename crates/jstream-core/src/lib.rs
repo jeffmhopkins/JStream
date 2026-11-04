@@ -82,6 +82,7 @@ pub use runtime::{
     connect_rtmp,
 };
 pub use session::InProcessControl;
+
 pub use snapshot::SourceFrameError;
 pub use youtube::{
     DAILY_QUOTA, HEALTH_INTERVAL, SIGN_IN_TIMEOUT, STATS_INTERVAL, STATS_SLOWDOWN, TOKEN_ACCOUNT,
@@ -95,6 +96,24 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 /// success), so a panic while a lock is held leaves the data consistent.
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Why scenes can't be drawn on this machine, when no graphics adapter, hardware or
+/// software, is offered: a host logs it at startup, before the first frame is asked for
+/// (#1073). On Linux it names the software Vulkan driver to install. `None` when an
+/// adapter is offered. It lists adapters without opening a device, which takes a few
+/// milliseconds; call it once, not per frame.
+pub fn no_adapter_warning() -> Option<String> {
+    (!jstream_render::adapter_available()).then(|| {
+        if cfg!(target_os = "linux") {
+            format!(
+                "no graphics adapter, so scenes can't be drawn. {}",
+                jstream_render::NO_ADAPTER_HINT
+            )
+        } else {
+            "no graphics adapter, so scenes can't be drawn".to_owned()
+        }
+    })
 }
 
 // The tests below sit at the crate root because RULES.md names them by path:
