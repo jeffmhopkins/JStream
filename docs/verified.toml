@@ -5835,7 +5835,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:ef078d22b4977c46", by = "agent:help-about", note = "Re-read: jstream-ui now takes version.workspace (its About dialog shows it), added to the list of crates that take the release version" }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:e81888df72bb7e0f", by = "agent:timer", note = "#1027 adds jiff to [workspace.dependencies] in Cargo.toml; [workspace.package] version and the apps taking it are unchanged, so the section holds." }
+stamp = { hash = "b3:823408496e67fea8", by = "agent:release-thread", note = "Cargo.toml changed only in the cef pin (=154.5.0 to =156.2.0, Dependabot) and its comment (CEF build 156.0.14, cef-dll-sys downloads 156.0.15); [workspace.package] version and the apps taking it are unchanged, so the section holds" }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }
