@@ -67,4 +67,8 @@ eq('merges: a plain commit that moves a line (#1132 B1)', onlyBaseMerges([M, { p
 eq('merges: a restamp that also touches code', onlyBaseMerges([{ ...R, files: ['docs/verified.toml', 'src/x.rs'] }]), false);
 eq('merges: files unknown', onlyBaseMerges([{ ...R, files: null }]), false);
 eq('merges: an octopus merge', onlyBaseMerges([{ ...M, parents: 3 }]), false);
+const B = { inBase: true, parents: 1, parentInBase: false, files: null };
+eq("merges: main's own squash commits brought in are skipped (#1132 B6)", onlyBaseMerges([B, B, M, R]), true);
+eq('merges: only base commits, no merge of the PR', onlyBaseMerges([B]), false);
+eq('merges: a plain PR commit beside base commits', onlyBaseMerges([B, M, { parents: 1, parentInBase: false, files: ['src/x.rs'] }]), false);
 process.exit(fails ? 1 : 0);

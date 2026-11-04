@@ -118,10 +118,16 @@ jobs:
                 const cmp = async (basehead, per_page) =>
                   (await github.rest.repos.compareCommitsWithBasehead({ owner, repo, basehead, per_page })).data;
                 const path = await cmp(`${from}...${head}`, 100);
+                // The base branch's own commits that a merge brought in are listed too; only
+                // the PR's own commits (on the head, not in the base) are classified.
+                const own = await cmp(`${pr.base.sha}...${head}`, 100);
                 const commits = [];
-                if (path.status === 'ahead' && path.total_commits <= 100 && path.commits.length === path.total_commits) {
+                if (path.status === 'ahead' && path.total_commits <= 100 && path.commits.length === path.total_commits
+                    && own.total_commits <= 100 && own.commits.length === own.total_commits) {
+                  const ownShas = new Set(own.commits.map((c) => c.sha));
                   for (const c of path.commits) {
-                    const entry = { parents: c.parents.length, parentInBase: false, files: null };
+                    const entry = { parents: c.parents.length, parentInBase: false, files: null, inBase: !ownShas.has(c.sha) };
+                    if (entry.inBase) { commits.push(entry); continue; }
                     if (c.parents.length === 2) {
                       // A merge of the base: one parent is the base branch's tip or behind it.
                       for (const p of c.parents) {
@@ -184,11 +190,14 @@ jobs:
             // closed on a file without a patch (binary or too large) or a list of 300 files,
             // which may be truncated.
             // ADR-0109: whether the commits after the reviewed head only merge the base branch
-            // in. Each is { parents, parentInBase, files }: a merge must have a parent that is in
-            // the base branch; any other commit must have one parent and touch only the stamp
-            // ledger (a `docs verify --merge` restamp). Anything else, or files unknown, is no.
+            // in. Each is { inBase, parents, parentInBase, files }. A commit already in the base
+            // branch came in through a merge and is skipped. Of the PR's own commits, at least
+            // one, a merge must have a parent that is in the base branch, and any other commit
+            // must have one parent and touch only the stamp ledger (a `docs verify --merge`
+            // restamp). Anything else, or files unknown, is no.
             function onlyBaseMerges(commits) {
-              return commits.every((c) =>
+              const own = commits.filter((c) => !c.inBase);
+              return own.length > 0 && own.every((c) =>
                 c.parents === 2 ? c.parentInBase
                   : c.parents === 1 && Array.isArray(c.files) && c.files.length > 0
                     && c.files.every((f) => f === 'docs/verified.toml'));
