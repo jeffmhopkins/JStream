@@ -1866,6 +1866,12 @@ actions and queries, not edits: undo doesn't reach the disk, and there is no `re
 - Agents may call all four. A plugin may call `pack.list` and `pack.read` (class
   `read`) and never the writes, and no hotkey binds a pack action.
 
+<a id="shared-values"></a>
+## Shared values
+<!-- @section
+covers = ["crates/jstream-protocol/src/values.rs"]
+-->
+
 Since 0.78 a client can keep **shared values**: named JSON values the engine holds for
 browser source pages and agents to read
 ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md) decision 7, `values.rs`).
