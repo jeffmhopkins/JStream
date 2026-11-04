@@ -87,6 +87,10 @@ jobs:
           fi
           echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
       - name: Test
+        # Line tables keep backtraces' file and line but drop the full debug info, which
+        # had grown the workspace's test build past the hosted runner's disk.
+        env:
+          CARGO_PROFILE_DEV_DEBUG: line-tables-only
         run: cargo test --workspace --locked
 
   # Streams to a real RTMP server and decodes what it got (apps/jstream-daemon/README.md#receiver-e2e):
