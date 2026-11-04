@@ -1928,6 +1928,26 @@ impl Collection {
                     target: old,
                 }]
             }
+            Edit::OutputSetPath { output_id, path } => {
+                let Some(kind) = self.outputs.get_mut(&output_id) else {
+                    return Err(not_found(EntityKind::Output, output_id.as_str()));
+                };
+                if let Some(problem) = record_path_problem(&path) {
+                    return Err(invalid(at, "path", problem));
+                }
+                let OutputKind::Record { path: current, .. } = kind else {
+                    return Err(invalid(
+                        at,
+                        "output_id",
+                        "the output is not a recording output",
+                    ));
+                };
+                let old = std::mem::replace(current, path);
+                vec![Edit::OutputSetPath {
+                    output_id,
+                    path: old,
+                }]
+            }
             Edit::OutputDelete { output_id } => {
                 if running.contains(&output_id) {
                     return Err(invalid(
