@@ -71,6 +71,14 @@ fn a_bad_camera_is_refused_with_its_field() {
     wide.fov_deg = Finite32::new(175.0).expect("finite");
     let (field, _) = invalid_reason(apply_err(&mut graph, vec![set("a", Some(wide))]));
     assert!(field.ends_with("camera.fov_deg"), "{field}");
+    let mut unfocused = framing();
+    unfocused.focus_px = Some(Finite32::ZERO);
+    let (field, _) = invalid_reason(apply_err(&mut graph, vec![set("a", Some(unfocused))]));
+    assert!(field.ends_with("camera.focus_px"), "{field}");
+    let mut soft = framing();
+    soft.blur_px = Finite32::new(100.0).expect("finite");
+    let (field, _) = invalid_reason(apply_err(&mut graph, vec![set("a", Some(soft))]));
+    assert!(field.ends_with("camera.blur_px"), "{field}");
 }
 
 #[test]

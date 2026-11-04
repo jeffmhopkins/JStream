@@ -27,10 +27,10 @@ use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Edit, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId, KindCategory,
-    KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState, OverrideField,
-    ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId, SourceInfo,
-    SourceKind,
+    Edit, EffectsSpace, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId,
+    KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState,
+    OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId,
+    SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -1278,6 +1278,7 @@ pub fn Chains(
             }
         }
     };
+    let owner_of_space = owner.clone();
     let effects = matches!(
         owner,
         FilterOwner::Item { .. } | FilterOwner::Keyframe { .. }
@@ -1332,11 +1333,66 @@ pub fn Chains(
             </div>
         }
     };
+    let space = match &owner_of_space {
+        // Not under a keyframe's effects: the space belongs to the item in every scene
+        // (ADR-0106), where the panel says a keyframe's effects are its own.
+        FilterOwner::Item { item_id } if video => {
+            Some(view! { <EffectsSpaceCheck item_id=item_id.clone() /> })
+        }
+        _ => None,
+    };
     view! {
         <div class="filter-chains" class:in-place=in_place>
             {video.then(|| chain(FilterChain::Video))}
             {audio.then(|| chain(FilterChain::Audio))}
+            {space}
         </div>
+    }
+}
+
+/// An item's "Over the canvas" check under its effects (ADR-0106): on, the effects
+/// run after the item is placed, so a mask lines up with the canvas however the item
+/// is moved or flipped; off, they run over its box and move with it.
+#[component]
+fn EffectsSpaceCheck(item_id: ItemId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let dialogs = expect_context::<FilterDialogs>();
+    let canvas = {
+        let item_id = item_id.clone();
+        Memo::new(move |_| {
+            studio.collection.with(|c| {
+                c.as_ref()
+                    .and_then(|c| c.item(&item_id))
+                    .is_some_and(|(_, item)| item.effects_space == EffectsSpace::Canvas)
+            })
+        })
+    };
+    let toggle = move |event: leptos::ev::Event| {
+        let space = if event_target_checked(&event) {
+            EffectsSpace::Canvas
+        } else {
+            EffectsSpace::Box
+        };
+        if let Some(s) = session.get() {
+            let edits = vec![Edit::ItemSetEffectsSpace {
+                item_id: item_id.clone(),
+                space,
+            }];
+            dialogs.sent(&edits);
+            studio.apply(&s, edits);
+        }
+    };
+    view! {
+        <label class="check effects-space" title="Run the effects after the item is placed, over the canvas, so a mask lines up with the canvas however the item is moved or flipped">
+            <input
+                type="checkbox"
+                class="inline-check"
+                prop:checked=move || canvas.get()
+                on:change=toggle
+            />
+            "Over the canvas"
+        </label>
     }
 }
 
@@ -3154,6 +3210,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3210,6 +3267,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>, variant_of: Option<&str>| SceneInfo {
             overrides: Vec::new(),
@@ -3303,6 +3361,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             overrides: Vec::new(),
@@ -3488,6 +3547,7 @@ mod tests {
             blend: Default::default(),
             transition: jstream_control::protocol::ItemTransition::default(),
             locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
         };
         let scene = |id: &str, variant_of: Option<&str>, overrides: Vec<ItemOverride>| {
             let items = match variant_of {

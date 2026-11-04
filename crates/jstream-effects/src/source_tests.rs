@@ -375,9 +375,10 @@ fn the_watcher_reports_a_scale_or_image_size_change() {
 
 #[test]
 fn a_source_draws_its_program_on_the_test_adapter() {
-    let Some(mut compositor) = compositor() else {
+    let Some(mut opened) = compositor() else {
         return;
     };
+    let compositor = &mut opened.compositor;
     let pack = load("draw-source", MANIFEST, OUT).expect("loads");
     let source = pack.source("space/warp").expect("source");
     // `speed` 2 makes `boost` a no-op: the trail's green, at the source's size.
@@ -389,7 +390,7 @@ fn a_source_draws_its_program_on_the_test_adapter() {
         .expect("draws");
     assert_eq!((out.width(), out.height()), (16, 16));
     let green: Vec<u8> = [0, 255, 0, 255].repeat(256);
-    near(&read(&mut compositor, &out), &green, 2);
+    near(&read(compositor, &out), &green, 2);
     // A scene in the `sky` slot shows instead of the trail.
     let red = compositor
         .upload_rgba8(1, 1, &[255, 0, 0, 255])
@@ -398,9 +399,5 @@ fn a_source_draws_its_program_on_the_test_adapter() {
     let out = compositor
         .apply_filter(&mut filter, &stand_in, clock)
         .expect("draws");
-    near(
-        &read(&mut compositor, &out),
-        &[255, 0, 0, 255].repeat(256),
-        2,
-    );
+    near(&read(compositor, &out), &[255, 0, 0, 255].repeat(256), 2);
 }
