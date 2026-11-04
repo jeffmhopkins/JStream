@@ -1688,7 +1688,8 @@ stay) and tiles them on a dark background. So a slow GPU delays the answer, neve
 picture, and each tile's `at_ms` is the time it shows, counted from the call's own
 read of the clock. A picture keeps its render snapshot alive until the sheet is drawn.
 At most four sheets are taken at once across the engine (`frames::MAX_SHEETS`); a fifth
-is refused at once with `action_failed`. A scene deleted while its sheet is taken ends
+is refused at once with `action_failed`. No adapter fails a sheet as it fails
+`video.snapshot`, with `action_failed` naming the driver. A scene deleted while its sheet is taken ends
 it with `not_found`, and an engine dropped meanwhile with `internal`.
 
 `scene.switch_and_watch` checks the sheet's limits, then runs the `scene.switch` it

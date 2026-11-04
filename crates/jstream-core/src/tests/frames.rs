@@ -271,9 +271,10 @@ fn a_fifth_sheet_at_once_is_refused() {
         .map(|_| control.call(call()))
         .collect();
     let refused = block_on(control.call(call())).map(|_| ());
-    assert_eq!(
-        refused.map_err(|error| error.protocol().map(ProtocolError::code)),
-        Err(Some("action_failed"))
+    let refused = refused.map_err(|error| error.protocol().cloned());
+    assert!(
+        matches!(&refused, Err(Some(error)) if error == &crate::frames::busy()),
+        "a fifth sheet is refused as busy: {refused:?}"
     );
     // The four answer, with a sheet or, without an adapter, an error.
     for answer in running {
@@ -285,7 +286,7 @@ fn a_fifth_sheet_at_once_is_refused() {
             .as_ref()
             .err()
             .and_then(ControlError::protocol)
-            .is_none_or(|error| error.code() != "action_failed"),
+            .is_none_or(|error| is_no_adapter(error) || error.code() != "action_failed"),
         "a sheet is taken again once the others answered: {again:?}"
     );
 }
