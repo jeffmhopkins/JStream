@@ -176,7 +176,8 @@ impl Audio {
 
     /// A measure mapped onto `0..=1`. For [`Measure::Onset`], `measured` is already
     /// `0..=1` and is only clamped. For the others it is a linear full-scale amplitude
-    /// (1 is 0 dBFS), mapped in dB from the floor to the ceiling. Anything that isn't a
+    /// (1 is 0 dBFS), mapped in dB from the floor to the ceiling: for a band, the RMS of
+    /// its bins (the square root of their mean power), never the power itself. Anything that isn't a
     /// finite, positive number is silence.
     pub fn normalize(&self, measured: f32) -> f32 {
         if !measured.is_finite() || measured <= 0.0 {

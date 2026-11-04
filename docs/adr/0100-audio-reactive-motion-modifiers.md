@@ -28,7 +28,7 @@ tracking issue #1056). The engine already hears the mix in two places:
 What is missing is a way for an ordinary item to follow those numbers: a light's
 opacity rising on each kick, a logo's scale pumping with the bass, a glow's strength
 following the master level. [ADR-0099](0099-native-motion-modifiers-and-timelines.md)
-proposes motion modifiers, an ordered `motion` list on an item whose values add to (or
+decides motion modifiers, an ordered `motion` list on an item whose values add to (or
 multiply) its properties each frame, and leaves "audio-driven modifiers (#1060)" to this
 ADR "as a modifier source". This ADR decides part 1 of #1060. Part 2, pages hearing the
 mix through a `window.jstream` API (#1063), touches the threat model's browser section
@@ -53,8 +53,9 @@ its own.
   its own filters, fader, mute and follow. A binding hears what the audience hears.
 - `measure` is one of `level` (RMS of the latest window), `peak` (its peak absolute
   sample), `onset` (`AudioMeter`'s 0 to 1 jump above the recent average), or
-  `band { low_hz, high_hz }`: the power of the spectrum between the two frequencies,
-  20 Hz to 20 kHz with `low_hz < high_hz`. A band narrower than one of the meter's
+  `band { low_hz, high_hz }`: the spectrum between the two frequencies, 20 Hz to
+  20 kHz with `low_hz < high_hz`, as an amplitude (the RMS of its bins, the square
+  root of their mean power), so it maps in dB like a level. A band narrower than one of the meter's
   bands reads the band it falls in.
 
 **3. How a measure becomes a value.** In order, each step a pure function in
