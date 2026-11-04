@@ -302,8 +302,8 @@ pub(super) fn restore_all(owner: &FilterOwner, chains: FilterChains) -> Vec<Edit
     video.chain(audio).collect()
 }
 
-/// Refuses any reference (a scene, source, bus or asset) in a master or output
-/// filter's settings, as the graph does.
+/// Refuses a scene, source or bus reference in a master or output filter's settings,
+/// as the graph does; a file (an asset reference) is allowed.
 fn check_no_references(
     owner: &FilterOwner,
     settings: &Settings,
@@ -319,14 +319,14 @@ fn check_no_references(
     ) {
         return Ok(());
     }
-    match settings
-        .iter()
-        .find(|(_, value)| Reference::from_value(value).is_some())
-    {
+    match settings.iter().find(|(_, value)| {
+        Reference::from_value(value)
+            .is_some_and(|reference| !matches!(reference, Reference::Asset { .. }))
+    }) {
         Some((id, _)) => Err(invalid(
             at,
             &format!("{field_prefix}.{id}"),
-            "a master or output filter can't hold a reference yet",
+            "a master or output filter can't hold a scene, source or bus reference yet",
         )),
         None => Ok(()),
     }

@@ -70,8 +70,9 @@ and calls this crate.
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). Crops, a
   legacy scale and a fit mode's aspect ratio all count in the extent, and the texture
   is sampled across it.
-- `visible == false`, a crop that leaves no pixels, a scale of zero, or a box with neutral
-  3D so large its content overflows `f32` draws nothing.
+- `visible == false`, a crop that leaves no pixels, a scale of zero, a box with neutral
+  3D so large its content overflows `f32`, or a legacy transform whose corners leave
+  `f32`'s range (#1130) draws nothing.
 - Opacity is a straight-alpha multiplier in `[0, 1]`, default 1: `jstream-core` passes
   an item's stored opacity, or during a transition its track's sampled one
   ([ARCH › Data model](../../docs/ARCHITECTURE.md#data-model)).
@@ -532,6 +533,10 @@ function:
   about that corner by `rotation_deg`. In y-down coordinates that is
   `x' = px + dx·cos θ − dy·sin θ`, `y' = py + dx·sin θ + dy·cos θ`.
 
+A finite transform whose corners leave f32's range (a huge scale of a large source)
+draws nothing rather than failing the frame, as a too-large neutral box does
+(`a_legacy_transform_past_f32_draws_nothing`, #1130).
+
 This crate then maps those canvas pixels into clip space:
 `x_ndc = x/canvas_w·2 − 1`, `y_ndc = 1 − y/canvas_h·2`.
 
@@ -765,9 +770,11 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
 - `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
   `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
   of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
-  radius: it runs at the smallest working scale of 1, 2, 4 or 8 that keeps radius /
-  scale at 16 or less, so a box downsample reads at most 64 texels a texel and each
-  blur pass at most 33. It uses three scratch layers. The frame's edges clamp, so they
+  radius: it runs at the smallest working scale of 1, 2, 4, 8 or 16 that keeps radius /
+  scale at 8 or less, so a box downsample reads at most 64 texels a texel and each
+  blur pass at most 17. The bound is low for software rasterizers, which pay for every
+  load: a radius of 12 runs at half scale, about a sixth of the loads at full scale
+  (#1070). It uses three scratch layers. The frame's edges clamp, so they
   don't darken. The area's edge is hard (no feather), and the blur inside it still
   reads pixels just outside it.
 - `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are

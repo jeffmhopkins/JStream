@@ -7,13 +7,14 @@
 //! it, at any depth), and is written and cleared one field at a time. `item.set_effects`
 //! writes the effects field, a whole list (ADR-0088), with the graph's checks that need
 //! no kind descriptor: the IDs, their uniqueness and the list's length. Like the rest of
-//! the mock it stores the settings as given.
+//! the mock it stores the settings as given. `item.set_motion` writes the motion field,
+//! a whole list (ADR-0099), with the wire's check that the graph uses too.
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
     Blocker, Crop, Edit, EntityKind, FilterChains, FilterInfo, Finite32, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, MAX_CHAIN_FILTERS, OverrideField, ProtocolError, SceneId,
-    SceneRole, Settings, SourceKind,
+    ItemOverride, ItemTransform, MAX_CHAIN_FILTERS, MotionModifier, OverrideField, ProtocolError,
+    SceneId, SceneRole, Settings, SourceKind,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -36,6 +37,8 @@ pub(super) struct Override {
     opacity: Option<Finite32>,
     /// The effects, a whole video chain (ADR-0088).
     effects: Option<FilterChains>,
+    /// The motion modifiers, a whole list (ADR-0099).
+    motion: Option<Vec<MotionModifier>>,
 }
 
 impl Override {
@@ -83,6 +86,13 @@ impl Override {
                 opacity,
             });
         }
+        if let Some(motion) = &self.motion {
+            edits.push(Edit::ItemSetMotion {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+                motion: motion.clone(),
+            });
+        }
         if let (Some(effects), Some(scene_id)) = (&self.effects, scene_id) {
             edits.push(Edit::ItemSetEffects {
                 scene_id,
@@ -110,6 +120,7 @@ impl Override {
             OverrideField::Visible => only.visible = self.visible,
             OverrideField::Opacity => only.opacity = self.opacity,
             OverrideField::Effects => only.effects = self.effects.clone(),
+            OverrideField::Motion => only.motion = self.motion.clone(),
         }
         only
     }
@@ -122,6 +133,7 @@ impl Override {
             OverrideField::Visible => self.visible = None,
             OverrideField::Opacity => self.opacity = None,
             OverrideField::Effects => self.effects = None,
+            OverrideField::Motion => self.motion = None,
         }
     }
 
@@ -132,6 +144,7 @@ impl Override {
         self.visible = other.visible.or(self.visible);
         self.opacity = other.opacity.or(self.opacity);
         self.effects = other.effects.or(self.effects.take());
+        self.motion = other.motion.or(self.motion.take());
     }
 
     /// The field `edit` writes, as an override of that field alone, and the field.
@@ -165,6 +178,10 @@ impl Override {
                 });
                 OverrideField::Effects
             }
+            Edit::ItemSetMotion { motion, .. } => {
+                o.motion = Some(motion.clone());
+                OverrideField::Motion
+            }
             _ => return None,
         };
         Some((o, field))
@@ -186,6 +203,7 @@ impl Override {
             visible: self.visible,
             opacity: self.opacity,
             effects: self.effects.as_ref().map(|e| e.video.clone()),
+            motion: self.motion.clone(),
         }
     }
 }
@@ -247,6 +265,9 @@ impl Collection {
                 item_id, scene_id, ..
             }
             | Edit::ItemSetOpacity {
+                item_id, scene_id, ..
+            }
+            | Edit::ItemSetMotion {
                 item_id, scene_id, ..
             } => match self.variant_target(item_id, scene_id.as_ref(), at) {
                 Ok(Some(vi)) => Some(self.write_override(vi, item_id, edit, at)),
@@ -472,6 +493,7 @@ impl Collection {
             }
             Edit::ItemSetOpacity { opacity, .. } => super::check_opacity(*opacity, at)?,
             Edit::ItemSetEffects { effects, .. } => check_effects(effects, at)?,
+            Edit::ItemSetMotion { motion, .. } => super::check_motion_list(motion, at)?,
             _ => {}
         }
         let Some((written, field)) = Override::of_edit(edit) else {
@@ -596,6 +618,18 @@ impl Collection {
             )),
             None => Ok(()),
         }
+    }
+
+    /// Whether the placement of `item_id` that `scene_id` names is visible: a keyframe
+    /// scene's override if it has one, else the item's own, as the graph's `visible_in`
+    /// reads it (ADR-0101). `None` for an item the collection doesn't have.
+    pub(super) fn visible_in(&self, item_id: &ItemId, scene_id: Option<&SceneId>) -> Option<bool> {
+        let own = self.items.get(item_id)?.visible;
+        let overridden = scene_id
+            .and_then(|id| self.scene_index(id))
+            .and_then(|si| self.scenes[si].overrides.get(item_id))
+            .and_then(|o| o.visible);
+        Some(overridden.unwrap_or(own))
     }
 
     /// Whether `scene_id` names a keyframe scene.

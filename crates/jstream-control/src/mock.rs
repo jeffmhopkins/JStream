@@ -432,6 +432,13 @@ impl History {
         self.prune();
     }
 
+    /// A change by a client that is no step of its history (an item action, ADR-0101):
+    /// logged, so another client's undo over it conflicts, with its stacks kept.
+    fn log_only(&mut self, client_id: &ClientId, rev: Rev) {
+        self.log.push_back((rev, client_id.clone()));
+        self.prune();
+    }
+
     /// Takes the step an undo or redo would apply.
     fn take(&mut self, client_id: &ClientId, direction: HistoryDirection) -> Option<Step> {
         let stacks = self.clients.get_mut(client_id)?;
@@ -635,6 +642,8 @@ struct Item {
     effects: jstream_protocol::FilterChains,
     /// Whether its canvas box is locked (ADR-0096).
     locked: bool,
+    /// Its motion modifiers (ADR-0099).
+    motion: Vec<jstream_protocol::MotionModifier>,
     /// Where its effects run (ADR-0106).
     effects_space: jstream_protocol::EffectsSpace,
 }
@@ -801,6 +810,8 @@ impl State {
             if let Some((entity, id)) = deleted {
                 inverse.extend(next.remove_hotkeys_naming(entity, &id, &mut removed));
             }
+            // So does any edit that takes an item away (ADR-0101).
+            inverse.extend(next.remove_hotkeys_of_missing_items(&mut removed));
             undo.push(inverse);
         }
         next.rev = self
@@ -956,6 +967,43 @@ impl State {
         });
     }
 
+    /// `item.show`, `item.hide` and `item.toggle` (ADR-0101), as the engine runs them:
+    /// the placement's `item.set_visible`, one `rev` and a `state.changed`, logged for
+    /// undo conflicts but no step of the sender's history. The mock draws nothing, so it
+    /// plays no effect.
+    fn set_shown(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        item_id: ItemId,
+        scene_id: Option<SceneId>,
+        visible: Option<bool>,
+    ) -> Result<CallResult, ProtocolError> {
+        let current = self
+            .collection
+            .visible_in(&item_id, scene_id.as_ref())
+            .ok_or_else(|| not_found(EntityKind::Item, item_id.as_str()))?;
+        let visible = visible.unwrap_or(!current);
+        let edit = Edit::ItemSetVisible {
+            item_id,
+            scene_id,
+            visible,
+        };
+        if visible == current {
+            // Nothing to change, but a scene the edit would refuse is refused here too.
+            let running = self.running();
+            self.collection
+                .clone()
+                .apply(edit, 0, &running)
+                .map_err(action_field)?;
+            return Ok(CallResult::action());
+        }
+        let (rev, _, _) = self.apply(vec![edit]).map_err(action_field)?;
+        self.history.log_only(client_id, rev);
+        self.changed(client_id, request_id, rev, None);
+        Ok(CallResult::action())
+    }
+
     fn action(
         &mut self,
         client_id: &ClientId,
@@ -982,6 +1030,15 @@ impl State {
                     self.emit_studio(client_id, request_id, Some(started));
                 }
                 return Ok(CallResult::action());
+            }
+            Action::ItemShow { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, Some(true));
+            }
+            Action::ItemHide { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, Some(false));
+            }
+            Action::ItemToggle { item_id, scene_id } => {
+                return self.set_shown(client_id, request_id, item_id, scene_id, None);
             }
             Action::StudioSetPreview { scene_id } => {
                 self.collection.existing_scene(&scene_id)?;
@@ -1685,6 +1742,7 @@ impl Collection {
                         blend,
                         effects: Default::default(),
                         locked: false,
+                        motion: Vec::new(),
                         effects_space: jstream_protocol::EffectsSpace::Box,
                     },
                 );
@@ -1811,6 +1869,20 @@ impl Collection {
                 vec![Edit::ItemSetBlend {
                     item_id,
                     blend: old,
+                }]
+            }
+            Edit::ItemSetMotion {
+                item_id,
+                scene_id,
+                motion,
+            } => {
+                check_motion_list(&motion, at)?;
+                let item = self.placement(&item_id, scene_id.as_ref(), at)?;
+                let old = std::mem::replace(&mut item.motion, motion);
+                vec![Edit::ItemSetMotion {
+                    item_id,
+                    scene_id,
+                    motion: old,
                 }]
             }
             Edit::ItemSetLocked { item_id, locked } => {
@@ -2271,6 +2343,7 @@ impl Collection {
                         EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
                         // The mock has only the `cut` preset every collection starts with.
                         EntityKind::Transition => id == INITIAL_PRESET,
+                        EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
                         _ => false,
                     };
                     if !exists {
@@ -2303,6 +2376,29 @@ impl Collection {
             return Err(not_found(EntityKind::Scene, scene_id.as_str()));
         }
         Ok(())
+    }
+
+    /// Removes the hotkey bindings whose action names an item the collection no longer
+    /// has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a deleted object.
+    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Vec<HotkeyBinding>) -> Vec<Edit> {
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| {
+                action.named_objects().iter().any(|&(entity, id)| {
+                    entity == EntityKind::Item && !self.items.contains_key(&ItemId::new(id))
+                })
+            })
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        chords
+            .into_iter()
+            .filter_map(|chord| {
+                let action = self.hotkeys.remove(&chord)?;
+                removed.push(HotkeyBinding::new(chord.clone(), &action));
+                Some(Edit::HotkeySet { chord, action })
+            })
+            .collect()
     }
 
     /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
@@ -2525,6 +2621,7 @@ impl Collection {
                     blend: item.blend,
                     transition: ItemTransition::default(),
                     locked: item.locked,
+                    motion: item.motion.clone(),
                     effects_space: item.effects_space,
                 })
             })
@@ -2641,6 +2738,26 @@ impl Collection {
             ));
         }
         self.existing_item(item_id)
+    }
+}
+
+/// An error from the `item.set_visible` an item action applies, with its field named
+/// as the action's (`scene_id`, not `edits.0.scene_id`), as the engine reports it.
+fn action_field(error: ProtocolError) -> ProtocolError {
+    match error {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
+            field: field
+                .strip_prefix("edits.0.")
+                .map(str::to_owned)
+                .unwrap_or(field),
+            reason,
+            blockers,
+        },
+        other => other,
     }
 }
 
@@ -2789,6 +2906,13 @@ fn restore_item(
             locked: true,
         });
     }
+    if !item.motion.is_empty() {
+        edits.push(Edit::ItemSetMotion {
+            item_id: item_id.clone(),
+            scene_id: None,
+            motion: item.motion.clone(),
+        });
+    }
     if !item.effects_space.is_box() {
         edits.push(Edit::ItemSetEffectsSpace {
             item_id: item_id.clone(),
@@ -2800,6 +2924,15 @@ fn restore_item(
     };
     edits.extend(filter::restore_all(&owner, item.effects.clone()));
     Ok(edits)
+}
+
+/// Rejects a motion list the wire's check refuses, as `jstream-graph` does (ADR-0099).
+fn check_motion_list(
+    motion: &[jstream_protocol::MotionModifier],
+    at: usize,
+) -> Result<(), ProtocolError> {
+    jstream_protocol::check_motion(motion)
+        .map_err(|problem| invalid(at, &problem.field, problem.reason))
 }
 
 /// Rejects an opacity outside [0, 1], as `jstream-graph` does.
@@ -3575,6 +3708,75 @@ mod tests {
             CallResult::Query { result } => Ok(result),
             other => panic!("not a query result: {other:?}"),
         }
+    }
+
+    /// A master or output filter may name a file (an asset reference), as the graph
+    /// allows: Apply LUT on the program or one output.
+    #[test]
+    fn a_master_or_output_filter_may_name_a_file() {
+        use jstream_protocol::{
+            FilterChain, FilterId, FilterOwner, KindCategory, KindDescriptor, ParamDescriptor,
+            ParamType, RecordContainer,
+        };
+        let look = KindDescriptor {
+            kind_id: "look".into(),
+            category: KindCategory::VideoFilter,
+            name: "Look".into(),
+            version: 1,
+            video: true,
+            audio: false,
+            max_outset_px: None,
+            params: vec![ParamDescriptor {
+                id: "lut".into(),
+                ty: ParamType::Asset {
+                    accept: vec!["cube".into()],
+                },
+                default: serde_json::Value::Null,
+                label: "LUT".into(),
+                description: None,
+                group: None,
+                advanced: false,
+                visible_if: None,
+                live: true,
+            }],
+        };
+        let engine = MockEngine::new().with_kinds([look]);
+        let control = connected(&engine);
+        let lut = serde_json::json!({"type": "asset", "root": "app", "path": "warm.cube"});
+        let grade = |owner: FilterOwner| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("grade"),
+            kind: "look".into(),
+            settings: [("lut".to_owned(), lut.clone())].into_iter().collect(),
+            enabled: None,
+            index: None,
+        };
+        let edits = vec![
+            Edit::OutputCreate {
+                output_id: OutputId::new("rec"),
+                kind: OutputKind::Record {
+                    path: "/home/me/show.mp4".into(),
+                    container: RecordContainer::Mp4,
+                },
+            },
+            grade(FilterOwner::Master),
+            grade(FilterOwner::Output {
+                output_id: OutputId::new("rec"),
+            }),
+        ];
+        assert_eq!(
+            batch(
+                &*control,
+                Batch {
+                    edits,
+                    expected_rev: None,
+                    idempotency_key: None,
+                    ends_gesture: None,
+                }
+            ),
+            Ok(Rev(1))
+        );
     }
 
     /// The shared parity collection (`jstream_protocol::parity`), which `jstream-graph`'s

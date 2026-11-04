@@ -23,6 +23,7 @@ use crate::id::{
 };
 use crate::keyframe::OverrideField;
 use crate::mix::VideoMix;
+use crate::motion::MotionModifier;
 use crate::organise::{SceneMeta, SourceMeta};
 use crate::output::{OutputKind, RtmpTarget, SecretString};
 use crate::plugin::PluginGrant;
@@ -111,6 +112,26 @@ pub enum Edit {
         /// [`MAX_CHAIN_FILTERS`](crate::MAX_CHAIN_FILTERS), else `invalid_argument` on
         /// `effects`.
         effects: Vec<FilterInfo>,
+    },
+    /// Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which
+    /// move it on the engine's animation clock as each frame is drawn. Without
+    /// `scene_id`, or with its own scene's, it writes the item's own list; with a
+    /// keyframe scene whose tree holds the item, it writes that keyframe's override.
+    /// Any other scene is `invalid_argument` on `scene_id`. The list holds at most
+    /// [`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on
+    /// `motion`; each ID is unique and well formed, and each parameter in its range,
+    /// else `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion
+    /// (in a keyframe, an override with none). Inverse: `item.set_motion` with the old
+    /// list, or `item.clear_override` of `motion` when the keyframe didn't override it.
+    #[serde(rename = "item.set_motion")]
+    ItemSetMotion {
+        /// The item.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The modifiers, first first.
+        motion: Vec<MotionModifier>,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -1098,6 +1119,7 @@ impl Edit {
             Edit::SceneCreateVariant { .. } => "scene.create_variant",
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
+            Edit::ItemSetMotion { .. } => "item.set_motion",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1444,6 +1466,54 @@ pub enum Action {
         /// The scene to put on preview.
         scene_id: SceneId,
     },
+    /// Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows
+    /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
+    /// with the same `scene_id` rules and the same errors (`not_found` for an item or
+    /// scene not in the collection, `invalid_argument` on `scene_id` for a scene whose
+    /// placement it can't change). It is collection state: `rev` moves on by one,
+    /// `state.changed` follows and the collection saves it. It is an action, so it is
+    /// never a step of the sender's undo history (ADR-0024 §5); another client's undo that
+    /// would overwrite it fails with `undo_conflict`, as after a batch. Showing an item
+    /// already shown succeeds and changes nothing.
+    ///
+    /// When the program scene draws the item, it appears with its `appear` effect, after
+    /// its `delay_ms` and with its easing, over the default preset's duration. `inherit`
+    /// is the default preset's `unmatched`, or no animation when that preset is a `cut`
+    /// or another kind without one. A source the program shows again this way restarts
+    /// as on a scene switch: a `media` or `browser` source with `restart_on_show` starts
+    /// from the beginning. A running transition continues from what is on screen.
+    #[serde(rename = "item.show")]
+    ItemShow {
+        /// The item to show.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s
+    /// opposite, with the same rules. Hiding an item already hidden succeeds and changes
+    /// nothing.
+    #[serde(rename = "item.hide")]
+    ItemHide {
+        /// The item to hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
+    /// Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as
+    /// `item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is
+    /// the keyframe's override if it has one, else the item's own. An action takes no
+    /// `expected_rev` or idempotency key, so a retried toggle flips twice: a caller that
+    /// may retry sends `item.show` or `item.hide`, which are safe to repeat.
+    #[serde(rename = "item.toggle")]
+    ItemToggle {
+        /// The item to show or hide.
+        item_id: ItemId,
+        /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+    },
     /// Opens pairing for one more device (ADR-0044): the server draws a one-time
     /// pairing code and answers with it, to this client only (a `result` of type
     /// `pairing.start`). A device that posts the code with a name to `POST
@@ -1622,6 +1692,9 @@ impl Action {
             Action::DeviceRevoke { .. } => "device.revoke",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+            Action::ItemShow { .. } => "item.show",
+            Action::ItemHide { .. } => "item.hide",
+            Action::ItemToggle { .. } => "item.toggle",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
@@ -1660,6 +1733,15 @@ impl Action {
             }
             Action::StudioSetPreview { scene_id } => {
                 vec![(EntityKind::Scene, scene_id.as_str())]
+            }
+            Action::ItemShow { item_id, scene_id }
+            | Action::ItemHide { item_id, scene_id }
+            | Action::ItemToggle { item_id, scene_id } => {
+                let mut named = vec![(EntityKind::Item, item_id.as_str())];
+                if let Some(scene_id) = scene_id {
+                    named.push((EntityKind::Scene, scene_id.as_str()));
+                }
+                named
             }
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
@@ -1755,6 +1837,9 @@ impl Action {
             | Action::AudioResetLoudness {}
             | Action::SceneSwitch { .. }
             | Action::StudioSetPreview { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
             | Action::PrivacySet { .. } => None,
             // Bindable, but checked as the call would be, so a saved binding never fails
             // every press on its name or size.
@@ -1961,7 +2046,30 @@ impl ItemTransform {
         },
         rotation_deg: Finite32::ZERO,
     };
+
+    /// Checks that it is within bounds where any source draws it (#1130): each position
+    /// coordinate within [`MAX_DRAWN_PX`](crate::MAX_DRAWN_PX), and each scale within
+    /// ±[`MAX_LEGACY_SCALE`]. A source is at most `u32::MAX` pixels a side, so every
+    /// corner then stays far inside f32's range. The bound is enough, not needed: a
+    /// transform past it may still draw, and `item.set_transform` and `item.add` don't
+    /// check it (ADR-0022 keeps their 0.3 meaning). Motion keeps a moved transform within
+    /// it. Returns what is wrong if it isn't.
+    pub fn check_drawable(&self) -> Result<(), &'static str> {
+        let near = |v: Finite32| v.get().abs() <= crate::MAX_DRAWN_PX;
+        if !(near(self.position.x) && near(self.position.y)) {
+            return Err("its position must be within 1e15 pixels of the origin");
+        }
+        let scale = |v: Finite32| v.get().abs() <= MAX_LEGACY_SCALE;
+        if !(scale(self.scale.x) && scale(self.scale.y)) {
+            return Err("its scale must be within -100000..=100000");
+        }
+        Ok(())
+    }
 }
+
+/// The largest scale, either way, within [`ItemTransform::check_drawable`]'s bounds. No
+/// edit checks it: `item.set_transform` stores any finite scale (ADR-0022).
+pub const MAX_LEGACY_SCALE: f32 = 100_000.0;
 
 impl Default for ItemTransform {
     fn default() -> Self {

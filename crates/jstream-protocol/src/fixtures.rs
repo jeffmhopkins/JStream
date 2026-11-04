@@ -51,6 +51,7 @@ use crate::{FrameSheet, FrameStrip, SheetFrame};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
 use crate::{MixInput, MixResolution, VideoMix, VideoMixId, VideoMixInfo};
+use crate::{MotionClock, MotionKind, MotionModifier, MotionProperty, MotionShape};
 use crate::{PackContent, PackFile, PackFileInfo, PackInfo};
 use crate::{PluginClass, PluginDisabledReason, PluginGrant, PluginId, PluginState};
 use serde_json::{Value, json};
@@ -591,7 +592,50 @@ fn keyframe_edits() -> Vec<Edit> {
             filter_id: FilterId::new("flt_frame"),
             enabled: false,
         },
+        // An item's motion modifiers, and a keyframe's own (ADR-0099).
+        Edit::ItemSetMotion {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+            motion: sway(),
+        },
+        Edit::ItemSetMotion {
+            item_id: ItemId::new("itm_2"),
+            scene_id: Some(SceneId::new("scn_1_wide")),
+            motion: keyframe_motion(),
+        },
     ];
+    // Every property and every shape, in lists of at most 8 (ADR-0099).
+    let every: Vec<MotionModifier> = MotionProperty::ALL
+        .into_iter()
+        .zip(MotionShape::ALL.into_iter().cycle())
+        .map(|(property, shape)| MotionModifier {
+            modifier_id: format!(
+                "every-{}",
+                serde_json::to_value(property)
+                    .expect("serialises")
+                    .as_str()
+                    .expect("a string")
+            ),
+            property,
+            kind: MotionKind::Oscillate {
+                shape,
+                amplitude: Finite32::new(1.0).expect("finite"),
+                period_ms: 2000,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        })
+        .collect();
+    edits.extend(
+        every
+            .chunks(crate::MAX_MOTION_MODIFIERS)
+            .map(|motion| Edit::ItemSetMotion {
+                item_id: ItemId::new("itm_3"),
+                scene_id: None,
+                motion: motion.to_vec(),
+            }),
+    );
     // Every field, as "reset keyframe" clears them.
     edits.extend(
         [
@@ -599,6 +643,7 @@ fn keyframe_edits() -> Vec<Edit> {
             OverrideField::Crop,
             OverrideField::Visible,
             OverrideField::Effects,
+            OverrideField::Motion,
         ]
         .map(|field| Edit::ItemClearOverride {
             scene_id: SceneId::new("scn_1_wide"),
@@ -619,6 +664,64 @@ fn item_overrides() -> Vec<ItemOverride> {
         visible: Some(false),
         opacity: Some(Finite32::new(0.5).expect("finite")),
         effects: Some(keyframe_effects()),
+        motion: Some(keyframe_motion()),
+    }]
+}
+
+/// A gentle sway: every kind, every option, on the properties a sway moves (ADR-0099).
+fn sway() -> Vec<MotionModifier> {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    vec![
+        MotionModifier {
+            modifier_id: "sway-x".into(),
+            property: MotionProperty::X,
+            kind: MotionKind::Wiggle {
+                amplitude: f(3.0),
+                frequency_hz: f(0.4),
+                seed: 7,
+                octaves: 2,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        },
+        MotionModifier {
+            modifier_id: "sway-roll".into(),
+            property: MotionProperty::Rotation,
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Triangle,
+                amplitude: f(0.1),
+                period_ms: 5000,
+                phase: f(0.25),
+            },
+            clock: MotionClock::Shown,
+            enabled: true,
+        },
+        MotionModifier {
+            modifier_id: "scroll".into(),
+            property: MotionProperty::CropLeft,
+            kind: MotionKind::Drift {
+                rate_per_s: f(12.0),
+                wrap: Some(f(480.0)),
+            },
+            clock: MotionClock::Engine,
+            enabled: false,
+        },
+    ]
+}
+
+/// The keyframe scene `scn_1_wide`'s own motion for `itm_2`: a pulse, defaults omitted.
+fn keyframe_motion() -> Vec<MotionModifier> {
+    vec![MotionModifier {
+        modifier_id: "pulse".into(),
+        property: MotionProperty::Opacity,
+        kind: MotionKind::Oscillate {
+            shape: MotionShape::Sine,
+            amplitude: Finite32::new(0.2).expect("finite"),
+            period_ms: 1000,
+            phase: Finite32::ZERO,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
     }]
 }
 
@@ -1155,6 +1258,18 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             preset_id: None,
             strip: FrameStrip::new(7, 100),
+        },
+        Action::ItemShow {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
+        },
+        Action::ItemHide {
+            item_id: ItemId::new("itm_1"),
+            scene_id: Some(SceneId::new("scn_1")),
+        },
+        Action::ItemToggle {
+            item_id: ItemId::new("itm_1"),
+            scene_id: None,
         },
     ]
 }
@@ -1712,6 +1827,7 @@ fn item_infos() -> Vec<ItemInfo> {
                 settings: vignette(),
             }],
             locked: false,
+            motion: sway(),
             effects_space: crate::EffectsSpace::Box,
         },
         ItemInfo {
@@ -1740,6 +1856,7 @@ fn item_infos() -> Vec<ItemInfo> {
             },
             effects: Vec::new(),
             locked: false,
+            motion: Vec::new(),
             effects_space: crate::EffectsSpace::Box,
         },
     ]

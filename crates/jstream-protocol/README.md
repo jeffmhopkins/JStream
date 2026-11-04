@@ -63,13 +63,14 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `item.set_effects_space`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`, `privacy.set` (deprecated),
+  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`, `item.show`,
+  `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
@@ -158,8 +159,14 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it (its `effects` since 0.63), `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63, its `motion` since 0.81), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped.
+- **Motion** (`motion.rs`, since 0.81,
+  [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)):
+  `MotionModifier` (an ID, the `MotionProperty` it moves, its `MotionKind`, its
+  `MotionClock` and `enabled`), the limits `MAX_MOTION_MODIFIERS` (8) and
+  `MAX_MOTION_ID_LEN` (64), and `check_motion`, the list check every implementation
+  shares ([Motion](#motion)).
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -255,7 +262,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   `transform_view` is the deprecated 0.3 view of a geometry that `ItemInfo.transform`
   reports. `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 transform. A
   negative scale is not refused: `from_legacy` returns the drawn outline with the
-  reflection as the geometry's flip.
+  reflection as the geometry's flip. `ItemTransform::check_drawable` gives bounds
+  within which any source draws a legacy transform: its position within `MAX_DRAWN_PX`
+  and its scale within ±`MAX_LEGACY_SCALE` (100 000, #1130). They are enough, not
+  needed, and no edit checks them (ADR-0022); motion keeps a moved transform within
+  them.
 
 <a id="versions"></a>
 ## Protocol versions
@@ -264,8 +275,15 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 -->
 
 `PROTOCOL_VERSION` is 0.82 because of the frame
-sheets, `video.frames` and `scene.switch_and_watch` (#1061), with 0.79 to 0.81 left to
-the changes that claimed them first; 0.78 because of the shared values `values.set`, `values.list`
+sheets, `video.frames` and `scene.switch_and_watch` (#1061); 0.81 because of
+`item.set_motion`, `ItemInfo.motion`, `ItemOverride.motion` and `OverrideField`'s
+`motion` ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md));
+0.80 because of the
+`item.show`, `item.hide` and `item.toggle` actions
+([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)); 0.79 because a master or output filter may name a file (an
+asset reference, so Apply LUT grades the program or one output; no wire change:
+earlier minors refused it with `invalid_argument` on the parameter); 0.78 because of
+the shared values `values.set`, `values.list`
 and `values.changed` (`values.rs`,
 [ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)); 0.77 because of
 `SceneCamera`'s `focus_px` and `blur_px`, a camera's depth of field
@@ -858,9 +876,11 @@ from its next start (`output.status` reports it `dedicated`); a virtual camera h
 video chain only, and with a filter gets a render pass of its own but no encoder
 session. An audio filter on an output that carries no audio (a `virtual_cam`) is
 `invalid_argument` on `edits.N.chain`. A missing output is `not_found` with entity
-`output`. Their filters can't hold a reference yet (a scene, source, bus or asset;
-`invalid_argument` on the parameter), since the delete checks follow only a source's
-references. `output.delete`'s
+`output`. Their filters can't hold a scene, source or bus reference yet
+(`invalid_argument` on the parameter), since the delete checks follow only a source's
+references. From 0.79 they may name a file (an asset reference), which is no edge:
+the engine loads it as it does a source's filter's, so `apply_lut` or `image_mask`
+grades the program or one output. Before 0.79 an asset was refused there too. `output.delete`'s
 inverse re-adds the output's filters. `OutputInfo.filters` and `state.get`'s
 `master { filters }` report them, each omitted while empty.
 
@@ -1005,15 +1025,21 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   `youtube.*` actions (YouTube is driven through the UI,
   [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)), or the
   `plugin.*` actions (a person installs and grants plugins): each is
-  `invalid_argument` on `action.type`. A scene, output or preset the action names must
-  exist, else `not_found`.
+  `invalid_argument` on `action.type`. A scene, output, preset or item the action names
+  must exist, else `not_found`. `item.show`, `item.hide` and `item.toggle` (0.80,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) are the actions that show
+  and hide one item: they change its placement's visibility as `item.set_visible` would,
+  moving `rev` on with no undo step, and the engine plays the item's own `appear` or
+  `disappear` effect on program over the default preset's duration.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
   inverse is `hotkey.set` with the action.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs and the preset a `scene.switch`
-  names), and their inverses restore the
+  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
+  names and the item an `item.*` action names), and any edit that takes an item away
+  (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
+  the item (ADR-0101). Their inverses restore the
   bindings after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
@@ -1426,8 +1452,8 @@ that sets it: `scene.reorder` and `item.reorder` restore positions,
 `item.set_transform` each restore the previous placement in its own form. So undoing
 `item.remove` is `item.add` (with `geometry` or `transform`, matching the removed
 item's form) plus whichever of `item.reorder`, `item.set_crop`, `item.set_visible`,
-`item.set_transition`, `item.set_locked` and `item.set_effects_space` the removed item
-needs, and undoing `scene.delete` is
+`item.set_transition`, `item.set_locked`, `item.set_effects_space` and `item.set_motion`
+the removed item needs, and undoing `scene.delete` is
 `scene.create` with the scene's `role` (omitted for `scene`), `scene.reorder` unless it
 was last, `scene.set_transitions` if it had an override, and each item's restore,
 bottom to top. A variant's `scene.delete` is undone by `scene.create_variant`, its role
@@ -1999,7 +2025,10 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
-  `Unknown` from the start. 0.75 adds the `BlendMode` values `normal_srgb` and
+  `Unknown` from the start, and so do the motion enums (`MotionProperty`,
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81): a later kind or
+  property won't break a 0.81 client's `state.get`. `check_motion` refuses an `Unknown`
+  in an edit, and the engine draws one as still. 0.75 adds the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
@@ -2012,6 +2041,46 @@ after 1.0:
   too, except `FilterChain`: an owner has a video and an audio chain and no other
   ([ADR-0026](../../docs/adr/0026-source-filter-chains.md)), so code that picks a
   chain matches it exhaustively.
+
+<a id="motion"></a>
+## Motion
+<!-- @section
+covers = ["crates/jstream-protocol/src/motion.rs"]
+-->
+
+Since 0.81 an item carries continuous motion
+([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md), `motion.rs`):
+`ItemInfo.motion`, an ordered list of at most 8 `MotionModifier`s that the engine
+evaluates as each frame is drawn. A modifier never writes the item's values: `state.get`
+reports the same geometry, crop and opacity whatever it adds. Each modifier has a
+`modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
+the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
+`opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
+- **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
+  `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
+  `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`) and `drift` (a steady
+  `rate_per_s`, wrapping back to 0 past `wrap` when it has one). Amplitudes are 0 to
+  100 000, rates within ±100 000.
+- **How a value applies:** positions, angles, depth and crop edges add it (crop in
+  source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
+  and opacity is then clamped to 0 to 1. Two modifiers on one property add up.
+- **Clocks:** `engine` (the default) is the engine's animation time, so items with the
+  same settings move in step; `shown` starts at 0 each time the engine starts drawing
+  the item for program or a video mix (in any of their passes). A scene or source
+  preview doesn't run it: there a `shown` modifier stays at its start.
+- **`item.set_motion {item_id, scene_id?, motion}`** writes the whole list, and is
+  undone by the same edit with the old list. Addressed to a keyframe scene, it writes
+  that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
+  field `motion` removes. An empty override list stops the item's motion in that
+  keyframe. A list that breaks the rules above is `invalid_argument` naming the field,
+  and `check_motion` is the check every implementation shares. Plugins need the `edit`
+  class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
+  previews as it drags): each change is one undo step. `depth` is a property beyond
+  ADR-0099's list, for 3D scenes.
+
+During a scene switch a moving item keeps moving: a matched pair blends its two sides'
+motion by the transition's progress, an appearing item moves as its new scene says and a
+disappearing one as its old scene said.
 
 <a id="geometry"></a>
 ## Item geometry
@@ -2107,7 +2176,10 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and
   sending neither stores the identity transform, its 0.3 meaning, until 1.0.
   `item.set_geometry` stores a geometry and the deprecated `item.set_transform` a
-  transform. Each one's inverse restores the previous placement in its own form.
+  transform. Each one's inverse restores the previous placement in its own form. A
+  legacy transform keeps its 0.3 meaning, so any finite one is stored (ADR-0022); one
+  whose corners for the source's current size leave f32's range draws nothing, and the
+  frame goes on (#1130).
 - **Validation.** A stored geometry has a size greater than zero
   (`edits.N.geometry.size`), a `perspective_px` greater than zero if present
   (`edits.N.geometry.perspective_px`), and finite corners (`edits.N.geometry`). From

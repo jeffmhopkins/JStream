@@ -557,6 +557,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -1140,6 +1227,43 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "effects"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "motion": {
+                    "description": "The modifiers, first first.",
+                    "items": {
+                      "$ref": "#/$defs/MotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "motion"
                 ],
                 "type": "object"
               },
@@ -3269,7 +3393,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -3674,6 +3798,242 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionClock": {
+            "description": "Where a modifier's time starts.",
+            "oneOf": [
+              {
+                "const": "engine",
+                "description": "The engine's animation time: every item with the same parameters moves in step.",
+                "type": "string"
+              },
+              {
+                "const": "shown",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionModifier": {
+            "description": "One motion modifier on an item (ADR-0099 decision 3).",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "Where its time starts. Default `engine`."
+              },
+              "enabled": {
+                "description": "Whether it applies. Default `true`; omitted when `true`.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/MotionProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "MotionProperty": {
+            "description": "The property a motion modifier changes.",
+            "oneOf": [
+              {
+                "const": "x",
+                "description": "Horizontal position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "y",
+                "description": "Vertical position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "The box's size about its centre: multiplied by `1 + value`.",
+                "type": "string"
+              },
+              {
+                "const": "rotation",
+                "description": "Rotation in the canvas plane, in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "3D tilt (`tilt_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "turn",
+                "description": "3D turn (`turn_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "depth",
+                "description": "3D offset along the viewing axis (`depth_px`), in pixels toward the viewer:\nadded.",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Opacity: multiplied by `1 + value`, then clamped to `0..=1`.",
+                "type": "string"
+              },
+              {
+                "const": "crop_left",
+                "description": "Source pixels cut from the left edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_top",
+                "description": "Source pixels cut from the top edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_right",
+                "description": "Source pixels cut from the right edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_bottom",
+                "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionShape": {
+            "description": "The waveform of an `oscillate` modifier.",
+            "oneOf": [
+              {
+                "const": "sine",
+                "description": "A sine: starts at 0, rising.",
+                "type": "string"
+              },
+              {
+                "const": "triangle",
+                "description": "A triangle: starts at 0, rising, straight between -1 and 1.",
+                "type": "string"
+              },
+              {
+                "const": "square",
+                "description": "A square: 1 for the first half of each period, -1 for the second.",
+                "type": "string"
+              },
+              {
+                "const": "saw",
+                "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+                "type": "string"
+              }
+            ]
+          },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
             "type": "string"
@@ -3763,6 +4123,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "effects",
                 "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
+                "type": "string"
+              },
+              {
+                "const": "motion",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -5332,7 +5697,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -6428,6 +6793,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -7011,6 +7463,43 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "effects"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "motion": {
+                    "description": "The modifiers, first first.",
+                    "items": {
+                      "$ref": "#/$defs/MotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "motion"
                 ],
                 "type": "object"
               },
@@ -9140,7 +9629,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -9545,6 +10034,242 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionClock": {
+            "description": "Where a modifier's time starts.",
+            "oneOf": [
+              {
+                "const": "engine",
+                "description": "The engine's animation time: every item with the same parameters moves in step.",
+                "type": "string"
+              },
+              {
+                "const": "shown",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionModifier": {
+            "description": "One motion modifier on an item (ADR-0099 decision 3).",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "Where its time starts. Default `engine`."
+              },
+              "enabled": {
+                "description": "Whether it applies. Default `true`; omitted when `true`.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/MotionProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "MotionProperty": {
+            "description": "The property a motion modifier changes.",
+            "oneOf": [
+              {
+                "const": "x",
+                "description": "Horizontal position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "y",
+                "description": "Vertical position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "The box's size about its centre: multiplied by `1 + value`.",
+                "type": "string"
+              },
+              {
+                "const": "rotation",
+                "description": "Rotation in the canvas plane, in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "3D tilt (`tilt_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "turn",
+                "description": "3D turn (`turn_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "depth",
+                "description": "3D offset along the viewing axis (`depth_px`), in pixels toward the viewer:\nadded.",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Opacity: multiplied by `1 + value`, then clamped to `0..=1`.",
+                "type": "string"
+              },
+              {
+                "const": "crop_left",
+                "description": "Source pixels cut from the left edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_top",
+                "description": "Source pixels cut from the top edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_right",
+                "description": "Source pixels cut from the right edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_bottom",
+                "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionShape": {
+            "description": "The waveform of an `oscillate` modifier.",
+            "oneOf": [
+              {
+                "const": "sine",
+                "description": "A sine: starts at 0, rising.",
+                "type": "string"
+              },
+              {
+                "const": "triangle",
+                "description": "A triangle: starts at 0, rising, straight between -1 and 1.",
+                "type": "string"
+              },
+              {
+                "const": "square",
+                "description": "A square: 1 for the first half of each period, -1 for the second.",
+                "type": "string"
+              },
+              {
+                "const": "saw",
+                "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+                "type": "string"
+              }
+            ]
+          },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
             "type": "string"
@@ -9634,6 +10359,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "effects",
                 "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
+                "type": "string"
+              },
+              {
+                "const": "motion",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -10258,7 +10988,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -10599,6 +11329,242 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "type": "object"
           },
+          "MotionClock": {
+            "description": "Where a modifier's time starts.",
+            "oneOf": [
+              {
+                "const": "engine",
+                "description": "The engine's animation time: every item with the same parameters moves in step.",
+                "type": "string"
+              },
+              {
+                "const": "shown",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionModifier": {
+            "description": "One motion modifier on an item (ADR-0099 decision 3).",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "Where its time starts. Default `engine`."
+              },
+              "enabled": {
+                "description": "Whether it applies. Default `true`; omitted when `true`.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/MotionProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "MotionProperty": {
+            "description": "The property a motion modifier changes.",
+            "oneOf": [
+              {
+                "const": "x",
+                "description": "Horizontal position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "y",
+                "description": "Vertical position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "The box's size about its centre: multiplied by `1 + value`.",
+                "type": "string"
+              },
+              {
+                "const": "rotation",
+                "description": "Rotation in the canvas plane, in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "3D tilt (`tilt_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "turn",
+                "description": "3D turn (`turn_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "depth",
+                "description": "3D offset along the viewing axis (`depth_px`), in pixels toward the viewer:\nadded.",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Opacity: multiplied by `1 + value`, then clamped to `0..=1`.",
+                "type": "string"
+              },
+              {
+                "const": "crop_left",
+                "description": "Source pixels cut from the left edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_top",
+                "description": "Source pixels cut from the top edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_right",
+                "description": "Source pixels cut from the right edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_bottom",
+                "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionShape": {
+            "description": "The waveform of an `oscillate` modifier.",
+            "oneOf": [
+              {
+                "const": "sine",
+                "description": "A sine: starts at 0, rising.",
+                "type": "string"
+              },
+              {
+                "const": "triangle",
+                "description": "A triangle: starts at 0, rising, straight between -1 and 1.",
+                "type": "string"
+              },
+              {
+                "const": "square",
+                "description": "A square: 1 for the first half of each period, -1 for the second.",
+                "type": "string"
+              },
+              {
+                "const": "saw",
+                "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+                "type": "string"
+              }
+            ]
+          },
           "OverrideField": {
             "description": "One of the fields a keyframe scene can override. Each is overridden whole: a variant\nthat overrides `geometry` overrides all of it, and one that overrides `effects` the\nwhole list.",
             "oneOf": [
@@ -10625,6 +11591,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "effects",
                 "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
+                "type": "string"
+              },
+              {
+                "const": "motion",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
                 "type": "string"
               }
             ]
@@ -10798,6 +11769,43 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "effects"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "motion": {
+                    "description": "The modifiers, first first.",
+                    "items": {
+                      "$ref": "#/$defs/MotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "motion"
                 ],
                 "type": "object"
               },
@@ -11228,6 +12236,93 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "space"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -11951,6 +13046,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -12534,6 +13716,43 @@ source: crates/jstream-mcp/src/tests.rs
                   "scene_id",
                   "item_id",
                   "effects"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes an item's motion modifiers, the whole list (ADR-0099, since 0.81), which\nmove it on the engine's animation clock as each frame is drawn. Without\n`scene_id`, or with its own scene's, it writes the item's own list; with a\nkeyframe scene whose tree holds the item, it writes that keyframe's override.\nAny other scene is `invalid_argument` on `scene_id`. The list holds at most\n[`MAX_MOTION_MODIFIERS`](crate::MAX_MOTION_MODIFIERS), else `invalid_argument` on\n`motion`; each ID is unique and well formed, and each parameter in its range,\nelse `invalid_argument` on `motion.<n>.<field>`. An empty list stops all motion\n(in a keyframe, an override with none). Inverse: `item.set_motion` with the old\nlist, or `item.clear_override` of `motion` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item."
+                  },
+                  "motion": {
+                    "description": "The modifiers, first first.",
+                    "items": {
+                      "$ref": "#/$defs/MotionModifier"
+                    },
+                    "type": "array"
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.set_motion",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "motion"
                 ],
                 "type": "object"
               },
@@ -14663,7 +15882,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -15064,6 +16283,242 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionClock": {
+            "description": "Where a modifier's time starts.",
+            "oneOf": [
+              {
+                "const": "engine",
+                "description": "The engine's animation time: every item with the same parameters moves in step.",
+                "type": "string"
+              },
+              {
+                "const": "shown",
+                "description": "From when the engine last started drawing the item for program or a video mix,\nso it starts fresh each time it is shown. While it isn't shown, and in a scene\nor source preview, the modifier is at its start.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionModifier": {
+            "description": "One motion modifier on an item (ADR-0099 decision 3).",
+            "oneOf": [
+              {
+                "description": "Smooth seeded noise within `-amplitude..=amplitude`. The same seed gives the same\nmotion on every machine; each extra octave adds detail at twice the frequency and\nhalf the size.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "frequency_hz": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "About how many turns of direction a second, `0..=60` and not 0."
+                  },
+                  "kind": {
+                    "const": "wiggle",
+                    "type": "string"
+                  },
+                  "octaves": {
+                    "default": 1,
+                    "description": "How many octaves, `1..=4`. Default 1.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "seed": {
+                    "default": 0,
+                    "description": "Picks the noise. Default 0.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "frequency_hz"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A periodic wave within `-amplitude..=amplitude`.",
+                "properties": {
+                  "amplitude": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "The largest value it reaches, `0..=100000`."
+                  },
+                  "kind": {
+                    "const": "oscillate",
+                    "type": "string"
+                  },
+                  "period_ms": {
+                    "description": "One period, in milliseconds, `1..=3600000`.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "phase": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its offset into the period, as a fraction in `0..1`. Default 0."
+                  },
+                  "shape": {
+                    "$ref": "#/$defs/MotionShape",
+                    "default": "sine",
+                    "description": "Its waveform. Default `sine`."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "amplitude",
+                  "period_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A constant rate per second, of either sign, wrapping into `0..wrap` when `wrap`\nis set.",
+                "properties": {
+                  "kind": {
+                    "const": "drift",
+                    "type": "string"
+                  },
+                  "rate_per_s": {
+                    "$ref": "#/$defs/Finite32",
+                    "description": "Units per second, within `-100000..=100000`."
+                  },
+                  "wrap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Where it wraps back to 0, `0..=100000` and not 0. Omitted for no wrap."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate_per_s"
+                ],
+                "type": "object"
+              }
+            ],
+            "properties": {
+              "clock": {
+                "$ref": "#/$defs/MotionClock",
+                "default": "engine",
+                "description": "Where its time starts. Default `engine`."
+              },
+              "enabled": {
+                "description": "Whether it applies. Default `true`; omitted when `true`.",
+                "type": "boolean"
+              },
+              "modifier_id": {
+                "description": "Its ID, unique in the item's list: 1 to [`MAX_MOTION_ID_LEN`] bytes of ASCII\nletters, digits, `_` and `-`.",
+                "type": "string"
+              },
+              "property": {
+                "$ref": "#/$defs/MotionProperty",
+                "description": "What it changes."
+              }
+            },
+            "required": [
+              "modifier_id",
+              "property"
+            ],
+            "type": "object"
+          },
+          "MotionProperty": {
+            "description": "The property a motion modifier changes.",
+            "oneOf": [
+              {
+                "const": "x",
+                "description": "Horizontal position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "y",
+                "description": "Vertical position of the box's centre, in canvas pixels: added.",
+                "type": "string"
+              },
+              {
+                "const": "scale",
+                "description": "The box's size about its centre: multiplied by `1 + value`.",
+                "type": "string"
+              },
+              {
+                "const": "rotation",
+                "description": "Rotation in the canvas plane, in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "tilt",
+                "description": "3D tilt (`tilt_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "turn",
+                "description": "3D turn (`turn_deg`), in degrees: added.",
+                "type": "string"
+              },
+              {
+                "const": "depth",
+                "description": "3D offset along the viewing axis (`depth_px`), in pixels toward the viewer:\nadded.",
+                "type": "string"
+              },
+              {
+                "const": "opacity",
+                "description": "Opacity: multiplied by `1 + value`, then clamped to `0..=1`.",
+                "type": "string"
+              },
+              {
+                "const": "crop_left",
+                "description": "Source pixels cut from the left edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_top",
+                "description": "Source pixels cut from the top edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_right",
+                "description": "Source pixels cut from the right edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "crop_bottom",
+                "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionShape": {
+            "description": "The waveform of an `oscillate` modifier.",
+            "oneOf": [
+              {
+                "const": "sine",
+                "description": "A sine: starts at 0, rising.",
+                "type": "string"
+              },
+              {
+                "const": "triangle",
+                "description": "A triangle: starts at 0, rising, straight between -1 and 1.",
+                "type": "string"
+              },
+              {
+                "const": "square",
+                "description": "A square: 1 for the first half of each period, -1 for the second.",
+                "type": "string"
+              },
+              {
+                "const": "saw",
+                "description": "A sawtooth: rises from -1 to 1 over each period, then jumps back.",
+                "type": "string"
+              }
+            ]
+          },
           "OutputId": {
             "description": "An output (RTMP(S), recording, virtual camera).",
             "type": "string"
@@ -15153,6 +16608,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "effects",
                 "description": "Its effects, the whole list (`item.set_effects`, since 0.63, ADR-0088).",
+                "type": "string"
+              },
+              {
+                "const": "motion",
+                "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
                 "type": "string"
               }
             ]

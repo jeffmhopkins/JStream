@@ -204,6 +204,7 @@ fn writes_and_clears_have_the_inverses_adr_0049_gives() {
     assert_eq!(
         overrides(&graph, "k"),
         [ItemOverride {
+            motion: Default::default(),
             transform: None,
             item_id: ItemId::new("i1"),
             geometry: Some(geometry(5.0)),
@@ -344,6 +345,7 @@ fn removing_or_moving_an_item_out_drops_its_overrides_and_undo_restores_them() {
         dropped: o,
     };
     let none = |item: &str| ItemOverride {
+        motion: Default::default(),
         transform: None,
         item_id: ItemId::new(item),
         geometry: None,
@@ -1153,4 +1155,223 @@ fn a_keyframe_effects_undo_conflicts_with_a_later_filter_edit_there() {
         )],
     );
     assert!(!c.touched.conflicts_with(&own.touched));
+}
+
+// Motion modifiers (ADR-0099): an item's own list and a keyframe's override of it.
+
+fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
+    jstream_protocol::MotionModifier {
+        modifier_id: id.into(),
+        property: jstream_protocol::MotionProperty::X,
+        kind: jstream_protocol::MotionKind::Wiggle {
+            amplitude: Finite32::new(amplitude).expect("finite"),
+            frequency_hz: Finite32::ONE,
+            seed: 0,
+            octaves: 1,
+        },
+        clock: jstream_protocol::MotionClock::Engine,
+        enabled: true,
+    }
+}
+
+fn set_motion(
+    item: &str,
+    scene: Option<&str>,
+    motion: Vec<jstream_protocol::MotionModifier>,
+) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        motion,
+    }
+}
+
+/// The IDs of the motion modifiers `scene` moves `item` with.
+fn shown_motion(graph: &Graph, scene: &str, item: &str) -> Vec<String> {
+    let state = graph.state();
+    let scene = state.scene(&SceneId::new(scene)).expect("scene");
+    state
+        .shown_items(scene)
+        .iter()
+        .filter(|i| i.id().as_str() == item)
+        .flat_map(|i| i.motion().to_vec())
+        .map(|m| m.modifier_id)
+        .collect()
+}
+
+#[test]
+fn an_items_own_motion_is_written_whole_and_undoes_exactly() {
+    let mut graph = family();
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_motion("i1", None, vec![wiggle("a", 3.0)])],
+    );
+    assert_eq!(applied.inverse.edits, [set_motion("i1", None, Vec::new())]);
+    assert_eq!(shown_motion(&graph, "a", "i1"), ["a"]);
+    // A keyframe that doesn't override it follows the item's own.
+    assert_eq!(shown_motion(&graph, "k", "i1"), ["a"]);
+
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_motion(
+            "i1",
+            None,
+            vec![wiggle("b", 1.0), wiggle("c", 2.0)],
+        )],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        [set_motion("i1", None, vec![wiggle("a", 3.0)])]
+    );
+    let info = graph
+        .state()
+        .item(&ItemId::new("i1"))
+        .map(|(_, item)| item.to_info().motion);
+    assert_eq!(info, Some(vec![wiggle("b", 1.0), wiggle("c", 2.0)]));
+
+    // Removing the item undoes with its motion.
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        }],
+    );
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(shown_motion(&graph, "a", "i1"), ["b", "c"]);
+}
+
+#[test]
+fn a_keyframe_overrides_an_items_motion_whole_and_undoes_exactly() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![set_motion("i1", None, vec![wiggle("own", 3.0)])],
+    );
+
+    // The first write's inverse clears the field.
+    let applied = apply_ok(
+        &mut graph,
+        vec![set_motion("i1", Some("k"), vec![wiggle("kf", 1.0)])],
+    );
+    assert_eq!(
+        applied.inverse.edits,
+        [clear("k", "i1", OverrideField::Motion)]
+    );
+    assert_eq!(shown_motion(&graph, "k", "i1"), ["kf"]);
+    assert_eq!(shown_motion(&graph, "a", "i1"), ["own"]);
+    assert_eq!(shown_motion(&graph, "k2", "i1"), ["own"]);
+    assert_eq!(
+        overrides(&graph, "k")[0].motion,
+        Some(vec![wiggle("kf", 1.0)])
+    );
+
+    // A second write's inverse writes the old list back; an empty list is an override.
+    let applied = apply_ok(&mut graph, vec![set_motion("i1", Some("k"), Vec::new())]);
+    assert_eq!(
+        applied.inverse.edits,
+        [set_motion("i1", Some("k"), vec![wiggle("kf", 1.0)])]
+    );
+    assert!(shown_motion(&graph, "k", "i1").is_empty());
+
+    // Clearing follows the item again, and undoes with the list it removed.
+    let applied = apply_ok(&mut graph, vec![clear("k", "i1", OverrideField::Motion)]);
+    assert_eq!(
+        applied.inverse.edits,
+        [set_motion("i1", Some("k"), Vec::new())]
+    );
+    assert_eq!(shown_motion(&graph, "k", "i1"), ["own"]);
+    assert!(overrides(&graph, "k").is_empty());
+
+    // An item's removal drops the override, and reports it.
+    apply_ok(
+        &mut graph,
+        vec![set_motion("i1", Some("k"), vec![wiggle("kf", 1.0)])],
+    );
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("i1"),
+        }],
+    );
+    assert_eq!(
+        applied.dropped_overrides[0].dropped.motion,
+        Some(vec![wiggle("kf", 1.0)])
+    );
+}
+
+#[test]
+fn set_motion_refuses_a_list_the_wire_check_refuses() {
+    let mut graph = family();
+    let field = |graph: &mut Graph, edit: Edit| invalid_reason(apply_err(graph, vec![edit])).0;
+    let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
+    assert_eq!(
+        field(&mut graph, set_motion("i1", None, nine)),
+        "edits.0.motion"
+    );
+    assert_eq!(
+        field(
+            &mut graph,
+            set_motion("i1", Some("k"), vec![wiggle("a", 1.0), wiggle("a", 1.0)])
+        ),
+        "edits.0.motion.1.modifier_id"
+    );
+    assert_eq!(
+        field(&mut graph, set_motion("i1", None, vec![wiggle("a", -1.0)])),
+        "edits.0.motion.0.amplitude"
+    );
+    // A scene that is neither the item's own nor a keyframe of it.
+    assert_eq!(
+        field(&mut graph, set_motion("i1", Some("b"), Vec::new())),
+        "edits.0.scene_id"
+    );
+}
+
+#[test]
+fn motion_saves_and_loads() {
+    let mut graph = family();
+    apply_ok(
+        &mut graph,
+        vec![
+            set_motion("i1", None, vec![wiggle("own", 3.0)]),
+            set_motion("i1", Some("k"), vec![wiggle("kf", 1.0)]),
+            set_motion("i2", Some("k"), Vec::new()),
+        ],
+    );
+    let json = graph.to_collection_json();
+    let loaded = super::graph()
+        .with_collection_json(&json)
+        .expect("the file loads");
+    assert_eq!(loaded.state(), graph.state());
+    assert_eq!(loaded.to_collection_json(), json);
+}
+
+/// #1130: a legacy transform keeps its 0.3 meaning, so one past the bounds where any
+/// source draws it is still stored (ADR-0022), on an item and in a keyframe alike; the
+/// compositor draws it as nothing if it can't place it.
+#[test]
+fn set_transform_still_takes_a_transform_past_drawable() {
+    let mut graph = family();
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let huge = ItemTransform {
+        position: Vec2 {
+            x: f(2e15),
+            y: f(0.0),
+        },
+        scale: Vec2 {
+            x: f(1e35),
+            y: f(1.0),
+        },
+        rotation_deg: f(0.0),
+    };
+    assert!(huge.check_drawable().is_err());
+    for scene in [None, Some("k")] {
+        apply_ok(
+            &mut graph,
+            vec![Edit::ItemSetTransform {
+                item_id: ItemId::new("i1"),
+                scene_id: scene.map(SceneId::new),
+                transform: huge,
+            }],
+        );
+    }
 }

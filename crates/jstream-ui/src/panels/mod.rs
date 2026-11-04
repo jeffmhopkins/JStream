@@ -18,6 +18,7 @@ pub mod filters;
 pub mod inspector;
 pub mod labels;
 pub mod mixer;
+pub mod motion;
 pub mod number;
 pub mod outputs;
 pub mod properties;

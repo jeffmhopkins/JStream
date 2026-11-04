@@ -32,6 +32,8 @@ default = ["wasm-plugins"]
 arc-swap.workspace = true
 blake3.workspace = true
 futures-core.workspace = true
+# Motion modifiers, evaluated per frame on the render thread (ADR-0099).
+jstream-anim.workspace = true
 jstream-audio.workspace = true
 jstream-control.workspace = true
 jstream-effects.workspace = true

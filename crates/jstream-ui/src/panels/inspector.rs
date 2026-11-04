@@ -10,6 +10,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
 use super::Properties;
+use super::motion::MotionSection;
 use super::number::NumberField;
 use super::studio;
 use crate::app::SessionContext;
@@ -514,7 +515,8 @@ pub fn Inspector() -> impl IntoView {
             Shown::Item(scene, item) => view! {
                 <div class="inspector">
                     <ItemHeader item=item.clone() />
-                    <Placement scene=scene item=item linked=linked />
+                    <Placement scene=scene.clone() item=item.clone() linked=linked />
+                    <MotionSection scene=scene item=item />
                     <Fold title="Properties" open=true>
                         <Properties />
                     </Fold>
@@ -1167,7 +1169,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     min=0.0 max=100.0 send=send_opacity />
             </div>
         </Fold>
-        // A keyframe changes only placement, visibility and opacity (ADR-0049), so its
+        // A keyframe changes only placement, visibility, opacity and motion (ADR-0049,
+        // ADR-0099), so its
         // items' switches are the parent's and aren't shown here.
         <Show when=move || keyframe_of.with(Option::is_none)>
             <Fold title="Scene switches" open=false hint=switch_hint>
@@ -1181,6 +1184,28 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                 </div>
             </Fold>
         </Show>
+        // Keys that show and hide the item with its own effects (ADR-0101). In a keyframe
+        // scene they change that keyframe's own placement of the item.
+        {move || {
+            let (item_id, scene) = ids.get_value();
+            let scene_id = keyframe_of.with(Option::is_some).then_some(scene);
+            let toggle = jstream_control::protocol::Action::ItemToggle {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+            };
+            let show = jstream_control::protocol::Action::ItemShow {
+                item_id: item_id.clone(),
+                scene_id: scene_id.clone(),
+            };
+            let hide = jstream_control::protocol::Action::ItemHide { item_id, scene_id };
+            view! {
+                <Fold title="Hotkeys" open=false>
+                    <HotkeyRow label="Toggle" action=toggle />
+                    <HotkeyRow label="Show" action=show />
+                    <HotkeyRow label="Hide" action=hide />
+                </Fold>
+            }
+        }}
     }
 }
 
@@ -1352,7 +1377,7 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
         <Fold title="Scene" open=true>
             <div class="key-value"><span class="key">"Objects"</span><span>{objects}</span></div>
             <div class="key-value"><span class="key">"Used as a source in"</span><span>{used}</span></div>
-            <HotkeyRow scene=id.get_value() />
+            <HotkeyRow label="Hotkey" action=hotkeys::switch_to(&id.get_value()) />
         </Fold>
         <Fold title="Transitions" open=true hint=hint>
             {select(true, "Transition in")}
@@ -1362,17 +1387,18 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
     }
 }
 
-/// A scene's Hotkey row: the chords that put it on program, each with a button that
-/// unbinds it, and "Set key", which binds the next chord pressed (Escape cancels).
+/// A Hotkey row: the chords bound to `action` (a scene's `scene.switch`, an item's
+/// `item.toggle`, `item.show` or `item.hide`), each with a button that unbinds it, and
+/// "Set key", which binds the next chord pressed (Escape cancels).
 #[component]
-fn HotkeyRow(scene: SceneId) -> impl IntoView {
+fn HotkeyRow(label: &'static str, action: jstream_control::protocol::Action) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
-    let id = StoredValue::new(scene);
+    let id = StoredValue::new(action);
     let chords = Memo::new(move |_| {
         studio.collection.with(|c| {
             c.as_ref()
-                .map(|c| c.scene_chords(&id.get_value()))
+                .map(|c| c.chords_for(&id.get_value()))
                 .unwrap_or_default()
         })
     });
@@ -1424,7 +1450,7 @@ fn HotkeyRow(scene: SceneId) -> impl IntoView {
     };
     view! {
         <div class="key-value hotkey-row">
-            <span class="key">"Hotkey"</span>
+            <span class="key">{label}</span>
             <span class="hotkeys">
                 {move || chords.with(Vec::is_empty).then_some(view! { <span class="none">"none"</span> })}
                 <For each=move || chords.get() key=|c| c.clone() children=chip />

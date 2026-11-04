@@ -108,13 +108,19 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// The actions that change only what JStream shows or measures, so another call puts
 /// back what they changed and they send nothing new off the machine (ADR-0098; a
 /// `scene.switch` does change what a running stream shows): switching the program or
-/// preview scene (`scene.switch_and_watch` too, which only adds a frame sheet of it), a live value and its cancel, the loudness meter's reset, and
-/// a preview stream (which MCP can't receive anyway). A tool whose actions are all here
+/// preview scene (`scene.switch_and_watch` too, which only adds a frame sheet of it),
+/// showing or hiding an item (ADR-0101: the opposite action brings the
+/// picture back, though in a keyframe a hide's new override stays until
+/// `item.clear_override`), a live value and its cancel, the loudness meter's reset, and a preview stream
+/// (which MCP can't receive anyway). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 8] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 11] = [
     "audio.reset_loudness",
+    "item.hide",
+    "item.show",
+    "item.toggle",
     "live.cancel",
     "live.set",
     "preview.subscribe",

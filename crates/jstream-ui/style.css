@@ -654,6 +654,19 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .key-value .key { color: var(--muted); }
 .key-value select { width: 150px; }
 .inspector .note { margin: 6px 0 0; color: var(--dim); font-size: 11px; }
+.motion-row { margin: 8px 0; padding: 8px 0 0; border-top: 1px solid var(--border); }
+.motion-row-actions { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+.motion-row-actions .check { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.motion-button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+.motion-button:disabled { opacity: 0.5; }
 .section { margin: 0 0 0.75rem; padding: 0; border: none; }
 .section legend, .section summary { color: var(--muted); font-size: 0.8rem; margin-bottom: 0.4rem; }
 .field {

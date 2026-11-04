@@ -5,7 +5,9 @@
 //! focused scene row. A scene's chords are bound from the Inspector's Hotkey row: the
 //! chord pressed there is bound to `scene.switch` of the scene, taking it from whatever
 //! it ran before. The scene's Properties dialog also sets its first chord, and refuses
-//! one bound to something else.
+//! one bound to something else. An item's Hotkeys section binds chords the same way to
+//! `item.toggle`, `item.show` and `item.hide` of the item (ADR-0101), which show and hide
+//! it with its own appear and disappear effects.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#keyboard
 
@@ -69,11 +71,12 @@ pub fn switch_to(scene_id: &SceneId) -> Action {
     }
 }
 
-/// The edits that bind `chord` to putting `scene_id` on program: a `hotkey.clear` of
-/// whatever the chord ran before, then the `hotkey.set`. Empty when it already does.
-pub fn bind_edits(collection: &Collection, scene_id: &SceneId, chord: &Chord) -> Vec<Edit> {
+/// The edits that bind `chord` to `action` (a scene's [`switch_to`], or an item's
+/// `item.toggle`, `item.show` or `item.hide`): a `hotkey.clear` of whatever the chord
+/// ran before, then the `hotkey.set`. Empty when it already does.
+pub fn bind_edits(collection: &Collection, action: &Action, chord: &Chord) -> Vec<Edit> {
     let bound = collection.hotkeys.iter().find(|b| &b.chord == chord);
-    if bound.is_some_and(|b| b.action() == Some(switch_to(scene_id))) {
+    if bound.is_some_and(|b| b.action().as_ref() == Some(action)) {
         return Vec::new();
     }
     let mut edits = Vec::new();
@@ -84,7 +87,7 @@ pub fn bind_edits(collection: &Collection, scene_id: &SceneId, chord: &Chord) ->
     }
     edits.push(Edit::HotkeySet {
         chord: chord.clone(),
-        action: switch_to(scene_id),
+        action: action.clone(),
     });
     edits
 }
@@ -180,7 +183,7 @@ mod tests {
         let f1 = Chord::new("F1");
         let mut collection = Collection::default();
         assert_eq!(
-            bind_edits(&collection, &a, &f1),
+            bind_edits(&collection, &switch_to(&a), &f1),
             vec![Edit::HotkeySet {
                 chord: f1.clone(),
                 action: switch_to(&a),
@@ -188,13 +191,44 @@ mod tests {
         );
         collection.hotkeys = vec![HotkeyBinding::new(f1.clone(), &switch_to(&b))];
         assert_eq!(
-            bind_edits(&collection, &a, &f1).len(),
+            bind_edits(&collection, &switch_to(&a), &f1).len(),
             2,
             "cleared, then set"
         );
-        assert!(bind_edits(&collection, &b, &f1).is_empty(), "already bound");
+        assert!(
+            bind_edits(&collection, &switch_to(&b), &f1).is_empty(),
+            "already bound"
+        );
         assert_eq!(collection.hotkey(&f1), Some(switch_to(&b)));
         assert_eq!(collection.scene_chords(&b), vec![f1]);
         assert!(collection.scene_chords(&a).is_empty());
+    }
+
+    #[test]
+    fn an_items_chords_are_the_ones_bound_to_its_action() {
+        let toggle = Action::ItemToggle {
+            item_id: jstream_control::protocol::ItemId::new("i1"),
+            scene_id: None,
+        };
+        let show = Action::ItemShow {
+            item_id: jstream_control::protocol::ItemId::new("i1"),
+            scene_id: None,
+        };
+        let f2 = Chord::new("F2");
+        let collection = Collection {
+            hotkeys: vec![HotkeyBinding::new(f2.clone(), &toggle)],
+            ..Collection::default()
+        };
+        assert_eq!(collection.chords_for(&toggle), vec![f2.clone()]);
+        assert!(collection.chords_for(&show).is_empty());
+        assert!(
+            bind_edits(&collection, &toggle, &f2).is_empty(),
+            "already bound"
+        );
+        assert_eq!(
+            bind_edits(&collection, &show, &f2).len(),
+            2,
+            "taken from the toggle"
+        );
     }
 }

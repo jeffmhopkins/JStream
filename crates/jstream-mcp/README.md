@@ -122,8 +122,9 @@ disk that undo never reaches), `pairing`, `ui_settings` and `values` (whose valu
 browser source page granted them may send off the machine). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
 stream key that redo doesn't put back. Deletes are undoable edits, and `scene.switch` (and `scene.switch_and_watch`, which adds only a frame sheet), `studio.set_preview`, `live.set`,
-`live.cancel`, `audio.reset_loudness` and the `preview` actions only change what JStream
-shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+`live.cancel`, `audio.reset_loudness`, the `preview` actions and `item.show`, `item.hide`
+and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
+opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
@@ -184,9 +185,12 @@ above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
-source's `html` (time-based animation on the wall clock so separate pages agree, with
-subtle ambient motion and streaks that move less per frame than their length, and falling back to the built-in kinds where no browser is
-available), and checking
+source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
+kinds where no browser is available), continuous motion as `item.set_motion` on items
+rather than in pages (one engine clock, so items, masks and nested scenes move in step;
+a sway on a group's item moves the group as one; a keyframe scene's own list across a
+`move`; kept subtle, with streaks that move less per frame than their length,
+[ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

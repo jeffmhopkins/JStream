@@ -83,7 +83,9 @@ Contents ([Design](#design) explains the choices):
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
-  press, its label and the edits that bind a chord to a scene, tested natively.
+  press, its label and the edits that bind a chord to an action (a scene's
+  `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
+  `Collection::chords_for` lists a row's chords), tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -122,7 +124,9 @@ Contents ([Design](#design) explains the choices):
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
-  field the panels share (`number.rs`) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
+  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  pure list helpers, adding with a free ID, each kind's fields and switching kind, tested
+  natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
   (the program output and each output with its FX button, creating, editing and
   deleting streams, recordings and the virtual camera, their stream keys, start and
   stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
@@ -412,7 +416,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's) and Properties, the source's settings form. A scene shows its object
+  the parent's), Motion (folded, with the modifier count as its hint: a row per motion
+  modifier with what it moves, how (wiggle, oscillate with its shape, or drift), that
+  kind's fields, when its time starts (in step, or when shown), an On check and Remove,
+  and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
+  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
+  source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -573,8 +585,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
   virtual camera, which has no sound, has a video chain only. The Add filter dialog
-  won't add a kind whose settings name a scene, a source, a bus or a file there
-  (`refers`: the engine refuses those references yet), and, for an output whose video
+  won't add a kind whose settings name a scene, a source or a bus there (`refers`:
+  the engine refuses those references yet), though one that names a file, such as
+  Apply LUT, goes on them as on any chain, and, for an output whose video
   chain is empty, reads `output.status` and states what its first video filter costs
   (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
   encoder sessions in use now, or for the virtual camera, which opens no encoder
