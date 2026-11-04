@@ -278,6 +278,26 @@ state machine. Contents:
   legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
   `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
   moves one only where every moved value is back within them (a shrinking modifier).
+- **Audio-reactive motion** (`reactive.rs`,
+  [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
+  modifier hears the program mix, a bus or a source (`Hearing`), as a `spectrum` source
+  with the same settings would. The live sources find what items' and keyframe
+  overrides' motion hears on each sync (`audio::heard_by_motion`, so those buses and
+  sources are fed as a scope source's are) and keep its scopes in `FilterAssets`
+  (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
+  (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
+  loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
+  scope is first heard, never while it is steady), running the FFT only for a scope a
+  `band` binding hears (`measure_levels` otherwise), and advances each modifier's
+  envelope by the tick's media time, per item and modifier ID, so every pass and mix of
+  the tick reads the same level. The follower names a meter by its scope's address and
+  measures through the shot's binding, never holding a scope itself, so no scope's last
+  reference drops on the render thread (R-RT-003). An item drawn through two lists that
+  share a modifier ID (a keyframe and its parent) shares one envelope, and the first
+  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
+  draw paths read by item and ID without allocating. A modifier with nothing heard, a
+  preview shot (no follower) and the program mix while no output runs read silence,
+  the modifier's `from`.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot as its pass camera's
@@ -618,7 +638,8 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`) only
+  while a mix draws it (`a_waveform_no_mix_draws_is_not_painted`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
@@ -1366,7 +1387,8 @@ sync (`FilterAssets::heard`), the source it names is fed like a scope source's
 (`audio::retain_scopes`), and each frame the chain runs, the program's `AudioMeter`
 (made with the program, or when it starts to hear, never while a steady frame draws)
 measures it and hands the levels, bands and waveform to the
-program (`VideoFilter::set_audio`).
+program (`VideoFilter::set_audio`). Items' `audio` motion modifiers hear their scopes
+the same way, through the same sync (*Audio-reactive motion* in [Purpose](#purpose)).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -1786,9 +1808,13 @@ FFT each 1/30 s, `chat_message`, which redraws when another message is featured,
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
-them ahead on a thread of its own, so the plan's `frame` calls under the lock never
-draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+zeros. The thread paints only the painters the latest round of plans looked at, the
+program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
+while something else re-plans every frame; a plan that reaches one again paints it for
+the current time first, under the lock, so it never shows the frame it had when it was
+last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
+them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
+calls under the lock never draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
@@ -2199,7 +2225,8 @@ brings the mixer in line with the collection under the collection lock:
   and the meter still reads a source that is off program. `scene.switch` and a batch
   that moves program sync too, after program is reconciled;
 - the bus scopes (#362): every bus a source's settings refer to (a `waveform` or
-  `spectrum` drawing it) keeps a scope in the engine's `AudioScopes`, and the others
+  `spectrum` drawing it), or an item's or keyframe override's `audio` motion modifier
+  hears (`heard_by_motion`, ADR-0100), keeps a scope in the engine's `AudioScopes`, and the others
   are dropped (`AudioScopes::retain`). The live sources do this before they queue the
   edit's builds, and the sync again: a source drawing a new bus then finds its scope,
   and one still being built from settings from before the edit can't make a dropped
@@ -2215,7 +2242,8 @@ brings the mixer in line with the collection under the collection lock:
   goes to the program stage's audio sources thread, which plays it (see *Bus
   monitors*);
 - the source scopes (#459): every source a `waveform` or `spectrum` draws through its
-  `audio_source` (`jstream_sources::drawn_source`) keeps a scope too
+  `audio_source` (`jstream_sources::drawn_source`), or an `audio` motion modifier
+  hears through its own, keeps a scope too
   (`AudioScopes::retain_sources`), listed in the same `ScopeTaps` after the buses. It
   is fed from the source's mixer input (`Mixer::input_block`: after its filters,
   fader, mute and activity gain, before its sends, the point ADR-0028 gives a
@@ -2879,7 +2907,8 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
-each live source for a frame it already has. The snapshot compositor belongs to the snapshot
+each live source for a frame it already has, apart from one catch-up paint of a painter
+a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
@@ -3102,7 +3131,9 @@ encoder's size, the program at the canvas size: the mix's scene and the scenes i
 nests, or a running transition sampled at the tick's media time, with every `display`
 and `window` source that has no stored frame showing its capture. With no scene it
 draws the primary display's capture scaled to fill the canvas, fitted to the frame. A
-capture whose mailbox is empty repeats its last frame.
+capture whose mailbox is empty repeats its last frame. Before the tick's mixes are
+drawn, the loop's `reactive::Follower` measures what the shot's audio motion
+modifiers hear and advances their envelopes once (ADR-0100).
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,

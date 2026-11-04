@@ -8,10 +8,10 @@
 //! Docs: docs/adr/0099-native-motion-modifiers-and-timelines.md
 
 use crate::apply::invalid;
-use jstream_anim::{Clock, Kind, Modifier, Property, Shape};
+use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Modifier, Property, Shape};
 use jstream_protocol::{
-    CameraMotionModifier, CameraProperty, MotionClock, MotionKind, MotionModifier, MotionProperty,
-    MotionShape, ProtocolError, check_motion,
+    CameraMotionModifier, CameraProperty, MotionClock, MotionCurve, MotionKind, MotionMeasure,
+    MotionModifier, MotionProperty, MotionShape, ProtocolError, check_motion,
 };
 
 /// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
@@ -39,7 +39,7 @@ pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProp
             let as_item = MotionModifier {
                 modifier_id: m.modifier_id.clone(),
                 property: MotionProperty::X,
-                kind: m.kind,
+                kind: m.kind.clone(),
                 clock: m.clock,
                 enabled: m.enabled,
             };
@@ -115,6 +115,43 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             rate_per_s: f64::from(rate_per_s.get()),
             wrap: wrap.map(|w| f64::from(w.get())),
         },
+        MotionKind::Audio {
+            measure,
+            low_hz,
+            high_hz,
+            floor_db,
+            ceiling_db,
+            attack_ms,
+            release_ms,
+            curve,
+            from,
+            to,
+            ..
+        } => Kind::Audio(Audio {
+            measure: match measure {
+                MotionMeasure::Level => Measure::Level,
+                MotionMeasure::Peak => Measure::Peak,
+                MotionMeasure::Onset => Measure::Onset,
+                MotionMeasure::Band => Measure::Band {
+                    low_hz: low_hz?.get(),
+                    high_hz: high_hz?.get(),
+                },
+                _ => return None,
+            },
+            floor_db: floor_db.get(),
+            ceiling_db: ceiling_db.get(),
+            attack_ms: attack_ms as f32,
+            release_ms: release_ms as f32,
+            curve: match curve {
+                MotionCurve::Linear => Curve::Linear,
+                MotionCurve::EaseIn => Curve::EaseIn,
+                MotionCurve::EaseOut => Curve::EaseOut,
+                MotionCurve::EaseInOut => Curve::EaseInOut,
+                _ => return None,
+            },
+            from: f64::from(from.get()),
+            to: f64::from(to.get()),
+        }),
         MotionKind::Impulse {
             amplitude,
             frequency_hz,
@@ -173,6 +210,34 @@ mod tests {
                 rate_per_s: f(100_000.0),
                 wrap: Some(f(f32::MIN_POSITIVE)),
             },
+            MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: MotionMeasure::Band,
+                low_hz: Some(f(20.0)),
+                high_hz: Some(f(20.000_002)),
+                floor_db: f(-90.0),
+                ceiling_db: f(-89.999),
+                attack_ms: 0,
+                release_ms: 10_000,
+                curve: MotionCurve::EaseInOut,
+                from: f(-100_000.0),
+                to: f(100_000.0),
+            },
+            MotionKind::Audio {
+                audio: None,
+                audio_source: None,
+                measure: MotionMeasure::Onset,
+                low_hz: None,
+                high_hz: None,
+                floor_db: f(-0.001),
+                ceiling_db: f(0.0),
+                attack_ms: 10_000,
+                release_ms: 0,
+                curve: MotionCurve::Linear,
+                from: f(100_000.0),
+                to: f(-100_000.0),
+            },
             MotionKind::Impulse {
                 amplitude: f(100_000.0),
                 frequency_hz: f(60.0),
@@ -186,18 +251,21 @@ mod tests {
                 duration_ms: 1,
             },
         ];
-        let motion: Vec<MotionModifier> = kinds
-            .iter()
-            .enumerate()
-            .map(|(n, kind)| MotionModifier {
-                modifier_id: format!("m-{n}_{}", "x".repeat(50)),
-                property: MotionProperty::ALL[n],
-                kind: *kind,
-                clock: [MotionClock::Shown, MotionClock::Triggered][n % 2],
-                enabled: n % 3 == 0,
-            })
-            .collect();
-        assert_eq!(check_motion(&motion), Ok(()));
-        assert_eq!(jstream_anim::check_list(&anim_modifiers(&motion)), Ok(()));
+        // More kinds than a list may hold, so they are checked as two lists.
+        for (half, kinds) in kinds.chunks(kinds.len().div_ceil(2)).enumerate() {
+            let motion: Vec<MotionModifier> = kinds
+                .iter()
+                .enumerate()
+                .map(|(n, kind)| MotionModifier {
+                    modifier_id: format!("m-{half}{n}_{}", "x".repeat(50)),
+                    property: MotionProperty::ALL[n],
+                    kind: kind.clone(),
+                    clock: [MotionClock::Shown, MotionClock::Triggered][(half + n) % 2],
+                    enabled: n % 3 == 0,
+                })
+                .collect();
+            assert_eq!(check_motion(&motion), Ok(()));
+            assert_eq!(jstream_anim::check_list(&anim_modifiers(&motion)), Ok(()));
+        }
     }
 }

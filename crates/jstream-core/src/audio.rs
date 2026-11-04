@@ -258,7 +258,8 @@ pub(crate) fn retain_scopes(scopes: &AudioScopes, state: &State) {
     scopes.retain_sources(&drawn_sources(state));
 }
 
-/// Every bus a source's settings refer to: the buses whose scopes are drawn.
+/// Every bus a source's settings refer to, and every bus an audio motion modifier
+/// hears (ADR-0100): the buses whose scopes are drawn.
 fn drawn_buses(state: &State) -> BTreeSet<BusId> {
     state
         .sources()
@@ -267,7 +268,25 @@ fn drawn_buses(state: &State) -> BTreeSet<BusId> {
             Reference::Bus { bus_id } => Some(bus_id),
             _ => None,
         })
+        .chain(heard_by_motion(state).filter_map(|heard| match heard {
+            crate::reactive::Hearing::Bus(bus) => Some(bus),
+            _ => None,
+        }))
         .collect()
+}
+
+/// What every audio motion modifier of the collection hears: on each scene's items, and
+/// in each keyframe scene's motion overrides.
+pub(crate) fn heard_by_motion(state: &State) -> impl Iterator<Item = crate::reactive::Hearing> {
+    state.scenes().iter().flat_map(|scene| {
+        let own = scene.items().iter().flat_map(|item| item.motion().iter());
+        let overridden = scene
+            .overrides()
+            .iter()
+            .filter_map(|(_, over)| over.motion.as_ref())
+            .flatten();
+        own.chain(overridden).filter_map(crate::reactive::hearing)
+    })
 }
 
 /// Every source a scope source's `audio_source` draws (#459), and a shader source's
@@ -282,6 +301,10 @@ fn drawn_sources(state: &State) -> BTreeSet<SourceId> {
             SourceKind::Builtin { kind } => jstream_sources::drawn_source(kind, source.settings()),
             _ => None,
         })
+        .chain(heard_by_motion(state).filter_map(|heard| match heard {
+            crate::reactive::Hearing::Source(source) => Some(source),
+            _ => None,
+        }))
         .collect()
 }
 

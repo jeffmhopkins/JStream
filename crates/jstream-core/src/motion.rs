@@ -130,12 +130,15 @@ impl Fired {
 }
 
 /// What `motion` adds to an item at `at`, which was first shown at `shown`, if it is,
-/// and whose `triggered` modifiers were fired as `fires` says. Allocates nothing.
+/// and whose `triggered` modifiers were fired as `fires` says. `heard` gives an audio
+/// modifier's level for the tick, by modifier ID (ADR-0100, [`crate::reactive`]); one it
+/// has none for reads as silence. Allocates nothing.
 pub(crate) fn offsets(
     motion: &[Modifier],
     at: MediaTime,
     shown: Option<MediaTime>,
     fires: Option<&Fires>,
+    heard: impl Fn(&str) -> Option<f32>,
 ) -> Offsets {
     if motion.is_empty() {
         return Offsets::IDENTITY;
@@ -144,8 +147,7 @@ pub(crate) fn offsets(
     let since = |origin: MediaTime| (engine_s - origin.as_secs_f64()).max(0.0);
     let shown_s = shown.map(since);
     let fired = |id: &str| fires.and_then(|fires| fires.at(id)).map(since);
-    // No audio reaches the motion yet, so an audio modifier reads as silence.
-    jstream_anim::evaluate_with(motion, engine_s, shown_s, fired, |_| None)
+    jstream_anim::evaluate_with(motion, engine_s, shown_s, fired, heard)
 }
 
 /// `placement`, `crop` and `opacity` moved by `by`. A legacy transform moves and turns
@@ -353,6 +355,16 @@ mod tests {
             clock,
             enabled: true,
         }
+    }
+
+    /// [`super::offsets`] with nothing heard.
+    fn offsets(
+        motion: &[Modifier],
+        at: MediaTime,
+        shown: Option<MediaTime>,
+        fires: Option<&Fires>,
+    ) -> Offsets {
+        super::offsets(motion, at, shown, fires, |_| None)
     }
 
     fn at(secs: f64) -> MediaTime {

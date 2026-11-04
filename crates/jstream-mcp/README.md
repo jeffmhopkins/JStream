@@ -199,7 +199,9 @@ a one-shot jolt as an `impulse` on the `triggered` clock that `item.trigger_moti
 fires, rather than stepping the item call by call;
 a sway on a group's item moves the group as one; a keyframe scene's own list across a
 `move`; kept subtle, with streaks that move less per frame than their length,
-[ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), and checking
+[ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md); an `audio`
+modifier for something that follows a bus or a beat, which hears only while an output
+runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

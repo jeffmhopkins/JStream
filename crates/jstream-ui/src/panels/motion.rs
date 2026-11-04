@@ -1,7 +1,8 @@
 //! The Inspector's Motion section (ADR-0099): the selected item's motion modifiers,
 //! each a row with what it moves, how (wiggle, oscillate, drift or shake, with that
-//! kind's parameters), its clock and whether it is on, and Add and Remove. A row on the
-//! trigger clock has a Fire button, which sends `item.trigger_motion` for it (#1107). Every change sends
+//! kind's parameters, or audio: what it hears and measures, ADR-0100), its clock and
+//! whether it is on, and Add and Remove. A row on the trigger clock has a Fire button,
+//! which sends `item.trigger_motion` for it (#1107). Every change sends
 //! `item.set_motion` with the whole list, addressed to the shown scene, so in a keyframe
 //! scene it writes the keyframe's own list. The engine draws the motion; the canvas
 //! shows the item where its values put it.
@@ -13,8 +14,8 @@ use super::number::NumberField;
 use crate::app::SessionContext;
 use crate::store::Studio;
 use jstream_control::protocol::{
-    Action, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionKind, MotionModifier,
-    MotionProperty, MotionShape, SceneId,
+    Action, BusId, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve,
+    MotionKind, MotionMeasure, MotionModifier, MotionProperty, MotionShape, SceneId, SourceId,
 };
 use leptos::prelude::*;
 
@@ -49,7 +50,23 @@ pub fn property_unit(property: MotionProperty) -> &'static str {
 }
 
 /// The kinds a row can switch between, by name.
-pub const KINDS: [&str; 4] = ["Wiggle", "Oscillate", "Drift", "Shake"];
+pub const KINDS: [&str; 5] = ["Wiggle", "Oscillate", "Drift", "Shake", "Audio"];
+
+/// What an audio modifier can measure, by name.
+pub const MEASURES: [(MotionMeasure, &str); 4] = [
+    (MotionMeasure::Level, "Level"),
+    (MotionMeasure::Peak, "Peak"),
+    (MotionMeasure::Onset, "Beat"),
+    (MotionMeasure::Band, "Band"),
+];
+
+/// How an audio modifier can bend its envelope, by name.
+pub const CURVES: [(MotionCurve, &str); 4] = [
+    (MotionCurve::Linear, "Linear"),
+    (MotionCurve::EaseIn, "Ease in"),
+    (MotionCurve::EaseOut, "Ease out"),
+    (MotionCurve::EaseInOut, "Ease in-out"),
+];
 
 /// The shapes an oscillator can have, by name.
 pub const SHAPES: [(MotionShape, &str); 4] = [
@@ -66,6 +83,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Oscillate { .. } => "Oscillate",
         MotionKind::Drift { .. } => "Drift",
         MotionKind::Impulse { .. } => "Shake",
+        MotionKind::Audio { .. } => "Audio",
         _ => "Other",
     }
 }
@@ -82,6 +100,28 @@ pub fn default_kind(name: &str, property: MotionProperty) -> Option<MotionKind> 
         "×" => 0.05,
         _ => 3.0,
     };
+    if name == "Audio" {
+        // Follows the program mix's level: a light dims between beats, anything else
+        // pushes by a little more than a sway would.
+        let (from, to) = match property {
+            MotionProperty::Opacity => (-0.6, 0.0),
+            _ => (0.0, size * 2.0),
+        };
+        return Some(MotionKind::Audio {
+            audio: None,
+            audio_source: None,
+            measure: MotionMeasure::Level,
+            low_hz: None,
+            high_hz: None,
+            floor_db: finite(-60.0),
+            ceiling_db: Finite32::ZERO,
+            attack_ms: 10,
+            release_ms: 250,
+            curve: MotionCurve::Linear,
+            from: finite(from),
+            to: finite(to),
+        });
+    }
     sized_kind(name, size)
 }
 
@@ -159,6 +199,22 @@ pub enum Param {
     Decay,
     /// How long a shake lasts.
     Duration,
+    /// An audio modifier's value at silence.
+    From,
+    /// Its value at the ceiling.
+    To,
+    /// How fast it rises.
+    Attack,
+    /// How fast it falls.
+    Release,
+    /// The level that maps to its `from`.
+    Floor,
+    /// The level that maps to its `to`.
+    Ceiling,
+    /// A band's lowest frequency.
+    LowHz,
+    /// A band's highest frequency.
+    HighHz,
 }
 
 impl Param {
@@ -173,6 +229,31 @@ impl Param {
             ],
             MotionKind::Oscillate { .. } => &[Param::Amplitude, Param::Period, Param::Phase],
             MotionKind::Drift { .. } => &[Param::Rate, Param::Wrap],
+            MotionKind::Audio {
+                measure: MotionMeasure::Band,
+                ..
+            } => &[
+                Param::From,
+                Param::To,
+                Param::LowHz,
+                Param::HighHz,
+                Param::Floor,
+                Param::Ceiling,
+                Param::Attack,
+                Param::Release,
+            ],
+            MotionKind::Audio {
+                measure: MotionMeasure::Onset,
+                ..
+            } => &[Param::From, Param::To, Param::Attack, Param::Release],
+            MotionKind::Audio { .. } => &[
+                Param::From,
+                Param::To,
+                Param::Floor,
+                Param::Ceiling,
+                Param::Attack,
+                Param::Release,
+            ],
             MotionKind::Impulse { .. } => &[
                 Param::Amplitude,
                 Param::Frequency,
@@ -196,6 +277,14 @@ impl Param {
             Param::Wrap => ("Wrap", 10.0, 1, 0.0, 100_000.0),
             Param::Decay => ("Decay", 0.5, 1, 0.0, 1000.0),
             Param::Duration => ("Length", 50.0, 0, 1.0, 3_600_000.0),
+            Param::From => ("At silence", 0.05, 2, -100_000.0, 100_000.0),
+            Param::To => ("At loudest", 0.05, 2, -100_000.0, 100_000.0),
+            Param::Attack => ("Attack", 5.0, 0, 0.0, 10_000.0),
+            Param::Release => ("Release", 10.0, 0, 0.0, 10_000.0),
+            Param::Floor => ("Floor", 1.0, 0, -90.0, -1.0),
+            Param::Ceiling => ("Ceiling", 1.0, 0, -89.0, 0.0),
+            Param::LowHz => ("Low", 10.0, 0, 20.0, 19_999.0),
+            Param::HighHz => ("High", 10.0, 0, 21.0, 20_000.0),
         }
     }
 }
@@ -203,7 +292,7 @@ impl Param {
 /// `kind`'s value of `param`, or `None` when it has no such field.
 pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
     let f = |v: Finite32| Some(f64::from(v.get()));
-    match (*kind, param) {
+    match (kind.clone(), param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
         | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude)
         | (MotionKind::Impulse { amplitude, .. }, Param::Amplitude) => f(amplitude),
@@ -219,6 +308,14 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
         (MotionKind::Drift { wrap, .. }, Param::Wrap) => {
             Some(wrap.map_or(0.0, |w| f64::from(w.get())))
         }
+        (MotionKind::Audio { from, .. }, Param::From) => f(from),
+        (MotionKind::Audio { to, .. }, Param::To) => f(to),
+        (MotionKind::Audio { attack_ms, .. }, Param::Attack) => Some(f64::from(attack_ms)),
+        (MotionKind::Audio { release_ms, .. }, Param::Release) => Some(f64::from(release_ms)),
+        (MotionKind::Audio { floor_db, .. }, Param::Floor) => f(floor_db),
+        (MotionKind::Audio { ceiling_db, .. }, Param::Ceiling) => f(ceiling_db),
+        (MotionKind::Audio { low_hz, .. }, Param::LowHz) => low_hz.and_then(f),
+        (MotionKind::Audio { high_hz, .. }, Param::HighHz) => high_hz.and_then(f),
         _ => None,
     }
 }
@@ -227,7 +324,7 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
 /// is no wrap.
 pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionKind> {
     let v = finite(value as f32);
-    let mut next = *kind;
+    let mut next = kind.clone();
     match (&mut next, param) {
         (MotionKind::Wiggle { amplitude, .. }, Param::Amplitude)
         | (MotionKind::Oscillate { amplitude, .. }, Param::Amplitude)
@@ -250,9 +347,90 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
         (MotionKind::Drift { wrap, .. }, Param::Wrap) => {
             *wrap = (value > 0.0).then_some(v);
         }
+        (MotionKind::Audio { from, .. }, Param::From) => *from = v,
+        (MotionKind::Audio { to, .. }, Param::To) => *to = v,
+        (MotionKind::Audio { attack_ms, .. }, Param::Attack) => {
+            *attack_ms = value.clamp(0.0, 10_000.0) as u32
+        }
+        (MotionKind::Audio { release_ms, .. }, Param::Release) => {
+            *release_ms = value.clamp(0.0, 10_000.0) as u32
+        }
+        (MotionKind::Audio { floor_db, .. }, Param::Floor) => *floor_db = v,
+        (MotionKind::Audio { ceiling_db, .. }, Param::Ceiling) => *ceiling_db = v,
+        (MotionKind::Audio { low_hz, .. }, Param::LowHz) => *low_hz = Some(v),
+        (MotionKind::Audio { high_hz, .. }, Param::HighHz) => *high_hz = Some(v),
         _ => return None,
     }
     Some(next)
+}
+
+/// What the Hears select shows for an audio `kind`: empty for the program mix, a bus's
+/// ID, or `source:` and the ID of a source it hears instead.
+pub fn hears_value(kind: &MotionKind) -> String {
+    match kind {
+        MotionKind::Audio {
+            audio_source: Some(source),
+            ..
+        } => format!("source:{}", source.as_str()),
+        MotionKind::Audio {
+            audio: Some(bus), ..
+        } => bus.as_str().to_owned(),
+        _ => String::new(),
+    }
+}
+
+/// An audio `kind` hearing what the Hears select's `value` names ([`hears_value`]):
+/// picking the program mix or a bus stops it hearing a source. `None` when it isn't
+/// audio or already hears that.
+pub fn with_hears(kind: &MotionKind, value: &str) -> Option<MotionKind> {
+    if hears_value(kind) == value {
+        return None;
+    }
+    let mut kind = kind.clone();
+    let MotionKind::Audio {
+        audio,
+        audio_source,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    match value.strip_prefix("source:") {
+        Some(source) => *audio_source = Some(SourceId::new(source)),
+        None => {
+            *audio_source = None;
+            *audio = (!value.is_empty()).then(|| BusId::new(value));
+        }
+    }
+    Some(kind)
+}
+
+/// An audio `kind` measuring `measure` instead: a band gets a bass band to start from,
+/// and any other measure drops the band's edges. `None` when it isn't audio or already
+/// measures that.
+pub fn with_measure(kind: &MotionKind, next: MotionMeasure) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Audio {
+        measure,
+        low_hz,
+        high_hz,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    if *measure == next {
+        return None;
+    }
+    *measure = next;
+    if next == MotionMeasure::Band {
+        *low_hz = Some(low_hz.unwrap_or(finite(40.0)));
+        *high_hz = Some(high_hz.unwrap_or(finite(120.0)));
+    } else {
+        *low_hz = None;
+        *high_hz = None;
+    }
+    Some(kind)
 }
 
 /// `kind` switched to the kind named `name`, keeping its size where both have one.
@@ -360,8 +538,12 @@ pub fn MotionSection(
                             Param::Amplitude | Param::Rate | Param::Wrap => {
                                 at().map_or("", |m| property_unit(m.property))
                             }
-                            Param::Frequency => "Hz",
-                            Param::Period => "ms",
+                            Param::From | Param::To => {
+                                at().map_or("", |m| property_unit(m.property))
+                            }
+                            Param::Frequency | Param::LowHz | Param::HighHz => "Hz",
+                            Param::Period | Param::Attack | Param::Release => "ms",
+                            Param::Floor | Param::Ceiling => "dB",
                             _ => "",
                         };
                         let value =
@@ -470,7 +652,127 @@ pub fn MotionSection(
                             </select>
                         </label>
                     </Show>
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Audio { .. }))>
+                        <label class="select-field">
+                            <span class="field-label">"Hears"</span>
+                            <select
+                                aria-label="What it hears"
+                                title="The program mix as the outputs hear it, or one bus after its fader"
+                                prop:value=move || at().map(|m| hears_value(&m.kind)).unwrap_or_default()
+                                on:change=move |event| {
+                                    let value = event_target_value(&event);
+                                    change(n, &|m| match with_hears(&m.kind, &value) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            >
+                                <option value="">"Program mix"</option>
+                                // A source set over MCP or the API shows as itself, so
+                                // the select never claims a bus the engine isn't hearing.
+                                {move || at().and_then(|m| match m.kind {
+                                    MotionKind::Audio { audio_source: Some(source), .. } => {
+                                        let name = studio.collection.with(|c| {
+                                            c.as_ref()
+                                                .and_then(|c| c.sources.iter().find(|s| s.source_id == source))
+                                                .map(|s| s.name.clone())
+                                        });
+                                        let label = name.unwrap_or_else(|| source.as_str().to_owned());
+                                        Some(view! {
+                                            <option value=format!("source:{}", source.as_str())>{format!("Source: {label}")}</option>
+                                        })
+                                    }
+                                    _ => None,
+                                })}
+                                {move || studio.collection.with(|c| {
+                                    c.as_ref()
+                                        .map(|c| c.buses.clone())
+                                        .unwrap_or_default()
+                                        .into_iter()
+                                        .map(|bus| {
+                                            let id = bus.bus_id.as_str().to_owned();
+                                            view! { <option value=id>{bus.name}</option> }
+                                        })
+                                        .collect_view()
+                                })}
+                            </select>
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"Follows"</span>
+                            <select
+                                aria-label="What it follows"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Audio { measure, .. } => MEASURES
+                                        .iter()
+                                        .find(|(x, _)| *x == measure)
+                                        .map(|(_, name)| *name),
+                                    _ => None,
+                                }).unwrap_or("")
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    let Some(next) = MEASURES
+                                        .iter()
+                                        .find(|(_, n)| *n == name)
+                                        .map(|(x, _)| *x)
+                                    else {
+                                        return;
+                                    };
+                                    change(n, &|m| match with_measure(&m.kind, next) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            >
+                                {MEASURES
+                                    .iter()
+                                    .map(|(_, name)| view! { <option value=*name>{*name}</option> })
+                                    .collect_view()}
+                            </select>
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"Curve"</span>
+                            <select
+                                aria-label="Curve"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Audio { curve, .. } => CURVES
+                                        .iter()
+                                        .find(|(c, _)| *c == curve)
+                                        .map(|(_, name)| *name),
+                                    _ => None,
+                                }).unwrap_or("")
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    let Some(next) = CURVES
+                                        .iter()
+                                        .find(|(_, n)| *n == name)
+                                        .map(|(c, _)| *c)
+                                    else {
+                                        return;
+                                    };
+                                    change(n, &|m| match &mut m.kind {
+                                        MotionKind::Audio { curve, .. } if *curve != next => {
+                                            *curve = next;
+                                            true
+                                        }
+                                        _ => false,
+                                    });
+                                }
+                            >
+                                {CURVES
+                                    .iter()
+                                    .map(|(_, name)| view! { <option value=*name>{*name}</option> })
+                                    .collect_view()}
+                            </select>
+                        </label>
+                    </Show>
                     {fields}
+                    <Show when=move || !at().is_some_and(|m| matches!(m.kind, MotionKind::Audio { .. }))>
                     <label class="select-field">
                         <span class="field-label">"Starts"</span>
                         <select
@@ -499,6 +801,7 @@ pub fn MotionSection(
                             <option value="triggered">"When fired"</option>
                         </select>
                     </label>
+                    </Show>
                 </div>
                 <div class="motion-row-actions">
                     <label class="check">
@@ -596,6 +899,66 @@ mod tests {
         assert_eq!(param_value(&wrapped, Param::Wrap), Some(360.0));
         let unwrapped = with_param(&wrapped, Param::Wrap, 0.0).expect("its field");
         assert!(matches!(unwrapped, MotionKind::Drift { wrap: None, .. }));
+    }
+
+    /// ADR-0100: an audio modifier's fields, its measure switch and its defaults, all of
+    /// which the wire accepts.
+    #[test]
+    fn an_audio_row_reads_and_writes_its_fields() {
+        let light = default_kind("Audio", MotionProperty::Opacity).expect("a kind");
+        assert_eq!(param_value(&light, Param::From), Some(-0.6_f32 as f64));
+        assert_eq!(param_value(&light, Param::To), Some(0.0));
+        for param in Param::of(&light) {
+            let next = with_param(&light, *param, -12.0).expect("its field");
+            let expected = match param {
+                Param::Attack | Param::Release => 0.0,
+                _ => -12.0,
+            };
+            assert_eq!(param_value(&next, *param), Some(expected), "{param:?}");
+        }
+        assert!(!Param::of(&light).contains(&Param::LowHz));
+        let band = with_measure(&light, MotionMeasure::Band).expect("switched");
+        assert!(Param::of(&band).contains(&Param::LowHz));
+        assert_eq!(param_value(&band, Param::LowHz), Some(40.0));
+        assert_eq!(with_measure(&band, MotionMeasure::Band), None);
+        let beat = with_measure(&band, MotionMeasure::Onset).expect("switched");
+        assert_eq!(
+            param_value(&beat, Param::LowHz),
+            None,
+            "the band's edges go"
+        );
+        assert!(!Param::of(&beat).contains(&Param::Floor));
+        let row = |kind| MotionModifier {
+            kind,
+            ..with_added(&[]).expect("room")[0].clone()
+        };
+        for kind in [light.clone(), band, beat] {
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind.clone())]),
+                Ok(()),
+                "{kind:?}"
+            );
+        }
+        // What it hears: a source set elsewhere shows as itself, and picking a bus or
+        // the program mix stops it hearing the source (#1149 review N2).
+        assert_eq!(hears_value(&light), "");
+        let bus = with_hears(&light, "bus_music").expect("switched");
+        assert_eq!(hears_value(&bus), "bus_music");
+        let mut heard = bus.clone();
+        if let MotionKind::Audio { audio_source, .. } = &mut heard {
+            *audio_source = Some(SourceId::new("src_mic"));
+        }
+        assert_eq!(hears_value(&heard), "source:src_mic");
+        assert_eq!(with_hears(&heard, "source:src_mic"), None);
+        let back = with_hears(&heard, "bus_music").expect("switched");
+        assert_eq!(back, bus, "the source goes, the bus stays");
+        let program = with_hears(&heard, "").expect("switched");
+        assert_eq!(hears_value(&program), "");
+        let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
+        assert_eq!(with_measure(&wiggle, MotionMeasure::Band), None);
+        assert_eq!(with_hears(&wiggle, "bus_music"), None);
+        let pushed = with_kind(&wiggle, "Audio", MotionProperty::X).expect("switched");
+        assert_eq!(kind_name(&pushed), "Audio");
     }
 
     #[test]

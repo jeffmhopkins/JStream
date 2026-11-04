@@ -12,11 +12,11 @@ use crate::{
     ClientMessage, Command, CommandClass, Crop, DeleteTarget, DropCounts, Edit, EngineLoad,
     EntityKind, ErrorResponse, Event, EventMessage, FilterChain, FilterChains, FilterId,
     FilterInfo, FilterOwner, Finite32, FitMode, Hello, IdempotencyKey, ItemGeometry, ItemId,
-    ItemInfo, ItemTransform, MasterInfo, OutputHealth, OutputId, OutputInfo, OutputKind,
-    OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm, ProtocolError, Query,
-    QueryResult, RecordContainer, Request, RequestId, Response, Rev, RtmpTarget, SceneId,
-    SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings, Size, SourceId,
-    SourceInfo, SourceKind, Vec2, Welcome, json_schema,
+    ItemInfo, ItemTransform, MasterInfo, MotionCurve, MotionMeasure, OutputHealth, OutputId,
+    OutputInfo, OutputKind, OutputState, OutputStatsInfo, PROTOCOL_VERSION, PlacementForm,
+    ProtocolError, Query, QueryResult, RecordContainer, Request, RequestId, Response, Rev,
+    RtmpTarget, SceneId, SceneInfo, SceneRole, SceneSummary, SecretString, ServerMessage, Settings,
+    Size, SourceId, SourceInfo, SourceKind, Vec2, Welcome, json_schema,
 };
 use crate::{
     ActionResult, AudioCodec, AudioEncoding, BroadcastInfo, BroadcastLifeCycle,
@@ -665,6 +665,13 @@ fn keyframe_edits() -> Vec<Edit> {
                 motion: motion.to_vec(),
             }),
     );
+    // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
+    // source.
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: reactive(),
+    });
     // Every field, as "reset keyframe" clears them.
     edits.extend(
         [
@@ -767,6 +774,66 @@ fn sway() -> Vec<MotionModifier> {
             clock: MotionClock::Triggered,
             enabled: true,
         },
+    ]
+}
+
+/// Lights and a speaker that follow the mix (ADR-0100): every measure and every curve.
+fn reactive() -> Vec<MotionModifier> {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let audio = |audio, audio_source, measure, band: Option<(f32, f32)>, curve| MotionKind::Audio {
+        audio,
+        audio_source,
+        measure,
+        low_hz: band.map(|(low, _)| f(low)),
+        high_hz: band.map(|(_, high)| f(high)),
+        floor_db: f(-48.0),
+        ceiling_db: f(-6.0),
+        attack_ms: 5,
+        release_ms: 300,
+        curve,
+        from: f(-0.6),
+        to: Finite32::ZERO,
+    };
+    let modifier = |id: &str, property, kind| MotionModifier {
+        modifier_id: id.into(),
+        property,
+        kind,
+        clock: MotionClock::Engine,
+        enabled: true,
+    };
+    vec![
+        modifier(
+            "glow",
+            MotionProperty::Opacity,
+            audio(None, None, MotionMeasure::Level, None, MotionCurve::Linear),
+        ),
+        modifier(
+            "flash",
+            MotionProperty::Opacity,
+            audio(
+                Some(BusId::new("bus_vod")),
+                None,
+                MotionMeasure::Peak,
+                None,
+                MotionCurve::EaseIn,
+            ),
+        ),
+        modifier(
+            "kick",
+            MotionProperty::Y,
+            audio(None, None, MotionMeasure::Onset, None, MotionCurve::EaseOut),
+        ),
+        modifier(
+            "bass",
+            MotionProperty::Scale,
+            audio(
+                None,
+                Some(SourceId::new("src_cam")),
+                MotionMeasure::Band,
+                Some((40.0, 120.0)),
+                MotionCurve::EaseInOut,
+            ),
+        ),
     ]
 }
 

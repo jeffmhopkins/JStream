@@ -39,6 +39,7 @@ mod error;
 mod fonts;
 mod image;
 mod media;
+mod model;
 mod registry;
 mod scope;
 mod shape;
@@ -58,13 +59,15 @@ pub use image::{StillImage, decode_still};
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
 pub use media::MediaAudio;
+pub use model::ModelKind;
 pub use registry::Registry;
 pub use scope::{
-    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, drawn_source, heard_scope,
-    heard_source,
+    AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, RawMeasure, drawn_source,
+    heard_scope, heard_source,
 };
 pub use source::{
-    AssetRoots, Context, Limits, Painter, Source, SourceAudio, SourceKind, needs_restart,
+    AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,
+    needs_restart,
 };
 pub use text::MAX_DENSITY;
 pub use youtube_chat::YOUTUBE_CHAT_CSS;
