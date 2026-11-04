@@ -558,7 +558,6 @@ status = "done"
 release = "alpha.4"
 prs = [595, 607, 626, 712, 717, 718, 730, 971]
 note = "part 1 runs the built-in kinds, part 2 loads apply_lut and image_mask assets, part 3 gives scene_mask its scene, part 4 pools scratch layers and each draw's uniform buffers (#712, #718, landed with wave/m1-4, #810), and #730 uploads LUT tables directly; effect-pack kinds are drawn, with the packs folder watched by the engine (#971). No bounds inset: on a source chain shadow, outline and glow draw within the frame (ADR-0065 §5)"
-needs = ["build"]
 
 [[item]]
 id = "D5"
@@ -1413,9 +1412,9 @@ prs = [1094]
 id = "RL4"
 milestone = "M3"
 title = "Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows"
-status = "planned"
+status = "review"
 release = "alpha.4"
 gate = true
-prs = []
+prs = [1179]
 note = "Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile"
 needs = ["build",  "hardware"]
