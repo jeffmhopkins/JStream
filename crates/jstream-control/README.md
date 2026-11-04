@@ -161,7 +161,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     filter ID, an audio chain on a `scene` source, a full chain and an index out of range. The master stage and
     outputs ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)) take
     video filters, and audio filters on the master and an output that carries audio,
-    and their filters no scene or source reference; a scene and an item (ADR-0065) take video filters only, and
+    and their filters no scene, source or bus reference, though a file (an asset) is allowed, as the graph allows it; a scene and an item (ADR-0065) take video filters only, and
     `scene.delete`'s and `item.remove`'s inverses re-add theirs. `source.duplicate`
     copies the chains, and `source.delete`'s and `output.delete`'s inverses re-add them; a reference in a filter's settings
     blocks deleting its target, as a source's own does;
@@ -219,7 +219,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), through
   `item.set_effects` (checking only the list's length and its IDs) and the `filter.*`
   edits on the `keyframe` owner, which copy the item's own effects first where the
-  keyframe follows them, with the graph's inverses;
+  keyframe follows them, with the graph's inverses, and an item's motion
+  ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), through
+  `item.set_motion` addressed to it (the whole list, checked with the protocol's
+  `check_motion` as the item's own is);
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -227,12 +230,13 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ID), each at the current `rev`.
   So it keeps everything an edit sets: the canvas, source names, kinds, settings and
   filter chains, each item's placement (its transform, or its geometry and the
-  transform view of it), crop, visibility, opacity and blend, each scene's role and
+  transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
   the hotkey bindings (in `state.get`, ordered by chord).
-  `video.snapshot` is not one of those reads: the mock has no compositor and answers
-  it with `internal`, as it does for any protocol variant it does not implement;
+  `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
+  `scene.switch_and_watch`): the mock has no compositor and answers them with
+  `internal`, as it does for any protocol variant it does not implement;
 - outputs as the engine (`jstream-core`) keeps them: a configured output starts
   `stopped` and is forgotten once deleted. `MockEngine::with_output` declares an output
   the way `Engine::with_output` does: it can be started, stopped and read with
@@ -322,7 +326,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `stopped`). `MockEngine::emit` injects any other event;
 - the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.get`,
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `item.show`,
+  `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
+  `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
+  to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `studio.get`,
   and `studio.changed` for each and after a batch, undo or redo that creates the first
   scene or deletes the program or preview scene. The mock knows only the initial `cut`
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every

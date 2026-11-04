@@ -130,6 +130,8 @@ impl Graph {
                     &mut removed,
                 ));
             }
+            // So does any edit that takes an item away (ADR-0101).
+            inverse.extend(crate::hotkey::remove_missing_items(&mut work, &mut removed));
             removed_hotkeys.append(&mut removed);
             undo.push(inverse);
         }
@@ -591,6 +593,7 @@ fn apply_edit(
                 effects: Chains::default(),
                 transition: ItemTransition::default(),
                 locked: false,
+                motion: Vec::new(),
                 effects_space: jstream_protocol::EffectsSpace::Box,
             });
             Ok(vec![Edit::ItemRemove {
@@ -742,6 +745,26 @@ fn apply_edit(
                         item_id: item_id.clone(),
                         scene_id: scene_id.clone(),
                         opacity: old,
+                    }])
+                }
+            }
+        }
+        Edit::ItemSetMotion {
+            item_id,
+            scene_id,
+            motion,
+        } => {
+            crate::motion::check(motion, at)?;
+            match placement_mut(state, item_id, scene_id.as_ref(), at)? {
+                PlacementTarget::Variant(vi) => {
+                    keyframe::write(state, vi, item_id, KeyValue::Motion(motion.clone()), at)
+                }
+                PlacementTarget::Item(item) => {
+                    let old = std::mem::replace(&mut item.motion, motion.clone());
+                    Ok(vec![Edit::ItemSetMotion {
+                        item_id: item_id.clone(),
+                        scene_id: scene_id.clone(),
+                        motion: old,
                     }])
                 }
             }
@@ -1250,6 +1273,13 @@ fn restore_item(
         edits.push(Edit::ItemSetLocked {
             item_id: item.id.clone(),
             locked: true,
+        });
+    }
+    if !item.motion.is_empty() {
+        edits.push(Edit::ItemSetMotion {
+            item_id: item.id.clone(),
+            scene_id: None,
+            motion: item.motion.clone(),
         });
     }
     if !item.effects_space.is_box() {

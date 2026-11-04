@@ -23,7 +23,8 @@ the host apps may depend on it, and the clients (`jstream-server`, `jstream-mcp`
 `jstream-cli`, `jstream-ui`) never do ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)); a
 host hands them an `InProcessControl` as a `dyn Control`.
 
-The control plane is the scene graph, the sessions and `video.snapshot`.
+The control plane is the scene graph, the sessions, `video.snapshot` and the frame
+sheets (`video.frames`, `scene.switch_and_watch`).
 `output.start` runs the media pipeline when the host calls
 `with_backends` and gives it a publish target (`with_publish` or
 `with_publish_opener`); a recording output needs no publish target, nor does a
@@ -210,7 +211,7 @@ state machine. Contents:
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
-  compositor. A keyframe scene draws its parent's items at their effective values
+  compositor and draws the frame sheets too (`frames.rs`, see *Frame sheets*). A keyframe scene draws its parent's items at their effective values
   (`State::shown_items`), effects included where it overrides them
   ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)), so it
   follows every edit to the parent; so does what the
@@ -221,8 +222,8 @@ state machine. Contents:
   and drawn at `State::items_through`; a group it doesn't override is drawn as itself,
   so the layer stays shared. A Move within the family flattens a group over the whole
   canvas into its children, which pair by item and move between the two sides'
-  values. A group that doesn't flatten (placed elsewhere, or with a blend, chain or
-  effects) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
+  values. A group that doesn't flatten (placed elsewhere, or with a blend, chain,
+  effects or motion) moves as one item. Its children move inside its layer (ADR-0049 §3), unless
   it is shown through its `scene` source's own video chain, which moves it as one
   picture with nothing inside it moving:
   `transition.rs` plans them by item between the group's two sides (a view through
@@ -244,6 +245,30 @@ state machine. Contents:
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
+- **Motion** (`motion.rs`,
+  [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
+  motion modifiers, turned into `jstream-anim`'s once when the shot is planned, are
+  evaluated each time a pass draws the item, at the frame's animation time, and added
+  to its placement, crop and opacity after any live value (`apply`: position, size,
+  rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
+  placement, crop rounded and never below 0, opacity kept within 0 and `MAX_OPACITY`, so a gain above 1 (#1101) stays one; a 3D model's drawn layer,
+  already placed in its pixels, stays put). An item whose effects run over the canvas
+  (ADR-0106) moves inside its canvas-sized layer, which stays over the canvas, also in
+  a transition, where that layer takes only the motion's opacity. The item's
+  stored values never change. A shot with motion anywhere (`Shot::moves`) changes with
+  time (`Shot::changes_with_time`), as a running transition does, so a preview stream
+  sends it each frame too. During a transition each track
+  carries both sides' motion (`TrackMotion`): a matched pair blends their offsets by
+  the eased progress, an appearing item moves by its new side's and a disappearing one
+  by its old side's. The `shown` clock starts when an item starts being drawn in any
+  pass of the program shot, a video mix's included: the engine keeps when each drawn
+  item appeared (`ShownSince`) and stamps it on each program shot it publishes
+  (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
+  modifier stays at its start there. A legacy placement's signed scale keeps its flip,
+  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
+  legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
+  `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
+  moves one only where every moved value is back within them (a shrinking modifier).
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -368,7 +393,10 @@ state machine. Contents:
   drawn until committed or cancelled, and dropped with its source) and a live value drawn
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
-  `video.snapshot` on whatever adapter opens (the software one in CI), nested-scene scheduling (order, depth
+  `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
+  (a `scene.switch_and_watch` showing a fade as it plays, a scene drawn alone, the
+  limits and the cap on sheets at once, in `tests/frames.rs`; the layout, tiling and
+  downscale in `frames.rs`), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
@@ -692,7 +720,8 @@ are serialized across sessions and their events are queued in the order the chan
 happened. Placeholder output actions do too: they only step the state machine.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
 media clock's time under that lock and hands them to the snapshot thread after
-releasing it (see *Snapshots*).
+releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
+(see *Frame sheets*).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -732,7 +761,22 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
   and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
-  `values.set` (see [Shared values](#shared-values)).
+  `values.set` (see [Shared values](#shared-values)), and `item.show`, `item.hide` and
+  `item.toggle`
+  ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). Those apply the
+  `item.set_visible` they stand for (`toggle` reads the placement's visibility first,
+  `State::visible_in`): a `rev`, `state.changed` and an entry in the undo-conflict log,
+  but no undo step (`History::record_batch` with no inverse). When the program scene's
+  tree holds the item, the item's effect isn't an instant one with no delay, and
+  program's own placement of the item is the one that changed (its `visible_in` for the
+  program scene differs after the edit), the engine reads what is on screen first (`snapshot::on_screen`, looking at sources
+  quietly so the probe reaches none) and puts a Move toward the program scene on the
+  studio, by item, with the default preset's duration and easing and its `unmatched`
+  (none for a `cut`): every other item pairs with itself and holds still, and only the
+  changed one appears or disappears with its effect. A transition in flight is
+  continued from what is on screen; a press program doesn't see (another keyframe's
+  placement) leaves it as it is. A source the next plan reaches again restarts as on a
+  switch (`restart_on_show`).
   `live.list` is a query answered from the gesture table, and `values.list` from the
   shared values.
 - **`studio.get`** reads the program and preview scenes under the collection lock, and
@@ -1346,13 +1390,15 @@ place. A frame without either chain draws as before, with no extra layer. The ed
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
 stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
-of its mix in order. Their filters hold no references (the graph refuses one), so none
-reads a scene or an asset.
+of its mix in order. Their filters hold no scene, source or bus reference (the graph
+refuses one), so none reads a scene, but one may read a file: the asset sync below
+lists the master's and outputs' video filters with the rest, and `plan_stages` hands
+each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
 `image_mask`'s `image`, whose first frame is the mask) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
-name, a source's, a scene's or an item's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
+name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
@@ -1370,7 +1416,11 @@ pass after the chains of the sources it places and the scenes it nests, so a cha
 that masks with a scene of filtered sources sees them filtered this frame. The scene is
 drawn at depth 1, as a nested scene, into its own layer (`GpuKey::reference`, at the
 canvas size), and those passes run once per frame with the chains, before any mix
-draws; `claim_layers` keeps their layers too. The filter holds a clone of the layer and
+draws; `claim_layers` keeps their layers too. That layer is the one a mix nesting the
+same scene at depth 1 draws into, so a mix pass whose layer the chains already drew
+this frame reads it as it is instead of drawing it again (`Chains::reuse`, #1070): a
+group shown both as itself and through a `scene` source's chain, as a reflection is,
+costs one pass. The filter holds a clone of the layer and
 is made again only when the layer is remade, the old one retired through the cache. A
 scene pass that fails (its layer can't be made, or the draw fails) fails the frame, as
 a failed nested pass does, and the chains after it don't run that tick. The graph
@@ -1662,7 +1712,11 @@ draw or decode. Each plan is numbered (`begin_plan`), and each source remembers 
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including
-the first time it is shown. Sources run on the media clock of the backends the host
+the first time it is shown. Each source also remembers the last plan any mix looked at
+it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
+same re-plan): after that re-plan, one none of them looked at is told nothing draws it
+(`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
+its frame is taken. A `browser` page rests while nothing draws it (#1071). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `media` sources play through the injected
@@ -1708,6 +1762,38 @@ The collection lock is not held across the GPU wait
 call's future waits for the snapshot thread, so an async host's worker thread is
 free while the GPU renders, reads back and the PNG is encoded. This query is
 control-plane work, not the render thread.
+
+<a id="frame-sheets"></a>
+## Frame sheets
+<!-- @section
+covers = ["crates/jstream-core/src/frames.rs"]
+depends_on = ["crates/jstream-protocol/README.md#queries"]
+-->
+
+`video.frames` and `scene.switch_and_watch` (#1061,
+[jstream-protocol › Queries](../jstream-protocol/README.md#queries)) answer with a frame
+sheet: several pictures taken in real time, tiled into one PNG (`frames.rs`). Each
+sheet gets a `jstream-frames` thread, which wakes when each picture is due (the call's
+`Instant` plus `delay_ms + i × interval_ms`) and reads, under the collection lock,
+what `video.snapshot` would draw then (`Shared::sample`): the published program
+render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
+it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
+`rev` and the media clock's time. It only collects: once the last picture is due it
+hands every sample to the snapshot thread as one job, which draws each at its own time,
+scales it to a tile with an area average (not nearest-neighbour, so thin lines and text
+stay) and tiles them on a dark background. So a slow GPU delays the answer, never a
+picture, and each tile's `at_ms` is the time it shows, counted from the call's own
+read of the clock. A picture keeps its render snapshot alive until the sheet is drawn.
+At most four sheets are taken at once across the engine (`frames::MAX_SHEETS`); a fifth
+is refused at once with `action_failed`. No adapter fails a sheet as it fails
+`video.snapshot`, with `action_failed` naming the driver. A scene deleted while its sheet is taken ends
+it with `not_found`, and an engine dropped meanwhile with `internal`.
+
+`scene.switch_and_watch` checks the sheet's limits, then runs the `scene.switch` it
+carries through `Engine::execute`, so the switch is logged, audited and emitted as a
+`scene.switch`; once it succeeds the sheet starts, its start read after the switch has
+published the new render snapshot. A failed switch takes no sheet. A running
+transition is drawn at each picture's time, so the sheet shows it as the output does.
 
 <a id="shared-values"></a>
 ## Shared values

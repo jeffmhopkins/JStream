@@ -53,7 +53,7 @@ pub use codec::{
     AudioEncoder, AudioEncoderConfig, CodecInfo, CodecRole, Codecs, HardwarePreference,
     RateControl, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
-pub use cursor::{CaptureCursor, CursorCapture, CursorImage, draw_cursor};
+pub use cursor::{CaptureCursor, CursorCapture, CursorImage, PointerPosition, draw_cursor};
 pub use error::PlatformError;
 pub use gpu::{AdapterId, ContextKey, FrameSync, GpuContext, GpuFrame, GpuInterop, SubmitLock};
 pub use id::DeviceId;

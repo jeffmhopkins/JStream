@@ -161,11 +161,15 @@ its `width` and `height` to the canvas and place its item full-frame, or to the 
 graphic's bounds; the default `css` makes the page transparent, so draw only the \
 graphic and leave `body` without a background. Fonts and images can come from https \
 URLs (such as Google Fonts), not from local files. Animate the entrance with CSS \
-`@keyframes` that run once on load, with `animation-fill-mode: both`. Time-based animation \
-in pages: when several pages show parts of one motion (a background that drifts \
-behind several layers, lights that pulse in step), compute it from the wall clock \
-(`Date.now()`), not from when each page loaded, so separate pages agree; use load time \
-only for an effect that should replay each time it is shown. Keep continuous motion \
+`@keyframes` that run once on load, with `animation-fill-mode: both`. Continuous motion \
+(a sway, a drift, a pulse, a scan) belongs on items, not in pages: `item.set_motion` \
+gives an item up to 8 modifiers (`wiggle`, `oscillate` or `drift` on `x`, `y`, `scale`, \
+`rotation`, `tilt`, `turn`, `depth`, `opacity` or a crop edge), which the engine draws \
+each frame from one clock, so every item, mask and nested scene showing the same \
+modifiers moves in step. Put a sway on a group's item to move the group and its masks as \
+one, and give a keyframe scene its own list (`scene_id`) to calm or quicken it across a \
+`move`. Use `clock` `shown` for motion that should start fresh each time the item is \
+shown. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. Changing `html` \

@@ -104,3 +104,93 @@ fn a_page_paints_in_the_sandboxed_helper_and_reaches_the_engine_on_the_cpu() {
     assert!(stopping.elapsed() < Duration::from_secs(20));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Changes colour on every animation frame, so it paints at its frame rate.
+const ANIMATED: &str = r#"<!doctype html>
+<html><body><script>
+let n = 0;
+function step() {
+  n += 1;
+  document.body.style.background = n % 2 ? '#ff0000' : '#0000ff';
+  requestAnimationFrame(step);
+}
+requestAnimationFrame(step);
+</script></body></html>"#;
+
+/// #1071: a hidden page stops painting, and paints again once shown.
+#[test]
+#[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
+fn a_hidden_page_stops_painting_until_shown() {
+    let helper = PathBuf::from(
+        std::env::var_os("JSTREAM_BROWSER_HELPER").expect("JSTREAM_BROWSER_HELPER is set"),
+    );
+    let dir = std::env::temp_dir().join(format!("jstream-linux-hidden-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("a temp folder");
+    let page_file = dir.join("index.html");
+    std::fs::write(&page_file, ANIMATED).expect("the page");
+    let backend = CefBackend::new(
+        CefConfig {
+            helper,
+            cache_root: dir.join("cef"),
+            log_file: Some(dir.join("cef.log")),
+        },
+        Arc::new(FakeClock::new(Timebase::MILLIS)),
+    );
+    backend.use_device(None);
+    let mut page = backend
+        .open(&PageSpec {
+            location: PageLocation::File(page_file),
+            size: FrameSize::new(64, 36).expect("a size"),
+            fps: 30,
+            css: DEFAULT_CSS.into(),
+            local_network: false,
+        })
+        .expect("the page opened");
+    // Paints arrive while shown.
+    let paints = |page: &dyn jstream_browser::BrowserPage, within: Duration| -> usize {
+        let deadline = Instant::now() + within;
+        let mut last = page.cpu_frame();
+        let mut count = 0;
+        while Instant::now() < deadline {
+            let now = page.cpu_frame();
+            let changed = match (&last, &now) {
+                (Some(a), Some(b)) => !Arc::ptr_eq(a, b),
+                (None, Some(_)) => true,
+                _ => false,
+            };
+            if changed {
+                count += 1;
+                last = now;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        count
+    };
+    let deadline = Instant::now() + PAINT_TIMEOUT;
+    while page.cpu_frame().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        paints(&*page, Duration::from_secs(1)) >= 5,
+        "it paints while shown"
+    );
+
+    page.set_hidden(true);
+    // Let a paint already under way land.
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        paints(&*page, Duration::from_secs(1)),
+        0,
+        "it rests while hidden"
+    );
+
+    page.set_hidden(false);
+    assert!(
+        paints(&*page, Duration::from_secs(2)) >= 5,
+        "it paints again once shown"
+    );
+    drop(page);
+    drop(backend);
+    let _ = std::fs::remove_dir_all(&dir);
+}

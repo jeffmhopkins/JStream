@@ -91,6 +91,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
     ("video.snapshot", N),
+    // Pictures of the program mix, like `video.snapshot`.
+    ("video.frames", N),
     ("youtube.status", N),
     ("youtube.list_broadcasts", N),
     ("youtube.list_streams", N),
@@ -130,6 +132,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.set_effects_space", Class(E)),
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
+    ("item.set_motion", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),
@@ -188,6 +191,9 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("live.set", Class(E)),
     ("live.cancel", Class(E)),
     ("scene.switch", Class(L)),
+    // It switches as `scene.switch` does, but answers with pictures of the program mix,
+    // like `video.snapshot`.
+    ("scene.switch_and_watch", N),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),
     ("output.set_key", N),
@@ -207,6 +213,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
+    // An item's visibility, as `item.set_visible` changes it (ADR-0101).
+    ("item.show", Class(E)),
+    ("item.hide", Class(E)),
+    ("item.toggle", Class(E)),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants and re-enables plugins; a plugin never does (G1).

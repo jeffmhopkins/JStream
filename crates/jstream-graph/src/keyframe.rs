@@ -10,15 +10,19 @@
 //! Besides the placement fields, an override may hold the item's effects, a whole list
 //! that the keyframe draws in place of the item's own, written by `item.set_effects`
 //! (ADR-0088). Each entry is checked as `filter.add` checks an item effect, and its
-//! references are edges of the keyframe scene, so the write runs the cycle check.
+//! references are edges of the keyframe scene, so the write runs the cycle check. It may
+//! also hold the item's motion modifiers, a whole list written by `item.set_motion`
+//! (ADR-0099).
 //!
-//! Docs: docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md, crates/jstream-graph/README.md#purpose
+//! Docs: docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md, docs/adr/0099-native-motion-modifiers-and-timelines.md, crates/jstream-graph/README.md#purpose
 
 use crate::apply::{
     Kinds, already_exists, check_id, check_name, complete_settings_in, invalid, not_found,
 };
 use crate::deps::{self, Node};
-use crate::model::{Chains, Filter, MAX_CHAIN_FILTERS, Overrides, Placement, Scene, State};
+use crate::model::{
+    Chains, Filter, MAX_CHAIN_FILTERS, MotionList, Overrides, Placement, Scene, State,
+};
 use jstream_anim::{Field, Inverse, Override, Value};
 use jstream_protocol::{
     Crop, DroppedOverride, Edit, EntityKind, FilterInfo, Finite32, ItemId, ItemOverride,
@@ -28,10 +32,10 @@ use jstream_protocol::{
 use std::collections::BTreeSet;
 
 /// The value a keyframe scene stores for one field.
-pub(crate) type FieldValue = Value<Placement, Crop, Chains>;
+pub(crate) type FieldValue = Value<Placement, Crop, Chains, MotionList>;
 
 /// One item's override in a keyframe scene.
-pub(crate) type ItemOverrides = Override<Placement, Crop, Chains>;
+pub(crate) type ItemOverrides = Override<Placement, Crop, Chains, MotionList>;
 
 /// Applies the keyframe edits; `None` for any other edit.
 pub(crate) fn apply(
@@ -478,6 +482,7 @@ pub(crate) fn to_info(item_id: &ItemId, o: &ItemOverrides) -> ItemOverride {
         visible: o.visible,
         opacity: o.opacity.and_then(Finite32::new),
         effects: o.effects.as_ref().map(|chains| effects_info(&chains.video)),
+        motion: o.motion.clone(),
     }
 }
 
@@ -498,7 +503,7 @@ pub(crate) fn effects_info(filters: &[Filter]) -> Vec<FilterInfo> {
 fn inverse_edit(
     scene_id: &SceneId,
     item_id: &ItemId,
-    inverse: Inverse<Placement, Crop, Chains>,
+    inverse: Inverse<Placement, Crop, Chains, MotionList>,
 ) -> Edit {
     match inverse {
         Inverse::Write(value) => value_edit(scene_id, item_id, value),
@@ -511,7 +516,7 @@ fn inverse_edit(
 }
 
 /// The edit addressed to the keyframe scene `keyframe` that writes `value`: a placement
-/// edit, or `item.set_effects`.
+/// edit, `item.set_effects` or `item.set_motion`.
 fn value_edit(keyframe: &SceneId, item_id: &ItemId, value: FieldValue) -> Edit {
     let item_id = item_id.clone();
     let scene_id = Some(keyframe.clone());
@@ -547,6 +552,11 @@ fn value_edit(keyframe: &SceneId, item_id: &ItemId, value: FieldValue) -> Edit {
             item_id,
             effects: effects_info(&chains.video),
         },
+        Value::Motion(motion) => Edit::ItemSetMotion {
+            item_id,
+            scene_id,
+            motion,
+        },
     }
 }
 
@@ -557,6 +567,7 @@ fn field_of(field: OverrideField) -> Field {
         OverrideField::Visible => Field::Visible,
         OverrideField::Opacity => Field::Opacity,
         OverrideField::Effects => Field::Effects,
+        OverrideField::Motion => Field::Motion,
     }
 }
 
@@ -567,5 +578,6 @@ fn wire_field(field: Field) -> OverrideField {
         Field::Visible => OverrideField::Visible,
         Field::Opacity => OverrideField::Opacity,
         Field::Effects => OverrideField::Effects,
+        Field::Motion => OverrideField::Motion,
     }
 }
