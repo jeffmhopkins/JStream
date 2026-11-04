@@ -566,7 +566,8 @@ state machine. Contents:
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
-  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`), and a
+  by the sources thread (`a_waveform_source_is_painted_by_the_sources_thread`) only
+  while a mix draws it (`a_waveform_no_mix_draws_is_not_painted`), and a
   `timer` that keeps counting through a style change and a new density, showing the
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`). The parity
@@ -1613,7 +1614,11 @@ FFT each 1/30 s, `chat_message`, which redraws when another message is featured,
 is painted by that thread just before each re-plan, holding no engine
 lock, so under the collection lock the plan only takes the frame painted last;
 `install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. Every other built kind makes its frames when built, or (a `media` file) decodes
+zeros. The thread paints only the painters the latest round of plans looked at, the
+program's or a preview's (`LiveSources::end_looks`), so one no mix draws costs nothing
+while something else re-plans every frame; a plan that reaches one again paints it for
+the current time first, under the lock, so it never shows the frame it had when it was
+last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
 them ahead on a thread of its own, so the plan's `frame` calls under the lock never
 draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that

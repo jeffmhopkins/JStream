@@ -42,6 +42,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -174,6 +175,12 @@ struct Running {
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
     planned: u64,
+    /// The last plan any mix looked at it in, the program's or a preview's, so the
+    /// thread paints only sources something draws.
+    seen: u64,
+    /// Whether the thread paints it before each re-plan: while the latest plans looked
+    /// at it ([`LiveSources::end_looks`]). Shared with the thread's [`Painted`] entry.
+    drawn: Arc<AtomicBool>,
     /// The texture it showed last, for a source that paints on the GPU.
     shown_gpu: Option<(GpuFrame, Frame)>,
     /// Its own size, which its frames are placed at, for a kind that draws them at a
@@ -611,6 +618,8 @@ impl LiveSources {
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
                 planned: plan,
+                seen: plan,
+                drawn: Arc::new(AtomicBool::new(true)),
                 shown_gpu: None,
                 extent: built.extent,
                 size: built.size,
@@ -649,7 +658,14 @@ impl LiveSources {
             .entries
             .iter()
             .filter_map(|(id, e)| Some((id, e.running.as_ref()?)))
-            .filter_map(|(id, r)| Some((id.clone(), r.source.painter()?, r.start)))
+            .filter_map(|(id, r)| {
+                Some(Painted {
+                    source_id: id.clone(),
+                    painter: r.source.painter()?,
+                    start: r.start,
+                    drawn: Arc::clone(&r.drawn),
+                })
+            })
             .collect();
         lock(&self.worker.queue).painters = painters;
     }
@@ -798,6 +814,17 @@ impl LiveSources {
         let entry = self.entries.get_mut(source_id)?;
         let running = entry.running.as_mut()?;
         let at = since(now, running.start);
+        running.seen = plan;
+        if !running.drawn.load(Ordering::Relaxed)
+            && let Some(painter) = running.source.painter()
+        {
+            // Not painted while nothing drew it: painted for now before it is shown,
+            // so it never shows the frame it had when it was last drawn.
+            let started = Instant::now();
+            painter.paint(at);
+            self.meters.painted(source_id, started.elapsed());
+            running.drawn.store(true, Ordering::Relaxed);
+        }
         if reach {
             if running.planned + 1 < plan {
                 running.source.show(at);
@@ -873,6 +900,17 @@ impl LiveSources {
             if let Some(audio) = &running.audio {
                 audio.set_audible(running.planned == plan);
             }
+        }
+    }
+
+    /// Ends a round of plans, the program mix's and every preview's: the thread paints
+    /// only the sources one of them looked at, so a scope, timer or chat source no mix
+    /// draws costs nothing while something else animates. A source looked at again is
+    /// painted then ([`Self::look`]).
+    pub(crate) fn end_looks(&self) {
+        let plan = self.plan;
+        for running in self.entries.values().filter_map(|e| e.running.as_ref()) {
+            running.drawn.store(running.seen == plan, Ordering::Relaxed);
         }
     }
 
@@ -1000,7 +1038,7 @@ struct Queue {
     building: usize,
     /// The running sources that draw their frames as they come due, with each one's
     /// time zero: the thread paints them before every re-plan.
-    painters: Vec<(SourceId, Arc<dyn Painter>, MediaTime)>,
+    painters: Vec<Painted>,
     clock: Arc<dyn MediaClock>,
     closed: bool,
 }
@@ -1047,12 +1085,23 @@ impl Worker {
     }
 }
 
+/// A running source that draws its own frames, as the thread paints it.
+#[derive(Clone)]
+struct Painted {
+    source_id: SourceId,
+    painter: Arc<dyn Painter>,
+    /// Its time zero.
+    start: MediaTime,
+    /// Whether a mix drew it in the latest plans ([`Running::drawn`]).
+    drawn: Arc<AtomicBool>,
+}
+
 /// What the thread does next.
 enum Next {
     Build(Job),
     Load(AssetJob),
     /// Paint these at this time, then re-plan.
-    Replan(Vec<(SourceId, Arc<dyn Painter>, MediaTime)>, MediaTime),
+    Replan(Vec<Painted>, MediaTime),
     Exit,
 }
 
@@ -1099,10 +1148,11 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
             Next::Replan(painters, now) => {
                 // Drawing can take milliseconds, so it happens here, before the re-plan
                 // takes the collection lock and asks for the painted frames.
-                for (source_id, painter, start) in painters {
+                // A source no mix drew in the latest plans is skipped.
+                for painted in painters.iter().filter(|p| p.drawn.load(Ordering::Relaxed)) {
                     let started = Instant::now();
-                    painter.paint(since(now, start));
-                    worker.meters.painted(&source_id, started.elapsed());
+                    painted.painter.paint(since(now, painted.start));
+                    worker.meters.painted(&painted.source_id, started.elapsed());
                 }
                 match host.upgrade() {
                     Some(host) => host.replan(),

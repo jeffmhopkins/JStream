@@ -667,6 +667,61 @@ fn a_waveform_source_is_painted_by_the_sources_thread() {
     );
 }
 
+/// A scope no mix draws is not painted while the program re-plans for another source,
+/// and is painted for the current time once a scene that shows it goes on program.
+#[test]
+fn a_waveform_no_mix_draws_is_not_painted() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let wave = |id: &str| {
+        source(
+            id,
+            "waveform",
+            settings(&[
+                ("width", json!(1)),
+                ("height", json!(3)),
+                ("color", json!("#ff0000")),
+                ("background", json!("#0000ff")),
+            ]),
+        )
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            wave("on"),
+            add("a", "i1", "on"),
+            create("b"),
+            wave("off"),
+            add("b", "i2", "off"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "built");
+    // Sound keeps the program's waveform moving, so the thread re-plans every tick.
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && engine.paints("on") < 10 {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(engine.paints("on") >= 10, "the shown waveform is painted");
+    let before = engine.paints("off");
+    for _ in 0..20 {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        engine.paints("off") <= before + 1,
+        "the waveform on scene b is not painted while b isn't drawn"
+    );
+    super::block_on(control.call(super::switch_call("b"))).expect("switched");
+    assert!(
+        engine.paints("off") > before,
+        "painted once b is on program"
+    );
+}
+
 /// Shows or hides item `i1`.
 fn visible(control: &crate::InProcessControl, visible: bool) {
     batch(
