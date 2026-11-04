@@ -335,6 +335,9 @@ pub(crate) struct Boxed {
     /// The size of the image the item shows, when known: what turns a legacy transform
     /// into its box.
     input: Option<[u32; 2]>,
+    /// Whether the effects run over the canvas after the item is placed (ADR-0106): the
+    /// layer is then the canvas, `size` is the canvas's and `outset` is 0.
+    canvas: bool,
 }
 
 impl Boxed {
@@ -355,6 +358,27 @@ impl Boxed {
             layer: [side(padded[0]), side(padded[1])],
             scale,
             input,
+            canvas: false,
+        })
+    }
+
+    /// The layer for an item whose effects run in canvas space (ADR-0106): the canvas,
+    /// scaled down to fit [`MAX_LAYER_SIDE`] when larger, with no outset, since what the
+    /// effects draw outside the canvas is never seen.
+    fn over_canvas(canvas: Canvas, input: Option<[u32; 2]>) -> Option<Self> {
+        let size = [canvas.width as f32, canvas.height as f32];
+        if !size.iter().all(|side| side.is_finite() && *side > 0.0) {
+            return None;
+        }
+        let scale = (MAX_LAYER_SIDE as f32 / size[0].max(size[1])).min(1.0);
+        let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
+        Some(Self {
+            size,
+            outset: 0.0,
+            layer: [side(size[0]), side(size[1])],
+            scale,
+            input,
+            canvas: true,
         })
     }
 
@@ -391,10 +415,45 @@ impl Boxed {
         }
     }
 
+    /// What `by`, an item's motion, moves inside its layer: its crop, cut there, and over
+    /// the canvas (ADR-0106) its placement too, since that layer stays where it is and
+    /// [`Self::around`] drops the box. Else the rest moves the box where it is placed.
+    fn moved_inside(
+        &self,
+        by: &jstream_anim::Offsets,
+        placement: Placement,
+        crop: Crop,
+    ) -> (Placement, Crop) {
+        let (moved, crop, _) = motion::apply(by, placement, crop, OPAQUE);
+        (if self.canvas { moved } else { placement }, crop)
+    }
+
     /// Where the item is drawn inside its layer: centred at the box's planned size,
     /// flat and unrotated, with `geometry`'s fit and flips, so the effects see the
     /// cropped, fitted box in its own frame (ADR-0050 §7).
     fn inside(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        if self.canvas {
+            // Placed where it is on the canvas, turned, tilted and flipped as it is, in
+            // layer pixels.
+            let px = |value: f32| jstream_protocol::Finite32::new(value * self.scale);
+            return Some(ItemGeometry {
+                center: jstream_protocol::Vec2::new(
+                    geometry.center.x.get() * self.scale,
+                    geometry.center.y.get() * self.scale,
+                )?,
+                size: jstream_protocol::Size::try_new(
+                    geometry.size.width.get() * self.scale,
+                    geometry.size.height.get() * self.scale,
+                )
+                .ok()?,
+                depth_px: px(geometry.depth_px.get())?,
+                perspective_px: match geometry.perspective_px {
+                    Some(perspective) => Some(px(perspective.get())?),
+                    None => None,
+                },
+                ..*geometry
+            });
+        }
         let centre =
             jstream_protocol::Vec2::new(self.layer[0] as f32 * 0.5, self.layer[1] as f32 * 0.5)?;
         Some(ItemGeometry {
@@ -415,6 +474,13 @@ impl Boxed {
     /// on every side, in proportion to the box the layer was planned for, the whole
     /// layer stretched over it, turned and projected as the box is.
     fn around(&self, geometry: &ItemGeometry) -> Option<ItemGeometry> {
+        if self.canvas {
+            // The whole canvas, flat: the item's own transform is inside the layer.
+            return Some(ItemGeometry {
+                fit_mode: jstream_protocol::FitMode::Stretch,
+                ..ItemGeometry::covering_canvas(self.size[0] as u32, self.size[1] as u32).ok()?
+            });
+        }
         let grow = |live: f32, planned: f32| live * (planned + 2.0 * self.outset) / planned;
         Some(ItemGeometry {
             size: jstream_protocol::Size::try_new(
@@ -441,8 +507,9 @@ struct ItemBox {
     placement: Placement,
     crop: Crop,
     boxed: Boxed,
-    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, the rest
-    /// moves the box where it is placed.
+    /// Its motion modifiers (ADR-0099): their crop is cut inside the box, and the rest
+    /// moves the box where it is placed, except over the canvas (ADR-0106), where they
+    /// move the item inside its layer ([`Boxed::moved_inside`]).
     motion: motion::Motion,
 }
 
@@ -696,11 +763,26 @@ impl Shot {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
     }
 
+    /// Whether `image` is the layer of an item whose effects run over the canvas
+    /// (ADR-0106).
+    fn is_canvas_box(&self, image: &GpuKey) -> bool {
+        // A track or layer draws a box through its chain's output, `Filtered`; its
+        // `ItemBox` is the layer the item is drawn into first (#1125 review N16).
+        let owner = match image {
+            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
+            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
+            _ => return false,
+        };
+        self.boxes
+            .get(&owner)
+            .is_some_and(|boxed| boxed.boxed.canvas)
+    }
+
     /// Whether an item this shot draws has a motion modifier: in a pass, a chain
     /// phase's pass, a box or a transition track.
     fn has_motion(&self) -> bool {
         let chain_passes = self.chain_steps.iter().filter_map(|step| match step {
-            ChainStep::Pass(pass) => Some(pass),
+            ChainStep::Pass(pass) => Some(&**pass),
             ChainStep::Run(_) | ChainStep::Box(_) => None,
         });
         self.passes
@@ -949,7 +1031,7 @@ impl Shot {
         self.transition.as_ref().map(|t| {
             t.tracks
                 .iter()
-                .map(|(_, track, _, moved)| {
+                .map(|(key, track, _, moved)| {
                     let by = moved.offsets(
                         track,
                         elapsed_ms,
@@ -959,7 +1041,7 @@ impl Shot {
                     );
                     track
                         .sample(elapsed_ms, canvas)
-                        .map(|end| motion::apply_endpoint(&by, end))
+                        .map(|end| moved_track(self.is_canvas_box(key), &by, end))
                 })
                 .collect()
         })
@@ -1335,7 +1417,7 @@ fn plan_inner(
         }));
     shot.chain_steps = schedule_chains(&shot);
     let read = placed_captures(shot.chain_steps.iter().filter_map(|step| match step {
-        ChainStep::Pass(pass) => Some(pass),
+        ChainStep::Pass(pass) => Some(&**pass),
         ChainStep::Run(_) | ChainStep::Box(_) => None,
     }))
     .collect::<Vec<_>>();
@@ -2073,7 +2155,10 @@ impl<'a> Planner<'a, '_> {
             }
             _ => return None,
         };
-        let boxed = Boxed::new(&geometry, chain.outset(), input)?;
+        let boxed = match item.effects_space() {
+            jstream_protocol::EffectsSpace::Canvas => Boxed::over_canvas(canvas, input)?,
+            _ => Boxed::new(&geometry, chain.outset(), input)?,
+        };
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -2185,6 +2270,12 @@ impl<'a> Planner<'a, '_> {
             };
             // An item with effects is its effects' layer over its grown box, uncropped.
             let boxed = self.boxed(id, item, &image, out);
+            // An item whose effects run over the canvas covers the canvas on both sides
+            // of a switch, so it can't glide (ADR-0106): it disappears and appears.
+            let mut settings = *item.transition();
+            if boxed.is_some_and(|boxed| boxed.canvas) {
+                settings.glide = jstream_protocol::Glide::Never;
+            }
             let (image, geometry, cut, size, effects) = match boxed {
                 Some(boxed) => {
                     let owner = ChainOwner::Item(id.clone(), item.id().clone());
@@ -2213,7 +2304,7 @@ impl<'a> Planner<'a, '_> {
                     blend: item.blend(),
                 },
                 size,
-                settings: *item.transition(),
+                settings,
                 effects,
                 inside: None,
                 seen: Seen::AsPlanned,
@@ -2408,8 +2499,9 @@ impl GpuKey {
 /// reads ([`schedule_chains`]).
 #[derive(Debug, PartialEq)]
 enum ChainStep {
-    /// A scene a `scene_mask` reads, or a scene that one nests.
-    Pass(Pass),
+    /// A scene a `scene_mask` reads, or a scene that one nests. Boxed: a pass holds two
+    /// cameras, which would make every step that size.
+    Pass(Box<Pass>),
     /// An item with effects, drawn into its [`GpuKey::ItemBox`] before they run.
     Box(ChainOwner),
     /// The video chain of a source or a scene.
@@ -2820,7 +2912,7 @@ impl ChainOrder {
 
 impl Passes for ChainOrder {
     fn pass(&mut self, pass: Pass) {
-        self.steps.push(ChainStep::Pass(pass));
+        self.steps.push(ChainStep::Pass(Box::new(pass)));
     }
 
     fn filtered(&mut self, shot: &Shot, owner: &ChainOwner, done: &mut BTreeSet<GpuKey>) {
@@ -3967,6 +4059,12 @@ pub(crate) fn compose_metered(
         };
         let mut items: Vec<Item<'_>> = Vec::new();
         for pass in nested {
+            // The chains drew this scene at this depth already this frame, for a
+            // chain that reads it: the same pass, so its layer holds what this one
+            // would draw (#1070).
+            if chains.reuse(&pass.key) {
+                continue;
+            }
             let started = Instant::now();
             fill_items(
                 &mut items,
@@ -4171,6 +4269,7 @@ fn run_chains(
                     continue;
                 };
                 compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
+                chains.drew_layer(&pass.key);
                 meter.pass(&pass.scene, started.elapsed());
             }
         }
@@ -4218,11 +4317,10 @@ fn draw_box(
         boxed.placement,
         boxed.crop,
     );
-    // Its motion's crop is cut here; the rest moves the box where it is placed.
     let by = motion::offsets(&boxed.motion, at, shot.shown_at(&boxed.item), |id| {
         shot.heard(&boxed.item, id)
     });
-    let (_, crop, _) = motion::apply(&by, placement, crop, OPAQUE);
+    let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
         .geometry_of(placement, crop)
@@ -4353,7 +4451,11 @@ fn fill_items<'a>(
                 |item| shot.shown_at(item),
                 |item, id| shot.heard(item, id),
             );
-            let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
+            let sampled = moved_track(
+                shot.is_canvas_box(&layer.image),
+                &by,
+                track.sample(elapsed, size)?,
+            );
             return Some(Item {
                 image: cache.get(&layer.image)?,
                 placement: Placement::Geometry(sampled.geometry),
@@ -4392,6 +4494,20 @@ fn fill_items<'a>(
     }));
 }
 
+/// A track's sampled endpoint moved by `by`, its item's motion. A canvas-space layer
+/// (ADR-0106) stays over the canvas: its item moves inside it ([`draw_box`]), so only
+/// the layer's opacity takes the motion here.
+fn moved_track(canvas_box: bool, by: &jstream_anim::Offsets, sampled: Endpoint) -> Endpoint {
+    if canvas_box {
+        Endpoint {
+            opacity: by.opacity_of(sampled.opacity),
+            ..sampled
+        }
+    } else {
+        motion::apply_endpoint(by, sampled)
+    }
+}
+
 /// Replaces `items` with `transition`'s tracks sampled at `at`, in drawing order. A
 /// track that draws nothing then, or whose image is not cached, is left out.
 fn fill_tracks<'a>(
@@ -4419,7 +4535,8 @@ fn fill_tracks<'a>(
                     |item| shot.shown_at(item),
                     |item, id| shot.heard(item, id),
                 );
-                let sampled = motion::apply_endpoint(&by, track.sample(elapsed, size)?);
+                let sampled =
+                    moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
                 Some(Item {
                     image: cache.get(key)?,
                     placement: Placement::Geometry(sampled.geometry),
@@ -4747,6 +4864,116 @@ pub(crate) mod tests {
         let of = known.geometry_of(legacy, Crop::NONE).expect("its box");
         assert_eq!((of.size.width.get(), of.size.height.get()), (32.0, 18.0));
         assert_eq!((of.center.x.get(), of.center.y.get()), (26.0, 29.0));
+    }
+
+    /// An item whose effects run in canvas space (ADR-0106) is drawn into a canvas-sized
+    /// layer where it is placed, turned and flipped as it is, and the layer covers the
+    /// canvas flat. A canvas too large for one texture is scaled down uniformly.
+    #[test]
+    fn a_canvas_space_effects_layer_is_the_canvas() {
+        use jstream_protocol::{Canvas, Finite32, FitMode, ItemGeometry, Size, Vec2};
+        let mut placed = ItemGeometry::try_new(
+            Vec2::new(500.0, 300.0).expect("finite"),
+            Size::try_new(100.0, 50.0).expect("positive"),
+        )
+        .expect("valid");
+        placed.rotation_deg = Finite32::new(30.0).expect("finite");
+        placed.flip_v = true;
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let boxed = super::Boxed::over_canvas(canvas, None).expect("finite");
+        assert_eq!(boxed.layer, [1920, 1080]);
+
+        let inside = boxed.inside(&placed).expect("inside");
+        assert_eq!(inside, placed, "placed in the layer as on the canvas");
+
+        let around = boxed.around(&placed).expect("around");
+        assert_eq!(
+            (around.center.x.get(), around.center.y.get()),
+            (960.0, 540.0)
+        );
+        assert_eq!(
+            (around.size.width.get(), around.size.height.get()),
+            (1920.0, 1080.0)
+        );
+        assert!(!around.flip_v && around.rotation_deg.get() == 0.0);
+        assert_eq!(around.fit_mode, FitMode::Stretch);
+
+        let huge = Canvas {
+            width: 16_384,
+            height: 4_096,
+        };
+        let scaled = super::Boxed::over_canvas(huge, None).expect("finite");
+        assert_eq!((scaled.layer, scaled.scale), ([8192, 2048], 0.5));
+        let inside = scaled.inside(&placed).expect("inside");
+        assert_eq!(
+            (inside.center.x.get(), inside.center.y.get()),
+            (250.0, 150.0)
+        );
+        assert_eq!(inside.size.width.get(), 50.0);
+        assert!(inside.flip_v, "the item's own flip");
+    }
+
+    /// Motion on an item whose effects run over the canvas (ADR-0106, ADR-0099) moves
+    /// the item inside its layer, which stays over the canvas, on a steady frame and
+    /// during a switch alike; a box's layer moves where it is placed and only cuts the
+    /// crop inside (#1125 review B8).
+    #[test]
+    fn motion_moves_a_canvas_space_item_inside_its_layer() {
+        use jstream_protocol::{Canvas, ItemGeometry, Size, Vec2};
+        let placed = ItemGeometry::try_new(
+            Vec2::new(500.0, 300.0).expect("finite"),
+            Size::try_new(100.0, 50.0).expect("positive"),
+        )
+        .expect("valid");
+        let by = jstream_anim::Offsets {
+            x: 40.0,
+            opacity: 0.5,
+            crop: [2.0, 0.0, 0.0, 0.0],
+            ..jstream_anim::Offsets::IDENTITY
+        };
+        let canvas = super::Boxed::over_canvas(
+            Canvas {
+                width: 1920,
+                height: 1080,
+            },
+            None,
+        )
+        .expect("finite");
+        let (moved, crop) = canvas.moved_inside(&by, Placement::Geometry(placed), Crop::NONE);
+        let Placement::Geometry(moved) = moved else {
+            panic!("a geometry");
+        };
+        assert_eq!(moved.center.x.get(), 540.0, "moved inside the layer");
+        assert_eq!(crop.left, 2);
+        let inside = canvas.inside(&moved).expect("inside");
+        assert_eq!(inside.center.x.get(), 540.0);
+
+        let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
+        let (kept, crop) = boxed.moved_inside(&by, Placement::Geometry(placed), Crop::NONE);
+        assert_eq!(
+            kept,
+            Placement::Geometry(placed),
+            "the box moves where placed"
+        );
+        assert_eq!(crop.left, 2);
+
+        let at = super::Endpoint {
+            geometry: canvas.around(&placed).expect("around"),
+            crop: Crop::NONE,
+            opacity: 1.0,
+            blend: BlendMode::Normal,
+        };
+        let layer = super::moved_track(true, &by, at);
+        assert_eq!(layer.geometry, at.geometry, "the canvas layer stays put");
+        assert_eq!(layer.opacity, 0.5, "and takes the motion's opacity");
+        let track = super::moved_track(false, &by, at);
+        assert_eq!(
+            track.geometry.center.x.get(),
+            at.geometry.center.x.get() + 40.0
+        );
     }
 
     fn placed(source: SourceRef, placement: Placement) -> Placed {
@@ -5496,6 +5723,92 @@ pub(crate) mod tests {
         for (x, y) in [(10, 10), (310, 190), (330, 170), (650, 350), (900, 600)] {
             assert_eq!(at(&rgba, x, y), RED, "({x}, {y})");
         }
+    }
+
+    /// A group a mix nests that a `scene` source's chain also reads, at the same depth,
+    /// is drawn once a frame (#1070): the mix reads the layer the chain phase drew, and
+    /// shows it both as itself and through the chain.
+    #[test]
+    fn a_nested_scene_a_chain_also_reads_is_drawn_once() {
+        use jstream_graph::Graph;
+        use serde_json::json;
+
+        let geometry = |cx: f32, cy: f32, w: f32, h: f32| json!({"center": [cx, cy], "size": [w, h], "fit_mode": "stretch"});
+        let edits = [
+            json!({"type": "scene.create", "scene_id": "main", "name": "Main"}),
+            json!({"type": "scene.create", "scene_id": "g", "name": "G", "role": "group"}),
+            json!({"type": "source.create", "source_id": "green", "name": "Green",
+                   "kind": {"type": "builtin", "kind": "image"}}),
+            json!({"type": "item.add", "scene_id": "g", "item_id": "green", "source_id": "green",
+                   "geometry": geometry(480.0, 270.0, 960.0, 540.0)}),
+            json!({"type": "source.create", "source_id": "as-is", "name": "As is",
+                   "kind": {"type": "scene", "scene_id": "g"}}),
+            json!({"type": "source.create", "source_id": "blurred", "name": "Blurred",
+                   "kind": {"type": "scene", "scene_id": "g"}}),
+            json!({"type": "filter.add", "owner": {"type": "source", "source_id": "blurred"},
+                   "chain": "video", "filter_id": "b", "kind": "blur",
+                   "settings": {"radius": 2.0}}),
+            json!({"type": "item.add", "scene_id": "main", "item_id": "as-is",
+                   "source_id": "as-is", "geometry": geometry(960.0, 540.0, 1920.0, 1080.0)}),
+            json!({"type": "item.add", "scene_id": "main", "item_id": "blurred",
+                   "source_id": "blurred",
+                   "geometry": geometry(1440.0, 810.0, 960.0, 540.0)}),
+        ]
+        .into_iter()
+        .map(|edit| serde_json::from_value::<Edit>(edit).expect("an edit"))
+        .collect::<Vec<_>>();
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        graph.apply(&edits, None).expect("edits");
+        let green = Frame::new(1, 1, &GREEN, 1).expect("a pixel");
+        let frames = BTreeMap::from([(SourceId::new("green"), green)]);
+        let shot = super::plan(&graph, &frames);
+        let layer = GpuKey::Layer(SceneId::new("g"), 1);
+        assert!(
+            shot.passes.iter().any(|pass| pass.key == layer),
+            "the mix nests g at depth 1"
+        );
+
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Ok(mut compositor) = Compositor::open(OpenOptions::hardware()) else {
+            assert!(std::env::var_os("CI").is_none(), "CI has no wgpu adapter");
+            return;
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let canvas = shot.canvas().expect("a canvas");
+        cache.begin_frame();
+        let output = compose(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (
+                &shot,
+                MediaTime::new(0, Timebase::new(1, 1000).expect("valid")),
+            ),
+            View::default(),
+            &LiveParams::default(),
+            &super::NoCaptures,
+            super::DrawAt::read(canvas),
+        )
+        .expect("compose");
+        drop(cache.end_frame(&compositor));
+        assert_eq!(
+            chains.reused.load(std::sync::atomic::Ordering::Relaxed),
+            1,
+            "the mix read g's layer instead of drawing it again"
+        );
+        let frame = output.pixels().expect("read back");
+        let at = |x: usize, y: usize| {
+            let i = (y * frame.width() as usize + x) * 4;
+            let rgba = frame.rgba();
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        };
+        // g as itself: green over its top-left quarter, black beside it.
+        assert_eq!(at(480, 270), GREEN);
+        assert_eq!(at(1440, 270), [0, 0, 0, 255]);
+        // Through the blur, scaled into the bottom-right quarter: green in the middle
+        // of its own top-left quarter.
+        assert_eq!(at(1200, 675), GREEN);
+        assert_eq!(at(1700, 950), [0, 0, 0, 255]);
     }
 
     /// A scene's background fills its canvas under its items wherever it is drawn

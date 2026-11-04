@@ -508,6 +508,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -687,6 +774,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "pack"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
                 ],
                 "type": "object"
               },
@@ -1247,7 +1355,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -2873,6 +2981,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -3108,6 +3239,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -3198,7 +3344,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -3618,56 +3764,6 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
-          "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
-            "oneOf": [
-              {
-                "const": "linear",
-                "description": "As it is.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in",
-                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
-                "type": "string"
-              },
-              {
-                "const": "ease_out",
-                "description": "Cubic, fast at first: quiet passages already show.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in_out",
-                "description": "Cubic at both ends.",
-                "type": "string"
-              }
-            ]
-          },
-          "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
-            "oneOf": [
-              {
-                "const": "level",
-                "description": "The RMS level of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "peak",
-                "description": "The peak absolute sample of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "onset",
-                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
-                "type": "string"
-              },
-              {
-                "const": "band",
-                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
-                "type": "string"
-              }
-            ]
-          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -3770,107 +3866,6 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
-                ],
-                "type": "object"
-              },
-              {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
-                "properties": {
-                  "attack_ms": {
-                    "default": 10,
-                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "audio": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/BusId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
-                  },
-                  "audio_source": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/SourceId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
-                  },
-                  "ceiling_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
-                  },
-                  "curve": {
-                    "$ref": "#/$defs/MotionCurve",
-                    "default": "linear",
-                    "description": "How the envelope is bent. Default `linear`."
-                  },
-                  "floor_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": -60.0,
-                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
-                  },
-                  "from": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
-                  },
-                  "high_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
-                  },
-                  "kind": {
-                    "const": "audio",
-                    "type": "string"
-                  },
-                  "low_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
-                  },
-                  "measure": {
-                    "$ref": "#/$defs/MotionMeasure",
-                    "default": "level",
-                    "description": "What it measures. Default `level`."
-                  },
-                  "release_ms": {
-                    "default": 250,
-                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "to": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 1.0,
-                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
-                  }
-                },
-                "required": [
-                  "kind"
                 ],
                 "type": "object"
               }
@@ -4331,11 +4326,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -5638,7 +5648,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -6685,6 +6695,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -6864,6 +6961,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "pack"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
                 ],
                 "type": "object"
               },
@@ -7424,7 +7542,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -9050,6 +9168,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -9285,6 +9426,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -9375,7 +9531,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -9795,56 +9951,6 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
-          "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
-            "oneOf": [
-              {
-                "const": "linear",
-                "description": "As it is.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in",
-                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
-                "type": "string"
-              },
-              {
-                "const": "ease_out",
-                "description": "Cubic, fast at first: quiet passages already show.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in_out",
-                "description": "Cubic at both ends.",
-                "type": "string"
-              }
-            ]
-          },
-          "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
-            "oneOf": [
-              {
-                "const": "level",
-                "description": "The RMS level of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "peak",
-                "description": "The peak absolute sample of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "onset",
-                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
-                "type": "string"
-              },
-              {
-                "const": "band",
-                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
-                "type": "string"
-              }
-            ]
-          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -9947,107 +10053,6 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
-                ],
-                "type": "object"
-              },
-              {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
-                "properties": {
-                  "attack_ms": {
-                    "default": 10,
-                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "audio": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/BusId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
-                  },
-                  "audio_source": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/SourceId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
-                  },
-                  "ceiling_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
-                  },
-                  "curve": {
-                    "$ref": "#/$defs/MotionCurve",
-                    "default": "linear",
-                    "description": "How the envelope is bent. Default `linear`."
-                  },
-                  "floor_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": -60.0,
-                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
-                  },
-                  "from": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
-                  },
-                  "high_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
-                  },
-                  "kind": {
-                    "const": "audio",
-                    "type": "string"
-                  },
-                  "low_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
-                  },
-                  "measure": {
-                    "$ref": "#/$defs/MotionMeasure",
-                    "default": "level",
-                    "description": "What it measures. Default `level`."
-                  },
-                  "release_ms": {
-                    "default": 250,
-                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "to": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 1.0,
-                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
-                  }
-                },
-                "required": [
-                  "kind"
                 ],
                 "type": "object"
               }
@@ -10508,11 +10513,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -10870,7 +10890,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BlendMode": {
@@ -10933,10 +10953,6 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
-          "BusId": {
-            "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
-            "type": "string"
-          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -10972,6 +10988,21 @@ source: crates/jstream-mcp/src/tests.rs
               "bottom"
             ],
             "type": "object"
+          },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
           },
           "FilterId": {
             "description": "A filter in one of a source's chains. Unique within its source, not across\nsources, so a duplicated source keeps its filters' IDs (ADR-0026).",
@@ -11215,56 +11246,6 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
-          "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
-            "oneOf": [
-              {
-                "const": "linear",
-                "description": "As it is.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in",
-                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
-                "type": "string"
-              },
-              {
-                "const": "ease_out",
-                "description": "Cubic, fast at first: quiet passages already show.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in_out",
-                "description": "Cubic at both ends.",
-                "type": "string"
-              }
-            ]
-          },
-          "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
-            "oneOf": [
-              {
-                "const": "level",
-                "description": "The RMS level of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "peak",
-                "description": "The peak absolute sample of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "onset",
-                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
-                "type": "string"
-              },
-              {
-                "const": "band",
-                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
-                "type": "string"
-              }
-            ]
-          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -11367,107 +11348,6 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
-                ],
-                "type": "object"
-              },
-              {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
-                "properties": {
-                  "attack_ms": {
-                    "default": 10,
-                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "audio": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/BusId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
-                  },
-                  "audio_source": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/SourceId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
-                  },
-                  "ceiling_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
-                  },
-                  "curve": {
-                    "$ref": "#/$defs/MotionCurve",
-                    "default": "linear",
-                    "description": "How the envelope is bent. Default `linear`."
-                  },
-                  "floor_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": -60.0,
-                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
-                  },
-                  "from": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
-                  },
-                  "high_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
-                  },
-                  "kind": {
-                    "const": "audio",
-                    "type": "string"
-                  },
-                  "low_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
-                  },
-                  "measure": {
-                    "$ref": "#/$defs/MotionMeasure",
-                    "default": "level",
-                    "description": "What it measures. Default `level`."
-                  },
-                  "release_ms": {
-                    "default": 250,
-                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "to": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 1.0,
-                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
-                  }
-                },
-                "required": [
-                  "kind"
                 ],
                 "type": "object"
               }
@@ -11904,7 +11784,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -12235,6 +12115,116 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "locked"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
                 ],
                 "type": "object"
               },
@@ -12909,6 +12899,93 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.show",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Hides an item with its own `disappear` effect (0.80, ADR-0101): `item.show`'s\nopposite, with the same rules. Hiding an item already hidden succeeds and changes\nnothing.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.hide",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Shows the item if that placement hides it, else hides it (0.80, ADR-0101), as\n`item.show` and `item.hide` do. In a keyframe scene, the placement's visibility is\nthe keyframe's override if it has one, else the item's own. An action takes no\n`expected_rev` or idempotency key, so a retried toggle flips twice: a caller that\nmay retry sends `item.show` or `item.hide`, which are safe to repeat.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to show or hide."
+                  },
+                  "scene_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SceneId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "The scene whose placement of the item to change. See [`Edit::ItemSetVisible`]."
+                  },
+                  "type": {
+                    "const": "item.toggle",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Opens pairing for one more device (ADR-0044): the server draws a one-time\npairing code and answers with it, to this client only (a `result` of type\n`pairing.start`). A device that posts the code with a name to `POST\n/api/v1/pair` within 2 minutes gets its own device token. One code is open at a\ntime: a new `pairing.start` replaces the one open. A code is single-use and void\nafter 5 wrong attempts. The code never appears in a log, an event or any other\nanswer (R-SEC-001). Answered by the server that admits clients, not the engine:\na `Control` with no server in front fails with `unsupported`. Fails with\n`action_failed` when the server listens beyond loopback, since a device token\ntravels only over loopback or TLS and the server has no TLS yet.",
                 "properties": {
                   "type": {
@@ -13088,6 +13165,27 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "pack"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
                 ],
                 "type": "object"
               },
@@ -13648,7 +13746,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), and the placement edits that\nwrite each dropped override back.",
+                "description": "Removes an item from its scene. The source itself stays. Every keyframe scene\nwhose tree held the item loses its override of it, and of the items of a group\nit was the last path to, reported in the batch result's `dropped_overrides`\n(ADR-0040 §1). Inverse: `item.add` with\nthe removed item's scene, ID and source, its placement in the field matching its\nform (`transform` or `geometry`), and its opacity and blend where they differ from\nthe defaults, then `item.reorder` to its old stacking position (unless it was on\ntop), `item.set_crop` if it was cropped, `item.set_visible` if it was hidden,\n`item.set_transition` if its transition settings were not the default,\n`item.set_locked` if it was locked (since 0.71), `item.set_effects_space` if its\neffects run in canvas space (since 0.76), and the placement edits that write each\ndropped override back.",
                 "properties": {
                   "item_id": {
                     "$ref": "#/$defs/ItemId",
@@ -15274,6 +15372,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets where an item's effects run (ADR-0106, since 0.76): over its box before it is\nplaced (`box`, the default), or over the canvas after it is placed (`canvas`), so\na mask or a gradient lines up with the canvas however the item is moved, scaled,\nturned or flipped. Like a lock, it belongs to the item, so it takes no `scene_id`\nand a keyframe doesn't override it; a keyframe's overridden effects run in the\nitem's space. Items are added with `box`. Inverse: `item.set_effects_space` with\nthe previous value.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item to change."
+                  },
+                  "space": {
+                    "$ref": "#/$defs/EffectsSpace",
+                    "description": "Where its effects run."
+                  },
+                  "type": {
+                    "const": "item.set_effects_space",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "item_id",
+                  "space"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Changes some of an audio source's settings (ADR-0028): the fields sent change,\nthe others keep their values, and sending none is `invalid_argument`. A source\nwithout audio is `invalid_argument` on `source_id`. A `scene` source has no fader\nor mute of its own, so `gain_db` or `muted` on one is `invalid_argument`, and so\nis a gain outside −100 to +24 dB. Inverse: `source.set_audio`\nwith the previous values of the fields sent.",
                 "properties": {
                   "enabled": {
@@ -15509,6 +15630,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "EffectsSpace": {
+            "description": "Where an item's effects run (ADR-0106, since 0.76).",
+            "oneOf": [
+              {
+                "const": "box",
+                "description": "Over the item's cropped, fitted box, in its own frame, before it is placed\n(ADR-0065 §5): an effect turns, scales and flips with its item.",
+                "type": "string"
+              },
+              {
+                "const": "canvas",
+                "description": "Over the canvas, after the item is placed: the item is drawn where it is on a\ntransparent canvas-sized layer, the effects run over that layer, and the layer is\ndrawn over the scene with the item's opacity and blend. A canvas-sized mask\nlines up with the canvas whatever the item's transform.",
+                "type": "string"
+              }
+            ]
+          },
           "EncoderProfile": {
             "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
             "properties": {
@@ -15599,7 +15735,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a reference.",
+                "description": "The master stage's chains, which apply to everything leaving JStream: every\noutput, after the bus it takes (ADR-0080 §1). Not the `master` bus, whose\nfader feeds it. Its audio chain runs once per block on each bus that feeds an\noutput, and monitoring hears the bus before it. Its video chain (since 0.60)\nruns once per frame on each mix an output draws, at the canvas size; the\nediting canvas, previews and `video.snapshot` show the mix before it. Its\nfilters can't hold a scene, source or bus reference; from 0.79 they may name a\nfile (an asset), as an output's may.",
                 "properties": {
                   "type": {
                     "const": "master",
@@ -16015,56 +16151,6 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
-          "MotionCurve": {
-            "description": "How an `audio` modifier bends its 0 to 1 envelope before mapping it onto its range.\nNone overshoots (since 0.84).",
-            "oneOf": [
-              {
-                "const": "linear",
-                "description": "As it is.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in",
-                "description": "Cubic, slow at first: quiet passages stay low and only loud ones lift.",
-                "type": "string"
-              },
-              {
-                "const": "ease_out",
-                "description": "Cubic, fast at first: quiet passages already show.",
-                "type": "string"
-              },
-              {
-                "const": "ease_in_out",
-                "description": "Cubic at both ends.",
-                "type": "string"
-              }
-            ]
-          },
-          "MotionMeasure": {
-            "description": "What an `audio` modifier measures of what it hears (since 0.84).",
-            "oneOf": [
-              {
-                "const": "level",
-                "description": "The RMS level of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "peak",
-                "description": "The peak absolute sample of the latest window.",
-                "type": "string"
-              },
-              {
-                "const": "onset",
-                "description": "A jump of the level above its recent average: 1 on the jump, else 0.",
-                "type": "string"
-              },
-              {
-                "const": "band",
-                "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
-                "type": "string"
-              }
-            ]
-          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -16167,107 +16253,6 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "kind",
                   "rate_per_s"
-                ],
-                "type": "object"
-              },
-              {
-                "description": "Follows a measure of a bus or a source (ADR-0100, since 0.84): the measure in dBFS from\n`floor_db` to `ceiling_db` is mapped onto 0 to 1 (an onset as it is), followed with\n`attack_ms` and `release_ms`, bent by `curve`, and mapped onto `from..to`. Silence\nis `from`. It hears what a `spectrum` source with the same `audio` and\n`audio_source` would draw, and silence while that is silent.",
-                "properties": {
-                  "attack_ms": {
-                    "default": 10,
-                    "description": "How fast it rises, in milliseconds, `0..=10000`. Default 10.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "audio": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/BusId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "The bus it hears, after its fader. Omitted for the program mix: the master\nafter its filters, as the outputs hear it."
-                  },
-                  "audio_source": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/SourceId"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A source to hear instead of the bus: that source after its own filters,\nfader, mute and follow. Omitted to hear the bus."
-                  },
-                  "ceiling_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "The level, in dBFS, that maps to 1: above `floor_db` and at most 0. Default 0."
-                  },
-                  "curve": {
-                    "$ref": "#/$defs/MotionCurve",
-                    "default": "linear",
-                    "description": "How the envelope is bent. Default `linear`."
-                  },
-                  "floor_db": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": -60.0,
-                    "description": "The level, in dBFS, that maps to 0: at least -90 and below `ceiling_db`.\nDefault -60."
-                  },
-                  "from": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 0.0,
-                    "description": "Its value at silence, in the property's unit, within `-100000..=100000`.\nDefault 0."
-                  },
-                  "high_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's highest frequency, in hertz, above `low_hz` and at most\n20000. Only with `band`."
-                  },
-                  "kind": {
-                    "const": "audio",
-                    "type": "string"
-                  },
-                  "low_hz": {
-                    "anyOf": [
-                      {
-                        "$ref": "#/$defs/Finite32"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "A `band` measure's lowest frequency, in hertz, `20..=20000`. Only with `band`."
-                  },
-                  "measure": {
-                    "$ref": "#/$defs/MotionMeasure",
-                    "default": "level",
-                    "description": "What it measures. Default `level`."
-                  },
-                  "release_ms": {
-                    "default": 250,
-                    "description": "How fast it falls, in milliseconds, `0..=10000`. Default 250.",
-                    "format": "uint32",
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "to": {
-                    "$ref": "#/$defs/Finite32",
-                    "default": 1.0,
-                    "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
-                  }
-                },
-                "required": [
-                  "kind"
                 ],
                 "type": "object"
               }
@@ -16722,11 +16707,26 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -17995,11 +17995,26 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "integer"
           },
           "SceneCamera": {
-            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, and omitted\n`depth_sort` `true`, which is not written.",
+            "description": "A scene's camera (ADR-0094): where it is, what it looks at, and how wide it sees.\n\nA scene with a camera is a **3D scene**: every item in it is placed in the scene's\nspace by its geometry and seen through the camera, and its own `perspective_px` is\nignored. On the wire, omitted `fov_deg` is 45, omitted `roll_deg` 0, omitted\n`depth_sort` `true` and omitted `blur_px` 0, neither of which is written, and omitted\n`focus_px` no depth of field.",
             "properties": {
+              "blur_px": {
+                "$ref": "#/$defs/Finite32",
+                "description": "How soft focus gets: the blur radius, in canvas pixels, of a point infinitely far\nbehind the focus plane, from 0 to 64. With `focus_px`, the camera has a depth of\nfield when this is above 0. Default 0 (ADR-0108)."
+              },
               "depth_sort": {
                 "description": "Whether items draw far to near, by the depth of their box centre along the\nviewing axis, with stacking order breaking ties. `false` keeps stacking order.\nDefault `true`.",
                 "type": "boolean"
+              },
+              "focus_px": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Finite32"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The distance along the viewing axis, from the camera, of the plane in focus, in\nscene pixels: above 0 and at most the drawable distance. Absent, everything is in\nfocus (ADR-0108)."
               },
               "fov_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -19365,6 +19380,71 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "ui_settings"
+    },
+    {
+      "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `values` operation: set `op.type` to one of `values.set` (action), `values.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `values` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Sets one shared value (0.78, ADR-0102 decision 7), or removes it when `value` is\n`null` or left out. Shared values are named JSON values the engine holds for pages and agents\nto read: never saved, never `rev`, and not an edit, so a value that changes often\nfills no undo history. Every client gets `values.changed` when it changes; setting\nthe value a name already has, or removing a name that has none, changes nothing\nand sends nothing. Fails with `invalid_argument` at `name` for a name outside the\nrules (dotted segments of `a`-`z`, `0`-`9` and `_`, at most 64 bytes), at `value`\nfor a value over 16 KiB as compact JSON, and at `name` when the store already\nholds 256 names and this is a new one.",
+                "properties": {
+                  "name": {
+                    "description": "The value's name, such as `status.text`.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "values.set",
+                    "type": "string"
+                  },
+                  "value": {
+                    "description": "The value. `null`, or leaving it out, removes the value. Inside a value, `null`\nis an ordinary JSON value."
+                  }
+                },
+                "required": [
+                  "type",
+                  "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the shared values (0.78, ADR-0102 decision 7), ordered by name: every one,\nor with `prefix`, the value named `prefix` and every value below it (`status`\ncovers `status` and `status.text`). Shared values are not collection state, so\nthe result carries no `rev`.",
+                "properties": {
+                  "prefix": {
+                    "description": "Only this name and the names below it. Omitted for every value.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "values.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "values"
     },
     {
       "annotations": {

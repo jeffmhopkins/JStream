@@ -388,6 +388,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `restart_on_show` (live, default off) reloads the page each time the program shows it
   again (`show`), so an HTML graphic or stinger plays its entrance every time. It is
   transparent while it reloads, never the end of its previous run.
+  While no mix draws the source (`set_drawn(false)`) its page is hidden
+  (`BrowserPage::set_hidden`), so it stops painting and its animation frames stop; its
+  scripts and audio go on, throttled as a background tab's. Its frames keep the last
+  paint until it is drawn again (#1071).
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as

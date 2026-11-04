@@ -90,6 +90,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
+| `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
 | `output list` | query `output.list` |
 | `output status <id>` | query `output.status` |
 | `video snapshot` | query `video.snapshot` |
@@ -143,6 +144,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `item.set_source <item-id> <source-id>` switches an item to another source.
   `item.set_locked <item-id> true|false` locks or unlocks an item's canvas box
   (protocol 0.71).
+  `item.set_effects_space <item-id> box|canvas` sets whether an item's effects run over
+  its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..1>` and `item.set_blend <item-id> <mode>` set an
   item's opacity and blend mode; the engine draws every mode (protocol 0.47), and
   `normal_srgb` and `additive_srgb` (0.75) blend as a browser does.

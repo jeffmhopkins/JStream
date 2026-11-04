@@ -446,9 +446,16 @@ pub(crate) struct Chains {
     /// [`GpuKey::Mixed`] once its master chain ran, and each output's chain output, so
     /// a mix two outputs draw at different sizes is composited and filtered once.
     staged: BTreeSet<GpuKey>,
+    /// The scene layers the chains' passes drew in the frame `ran` names, which a mix
+    /// that nests the same scene at the same depth reads instead of drawing it again
+    /// (#1070).
+    drawn: BTreeSet<GpuKey>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
+    /// How many mix passes read a layer [`Self::drawn`] holds, for tests.
+    #[cfg(test)]
+    pub(crate) reused: std::sync::atomic::AtomicUsize,
 }
 
 impl Chains {
@@ -478,6 +485,7 @@ impl Chains {
         }
         self.failed.clear();
         self.staged.clear();
+        self.drawn.clear();
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -663,6 +671,23 @@ impl Chains {
     }
 
     /// Records that `owner`'s effects layer drew, so a later failure logs again.
+    /// Records that the chains' passes drew scene layer `key` this frame.
+    pub(crate) fn drew_layer(&mut self, key: &GpuKey) {
+        self.drawn.insert(key.clone());
+    }
+
+    /// Whether the chains' passes drew scene layer `key` this frame, so a mix's pass
+    /// for it reads that layer as it is instead of drawing it again.
+    pub(crate) fn reuse(&self, key: &GpuKey) -> bool {
+        let drawn = self.drawn.contains(key);
+        #[cfg(test)]
+        if drawn {
+            self.reused
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        drawn
+    }
+
     pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
         self.box_warned.remove(owner);
     }
@@ -2436,6 +2461,73 @@ mod tests {
         );
     }
 
+    /// `cam` in the left half of the canvas, flipped upside down, with a vignette on the
+    /// item. In box space the vignette is the box's ellipse; with its effects in canvas
+    /// space (ADR-0106) it is drawn over the placed item, so it is the canvas's ellipse,
+    /// whatever the item's place and flip, and the right half stays clear.
+    #[test]
+    fn golden_a_vignette_in_canvas_space_is_the_canvas() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(16.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+        geometry.flip_v = true;
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry,
+                },
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BWWWWWWB........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWB........
+            BWWWWWWB........
+            ",
+            "in box space the ellipse is the box's",
+        );
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("cam"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            }],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            BBWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            BWWWWWWW........
+            BBBWWWWW........
+            ",
+            "in canvas space the ellipse is the canvas's, cut to the item",
+        );
+    }
+
     /// A `color_correction` filter `id` multiplying by `colour` on `owner`'s video chain.
     fn multiply(owner: FilterOwner, id: &str, colour: &str) -> Edit {
         Edit::FilterAdd {
@@ -2540,6 +2632,71 @@ mod tests {
             staged.stage_chain(&ChainOwner::Output(OutputId::new("vod"))),
             None,
             "a disabled filter is bypassed"
+        );
+    }
+
+    /// A LUT on the master stage grades every output's frame, and one on an output's
+    /// own chain grades that output's after it, each once its table is loaded; the
+    /// editing canvas shows the mix before them.
+    #[test]
+    fn the_output_stage_reads_its_filters_assets() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let lut: Settings = [(
+            "lut",
+            serde_json::json!({"type": "asset", "root": "app", "path": "invert.cube"}),
+        )]
+        .into_iter()
+        .collect();
+        let key = filter_assets::wanted("apply_lut", &lut).expect("a LUT");
+        let invert = |owner: FilterOwner, id: &str| Edit::FilterAdd {
+            owner,
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(id),
+            kind: "apply_lut".into(),
+            settings: lut.clone(),
+            enabled: None,
+            index: None,
+        };
+        let mut g = graph(&[]);
+        apply(
+            &mut g,
+            vec![
+                record("rec"),
+                invert(FilterOwner::Master, "m"),
+                invert(output("rec"), "o"),
+            ],
+        );
+        let rec = OutputId::new("rec");
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let mut views = |shot: &Shot| {
+            let canvas = shot.canvas().expect("canvas");
+            draw_views(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                shot,
+                &[
+                    (snapshot::View::default(), canvas),
+                    (snapshot::View::output(None, None), canvas),
+                    (snapshot::View::output(None, Some(&rec)), canvas),
+                ],
+            )
+        };
+        assert_eq!(
+            views(&shot(&g)),
+            [WHITE, WHITE, WHITE],
+            "no table yet: passed through"
+        );
+        let table = Arc::new(FilterAsset {
+            version: 1,
+            loaded: Loaded::Lut(Lut::parse_cube(INVERT).expect("cube")),
+        });
+        let black = [0, 0, 0, 255];
+        assert_eq!(
+            views(&shot_with(&g, &FilterAssets::from([(key, table)]))),
+            [WHITE, black, WHITE],
+            "the master inverts every output; rec's own inverts it back"
         );
     }
 

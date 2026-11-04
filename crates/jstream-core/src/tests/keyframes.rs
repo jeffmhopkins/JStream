@@ -1305,3 +1305,48 @@ fn an_audio_modifier_follows_the_program_mix_and_reads_silence_until_heard() {
         "k shows a1's own"
     );
 }
+
+/// An item whose effects run over the canvas (ADR-0106) moves inside its layer, which
+/// stays flat over the canvas: in a switch its tracks, which carry that layer, don't
+/// drift with its motion (#1125 review B8, N16).
+#[test]
+fn a_canvas_space_items_motion_leaves_its_layer_over_the_canvas() {
+    use jstream_protocol::MotionClock::Engine as Clock;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::FilterAdd {
+                owner: jstream_protocol::FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                chain: jstream_protocol::FilterChain::Video,
+                filter_id: jstream_protocol::FilterId::new("sharp"),
+                kind: "sharpen".into(),
+                settings: Settings::default(),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("a1"),
+                space: jstream_protocol::EffectsSpace::Canvas,
+            },
+            drift_x("a1", None, 100.0, Clock),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let shot = engine.render_hub().load();
+    let xs = |at: f64| {
+        shot.shot()
+            .tracks_moved_at(200.0, secs(at))
+            .expect("a transition runs")
+            .iter()
+            .map(|end| end.map(|end| end.geometry.center.x.get()))
+            .collect::<Vec<_>>()
+    };
+    assert!(xs(1.0).iter().any(Option::is_some), "{:?}", xs(1.0));
+    assert_eq!(xs(1.0), xs(3.0), "the canvas layers stay where they are");
+}

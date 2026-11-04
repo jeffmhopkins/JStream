@@ -7,9 +7,9 @@
 
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey,
-    ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId,
-    SceneRole, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
+    Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
+    IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev,
+    RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -51,6 +51,9 @@ Commands:
                                    item, source and thread, as JSON (query profile.get)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
+  item show|hide|toggle <item-id> [--scene <scene-id>]
+                                   show or hide an item with its own effect (actions
+                                   item.show, item.hide, item.toggle)
   output list                      list the configured outputs (query output.list)
   output status <output-id>        report an output's state and whether its stream
                                    key is set (query output.status)
@@ -91,6 +94,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.move <item-id> <scene-id> <index>
   item.set_visible <item-id> true|false
   item.set_locked <item-id> true|false
+  item.set_effects_space <item-id> box|canvas
   item.set_source <item-id> <source-id>
   item.set_opacity <item-id> <0..1>
   item.set_blend <item-id> normal|additive|multiply|screen|overlay|darken|lighten
@@ -309,6 +313,19 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
         }),
+        ["item", verb @ ("show" | "hide" | "toggle"), id, rest @ ..] => {
+            let scene_id = match rest {
+                [] => None,
+                ["--scene", scene] => Some(SceneId::new(*scene)),
+                _ => return Err(usage(format!("wrong arguments for `item {verb}`"))),
+            };
+            let item_id = ItemId::new(*id);
+            Command::Action(match *verb {
+                "show" => Action::ItemShow { item_id, scene_id },
+                "hide" => Action::ItemHide { item_id, scene_id },
+                _ => Action::ItemToggle { item_id, scene_id },
+            })
+        }
         ["output", "status", id] => Command::Query(Query::OutputStatus {
             output_id: OutputId::new(*id),
         }),
@@ -425,10 +442,22 @@ fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
 fn arity(name: &str) -> Option<usize> {
     Some(match name {
         "scene.delete" | "source.delete" | "item.remove" | "output.delete" | "hotkey.clear" => 1,
-        "scene.create" | "scene.rename" | "scene.reorder" | "scene.set_role" | "source.rename"
-        | "item.reorder" | "item.set_visible" | "item.set_locked" | "item.set_source"
-        | "item.set_opacity" | "item.set_blend" | "output.create" | "output.set_target"
-        | "output.set_path" | "canvas.set_size" => 2,
+        "scene.create"
+        | "scene.rename"
+        | "scene.reorder"
+        | "scene.set_role"
+        | "source.rename"
+        | "item.reorder"
+        | "item.set_visible"
+        | "item.set_locked"
+        | "item.set_effects_space"
+        | "item.set_source"
+        | "item.set_opacity"
+        | "item.set_blend"
+        | "output.create"
+        | "output.set_target"
+        | "output.set_path"
+        | "canvas.set_size" => 2,
         "source.create" | "source.duplicate" | "item.add" | "item.move" | "hotkey.set" => 3,
         "item.set_crop" => 5,
         "item.set_transform" => 6,
@@ -573,6 +602,18 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 other => {
                     return Err(usage(format!(
                         "`item.set_locked` takes `true` or `false`, not `{other}`"
+                    )));
+                }
+            },
+        },
+        ("item.set_effects_space", [id, space]) => Edit::ItemSetEffectsSpace {
+            item_id: ItemId::new(*id),
+            space: match *space {
+                "box" => EffectsSpace::Box,
+                "canvas" => EffectsSpace::Canvas,
+                other => {
+                    return Err(usage(format!(
+                        "`item.set_effects_space` takes `box` or `canvas`, not `{other}`"
                     )));
                 }
             },
@@ -759,9 +800,9 @@ mod tests {
     use super::{Command, Connection, Invocation, parse};
     use crate::exit::CliError;
     use jstream_control::protocol::{
-        Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, Finite32, FitMode, IdempotencyKey,
-        ItemId, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole, SourceId,
-        SourceKind, TransitionPresetId,
+        Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
+        IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole,
+        SourceId, SourceKind, TransitionPresetId,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -882,6 +923,28 @@ mod tests {
                 scene_id: SceneId::new("s"),
             })
         );
+        assert_eq!(
+            ok(&["item", "toggle", "i1"]).command,
+            Command::Action(Action::ItemToggle {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+            })
+        );
+        assert_eq!(
+            ok(&["item", "show", "i1", "--scene", "k"]).command,
+            Command::Action(Action::ItemShow {
+                item_id: ItemId::new("i1"),
+                scene_id: Some(SceneId::new("k")),
+            })
+        );
+        assert_eq!(
+            ok(&["item", "hide", "i1"]).command,
+            Command::Action(Action::ItemHide {
+                item_id: ItemId::new("i1"),
+                scene_id: None,
+            })
+        );
+        assert!(err(&["item", "hide", "i1", "k"]).starts_with("wrong arguments for `"));
         assert_eq!(
             ok(&["studio", "get"]).command,
             Command::Query(Query::StudioGet)
@@ -1480,6 +1543,21 @@ mod tests {
             [Edit::ItemSetLocked {
                 item_id: ItemId::new("i"),
                 locked: true,
+            }]
+        );
+        assert_eq!(
+            err(&["edit", "item.set_effects_space", "i", "world"]),
+            "`item.set_effects_space` takes `box` or `canvas`, not `world`"
+        );
+        let Command::Edit(batch) = ok(&["edit", "item.set_effects_space", "i", "canvas"]).command
+        else {
+            panic!("not an edit");
+        };
+        assert_eq!(
+            batch.edits,
+            [Edit::ItemSetEffectsSpace {
+                item_id: ItemId::new("i"),
+                space: EffectsSpace::Canvas,
             }]
         );
         assert_eq!(

@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#design, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion
 
 #![forbid(unsafe_code)]
 
@@ -37,6 +37,7 @@ mod query;
 mod schema;
 mod settings;
 mod transition;
+mod values;
 mod version;
 mod youtube;
 
@@ -47,8 +48,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, ItemTransform, MAX_LEGACY_SCALE,
-    SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
+    MAX_LEGACY_SCALE, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, EncoderProfile, EncoderProfileInfo, EncoderSessionInfo,
@@ -66,9 +67,9 @@ pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_F
 pub use finite::Finite32;
 pub use geometry::{
     CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
-    FitMode, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_DRAWN_PX,
-    MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm, ProjectedQuad,
-    SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
+    FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_BLUR_PX,
+    MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm,
+    ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
@@ -126,6 +127,10 @@ pub use transition::{
     MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
     TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
     check_preset_timing, initial_preset,
+};
+pub use values::{
+    MAX_VALUE_BYTES, MAX_VALUE_NAME_BYTES, MAX_VALUES, SharedValue, check_value_name,
+    check_value_size, prefix_covers,
 };
 pub use version::{PROTOCOL_VERSION, ProtocolVersion};
 pub use youtube::{

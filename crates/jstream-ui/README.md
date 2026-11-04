@@ -83,7 +83,9 @@ Contents ([Design](#design) explains the choices):
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
-  press, its label and the edits that bind a chord to a scene, tested natively.
+  press, its label and the edits that bind a chord to an action (a scene's
+  `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
+  `Collection::chords_for` lists a row's chords), tested natively.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -319,7 +321,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
   row, the scene) into the page's own clipboard (`Clipboard` context), and Ctrl+V,
   Paste or Paste scene sends one batch that places the copied items' sources again,
-  with their placement settings, lock and effects, or duplicates the copied scene. As OBS's
+  with their placement settings, lock, effects and effects space, or duplicates the copied scene. As OBS's
   does, the item menu also copies the primary item's source's filters (`FilterClip`)
   and pastes them onto each selected item's source, after its own or replacing them,
   chain by chain (a chain the clip has nothing for keeps its own), and copies the
@@ -420,7 +422,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and its curve, ADR-0100), that kind's fields, when its time starts (in step, or when
   shown; not for audio), an On check and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099) and Properties, the source's settings form. A scene shows its object
+  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
+  source's settings form. A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -525,7 +531,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
-  one (`camera_start`). A note warns when items already have depth or angles (`has_3d_items`).
+  one (`camera_start`). A note warns when items already have depth or angles
+  (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
+  on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
+  on selection (`focus_on`) sets the focus to the selected item's distance along the
+  view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   Duplicate scene copies the scene's options and camera with it. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
@@ -577,8 +587,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
   virtual camera, which has no sound, has a video chain only. The Add filter dialog
-  won't add a kind whose settings name a scene, a source, a bus or a file there
-  (`refers`: the engine refuses those references yet), and, for an output whose video
+  won't add a kind whose settings name a scene, a source or a bus there (`refers`:
+  the engine refuses those references yet), though one that names a file, such as
+  Apply LUT, goes on them as on any chain, and, for an output whose video
   chain is empty, reads `output.status` and states what its first video filter costs
   (`first_video_cost`, ADR-0080 §3): its own GPU pass and encoder session, with the
   encoder sessions in use now, or for the virtual camera, which opens no encoder
@@ -599,7 +610,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `effects_owner`): the item's own until a change there, which the engine applies to a
   copy of them, gives the keyframe its own; a note says which, and Follow the item sends
   `item.clear_override` of `effects`. Their Uses the scene picker leaves out the scenes
-  whose picture holds the keyframe. The Add filter dialog lists the vignette under Style.
+  whose picture holds the keyframe. Under an item's effects, an "Over the canvas" check
+  (`EffectsSpaceCheck`) sends `item.set_effects_space`
+  ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
+  after the item is placed. It isn't shown under a keyframe's effects, since the space
+  belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
 - **The shell** is the header bar over the workspace. A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
@@ -1040,9 +1055,11 @@ browser, and `mod.rs` is the component.
   silent, and an `undo_conflict` is explained in the problem bar.
 - **3D scenes** (`camera.rs`, [ADR-0094](../../docs/adr/0094-scene-cameras.md)). A
   scene with a camera (`Layout.camera`: its own, or a keyframe's override or else its
-  parent's, from `Collection::camera_of`) draws each outline through the camera with
-  `project_seen`, and a press hits the box the engine draws on top: the nearest along
-  the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  parent's, from `Collection::camera_of`) draws each outline through the camera as the
+  compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
+  partly behind the camera is outlined, labelled and hit by the part in front of it
+  (`camera::polygon`, #1054). A press hits the box the engine draws on top: the nearest
+  along the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
   the pointer, and nothing snaps; a group moves by the delta on the first selected
@@ -1056,7 +1073,7 @@ browser, and `mod.rs` is the component.
   The drag keeps the scene it started on (`Action::Orbit.scene`), and the overlay keeps
   the dragged camera with it (`camera::Preview`) until the collection has it, showing it
   in no other scene; a drag that ends with another scene shown is dropped, not
-  committed. In place of the
+  committed (`Preview::to_commit`). In place of the
   selection chrome, a pill reads the camera's position and distance to its target.
 - **Styles** are classes in `style.css`. The hosts' Content Security Policy has no
   `'unsafe-inline'` for styles, so a `style` attribute would be refused, static or set at

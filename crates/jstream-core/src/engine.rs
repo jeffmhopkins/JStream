@@ -40,6 +40,7 @@ use crate::snapshot::{
 };
 use crate::studio::{self, Studio};
 use crate::transition;
+use crate::values::SharedValues;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
@@ -3018,6 +3019,9 @@ struct State {
     stale_keys: BTreeSet<OutputId>,
     /// Which scene is on program. Runtime state, like `outputs`: not part of `rev`.
     studio: Studio,
+    /// The shared values (ADR-0102 decision 7). Runtime state, like `studio`: never
+    /// saved and not part of `rev`.
+    values: SharedValues,
     /// Forgets the capture backend's grant for each deleted source, once there are
     /// backends ([`ForgetSources`]).
     forget: Option<ForgetSources>,
@@ -3377,6 +3381,32 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::ItemShow { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, Some(true), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ItemHide { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, Some(false), wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ItemToggle { item_id, scene_id } => {
+                self.set_shown(client_id, request_id, item_id, scene_id, None, wake)?;
+                return Ok(CallResult::action());
+            }
+            Action::ValuesSet { name, value } => {
+                if self.values.set(&name, value.clone())? {
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name,
+                            value,
+                            client_id: client_id.clone(),
+                            request_id: Some(request_id.clone()),
+                        },
+                        wake,
+                    );
+                }
+                return Ok(CallResult::action());
+            }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }) => {
@@ -3464,6 +3494,9 @@ impl State {
                     entries: self.activity.list(*after_seq, *limit),
                 },
                 Query::PrivacyGet => QueryResult::PrivacyGet { on: false },
+                Query::ValuesList { prefix } => QueryResult::ValuesList {
+                    values: self.values.list(prefix.as_deref()),
+                },
                 Query::SourceSizes => QueryResult::SourceSizes {
                     sources: self
                         .graph
@@ -3568,6 +3601,168 @@ impl State {
         // The scene now on program can show a source no plan reached before.
         self.sync_sizes(wake);
         Ok(())
+    }
+
+    /// `item.show`, `item.hide` and `item.toggle` (ADR-0101): sets the placement's
+    /// visibility to `visible`, or to the opposite of what it is for `None`, as
+    /// `item.set_visible` would. The change moves `rev` on and is logged for undo
+    /// conflicts, but makes no undo step: an action is never undone (ADR-0024 §5). When
+    /// the program scene's tree holds the item, the change plays as a Move from what is
+    /// on screen to the program scene, pairing every item with itself, so only this
+    /// item moves: it appears or disappears with its own effect, over the default
+    /// preset's duration and easing ([`item_run`]). Showing a shown item, or hiding a
+    /// hidden one, changes nothing.
+    fn set_shown(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        item_id: jstream_protocol::ItemId,
+        scene_id: Option<SceneId>,
+        visible: Option<bool>,
+        wake: &mut Vec<Waker>,
+    ) -> Result<(), ProtocolError> {
+        let state = self.graph.state();
+        let current = state
+            .visible_in(&item_id, scene_id.as_ref())
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Item,
+                id: item_id.to_string(),
+            })?;
+        let visible = visible.unwrap_or(!current);
+        let edits = vec![Edit::ItemSetVisible {
+            item_id: item_id.clone(),
+            scene_id,
+            visible,
+        }];
+        let running = self.outputs.running();
+        if visible == current {
+            // Nothing to change, but a scene the edit would refuse is refused here too.
+            self.graph
+                .clone()
+                .apply_with_running(&edits, None, &running)
+                .map_err(action_field)?;
+            return Ok(());
+        }
+        let now = self.live.now();
+        let program = self
+            .studio
+            .program()
+            .filter(|program| {
+                let state = self.graph.state();
+                state
+                    .tree_items(state.family_of(program))
+                    .contains(&item_id)
+            })
+            .cloned();
+        // An item that would show or go at once, with no delay, needs no run.
+        let settings = self
+            .graph
+            .state()
+            .item(&item_id)
+            .map(|(_, item)| *item.transition())
+            .unwrap_or_default();
+        let effect = if visible {
+            settings.appear
+        } else {
+            settings.disappear
+        };
+        let run = program.as_ref().and_then(|program| {
+            let run = item_run(&self.graph).filter(|run| {
+                settings.delay_ms > 0
+                    || effect.resolve(run.unmatched) != jstream_protocol::TransitionEffect::None
+            })?;
+            Some((program.clone(), run))
+        });
+        // What is on screen before the change, which the item's effect starts from, and
+        // whether program showed the item then.
+        let from = run.as_ref().map(|(program, run)| {
+            let shown = self.graph.state().visible_in(&item_id, Some(program));
+            (self.screen_now(program, run, now), shown)
+        });
+        let applied = self
+            .graph
+            .apply_with_running(&edits, None, &running)
+            .map_err(action_field)?;
+        self.history
+            .record_batch(client_id, applied.rev, applied.touched, Vec::new());
+        // A placement program doesn't draw (another keyframe's, or the item's own under
+        // a program keyframe that overrides it) changes nothing there, so it starts no
+        // run, and a transition in flight keeps its own.
+        let from = from.and_then(|(from, shown)| {
+            let program = &run.as_ref()?.0;
+            (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
+        });
+        if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
+            let to_camera = transition::camera_of(&self.graph, &program);
+            let from_camera = shared.unwrap_or(None);
+            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                run.pairs = false;
+            }
+            self.studio.switch(
+                program.clone(),
+                Some(transition::Running {
+                    from,
+                    to: program,
+                    start: now,
+                    run,
+                    by_item: true,
+                    from_camera,
+                }),
+            );
+        }
+        self.changed(client_id, request_id, &edits, applied.rev, None, wake);
+        Ok(())
+    }
+
+    /// What is on screen at `now` with `program` on program, as a transition that
+    /// starts then would start from it, and the one camera it was all seen through
+    /// (`Err` when there are several): the running transition's items, or the program
+    /// scene's, taken as a Move within its family holds them (`run` only gives the
+    /// probe its timing).
+    fn screen_now(
+        &mut self,
+        program: &SceneId,
+        run: &transition::Run,
+        now: jstream_media::MediaTime,
+    ) -> (
+        transition::From,
+        Result<Option<jstream_protocol::SceneCamera>, ()>,
+    ) {
+        let probe = transition::Running {
+            from: transition::From::Scene(program.clone()),
+            to: program.clone(),
+            start: now,
+            run: transition::Run {
+                pairs: true,
+                ..run.clone()
+            },
+            by_item: true,
+            from_camera: transition::camera_of(&self.graph, program),
+        };
+        let Self {
+            graph,
+            frames,
+            frame_versions,
+            live,
+            studio,
+            ..
+        } = self;
+        let running = studio.running().unwrap_or(&probe);
+        let assets = live.filter_assets();
+        // Not a plan of the program: what it looks at is not reached, so a source the
+        // next plan shows again still restarts.
+        let visuals = snapshot::on_screen(
+            graph,
+            running,
+            now,
+            &mut |id| match frames.get(id) {
+                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                None => live.look_quiet(id, now, frame_versions),
+            },
+            &assets,
+        );
+        let shared = transition::shared_camera(&visuals);
+        (transition::From::OnScreen(visuals.into()), shared)
     }
 
     /// `studio.changed` with the scenes now on program and preview, caused by
@@ -3769,6 +3964,8 @@ impl State {
         if !same {
             *source_shots = Arc::new(shots);
         }
+        // Every mix and preview has looked at what it draws: the rest can rest.
+        live.rest_undrawn();
         live.wake_at(wake);
         live.meters().planned(started.elapsed());
         planning.end_ms
@@ -4274,6 +4471,54 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         }),
         primary: info.primary,
     })
+}
+
+/// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves
+/// with (ADR-0101): a Move over the default preset's duration and easing, in which
+/// `inherit` takes the preset's `unmatched`, or no animation when its kind has none (a
+/// `cut`, a `stinger`, a pack's). `None` when the preset lasts no time.
+fn item_run(graph: &Graph) -> Option<transition::Run> {
+    let state = graph.state();
+    let preset_id = state.default_preset().clone();
+    let preset = state.preset(&preset_id)?;
+    if preset.duration_ms() == 0 {
+        return None;
+    }
+    let unmatched = match preset.kind() {
+        jstream_protocol::FADE | jstream_protocol::MOVE => {
+            jstream_protocol::TransitionEffect::from_setting(preset.settings().get("unmatched"))
+        }
+        _ => jstream_protocol::TransitionEffect::None,
+    };
+    Some(transition::Run {
+        preset_id,
+        pairs: true,
+        duration_ms: preset.duration_ms(),
+        easing: preset.easing(),
+        unmatched,
+        stagger_ms: 0,
+        stinger: None,
+    })
+}
+
+/// An error from the `item.set_visible` an item action applies, with its field named
+/// as the action's (`scene_id`, not `edits.0.scene_id`).
+fn action_field(error: ProtocolError) -> ProtocolError {
+    match error {
+        ProtocolError::InvalidArgument {
+            field,
+            reason,
+            blockers,
+        } => ProtocolError::InvalidArgument {
+            field: field
+                .strip_prefix("edits.0.")
+                .map(str::to_owned)
+                .unwrap_or(field),
+            reason,
+            blockers,
+        },
+        other => other,
+    }
 }
 
 /// A protocol variant added after this engine was written.

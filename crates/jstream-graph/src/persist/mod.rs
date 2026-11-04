@@ -16,12 +16,12 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EncoderProfile,
-    EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32, FolderId,
-    INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId, MotionModifier,
-    OutputId, OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TransitionPresetId,
-    VideoMix, VideoMixId,
+    Action, BlendMode, BusId, BusMonitor, Canvas, Chord, Crop, Easing, Edit, EffectsSpace,
+    EncoderProfile, EncoderProfileId, FilterChain, FilterId, FilterInfo, FilterOwner, Finite32,
+    FolderId, INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, LabelId,
+    MotionModifier, OutputId, OutputKind, ProtocolError, Rev, SceneCamera, SceneId, SceneMeta,
+    SceneOptions, SceneRole, Settings, SourceAudio, SourceId, SourceKind, SourceMeta,
+    TransitionPresetId, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -406,6 +406,10 @@ struct FileItem {
     /// are none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     motion: Vec<MotionModifier>,
+    /// Where its effects run (ADR-0106); omitted while `box`, so a collection with no
+    /// canvas-space item saves as it did before, with no schema bump.
+    #[serde(default, skip_serializing_if = "EffectsSpace::is_box")]
+    effects_space: EffectsSpace,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -635,6 +639,7 @@ impl Graph {
                                 transition: item.transition,
                                 locked: item.locked,
                                 motion: item.motion.clone(),
+                                effects_space: item.effects_space,
                             }
                         })
                         .collect(),
@@ -1139,11 +1144,20 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             }
             if !item.motion.is_empty() {
                 edits.push((
-                    object,
+                    object.clone(),
                     Edit::ItemSetMotion {
                         item_id: item.id.clone(),
                         scene_id: None,
                         motion: item.motion.clone(),
+                    },
+                ));
+            }
+            if !item.effects_space.is_box() {
+                edits.push((
+                    object,
+                    Edit::ItemSetEffectsSpace {
+                        item_id: item.id.clone(),
+                        space: item.effects_space,
                     },
                 ));
             }

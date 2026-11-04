@@ -53,6 +53,11 @@ pub(crate) struct Shape {
     /// from. Carried as integers from the item's crop, never recovered from its texture
     /// coordinates, which don't round-trip through `f32`. `None` for a 2D item.
     pub crop: Option<Region>,
+    /// The camera's depth of field in the shader's terms (ADR-0108): the focus distance
+    /// as a `w` (`focus / f`), the far blur in canvas pixels, and the largest blur any
+    /// fragment of the shape takes, the radius its vertices were pushed out by. `[0, 0,
+    /// 0]`, no blur, without one.
+    pub dof: [f32; 3],
 }
 
 impl Shape {
@@ -98,6 +103,7 @@ impl Shape {
             edges: [NO_EDGE; MAX_VERTICES],
             uv_bounds: NO_UV_BOUNDS,
             crop: None,
+            dof: [0.0, 0.0, 0.0],
         }
     }
 }
@@ -241,7 +247,10 @@ fn boxed(
     let mut corners = [[0.0; 2]; 4];
     let mut uvs = [[0.0; 2]; 4];
     for (i, (x, y)) in local.into_iter().enumerate() {
-        // As with the content above, an overflow draws nothing (#1046).
+        // A defence, not a path any test reaches: the corners are clipped to the box,
+        // whose own corners `check_drawable` placed finitely, and each step of `place`
+        // is monotonic in the corner, so a clipped corner can't overflow where the box's
+        // didn't. Were it to, it would draw nothing, as the content above does (#1046).
         corners[i] = match geometry.place(x, y) {
             Ok(Placed::At(point)) if point.x.is_finite() && point.y.is_finite() => {
                 [point.x, point.y]
@@ -274,9 +283,12 @@ fn crop_region(source_width: u32, source_height: u32, crop: ProtocolCrop) -> Reg
 }
 
 /// A 3D item (ADR-0050 decisions 1, 2 and 6): the drawn polygon, clipped to the box and
-/// the near plane, with its edge lines, and each vertex pushed out by [`PUSH_OUT`] along
-/// both its edges. The pushed point is mapped back into the plane, so its `w` and texture
-/// coordinate stay exact; where it can't be (past the near plane), the vertex stays.
+/// the near plane, with its edge lines, and every vertex pushed out along both its edges
+/// by [`PUSH_OUT`], or by the largest blur radius of the polygon's corners where the
+/// camera's depth of field blurs it more (ADR-0108 decision 4); `Shape.dof` carries that
+/// radius so the shader caps each fragment's blur at it. The pushed point is mapped back
+/// into the plane, so its `w` and texture coordinate stay exact; where it can't be (past
+/// the near plane), the vertex stays.
 fn drawn(
     geometry: ItemGeometry,
     view: Option<&CameraView>,
@@ -309,21 +321,45 @@ fn drawn(
         uv_bounds[2] = uv_bounds[2].max(corner.uv[0]);
         uv_bounds[3] = uv_bounds[3].max(corner.uv[1]);
     }
+    // Every vertex is pushed out by the shape's largest blur, and the shader caps each
+    // fragment's blur there. A plane's blur is largest at a corner, since
+    // `|D - focus| / D` is monotonic in `D` on each side of the focus and `D` across the
+    // polygon lies between its corners'. Past the polygon's edge, though, a fragment's
+    // `w` runs on beyond the corners', so uncapped its blur would outgrow the push and
+    // its soft edge would be cut where the pushed polygon ends.
+    let by = view.map_or(PUSH_OUT, |view| {
+        corners
+            .iter()
+            .map(|corner| view.blur_at(f64::from(corner.w) * f64::from(view.focal_px())))
+            .fold(PUSH_OUT, f32::max)
+    });
+    let focus = view.and_then(CameraView::focus);
+    let dof = match (focus, view) {
+        (Some(focus), Some(view)) => [focus.distance / view.focal_px(), focus.blur, by],
+        _ => [0.0, 0.0, 0.0],
+    };
     let mut vertices = [UNUSED; MAX_VERTICES];
     for (i, corner) in corners.iter().enumerate() {
-        let target = push_out(edges[(i + len - 1) % len], edges[i], corner);
-        // A pushed point that can't be mapped back through a camera keeps the vertex,
-        // as one past the near plane does.
-        let pushed = match geometry.unplace_seen(view, target) {
-            Ok(Some(local)) => match geometry.drawn_vertex_seen(view, content, local) {
-                Ok(pushed) => pushed,
+        let pushed_by = |by: f32| -> Result<Option<DrawnVertex>, RenderError> {
+            let target = push_out(edges[(i + len - 1) % len], edges[i], corner, by);
+            Ok(match geometry.unplace_seen(view, target) {
+                Ok(Some(local)) => match geometry.drawn_vertex_seen(view, content, local) {
+                    Ok(pushed) => pushed,
+                    Err(_) if view.is_some() => None,
+                    Err(err) => return Err(placement_error(err)),
+                },
+                Ok(None) => None,
                 Err(_) if view.is_some() => None,
                 Err(err) => return Err(placement_error(err)),
-            },
-            Ok(None) => None,
-            Err(_) if view.is_some() => None,
-            Err(err) => return Err(placement_error(err)),
+            })
         };
+        // A point pushed by a large blur that can't be mapped back (past the horizon) is
+        // pushed by a pixel instead, so it keeps its anti-aliasing band (#1122 review
+        // N5); one that still can't (past the near plane) keeps the vertex.
+        let mut pushed = pushed_by(by)?;
+        if pushed.is_none() && by > PUSH_OUT {
+            pushed = pushed_by(PUSH_OUT)?;
+        }
         vertices[i] = vertex(&pushed.unwrap_or(*corner));
     }
     Ok(Some(Shape {
@@ -332,6 +368,7 @@ fn drawn(
         edges,
         uv_bounds,
         crop: Some(crop),
+        dof,
     }))
 }
 
@@ -363,13 +400,12 @@ fn edge_lines(corners: &[DrawnVertex]) -> [[f32; 3]; MAX_VERTICES] {
     edges
 }
 
-/// Where the corner between edges `before` and `after` goes when both move out by
-/// [`PUSH_OUT`]: the two moved lines' crossing, at most `4 · PUSH_OUT` from the corner
-/// (a very sharp corner's miter is long), or the corner itself when the edges are
-/// parallel.
-fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex) -> CanvasPoint {
+/// Where the corner between edges `before` and `after` goes when both move out by `by`
+/// pixels: the two moved lines' crossing, at most `4 · by` from the corner (a very sharp
+/// corner's miter is long), or the corner itself when the edges are parallel.
+fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex, by: f32) -> CanvasPoint {
     let at = corner.canvas;
-    let (c0, c1) = (before[2] + PUSH_OUT, after[2] + PUSH_OUT);
+    let (c0, c1) = (before[2] + by, after[2] + by);
     let det = before[0] * after[1] - before[1] * after[0];
     if det.abs() < 1e-6 {
         return at;
@@ -378,7 +414,7 @@ fn push_out(before: [f32; 3], after: [f32; 3], corner: &DrawnVertex) -> CanvasPo
     let y = (-before[0] * c1 + after[0] * c0) / det;
     let (dx, dy) = (x - at.x, y - at.y);
     let len = (dx * dx + dy * dy).sqrt();
-    let cap = 4.0 * PUSH_OUT;
+    let cap = 4.0 * by;
     if len > cap {
         let s = cap / len;
         return CanvasPoint {
@@ -854,8 +890,53 @@ mod tests {
                 }
             }
         }
-        assert!(accepted > 5_000, "{accepted} accepted");
+        assert!(
+            accepted - neutral > 5_000,
+            "{accepted} accepted, {neutral} neutral"
+        );
         assert!(neutral > 5_000, "{neutral} neutral");
+    }
+
+    /// #1122 review N5: pushed out by a large blur, a floor's far corners near the horizon
+    /// can't be mapped back to the plane; they are pushed by a pixel instead, so they
+    /// keep their anti-aliasing band rather than stay where the polygon ends.
+    #[test]
+    fn a_push_that_misses_the_plane_falls_back_to_a_pixel() {
+        use jstream_protocol::{Canvas, SceneCamera, Vec3};
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let at = |x: f32, y: f32, z: f32| Vec3::new(x, y, z).expect("finite");
+        let camera = SceneCamera {
+            position: at(960.0, 500.0, 600.0),
+            target: at(960.0, 540.0, 0.0),
+            focus_px: Finite32::new(100.0),
+            blur_px: Finite32::new(64.0).expect("finite"),
+            ..SceneCamera::framing(canvas)
+        };
+        let view = camera.view(canvas).expect("a valid camera");
+        // A floor running from under the camera far toward the horizon.
+        let mut floor = ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(960.0, 560.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 60_000.0).expect("positive"),
+        )
+        .expect("geometry");
+        floor.tilt_deg = Finite32::new(90.0).expect("finite");
+        floor.depth_px = Finite32::new(-29_000.0).expect("finite");
+        let shape = super::shape_seen(64, 64, Placement::Geometry(floor), Crop::NONE, Some(&view))
+            .expect("a stored geometry never fails its frame")
+            .expect("the floor is drawn");
+        let len = shape.vertices().len();
+        for (i, v) in shape.vertices().iter().enumerate() {
+            let distance = |e: [f32; 3]| e[0] * v.canvas[0] + e[1] * v.canvas[1] + e[2];
+            let outside = distance(shape.edges[(i + len - 1) % len]).min(distance(shape.edges[i]));
+            assert!(
+                outside < -0.5,
+                "vertex {i} at {:?} isn't pushed out: {outside}",
+                v.canvas
+            );
+        }
     }
 
     /// #1046: a box with neutral 3D so large that its content overflows `f32` draws
