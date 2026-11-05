@@ -181,7 +181,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 | 1 | A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording | ⏳ planned: #1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar | #1205, #1217 |  |
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |
 | 2 | Pop-out projectors: the program, the preview or a scene in its own window or full screen on another monitor, at full quality and frame rate | ⏳ planned: #1199 merged; the Windows check is #1208 | #1208 | #1199 |
-| 3 | An Application Settings dialog: plugin management, Check for updates, a CLAP plugins page, project video settings, and one set of blend modes | ⏳ planned | #1207, #1210, #1212, #1192, #1230 |  |
+| 3 | An Application Settings dialog: plugin management, Check for updates, a CLAP plugins page, project video settings, and one set of blend modes | ⏳ planned: #1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open | #1207, #1210, #1212, #1192, #1230 | #1249 |
 | 4 | Save and load projects: File › New, Open, Save As and Open recent | ⏳ planned | #1218 |  |
 | 5 | A UI scrub of every panel, dialog and window, with a decluttered Inspector and Properties and Filters in one dialog | ⏳ planned | #1219, #1198, #1202, #1204, #1206 |  |
 |  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 |  |

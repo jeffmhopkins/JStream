@@ -119,6 +119,8 @@ title = "An Application Settings dialog: plugin management, Check for updates, a
 priority = 3
 status = "planned"
 issues = [1207, 1210, 1212, 1192, 1230]
+prs = [1249]
+note = "#1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open"
 
 [[target]]
 release = "alpha.5"

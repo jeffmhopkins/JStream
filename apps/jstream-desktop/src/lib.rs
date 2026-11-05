@@ -17,3 +17,4 @@ pub mod logs;
 #[cfg(windows)]
 pub mod shell;
 pub mod ui;
+pub mod updates;

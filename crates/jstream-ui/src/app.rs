@@ -279,6 +279,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
+            <crate::updates::LaunchNotice />
             {move || studio.problem.get().map(|problem| view! {
                 <div class="problem-bar" role="alert">
                     <span>{problem}</span>
