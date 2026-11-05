@@ -30,9 +30,9 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
-  Help menu (the project's pages, and About), the stats
+  Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
@@ -41,6 +41,14 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
+  built as with GitHub's public releases list, pre-releases included, which the desktop
+  app fetches for it. It says "You're up to date" or names the newer version and links
+  its release page. File › Settings… holds "Check for updates at launch", off until the
+  user turns it on; the desktop app's main window then checks once as the workspace
+  opens and shows a dismissable notice only when a newer release exists. A failure is
+  quiet there and reported by the menu. A page that isn't the desktop app says the
+  check runs there. Nothing is downloaded. The comparison is tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -640,7 +648,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
   belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
-- **The shell** is the header bar over the workspace. A failed call shows in a
+- **The shell** is the header bar over the workspace. When the desktop app's launch
+  check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
+  A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
@@ -730,7 +740,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then About JStream. The About dialog's version is the workspace's
+  system browser), then Check for updates and About JStream. Check for updates and
+  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
   protocol the session's `welcome`. Below the licence it lists each codec

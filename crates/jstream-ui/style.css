@@ -1154,6 +1154,22 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 
 /* The About dialog (about.rs). */
 .modal.about-dialog { width: 400px; }
+/* Check for updates and Settings (updates.rs). */
+.modal.update-dialog, .modal.settings-dialog { width: 420px; }
+.update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
+.update-body p, .settings-check-note { margin: 0; }
+.update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.update-body a { color: var(--link); }
+.settings-check { display: flex; gap: 10px; align-items: flex-start; }
+.settings-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
+.settings-check-label { display: block; }
+.update-notice {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 12px; background: var(--menu); border-bottom: 1px solid var(--border);
+  color: var(--text-soft); font-size: 13px;
+}
+.update-notice a { color: var(--link); }
+.update-notice button { padding: 2px 8px; background: none; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); }
 .about-body { display: flex; flex-direction: column; align-items: center; padding: 20px 24px 18px; text-align: center; }
 .about-icon { width: 96px; height: 96px; border-radius: 20px; }
 .about-name { margin: 12px 0 2px; font-size: 20px; font-weight: 600; }

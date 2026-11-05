@@ -34,6 +34,9 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   on); `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
+- **Update check** (`updates.rs`): answers `GET /jstream-update-check` with GitHub's
+  public releases list, or a short error. The page cannot choose the address. The
+  request sends no body, token or version. Tested without the network.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
   and the virtual camera's status.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
@@ -51,7 +54,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
-  capped log file (user-only, checked on Unix), and the control token registered for redaction; the crash hook's own
+  capped log file (user-only, checked on Unix), the update check's request and the
+  replies it gives a releases list, a rate limit and a malformed message, and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
@@ -190,10 +194,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `http://jstream.localhost` (other webviews `jstream://localhost`). Paths are checked
   segment by segment: percent-decoded, no `..`, `\`, `:` or
   NUL, and the canonical file must be inside the canonical folder, so no path or link
-  reaches outside it. Each response has a `Content-Security-Policy`: the bundle's own
+  reaches outside it. `GET /jstream-update-check` is not a file: the app answers it
+  itself, on another thread, with GitHub's public releases list or an error
+  (`updates.rs`). Each response has a `Content-Security-Policy`: the bundle's own
   files, WASM compiled from them, inline scripts and styles only with the response's
   nonce (trunk's placeholder, as `jstream-server` fills it), and connections only to
-  the bundle and the engine's `ws://127.0.0.1:<port>`.
+  the bundle and the engine's `ws://127.0.0.1:<port>`. The update check is that same
+  origin, so the page never connects to GitHub itself.
 - **Handing the page the engine.** Before the page's own scripts, a bootstrap script
   defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token }` that can't be
   reassigned, and only when the page's origin is the app's. `jstream-ui` checks for it
@@ -225,13 +232,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   the page asked, and full screen when it asked for that (`&full=1`). A link to one of
   the project's own pages on GitHub (`links.rs`: the repository's URL from the
   workspace's `repository`, or a path, query or fragment under it written only with
-  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu and About dialog
-  link to) opens in the system browser, through Explorer with the URL as one argument,
+  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu, Check for updates
+  and About dialog link to) opens in the system browser, through Explorer with the URL as one argument,
   and never in the window. So a page can make the app start one OS process, Explorer,
   for those URLs only; no comma, backslash, quote, space or percent escape can reach
   Explorer's command line. Every other new window is refused, and a
   projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
-  no capabilities, so the API is the only way in.
+  no capabilities. It talks to the engine over the API, and the one other request the
+  scheme answers is the update check, which ignores whatever the page sends and always
+  reads the same releases list.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap

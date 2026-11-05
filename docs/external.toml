@@ -637,6 +637,14 @@ status = "ok"
 checked_note = "Re-read the object paths, the plain algorithm and the unlocking chapter"
 
 [[external]]
+id = "gh-releases-api"
+url = "https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=100"
+relied_on = "GitHub's public releases list for this repository, pre-releases included (the default list includes them; per_page=100). The desktop app GETs it, with no body and a fixed user agent, to compare with the running version (threat model Assets)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
 id = "gh-releases"
 url = "https://github.com/jeffmhopkins/JStream/releases"
 relied_on = "The repository's releases page, where the release workflow publishes each portable zip and its SHA-256 (docs/runbooks/release.md)"
