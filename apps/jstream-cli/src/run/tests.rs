@@ -349,7 +349,7 @@ fn state_get_golden() {
             item("cam_2"),
             item("cam_1"),
             r#"]},{"scene_id":"brb","name":"Be right back","items":[]}],"outputs":[],"encoders":[],"video_mixes":[],"#,
-            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":300,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
+            r#""buses":[{"bus_id":"master","name":"Master","gain_db":0.0,"muted":false}],"sends":[],"hotkeys":[],"transitions":{"presets":[{"preset_id":"cut","name":"Cut","kind":"cut","duration_ms":0,"easing":"ease_in_out"}],"default":"cut"}}}}"#,
         ))
     );
     assert_eq!(
