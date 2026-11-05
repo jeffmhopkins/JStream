@@ -515,6 +515,17 @@ every mix runs at the base rate divided by an integer.
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
 | Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
+**Target video model** ([ADR-0117](adr/0117-real-time-video-thread-model.md), being built
+in steps under #1221): the render thread only composites and submits, never touching
+pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
+slots from their own threads, so a new frame no longer re-plans; read-back consumers are
+served by a `jstream-readback` thread from a ring of staging buffers; the engine shares
+one GPU context; and the program stage runs while anything consumes it (a preview stream,
+a projector, an output or a virtual camera), compositing the program and every monitored
+scene, so the preview thread encodes and sends frames the render thread drew instead of
+compositing its own. A small `jstream-work-*` pool takes CPU work with no thread of its
+own. The table above is the model as built; each step edits it as it lands.
+
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
 [`jstream-core`'s runtime](../crates/jstream-core/README.md#runtime) and the audio and

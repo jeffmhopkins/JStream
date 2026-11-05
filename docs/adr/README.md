@@ -130,4 +130,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0114](0114-browsers-keep-no-certificate-pin.md) | A paired browser keeps no certificate pin, so a new warning on its host means stop | accepted | agent |  |
 | [ADR-0115](0115-timelines-on-the-wire.md) | Timelines on the wire: global IDs, inert cues, studio-state playback and source.restart | accepted | agent |  |
 | [ADR-0116](0116-keyframe-tracks.md) | Keyframe tracks: a placed scene switches its own keyframe, as studio state, with a Move | accepted | agent |  |
+| [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
 <!-- @generated end adr-index -->
