@@ -10,6 +10,7 @@ use crate::hotkeys::Hotkeys;
 use crate::menu::{ContextMenu, Menus};
 use crate::panels::AddSource;
 use crate::panels::add_source::AddSourceDialog;
+use crate::panels::agent::ActivityCleared;
 use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
 use crate::panels::inspector::Folds;
 use crate::panels::labels::LabelManager;
@@ -273,6 +274,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(Folds::restore());
     provide_context(LabelManager::new());
     provide_context(MixerOrientation::new());
+    provide_context(ActivityCleared::new());
     provide_context(crate::canvas::taps::PreviewTaps::new());
     view! {
         <div class="shell">

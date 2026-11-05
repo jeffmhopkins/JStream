@@ -677,7 +677,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
-  5 seconds; the
+  5 seconds. Its Clear button empties only the list shown: `ActivityCleared`, kept by
+  the shell, marks the newest entry's `seq`, and the panel asks only after it, so the
+  list stays clear across tab switches while the engine's log is untouched; the
   Live layout shows Stream stats, Outputs and it as tabs in one group. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
