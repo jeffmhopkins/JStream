@@ -5700,7 +5700,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "Re-read:
 stamp = { hash = "b3:791dca47c5097e10", by = "agent:obs-ui-thread", note = "properties.spec.js adds a test using describeKinds and the mock's font.list; no harness change. | kept from the merged side: properties.spec.js only adds a test using the existing describeKinds refuse hook to record requests; no fixture or mock-daemon change, so the harness section holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:5baca5f9db3c8c85", by = "agent:cursor", note = "Re-read the harness against scene-cameras.spec.js: the new fit check uses the existing mock daemon, connect, describeKinds and openAddSource. The daemon seed, fixtures.js, package.json and the console-error rule are unchanged." }
+stamp = { hash = "b3:851953f027e6b102", by = "agent:grok", note = "Re-read the harness: it describes the mock daemon, Playwright and dist, not the camera yaw control. The spec now targets the From the right textbox; the harness is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:d08fd2eb9a4c024e", by = "agent:obs-ui-thread", note = "With Filters now a tab behind the Inspector in the Editing layout, the filter, effect and scene-filter tests show it with the existing showPanel fixture after connecting, and the Transform test shows Transform again after Add source showed the Inspector; no new fixture, so the harness section holds." }
@@ -5808,7 +5808,7 @@ stamp = { hash = "b3:1fcf0952741df4ac", by = "agent:ui-parity", note = "The Proj
 stamp = { hash = "b3:791dca47c5097e10", by = "agent:obs-ui-thread", note = "Added the Text font list test (options, pick saved as one edit and reselected, Other file shows root and path) to the Properties entry for properties.spec.js. | kept from the merged side: Added to the Properties dialog bullet the new properties.spec.js test: live.set of source.set_settings with rev unchanged, Cancel sends live.cancel, OK's ends_gesture batch is one edit, the reopened dialog shows the value." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-cameras.spec.js"]
-stamp = { hash = "b3:5baca5f9db3c8c85", by = "agent:cursor", note = "Re-read the 3D scenes bullet against scene-cameras.spec.js: the orbit test is unchanged, and the new test turns the camera, depth of field and follow on with a window capture, adds a motion row, and checks that .props-settings scrollWidth stays within clientWidth at the dialog width and at a 720 viewport, that Nearest on top's check sits in front of its text, and that From the right keeps room for its number. The other bullets name specs this diff does not touch." }
+stamp = { hash = "b3:851953f027e6b102", by = "agent:grok", note = "Re-read the 3D scenes bullet: the fit check still measures the From the right stepper's number, now via the textbox role because the plus and minus buttons share that label." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/scene-filters.spec.js"]
 stamp = { hash = "b3:d08fd2eb9a4c024e", by = "agent:obs-ui-thread", note = "Only showPanel calls were added (Filters after connect in the filter, effect and scene-filter tests; Transform again in the align test after Add source showed the Inspector); what each test checks is unchanged, so its entry holds." }
