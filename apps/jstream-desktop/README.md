@@ -244,7 +244,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Encoders, #1165), opens in the system browser, through Explorer with the URL as one
   argument, and never in the window. So a page can make the app start one OS process,
   Explorer, for those URLs only; the Cisco URL is that one string, and no comma,
-  backslash, quote, space or percent escape can reach   Explorer's command line. Every
+  backslash, quote, space or percent escape can reach Explorer's command line. Every
   other new window is refused, and a
   projector can open none. The page gets one Tauri command, `pick_path` (`pick.rs`),
   and no other. `build.rs` declares that command to `tauri-build`, which writes
