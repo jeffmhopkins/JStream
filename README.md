@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `░░░░░░░░░░` 0% | 0 | 0 | 18 | 1 |
+| `░░░░░░░░░░` 0% | 0 | 0 | 19 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -185,16 +185,16 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 | 4 | Save and load projects: File › New, Open, Save As and Open recent | ⏳ planned | #1218 |  |
 | 5 | A UI scrub of every panel, dialog and window, with a decluttered Inspector and Properties and Filters in one dialog | ⏳ planned | #1219, #1198, #1202, #1204, #1206 |  |
 |  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 |  |
-|  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned | #1225, #1216, #1214, #1188 |  |
+|  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned: #1251 lays out the 3D camera section (#1214); #1225, #1216 and #1188 remain | #1225, #1216, #1214, #1188 | #1251 |
 |  | Looping media files play without a gap at the wrap | ⏳ planned | #445 |  |
-|  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240 |
+|  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240, #1245 |
 |  | Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter | ⏳ planned | #1226, #1227, #1232 |  |
 |  | Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read | ⏳ planned | #1228, #1060 |  |
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | ⏳ planned | #1195, #1196 |  |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
 |  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
 |  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 |  |
-|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned, ❔ this release or the next | #1182, #1181 |  |
+|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 |  |
 
 ### Whole app
 

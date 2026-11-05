@@ -549,7 +549,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   background and checks both switches, keeping the camera. Below the audio switch, a 3D
   camera check gives the scene a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)),
   starting from `SceneCamera::framing`, with its position, target, field of view, roll
-  and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
+  and Nearest on top as fields in one column under Camera and Rendering headings (each
+  label on the row of its control, the check in front of its text); OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
   one (`camera_start`). A note warns when items already have depth or angles
@@ -559,10 +560,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
-  offered while the scene places a display or window capture (`followable`), with the
+  offered while the scene places a display or window capture (`followable`), its fields
+  shown only while it is on and indented under the check, one row each for the
   item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
   hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
-  Camera motion, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
+  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. Both are draft fields, which OK sends as
   `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
