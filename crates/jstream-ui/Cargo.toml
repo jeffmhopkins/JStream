@@ -28,6 +28,8 @@ serde_json.workspace = true
 # The browser's storage for the dock, finding where a dragged panel would land, and
 # moving the focus through a right-click menu.
 web-sys = { workspace = true, features = ["Document", "DomRect", "Element", "Event", "HtmlElement", "NodeList", "Storage", "Window"] }
+# The desktop app's update check waits on the page's `fetch` of the app's own scheme.
+wasm-bindgen-futures.workspace = true
 
 [dev-dependencies]
 jstream-control = { workspace = true, features = ["mock"] }

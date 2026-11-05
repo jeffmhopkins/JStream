@@ -2946,6 +2946,8 @@ dependencies = [
  "jstream-protocol",
  "jstream-server",
  "jstream-sources",
+ "rustls",
+ "rustls-native-certs",
  "tauri",
  "tauri-build",
  "tokio",
@@ -3219,6 +3221,7 @@ dependencies = [
  "jstream-protocol",
  "leptos",
  "serde_json",
+ "wasm-bindgen-futures",
  "web-sys",
 ]
 
