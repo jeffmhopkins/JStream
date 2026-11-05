@@ -192,8 +192,8 @@ fn browser_process(
 
 /// What the engine is told when CEF won't start.
 #[cfg(windows)]
-const INITIALIZE_FAILED: &str =
-    "cef::initialize failed: libcef.dll and its resources must be next to the helper";
+const INITIALIZE_FAILED: &str = "cef::initialize failed: libcef.dll and its resources must be \
+     next to the helper, and no other process may be using the same browser cache folder";
 #[cfg(target_os = "linux")]
 const INITIALIZE_FAILED: &str = "cef::initialize failed: libcef.so and its resources must be \
      next to the helper, and the sandbox must be able to start: run as a user other than \

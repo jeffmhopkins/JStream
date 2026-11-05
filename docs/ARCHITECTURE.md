@@ -1453,8 +1453,9 @@ admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder als
 `bootstrap.exe` renamed `jstream-browser-helper.exe` and `jstream-browser-helper.dll`,
 signed with the same certificate if releases are signed
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
-(`CefConfig::beside_exe`). From M3 it also holds `jstream-plugin-host.exe`, the
-out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
+(`CefConfig::beside_exe`). It also holds `jstream-plugin-host.exe`, the out-of-process
+CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), which the engine
+starts from beside its own exe.
 Release builds link the C runtime statically and need only OS components (WebView2, Media
 Foundation, Direct3D 12).
 

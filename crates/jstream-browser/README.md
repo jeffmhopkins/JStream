@@ -44,7 +44,11 @@ every page to paint again whenever it is given a device (#1183). Without
 a device a page renders and plays but delivers no frames. A page that `paints_on_cpu`
 (CEF on Linux) needs no device: its latest paint is its `cpu_frame`, straight-alpha
 RGBA8, which `jstream-sources` shows as the source's frame and looks at again every
-frame of the page's rate (ADR-0095). Dropping the page closes it.
+frame of the page's rate (ADR-0095). Dropping the page closes it. On Windows the helper
+runs in a job object that kills it, and every process CEF starts from it, once the
+engine's handle closes, so no helper outlives the engine, even after a crash
+(`cef/job.rs`). The helper starts CEF with `--no-startup-window`, so the Chrome runtime
+opens no window of its own (#1186).
 
 **Built everywhere:**
 - `PageLocation` and `PageSpec` (`page.rs`). A web address must be `http://` or

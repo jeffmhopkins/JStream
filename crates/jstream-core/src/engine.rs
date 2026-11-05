@@ -4613,7 +4613,23 @@ impl State {
     /// a transition that has ended is let go. The shot lists the displays and windows the
     /// program and every mix capture. A source the shot shows enlarged is drawn again at
     /// the density that keeps it sharp, when its kind can be (ADR-0073).
+    ///
+    /// A plan that finds the transition over plans again at once, without it: the
+    /// ended plan still looked at the scene it moved away from, so without a plan after
+    /// it those sources would count as reached until something else asks for a plan. A
+    /// still program asks for none, and the switch back would then be the next plan:
+    /// no `restart_on_show` reload, and a page that never rests (#1185).
     fn publish_render(&mut self) -> Option<f32> {
+        let transitioning = self.studio.running().is_some();
+        let end_ms = self.publish_render_once();
+        if transitioning && self.studio.running().is_none() {
+            return self.publish_render_once();
+        }
+        end_ms
+    }
+
+    /// One plan of [`Self::publish_render`].
+    fn publish_render_once(&mut self) -> Option<f32> {
         let started = Instant::now();
         let Self {
             graph,
