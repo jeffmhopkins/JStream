@@ -201,7 +201,6 @@ release = "alpha.5"
 title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
 status = "planned"
 issues = [1182, 1181]
-undecided = true
 
 [[milestone]]
 id = "M0"
