@@ -90,9 +90,18 @@ use crate::runtime::{
 };
 use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, View};
 
-/// Base frame rate of this cut: one frame every 1/30 s.
+/// Base frame rate: one frame every 1/60 s. A mix runs slower by an integer
+/// divisor (ADR-0014), so 30 fps is divisor 2. The virtual camera stays at
+/// [`VCAM_FPS`]: its Windows media source offers and paces 30 fps.
 pub(crate) const FRAME_NUM: u32 = 1;
-pub(crate) const FRAME_DEN: u32 = 30;
+pub(crate) const FRAME_DEN: u32 = 60;
+
+/// The rate a virtual camera offers. The Windows contract is 1080p BGRA at 30 fps
+/// (`jstream-vcam-windows` paces samples to that), so the camera is fed every
+/// `FRAME_DEN / VCAM_FPS` base tick rather than every one.
+pub(crate) const VCAM_FPS: u32 = 30;
+
+const _: () = assert!(VCAM_FPS > 0 && FRAME_DEN.is_multiple_of(VCAM_FPS));
 
 /// The base frame period: what a frame may take for the program to keep up (ADR-0103).
 pub(crate) fn frame_budget() -> Duration {
@@ -107,11 +116,11 @@ const SAMPLE_RATE: u32 = 48_000;
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
 /// frame. One more reports the output failed: one second at the base rate.
-const MAX_DRAW_ERRORS: u32 = 30;
+const MAX_DRAW_ERRORS: u32 = FRAME_DEN / FRAME_NUM;
 /// Composite errors in a row on the platform's GPU context after which the render thread
 /// leaves it ([`Switch`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A
 /// third of a second at the base rate, so one bad frame does not cost the GPU path.
-const GPU_FALLBACK_ERRORS: u32 = 10;
+const GPU_FALLBACK_ERRORS: u32 = FRAME_DEN / FRAME_NUM / 3;
 /// Device losses within [`LOSS_WINDOW`] that end the drawing: the render thread opens a
 /// new device after each of the first two, and fails the output at the third
 /// (#349's decision: a GPU that keeps resetting is not retried for ever).
@@ -2245,8 +2254,9 @@ pub(crate) fn launch(
 }
 
 /// Starts a virtual-camera output on `program`: starts the camera at `canvas`, as BGRA8
-/// at the base frame rate, hands the render thread a tap that sends it every program
-/// frame, and starts the camera thread that publishes them. No encoder session opens.
+/// at [`VCAM_FPS`] (30 fps, the camera contract, not the base rate), hands the render
+/// thread a tap that sends it every camera tick, and starts the camera thread that
+/// publishes them. No encoder session opens.
 /// On failure `vcam` drops, which stops the camera and returns its sink to the engine.
 /// The stop sets the output's stop flag and waits for the camera thread to stop the
 /// camera, as long as it waits for any output thread.
@@ -2264,8 +2274,7 @@ pub(crate) fn launch_vcam(
     vcam.start(VcamFormat {
         size: canvas,
         pixel_format: PixelFormat::Bgra8,
-        frame_period: Timebase::new(FRAME_NUM, FRAME_DEN)
-            .map_err(|err| format!("frame period: {err}"))?,
+        frame_period: Timebase::new(1, VCAM_FPS).map_err(|err| format!("frame period: {err}"))?,
     })?;
     let stop = Arc::new(AtomicBool::new(false));
     let output_drops = Arc::new(AtomicU64::new(0));
@@ -3127,6 +3136,11 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         meter.skip(missed);
         index = index.saturating_add(missed);
+        // The tick being drawn, before `index` steps to the next one. The camera
+        // contract is slower than the base rate, so it takes this tick only when
+        // the base tick lands on one of its own.
+        let tick = index;
+        let camera_due = tick.is_multiple_of(u64::from(FRAME_DEN / VCAM_FPS));
         let drawn = frames.schedule(index);
         index = index.saturating_add(1);
         // Encode targets only while compositing on the context: after a fallback a
@@ -3397,7 +3411,9 @@ fn render_loop(job: RenderJob) {
                 .program_frame(size, cam.owner())
                 .map(|at| (&frames.shown[at], frames.mixes[at].push_at));
             let stays = match program {
-                Some((shown, Some(pts))) if !shown.is_empty() => cam.push(size, pts, shown),
+                Some((shown, Some(pts))) if camera_due && !shown.is_empty() => {
+                    cam.push(size, pts, shown)
+                }
                 _ => cam.stay(),
             };
             if stays {
@@ -4325,7 +4341,7 @@ mod tests {
     }
 
     /// A profile maps onto the encoder config field by field; its keyframe interval in
-    /// seconds becomes frames at the program's 30 fps.
+    /// seconds becomes frames at the program's 60 fps.
     #[test]
     fn a_profile_maps_to_the_encoder_config() {
         let size = &Feed {
@@ -4336,7 +4352,8 @@ mod tests {
         };
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 8000 });
-        assert_eq!(config.keyframe_interval, 60);
+        assert_eq!(config.frame_period, Timebase::new(1, 60).expect("60 fps"));
+        assert_eq!(config.keyframe_interval, 120);
         assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
@@ -4354,7 +4371,7 @@ mod tests {
                 max_kbps: 20_000
             }
         );
-        assert_eq!(config.keyframe_interval, 120);
+        assert_eq!(config.keyframe_interval, 240);
         assert_eq!(config.hardware, HardwarePreference::Require);
 
         profile.video.hardware = ProfileHardware::Prefer;
@@ -4740,11 +4757,11 @@ mod tests {
         };
         let config = video_config(&feed, &EncoderProfile::DEFAULT).expect("default");
         assert_eq!(config.size, feed.size);
-        assert_eq!(config.frame_period, Timebase::new(2, 30).expect("timebase"));
-        // 2 s at 15 fps.
-        assert_eq!(config.keyframe_interval, 30);
+        assert_eq!(config.frame_period, Timebase::new(1, 30).expect("timebase"));
+        // 2 s at 30 fps.
+        assert_eq!(config.keyframe_interval, 60);
         let slow = Feed {
-            divisor: 60,
+            divisor: 241,
             ..feed.clone()
         };
         let config = video_config(&slow, &EncoderProfile::DEFAULT).expect("slow");
@@ -4753,7 +4770,7 @@ mod tests {
             stream_info(&feed, us(0), &EncoderProfile::DEFAULT)
                 .expect("h264")
                 .frame_rate,
-            15.0
+            30.0
         );
     }
 

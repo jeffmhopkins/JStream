@@ -3390,8 +3390,8 @@ mod cpu_pipeline {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    /// One base-rate period of the pipeline on a microsecond clock (1/30 s).
-    const PERIOD_US: u64 = 33_333;
+    /// One base-rate period of the pipeline on a microsecond clock (1/60 s, nearest).
+    const PERIOD_US: u64 = 16_667;
 
     struct Fakes {
         clock: FakeClock,
@@ -5880,7 +5880,8 @@ mod cpu_pipeline {
         // rate on ticks that aren't skipped is checked by
         // `frames_draw_each_feed_once_on_its_ticks`.
         let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
-        let base = u64::try_from(micros / 33_333).expect("clock after zero");
+        let base = u64::try_from(micros / i64::try_from(PERIOD_US).expect("period"))
+            .expect("clock after zero");
         assert!(
             half + 6 >= full / 2 && half <= full + 2 && half <= base / 2 + 2,
             "{half} recorded frames against {full} streamed over {base} base ticks"
@@ -6047,9 +6048,10 @@ mod cpu_pipeline {
     }
 
     /// `output.start` on a virtual camera starts the platform's sink at the canvas
-    /// size, as BGRA at 30 fps, and publishes every program frame to it with no
-    /// publish target, encoder or audio. `output.stop` stops the camera, and the engine
-    /// keeps the sink, so the output starts again.
+    /// size, as BGRA at 30 fps (the camera contract; the program ticks at 60), and
+    /// publishes each camera tick to it with no publish target, encoder or audio.
+    /// `output.stop` stops the camera, and the engine keeps the sink, so the output
+    /// starts again.
     #[test]
     fn a_virtual_camera_publishes_the_program_until_stopped() {
         let fakes = fakes();
