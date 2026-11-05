@@ -31,6 +31,8 @@ mod cpu;
 #[cfg(windows)]
 mod gpu;
 #[cfg(windows)]
+mod job;
+#[cfg(windows)]
 mod pipe;
 
 use std::path::PathBuf;
@@ -142,6 +144,12 @@ struct Helper {
     /// stopped: declared after the fields `stop` uses, so it drops after.
     #[cfg(target_os = "linux")]
     _frames: cpu::FramesDir,
+    /// The job the helper and every process it starts run in (Windows), which kills
+    /// them all when its handle closes: when this drops after `stop`, and when the
+    /// engine's process ends any other way, a crash included, so no helper outlives it
+    /// (#1186).
+    #[cfg(windows)]
+    _job: job::KillOnClose,
 }
 
 impl Helper {
@@ -246,6 +254,8 @@ impl CefBackend {
             reader: Some(reader),
             #[cfg(target_os = "linux")]
             _frames: launched.dir,
+            #[cfg(windows)]
+            _job: launched.job,
         };
         let path = |p: &PathBuf| p.display().to_string();
         if let Err(e) = helper.link.start(
@@ -269,6 +279,7 @@ impl CefBackend {
         use std::os::windows::io::AsHandle;
         use std::process::{Command, Stdio};
         let pipes = pipe::Pending::create()?;
+        let job = job::KillOnClose::create()?;
         let mut child = Command::new(exe)
             .arg(format!("--jstream-pipe={}", pipes.name()))
             .stdin(Stdio::null())
@@ -276,6 +287,12 @@ impl CefBackend {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| start(format!("starting {}: {e}", exe.display())))?;
+        // Before CEF starts any subprocess, which only happens once the engine sends
+        // the start over the pipe, so every one of them is in the job too.
+        if let Err(e) = job.assign(&child) {
+            kill(&mut child);
+            return Err(e);
+        }
         let (from_helper, to_helper) = match pipes.connect(&mut child, CONNECT_TIMEOUT) {
             Ok(pipes) => pipes,
             Err(e) => {
@@ -295,6 +312,7 @@ impl CefBackend {
             from_helper: Box::new(from_helper),
             to_helper: Box::new(to_helper),
             frames: Arc::new(gpu::HelperFrames::new(Arc::clone(&self.device), process)),
+            job,
         })
     }
 
@@ -367,6 +385,8 @@ struct Launched {
     frames: Arc<dyn crate::link::Frames>,
     #[cfg(target_os = "linux")]
     dir: cpu::FramesDir,
+    #[cfg(windows)]
+    job: job::KillOnClose,
 }
 
 fn kill(child: &mut Child) {

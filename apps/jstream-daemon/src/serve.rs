@@ -389,7 +389,9 @@ fn cef_browser(
         tracing::warn!("no data directory for the browser's cache, so browser sources are off");
         return engine;
     };
-    let mut config = match CefConfig::beside_exe(&state) {
+    // A cache folder of its own: CEF refuses to start on a folder another process (the
+    // app, running beside the daemon) is using (#1187).
+    let mut config = match CefConfig::beside_exe(&state.join("daemon")) {
         Ok(config) => config,
         Err(error) => {
             tracing::warn!(%error, "browser sources are off");

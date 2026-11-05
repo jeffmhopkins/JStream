@@ -142,7 +142,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   second.
 - **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
   there are no outputs; with a recording added it is READY with no uptime and shows
-  the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
+  the default profile's H.264 at 8000 kbps; once the recording starts it is LIVE with
   the no-data box, and the ticks the test sends give the uptime, the bitrate against
   the target, the dropped share, Excellent then Poor, the chart and what was sent;
   hovering the chart's right edge reads the newest sample "now" and further left the

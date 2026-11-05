@@ -113,6 +113,16 @@ impl DeviceSlot {
             .device
             .clone()
     }
+
+    /// The generation of the device pages copy onto now, or `None` without one.
+    fn current(&self) -> Option<u64> {
+        self.0
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .device
+            .as_ref()
+            .map(|device| device.generation)
+    }
 }
 
 /// Imports one helper process's paints: its textures' handles are its own, so each is
@@ -200,12 +210,31 @@ impl PageFrames for HelperPageFrames {
         }
     }
 
+    /// The latest frame, if it is on the device pages copy onto now. A frame copied onto
+    /// an earlier device (a program stage that has stopped, whose wgpu instance a later
+    /// stage's compositor must never be handed) is dropped with the textures it was made
+    /// with, so a page that hasn't painted since shows nothing until it paints (#1183).
     fn latest(&self) -> Option<GpuFrame> {
+        let current = self.device.current();
         self.frames
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .latest
-            .clone()
+            .current(current)
+    }
+}
+
+impl PageState {
+    /// [`HelperPageFrames::latest`] once the slot's device generation is `current`.
+    fn current(&mut self, current: Option<u64>) -> Option<GpuFrame> {
+        if current != Some(self.generation) {
+            // Nothing here is any use on another device, and holding it keeps the old one.
+            self.opened = Default::default();
+            self.ring.clear();
+            self.next = 0;
+            self.latest = None;
+            return None;
+        }
+        self.latest.clone()
     }
 }
 
@@ -397,4 +426,113 @@ fn open(
             wgpu::TextureUses::PRESENT,
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::future::Future;
+    use std::pin::pin;
+    use std::task::{Context, Poll, Waker};
+
+    use std::sync::Arc;
+
+    use jstream_media::{
+        ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Timebase,
+        VideoFrameInfo,
+    };
+    use jstream_platform::{AdapterId, GpuContext, GpuFrame, wgpu};
+
+    use super::{Copied, DeviceSlot, PageState};
+
+    fn ready<F: Future>(future: F) -> Option<F::Output> {
+        match pin!(future)
+            .as_mut()
+            .poll(&mut Context::from_waker(Waker::noop()))
+        {
+            Poll::Ready(v) => Some(v),
+            Poll::Pending => None,
+        }
+    }
+
+    /// A D3D12 context of its own wgpu instance, on WARP or any adapter; `None` where
+    /// there is none.
+    fn context() -> Option<GpuContext> {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+            backends: wgpu::Backends::DX12,
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
+        });
+        let adapter = ready(instance.enumerate_adapters(wgpu::Backends::DX12))?
+            .into_iter()
+            .next()?;
+        let (device, queue) =
+            ready(adapter.request_device(&wgpu::DeviceDescriptor::default()))?.ok()?;
+        Some(GpuContext::new(
+            adapter,
+            device,
+            queue,
+            AdapterId {
+                luid: None,
+                vendor: 0,
+            },
+            None,
+        ))
+    }
+
+    fn frame(context: &GpuContext) -> GpuFrame {
+        let texture = context.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("test-page"),
+            size: wgpu::Extent3d {
+                width: 4,
+                height: 4,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Bgra8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let info = VideoFrameInfo {
+            size: FrameSize::new(4, 4).expect("a frame size"),
+            format: PixelFormat::Bgra8,
+            color: ColorInfo {
+                space: ColorSpace::Bt709,
+                range: ColorRange::Full,
+            },
+            pts: MediaTime::new(0, Timebase::MILLIS),
+        };
+        GpuFrame::new(texture, info, Arc::new(Copied))
+    }
+
+    /// #1183: a page's last frame from a program stage that stopped is never handed to
+    /// the next stage, whose compositor is on another wgpu instance (sampling it there
+    /// panicked the render thread). It shows nothing until it paints on the new device.
+    #[test]
+    fn a_frame_from_an_earlier_device_is_never_handed_out() {
+        // A runner with no D3D12 adapter at all has nothing to check.
+        let (Some(first), Some(second)) = (context(), context()) else {
+            return;
+        };
+        let slot = DeviceSlot::default();
+        assert_eq!(slot.current(), None);
+        slot.set(Some(&first));
+        let mut page = PageState {
+            generation: slot.current().expect("a device"),
+            size: (4, 4),
+            ..PageState::default()
+        };
+        page.ring.push(frame(&first).texture().clone());
+        page.latest = Some(frame(&first));
+        assert!(page.current(slot.current()).is_some(), "on its own device");
+
+        // The stage stops: no device until the next one starts.
+        slot.set(None);
+        assert!(page.current(slot.current()).is_none(), "with no device");
+        assert!(page.ring.is_empty(), "the old device's textures are let go");
+
+        page.latest = Some(frame(&first));
+        slot.set(Some(&second));
+        assert!(page.current(slot.current()).is_none(), "on the next device");
+    }
 }

@@ -200,7 +200,7 @@ a.menuitem:focus-visible { outline: none; }
 .menuitem .hint { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
 .connection { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 8px 6px; font-size: 12px; }
 .connection dt { color: var(--dim); }
-.connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.connection dd { margin: 0; white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
 .header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }

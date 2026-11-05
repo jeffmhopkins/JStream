@@ -572,7 +572,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
   `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
-  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. On Linux
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. CEF's cache
+root is the data folder's `daemon\cef`, not the app's `cef`: CEF refuses to start on a
+folder another process is using, so the daemon couldn't start pages while the app ran
+(#1187). On Linux
   the helper is the `jstream-browser-helper` executable with `libcef.so` and CEF's
   runtime files beside it, in the `browser` folder `cargo xtask browser-linux` lays out,
   beside `jstream-daemon` or next to it, and no device is opened: pages paint in

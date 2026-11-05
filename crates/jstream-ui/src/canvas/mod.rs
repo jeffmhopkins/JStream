@@ -314,18 +314,24 @@ pub fn Canvas() -> impl IntoView {
             ));
         });
     }
-    // Another scene shown: close the stream and open one of it (CV-03).
-    Effect::new(move |_| {
-        let want = wanted.get();
-        let Some(current) = stream.get_value() else {
+    // Another scene shown: close the stream and open one of it (CV-03), once what the
+    // canvas wants has held for `preview::SETTLE`. A scene switch changes the selection
+    // before the program, so `wanted` goes program, the scene, program again: settling
+    // keeps the program stream through it, and its transition plays without a stall
+    // (#1205).
+    let resubscribe = move |want: Option<SceneId>| {
+        let Some(current) = stream.try_get_value().flatten() else {
             return;
         };
-        if current.scene == want {
+        let Some(now) = wanted.try_get_untracked() else {
             return;
-        }
-        let next = current.showing(want);
+        };
+        let Some(next) = preview::settled_switch(&current, &want, &now) else {
+            return;
+        };
         stream.set_value(Some(next.clone()));
-        preview_state.set(PreviewState::Starting);
+        // A picture already shown stays until the new stream draws (#1205).
+        preview_state.update(|state| *state = state.resubscribed());
         let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };
@@ -349,6 +355,16 @@ pub fn Canvas() -> impl IntoView {
                 preview_state.try_set(PreviewState::Unavailable(error.to_string()));
             }
         });
+    };
+    Effect::new(move |_| {
+        let want = wanted.get();
+        if stream
+            .get_value()
+            .is_none_or(|current| current.scene == want)
+        {
+            return;
+        }
+        set_timeout(move || resubscribe(want), preview::SETTLE);
     });
     {
         let alive = Arc::clone(&alive);

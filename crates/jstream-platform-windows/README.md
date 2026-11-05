@@ -247,7 +247,8 @@ The code is ported from spikes S1 to S3. This first cut has:
       encoders on every platform.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
-      low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
+      low latency, quality over speed (`QualityVsSpeed` 70, the band hardware MFTs map to
+      their quality preset), the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
       Main), and BT.709 limited range. `ICodecAPI` settings are
       best effort; the media type always carries the bit rate.
     - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
