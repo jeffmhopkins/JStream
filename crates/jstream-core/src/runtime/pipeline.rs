@@ -1553,6 +1553,11 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
                     // are kept, as a mix not due keeps them.
                     if ring.is_full() && frame.nv12.is_none() {
+                        // A lost device's maps may never finish (DX12), so the ring
+                        // stays full and no draw would fail to say so (#349).
+                        if let Some(why) = compositor.lost() {
+                            return Err(DrawError::Lost(why));
+                        }
                         frame.unread += 1;
                         frame.awaiting = true;
                         snapshot::claim_layers(
