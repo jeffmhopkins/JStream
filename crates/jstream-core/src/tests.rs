@@ -4191,9 +4191,11 @@ mod cpu_pipeline {
 
         fakes.clock.advance(10 * PERIOD_US);
         assert!(wait_until(|| readbacks(&engine) >= 2), "no second frame");
+        // Ten periods at the base rate, with a little slack for the millisecond stamp.
+        let jumped_ms = 10 * PERIOD_US / 1_000;
         assert!(
-            wait_until(|| late_video() >= 300),
-            "the second frame was stamped {} ms, not at the clock",
+            wait_until(|| u64::from(late_video()) + 50 >= jumped_ms),
+            "the second frame was stamped {} ms, not at the clock ({jumped_ms} ms)",
             late_video()
         );
 
@@ -5222,7 +5224,10 @@ mod cpu_pipeline {
         assert!(
             pump_until(&fakes.clock, &fakes.audio, || {
                 engine.output_stats().is_some_and(|stats| {
-                    stats.video_subscriber.delivered >= 70 && stats.audio_subscriber.delivered >= 10
+                    // Two seconds at 60 fps is 120 frames; a few more so the second
+                    // keyframe is in the file.
+                    stats.video_subscriber.delivered >= 130
+                        && stats.audio_subscriber.delivered >= 10
                 })
             }),
             "media never reached the recording"

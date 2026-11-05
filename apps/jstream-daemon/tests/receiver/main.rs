@@ -471,7 +471,8 @@ impl Rig {
 
     /// Waits for the output to have sent `seconds` of video by its own stats, in the run
     /// since its last [`start`](Self::start). An earlier run's last entry doesn't count:
-    /// it would end the wait before a restarted output sent anything.
+    /// it would end the wait before a restarted output sent anything. The count is the
+    /// base rate, 60 fps, so this is for a program stream, not a slower mix.
     async fn stream_for(&self, id: &str, seconds: u64) {
         let since = self
             .starts
@@ -484,7 +485,7 @@ impl Rig {
             rig.stats(id)
                 .get(since..)
                 .and_then(<[OutputStatsInfo]>::last)
-                .is_some_and(|s| s.frames >= seconds * 30)
+                .is_some_and(|s| s.frames >= seconds * 60)
         })
         .await;
     }
@@ -629,7 +630,8 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         (p.width, p.height),
         (u64::from(CANVAS.0), u64::from(CANVAS.1))
     );
-    assert!(close(p.measured_fps(), 60.0, 1.0), "{p:?}");
+    // FLV stamps are whole milliseconds, so a 16.7 ms frame is 16 or 17 ms.
+    assert!(close(p.measured_fps(), 60.0, 4.0), "{p:?}");
     assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");
     assert_eq!(
         (p.sample_rate, p.channels),
@@ -774,7 +776,8 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
 
     let p = probe(&wide);
     assert_eq!((p.width, p.height), (320, 180), "{p:?}");
-    assert!(close(p.measured_fps(), 60.0, 1.0), "{p:?}");
+    // FLV stamps are whole milliseconds, so a 16.7 ms frame is 16 or 17 ms.
+    assert!(close(p.measured_fps(), 60.0, 4.0), "{p:?}");
     let rgb = pixel(&wide, 1.5, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the wide stream is red: {rgb:?}");
 
