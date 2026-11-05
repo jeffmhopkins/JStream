@@ -9,8 +9,9 @@
 //!   script, full screen when the page asks for it. A link to one of the project's own
 //!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
 //!   system browser instead. Any other is refused.
-//! - The page gets no Tauri IPC commands: the app defines none and grants no
-//!   capabilities, so the UI talks to the engine only over the WebSocket API.
+//! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
+//!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
+//!   only over the WebSocket API. The scheme's one other answer is the update check.
 //! - When the app exits, the host stops: the server closes its connections and the
 //!   engine stops.
 //!
@@ -156,6 +157,7 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result<()> {
     let start = start_url()?;
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![crate::pick::pick_path])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.
         .register_asynchronous_uri_scheme_protocol(

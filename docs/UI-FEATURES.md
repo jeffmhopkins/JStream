@@ -274,7 +274,9 @@ capture's target is picked from a list of the displays or open windows the engin
 reports (`capture.targets`), not typed as an ID. Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
-first and "Other file…" for any other file.
+first and "Other file…" for any other file. In the desktop app, an asset path whose
+root is the collection folder or an absolute path has a Browse… button; a file under
+the collection folder is stored relative to it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -362,7 +364,8 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
 prototype doesn't show; that stays ([Beyond](#beyond)). A stopped card's Edit changes an
-RTMP output's server URL or a recording's file path (`output.set_path`, #1072).
+RTMP output's server URL or a recording's file path (`output.set_path`, #1072). In the
+desktop app a recording's path has a Browse… button that opens a save dialog.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -438,7 +441,10 @@ The real UI does these and the prototype doesn't show them. Matching the prototy
 not remove them; they move into the prototype's look.
 
 - Connecting: the connect form, the desktop app's automatic connection, and the
-  connection details (engine URL, protocol, client, revision) with Disconnect.
+  connection details (engine URL, protocol, client, revision) with Disconnect. In the
+  desktop app, path fields have a Browse… button (`browse.rs`) that opens a native
+  dialog for the app's own engine; a browser page has none, and another engine leaves
+  the button disabled.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
   one-time code for a remote browser and lists and revokes paired devices. In the
   workspace it sits under the properties in the Inspector panel, since it hides itself
@@ -446,7 +452,8 @@ not remove them; they move into the prototype's look.
 - WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Plugins section
   under the pairing panel in the Inspector lists the installed plugins with why one is
-  off and what it asks for that isn't granted, installs one from its package folder, and
+  off and what it asks for that isn't granted, installs one from its package folder
+  (a folder dialog in the desktop app), and
   turns a disabled one back on. Its grant dialog offers only what the plugin's manifest
   asks for: `read`, always on, the other classes with what each lets it do, the hosts,
   and folders when it asks for them. It opens after an install that asks for more than

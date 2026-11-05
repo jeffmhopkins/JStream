@@ -688,6 +688,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .field .control .font-pick { flex: 1 1 100%; }
 .field .control .font-file { display: flex; gap: 0.35rem; flex: 1 1 100%; min-width: 0; }
 .field .control .font-file.hidden { display: none; }
+.field .control .browse, .path-row .browse { flex: none; white-space: nowrap; }
+.path-row { display: flex; gap: 0.35rem; align-items: center; min-width: 0; }
+.path-row input { flex: 1; min-width: 0; }
 .field .unit { color: var(--muted); font-size: 0.8rem; }
 .field .reset { border-color: transparent; background: none; }
 .field .problem { grid-column: 1 / -1; }

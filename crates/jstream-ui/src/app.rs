@@ -88,6 +88,10 @@ pub fn App() -> impl IntoView {
     let info = RwSignal::new(SessionInfo::default());
     let session = SessionContext(StoredValue::new_local(None));
     provide_context(session);
+    // The URL the open session connected to, so Browse can tell this app's engine
+    // from another one (`host::same_engine`).
+    let connected = RwSignal::new(String::new());
+    provide_context(crate::host::ConnectedEngine(connected));
     let studio = Studio::new();
     provide_context(studio);
     // Bumped each time a session ends, so a stale event loop can tell it is stale.
@@ -96,6 +100,7 @@ pub fn App() -> impl IntoView {
     let end_session = move |reason: Option<String>| {
         generation.update_value(|g| *g += 1);
         session.0.set_value(None);
+        connected.set(String::new());
         status.set(Status::Disconnected(reason));
     };
 
@@ -105,6 +110,7 @@ pub fn App() -> impl IntoView {
             match Session::connect(&url, &token).await {
                 Ok(opened) => {
                     let mine = generation.get_value();
+                    connected.set(url.clone());
                     info.set(SessionInfo {
                         url,
                         protocol: opened.welcome.protocol.to_string(),

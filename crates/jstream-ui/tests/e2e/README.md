@@ -73,6 +73,13 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 -->
 
+- **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
+  Browse… stores a path under the collection folder as a collection path and a path
+  outside it as absolute, hides the button for app assets, and leaves the field when
+  the stub cancels; a recording's add form and Edit ask for a save dialog and a
+  stream has no button; Install plugin asks for a folder dialog and fills the path and
+  the suggested id. A page with no desktop global has no Browse button. The native
+  dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
   connects with the browser's credentials; the header's File menu shows the URL and
   protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused

@@ -68,7 +68,13 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  and `desktop_vcam()`, what that global says about the virtual camera.
+  `desktop_vcam()`, what that global says about the virtual camera, and `browse`,
+  which calls the global's `browse` to open a native dialog. `same_engine` says
+  whether the open session is that app's own engine.
+- **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
+  file is stored (`place_asset`, tested natively): under the collection folder as a
+  `collection` path, otherwise `absolute`. App assets offer no button. With no desktop
+  shell the button is not rendered; connected to another engine it is disabled.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
@@ -198,7 +204,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
-  app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
+  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection` and
+  `browse`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -495,7 +502,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (stored as an `absolute` asset of its path), and "Other file…", which shows the
   root and path below it (`font_choices`, tested natively); a stored file the list
   doesn't name selects "Other file…". Until the list arrives, or if the engine can't
-  list fonts, only the root and path show. Fields
+  list fonts, only the root and path show. In the desktop app, while the session is
+  that app's own engine, a Browse… button sits beside an asset path whose root is the
+  collection folder or an absolute path (`browse.rs`). It opens a file dialog filtered
+  by the parameter's `accept`, with every file still offered, and stores a file under
+  the collection folder as a `collection` path and any other file as `absolute`
+  (`place_asset`, tested natively). App assets have no button. A browser page renders
+  none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
@@ -760,7 +773,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) or a recording's file path (`output.set_path`,
   #1072) with the card's Edit, and the encoder profile, deletes a stopped
-  output, and starts and stops each. A card's Audio select picks the bus the output
+  output, and starts and stops each. In the desktop app a recording's path, on the add
+  form and on Edit, has the same Browse… button, opening a save dialog for an `.mp4`;
+  a stream's URL has none. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
   camera's card has none. A card's Video select picks the mix it shows
@@ -843,7 +858,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
-  plugin asks for the package folder and an ID, suggested from the folder's name
+  plugin asks for the package folder (in the desktop app, a Browse… button opens a
+  folder dialog) and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
   with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
   next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
