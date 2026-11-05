@@ -1025,8 +1025,13 @@ browser, and `mod.rs` is the component.
   picture only the selected items, the box under the pointer and hidden items (which
   aren't in the picture but still take clicks) are outlined, so an unselected source
   shows no box; without the picture every box gets a faint outline and
-  its name. Hidden items are drawn dashed, and the box under the pointer gets a light
-  outline. A keyframe scene shows its
+  its name. The name sits just inside the box's top-left corner and runs along its
+  top edge, so it turns with the box; a flip mirrors the picture and not the box, and
+  the name stays on that corner. On a mirrored box the glyphs still grow into the
+  box, so the name sits about one line deeper. When that corner or the far end of
+  the edge is behind the viewer, or the edge has no direction, the name stays
+  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
@@ -1138,8 +1143,11 @@ browser, and `mod.rs` is the component.
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
   compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
-  (`camera::polygon`, #1054). A press hits the box the engine draws on top: the nearest
-  along the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  (`camera::polygon`, #1054). The name uses the projected top-left when that corner and
+  the far end of the top edge are both in front of the camera, and stays upright on the
+  visible part's bounds when either is not. A press hits the box the engine
+  draws on top: the nearest along the view (`CameraView::depth_of`) when the
+  camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
   the pointer, and nothing snaps; a group moves by the delta on the first selected

@@ -6,8 +6,9 @@ use crate::Engine;
 use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
 use jstream_control::{Control, ControlError};
 use jstream_protocol::{
-    Action, ActionResult, Call, CallResult, Easing, Edit, FrameSheet, FrameStrip, ProtocolError,
-    Query, QueryResult, SceneId, Settings, SourceId, SourceKind, TransitionPresetId,
+    Action, ActionResult, Call, CallResult, Easing, Edit, Finite32, FrameSheet, FrameStrip, ItemId,
+    MotionClock, MotionCurve, MotionKind, MotionMeasure, MotionModifier, MotionProperty,
+    ProtocolError, Query, QueryResult, SceneId, Settings, SourceId, SourceKind, TransitionPresetId,
 };
 use serde_json::json;
 use std::io::Write;
@@ -288,5 +289,66 @@ fn a_fifth_sheet_at_once_is_refused() {
             .and_then(ControlError::protocol)
             .is_none_or(|error| is_no_adapter(error) || error.code() != "action_failed"),
         "a sheet is taken again once the others answered: {again:?}"
+    );
+}
+
+/// #1189: a frame sheet of a scene that is not on program hears the mix. The item's
+/// opacity follows that level, dark at silence and full when the scope is loud, so the
+/// tile is red. A sheet that evaluates the modifier as silence stays dark.
+#[test]
+fn a_scene_sheet_hears_audio_motion() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    batch(
+        &control,
+        edits(vec![
+            create("main"),
+            create("side"),
+            fill("red", "#ff0000ff"),
+            add("side", "lamp", "red"),
+            Edit::ItemSetMotion {
+                item_id: ItemId::new("lamp"),
+                scene_id: None,
+                motion: vec![MotionModifier {
+                    modifier_id: "pulse".into(),
+                    property: MotionProperty::Opacity,
+                    kind: MotionKind::Audio {
+                        audio: None,
+                        audio_source: None,
+                        measure: MotionMeasure::Level,
+                        low_hz: None,
+                        high_hz: None,
+                        floor_db: f(-60.0),
+                        ceiling_db: f(-6.0),
+                        attack_ms: 0,
+                        release_ms: 200,
+                        curve: MotionCurve::Linear,
+                        from: f(-1.0),
+                        to: Finite32::ZERO,
+                    },
+                    clock: MotionClock::Engine,
+                    enabled: true,
+                }],
+            },
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the colour source was built");
+    let samples: Vec<f32> = (0..2048)
+        .flat_map(|n| {
+            let s = (std::f32::consts::TAU * 440.0 * n as f32 / 48_000.0).sin();
+            [s, s]
+        })
+        .collect();
+    engine.audio_scope().push(48_000, &samples);
+    let Some(sheet) = sheet_or_skip(frames(&control, FrameStrip::new(2, 20), Some("side"))) else {
+        return;
+    };
+    let pixel = centres(&sheet)[0];
+    assert!(
+        pixel[0] > 200 && pixel[1] < 40 && pixel[2] < 40,
+        "the scene sheet should show the loud mix, not silence: {pixel:?}"
     );
 }
