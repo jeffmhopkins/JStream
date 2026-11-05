@@ -1069,7 +1069,10 @@ program scene's (as the collection holds them now, so an edit mid-transition sho
 and the shot carries one `Track` per item, which the render thread samples at each
 frame's time. The plan's wake time includes the end, so the engine re-plans then, sees
 the transition has ended and lets it go; from that frame the program scene is drawn
-alone. A switch while a transition runs samples it at the switch time
+alone. That plan still looked at the scene it left, so the engine plans once more at
+once without the transition: the sources only the old scene drew are then not reached,
+and a switch back shows them again (`restart_on_show`) and they rest meanwhile, even when
+nothing else asks for a plan before it (#1185). A switch while a transition runs samples it at the switch time
 (`snapshot::on_screen`, the function the render thread draws with) and starts the new
 one from those items, so nothing jumps
 ([ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md) §1). A switch to the scene already on program, even

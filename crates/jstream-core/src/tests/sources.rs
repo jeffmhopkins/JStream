@@ -1642,3 +1642,89 @@ fn a_browser_page_rests_while_nothing_draws_it() {
     assert!(!page.hidden(), "drawn again");
     assert_eq!(browser.pages().len(), 1, "the same page throughout");
 }
+
+/// #1185: a `restart_on_show` page loads again each time the program shows it again,
+/// with a default fade: once the fade away from it has ended, no plan reaches it, though
+/// nothing else asks for one (the other scene is still), so the switch back shows it
+/// again. As on the Windows run: the fade's last plan used to look at the page and leave
+/// it marked reached, and the switch back was the very next plan.
+#[test]
+fn a_restart_on_show_page_reloads_each_time_the_program_shows_it_again() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let browser = FakeBrowser::new();
+    let engine = Engine::new().with_browser(browser.clone());
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source(
+                "page",
+                "browser",
+                settings(&[
+                    ("html", json!("<p>a</p>")),
+                    ("restart_on_show", json!(true)),
+                ]),
+            ),
+            add("a", "i1", "page"),
+            Edit::TransitionCreate {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+                name: "Fade".into(),
+                kind: "fade".into(),
+                duration_ms: 300,
+                easing: jstream_protocol::Easing::EaseInOut,
+                settings: Settings::default(),
+            },
+            Edit::TransitionSetDefault {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+            },
+        ]),
+    )
+    .expect("created");
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while browser.pages().is_empty() && Instant::now() < deadline {
+        engine.replan();
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    let page = browser.pages().first().cloned().expect("the page opened");
+    assert!(engine.settle_sources(), "the source was built");
+    engine.replan();
+    let switch = |scene| {
+        block_on(control.call(crate::tests::switch_call(scene))).expect("switched");
+    };
+    let before = page.reloads();
+    for n in 1..=3 {
+        switch("b");
+        // The fade's plan when it is due to end, as the engine wakes for it.
+        clock.advance(400);
+        engine.replan();
+        assert!(page.hidden(), "off program after the fade, switch {n}");
+        clock.advance(600);
+        switch("a");
+        assert_eq!(page.reloads(), before + n, "switch {n} shows it again");
+        clock.advance(400);
+        engine.replan();
+    }
+    // `item.hide` fades the item out with the default preset too.
+    let item = |action| {
+        block_on(control.call(Call::Action { action })).expect("accepted");
+    };
+    let before = page.reloads();
+    item(Action::ItemHide {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+    });
+    clock.advance(400);
+    engine.replan();
+    assert!(page.hidden(), "faded out");
+    clock.advance(600);
+    item(Action::ItemShow {
+        item_id: ItemId::new("i1"),
+        scene_id: None,
+    });
+    assert_eq!(page.reloads(), before + 1, "item shown again");
+}
