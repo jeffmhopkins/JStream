@@ -35,12 +35,14 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
-  and the virtual camera's status.
+  the virtual camera's status, the data folder (so a picked file under it can be
+  stored relative to the collection) and `browse`, which opens a native dialog.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
   projector windows the UI opens, the project's links it hands to the system browser
-  (`links.rs`, which builds and is tested everywhere), and shutdown.
+  (`links.rs`, which builds and is tested everywhere), shutdown, and the one command
+  the page may call (`pick.rs`): a native file, save or folder dialog.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -195,15 +197,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   nonce (trunk's placeholder, as `jstream-server` fills it), and connections only to
   the bundle and the engine's `ws://127.0.0.1:<port>`.
 - **Handing the page the engine.** Before the page's own scripts, a bootstrap script
-  defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token }` that can't be
-  reassigned, and only when the page's origin is the app's. `jstream-ui` checks for it
+  defines `window.__JSTREAM_DESKTOP__` as a frozen object that can't be reassigned,
+  and only when the page's origin is the app's. `jstream-ui` checks for it
   at start (its `host.rs`) and connects at once; the browser client offers the token as
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-  The strings are written as escaped JavaScript literals. The global also carries
-  `vcam`, the virtual camera's status as the app read it at start: `registered`,
-  `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
-  uses it only to say whether the camera can start (its outputs panel); the engine
-  still decides.
+  The strings are written as escaped JavaScript literals. The global carries
+  `url`, `token` and `vcam`, the virtual camera's status as the app read it at start:
+  `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
+  (not Windows). The UI uses `vcam` only to say whether the camera can start (its
+  outputs panel); the engine still decides. It also carries `collection`, the data
+  folder, and `browse`, a function. `browse` calls the app's one command, `pick_path`,
+  and resolves to the filesystem path the person picked, or null if they cancelled or
+  the dialog failed.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
@@ -230,8 +235,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   and never in the window. So a page can make the app start one OS process, Explorer,
   for those URLs only; no comma, backslash, quote, space or percent escape can reach
   Explorer's command line. Every other new window is refused, and a
-  projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
-  no capabilities, so the API is the only way in.
+  projector can open none. The page gets one Tauri command, `pick_path` (`pick.rs`),
+  and no other. The capability `browse` grants `allow-pick-path` to the main window
+  and to projector windows, and does not grant `core:default`. The command opens a
+  common-item dialog owned by the calling window and returns the path the person
+  picked. It does not read the file. The UI calls it only through `browse` on the
+  global. A browser of the daemon has no global, so it has no button and no command.
+  The engine is still reached only over the WebSocket API.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap
@@ -246,7 +256,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
   Foundation import listed nowhere still gets past it.
 - **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
-  and tests everything but the window (`shell.rs`) and `tests/delay_load.rs` without
+  and tests everything but the window (`shell.rs`, `pick.rs`) and `tests/delay_load.rs` without
   GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
   `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
   each marked as never built for Windows where that holds. `tauri.conf.json` names the

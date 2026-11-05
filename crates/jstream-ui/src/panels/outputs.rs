@@ -1068,6 +1068,21 @@ fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
                         aria-label=move || if is_record() { "File path" } else { "Server URL" }
                         bind:value=target
                     />
+                    <Show when=move || is_record()>
+                        {crate::browse::browse_button(
+                            crate::browse::BrowseKind::Save,
+                            vec!["mp4".into()],
+                            "Save the recording".into(),
+                            || true,
+                            move || crate::browse::file_name(&target.get()),
+                            move || crate::browse::start_folder(
+                                jstream_control::protocol::AssetRoot::Absolute,
+                                &target.get(),
+                                None,
+                            ),
+                            move |picked| target.set(picked),
+                        )}
+                    </Show>
                     <button type="submit">"Save"</button>
                     <button type="button" on:click=move |_| editing.set(false)>
                         "Cancel"
@@ -1293,14 +1308,31 @@ fn NewOutputForm(panel: Panel) -> impl IntoView {
                         NewKind::Rtmp => "Server URL (without the stream key)",
                         NewKind::Record | NewKind::VirtualCam => "File path on the engine's machine",
                     }}
-                    <input
-                        type="text"
-                        bind:value=target
-                        placeholder=move || match kind.get() {
-                            NewKind::Rtmp => "rtmps://live.example.com/app",
-                            NewKind::Record | NewKind::VirtualCam => "/home/me/Videos/show.mp4",
-                        }
-                    />
+                    <span class="path-row">
+                        <input
+                            type="text"
+                            bind:value=target
+                            placeholder=move || match kind.get() {
+                                NewKind::Rtmp => "rtmps://live.example.com/app",
+                                NewKind::Record | NewKind::VirtualCam => "/home/me/Videos/show.mp4",
+                            }
+                        />
+                        <Show when=move || kind.get() == NewKind::Record>
+                            {crate::browse::browse_button(
+                                crate::browse::BrowseKind::Save,
+                                vec!["mp4".into()],
+                                "Save the recording".into(),
+                                || true,
+                                move || crate::browse::file_name(&target.get()),
+                                move || crate::browse::start_folder(
+                                    jstream_control::protocol::AssetRoot::Absolute,
+                                    &target.get(),
+                                    None,
+                                ),
+                                move |picked| target.set(picked),
+                            )}
+                        </Show>
+                    </span>
                 </label>
             </Show>
             <button

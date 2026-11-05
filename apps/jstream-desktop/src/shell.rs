@@ -9,8 +9,9 @@
 //!   script, full screen when the page asks for it. A link to one of the project's own
 //!   pages on GitHub ([`links`]: the UI's Help menu and About dialog) opens in the
 //!   system browser instead. Any other is refused.
-//! - The page gets no Tauri IPC commands: the app defines none and grants no
-//!   capabilities, so the UI talks to the engine only over the WebSocket API.
+//! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
+//!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
+//!   only over the WebSocket API.
 //! - When the app exits, the host stops: the server closes its connections and the
 //!   engine stops.
 //!
@@ -140,6 +141,7 @@ fn open_projector(
 pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result<()> {
     let start = start_url()?;
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![crate::pick::pick_path])
         .register_uri_scheme_protocol(ui::SCHEME, move |_context, request| {
             let reply = ui.respond(
                 request.method().as_str(),

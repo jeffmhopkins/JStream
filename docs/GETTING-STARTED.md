@@ -67,7 +67,9 @@ on **program**, drawn on the canvas in the middle.
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device or the file. A display,
+   display or window from the list of those open now, the device or the file. In the
+   desktop app a file field has a **Browse…** button; a browser page keeps the path as
+   text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,
    before you press **OK**.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
@@ -137,10 +139,12 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
 -->
 
-In **Outputs**, add a **Recording (MP4)** output with the file path to write, then press
+In **Outputs**, add a **Recording (MP4)** output with the file path to write. In the
+desktop app, **Browse…** beside that field opens a save dialog; a browser page keeps
+the path as text. Then press
 **Record** at the top. **Stop recording** finishes the file. A recording runs on its own,
 whether or not you are live. It never overwrites a file, so for another take, press
-**Edit** on its card and give it a new file name.
+**Edit** on its card and give it a new file name. Browse… is there on Edit too.
 
 <a id="vcam"></a>
 ## The virtual camera (optional)

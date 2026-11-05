@@ -6,7 +6,7 @@
 //! It holds connecting and the session (`session`), the shell (`app`), the header bar
 //! (`header`) and its Help menu's links and About dialog (`about`), the dock model (`dock`) and the workspace that draws it (`workspace`),
 //! the hotkeys the page runs (`hotkeys`), the state the panels share (`store`), the
-//! panels (`panels`), the pairing panel
+//! panels (`panels`), the Browse buttons on path fields (`browse`), the pairing panel
 //! (`pairing`), the Plugins section (`plugins`), the preview canvas (`canvas`), the right-click menu (`menu`) and the
 //! selected items' entries in it (`item_menu`), copy and paste (`clipboard`), screenshots (`screenshot`), the modal dialog frame (`dialog`) and
 //! the prototype's icons (`icons`).
@@ -17,6 +17,7 @@
 
 pub mod about;
 pub mod app;
+pub mod browse;
 pub mod canvas;
 pub mod clipboard;
 pub mod dialog;

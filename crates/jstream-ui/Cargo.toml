@@ -29,5 +29,9 @@ serde_json.workspace = true
 # moving the focus through a right-click menu.
 web-sys = { workspace = true, features = ["Document", "DomRect", "Element", "Event", "HtmlElement", "NodeList", "Storage", "Window"] }
 
+# Awaits the desktop app's file-dialog promise. The browser build only.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures.workspace = true
+
 [dev-dependencies]
 jstream-control = { workspace = true, features = ["mock"] }

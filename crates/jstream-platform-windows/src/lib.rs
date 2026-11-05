@@ -23,8 +23,11 @@ mod clock;
 mod codec;
 #[cfg(windows)]
 mod com;
+// The extension filter is tested on every platform; the dialog itself is Windows.
 mod credential;
 mod decode;
+#[cfg(any(windows, test))]
+mod dialog;
 #[cfg(windows)]
 mod gpu;
 // Its decision logic is tested on every platform.
@@ -61,6 +64,8 @@ pub use credential::CredentialTarget;
 pub use credential::WindowsCredentials;
 #[cfg(windows)]
 pub use decode::MfMediaDecoders;
+#[cfg(windows)]
+pub use dialog::{Pick, PickKind, pick_path};
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
 #[cfg(windows)]

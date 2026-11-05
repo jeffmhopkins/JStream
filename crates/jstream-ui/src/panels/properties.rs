@@ -938,22 +938,60 @@ fn asset_input(
         }
     };
     let p = param.clone();
-    let on_root = move |event: leptos::ev::Event| {
-        let picked = root_from(&event_target_value(&event));
-        root.set(picked);
-        let current = parts().1;
-        if !current.is_empty() {
-            send(asset_value(&p, picked, &current));
+    let on_root = {
+        let send = send.clone();
+        move |event: leptos::ev::Event| {
+            let picked = root_from(&event_target_value(&event));
+            root.set(picked);
+            let current = parts().1;
+            if !current.is_empty() {
+                send(asset_value(&p, picked, &current));
+            }
         }
     };
     let hint = (!accept.is_empty()).then(|| accept.join(", "));
+    let extensions = accept.to_vec();
+    let dialog_title = param.label.clone();
+    let p = param.clone();
+    let send = send.clone();
     view! {
         <select class="asset-root" prop:value=move || root_name(root.get()) on:change=on_root>
             <option value="collection">"Collection folder"</option>
             <option value="app">"App assets"</option>
             <option value="absolute">"Absolute path"</option>
         </select>
-        <input type="text" placeholder=hint.unwrap_or_else(|| "path".into()) prop:value=path on:change=on_path />
+        <input type="text" placeholder=hint.unwrap_or_else(|| "path".into()) prop:value=path.clone() on:change=on_path />
+        // App assets are the app's own files, not something a person picks on disk.
+        {crate::browse::browse_button(
+            crate::browse::BrowseKind::Open,
+            extensions,
+            dialog_title,
+            move || root.get() != AssetRoot::App,
+            {
+                let path = path.clone();
+                move || crate::browse::file_name(&path())
+            },
+            {
+                let path = path.clone();
+                move || {
+                    let collection = crate::host::desktop_host().and_then(|host| host.collection);
+                    crate::browse::start_folder(
+                        root.get_untracked(),
+                        &path(),
+                        collection.as_deref(),
+                    )
+                }
+            },
+            move |picked: String| {
+                let collection = crate::host::desktop_host().and_then(|host| host.collection);
+                let (picked_root, path) = crate::browse::place_asset(collection.as_deref(), &picked);
+                let value = asset_value(&p, picked_root, &path);
+                if value.is_ok() {
+                    root.set(picked_root);
+                }
+                send(value);
+            },
+        )}
     }
     .into_any()
 }

@@ -157,7 +157,14 @@ pub fn start(
         host.stop();
         return Startup::problem(message);
     }
-    let script = bootstrap::script(ui::ORIGIN, host.ws_url(), host.token(), vcam.as_str());
+    let collection = data.to_string_lossy();
+    let script = bootstrap::script(
+        ui::ORIGIN,
+        host.ws_url(),
+        host.token(),
+        vcam.as_str(),
+        collection.as_ref(),
+    );
     Startup {
         ui,
         script: Some(script),
