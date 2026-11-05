@@ -58,7 +58,8 @@ Contents ([Design](#design) explains the choices):
   scene's Pop out submenu) and `pop_out_source` (an object's), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
   natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
-  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
+  app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
+  same-origin opener's for a projector window), if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
@@ -190,7 +191,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
-  and `App` connects to that engine at once (`host.rs`). That connection carries the
+  and `App` connects to that engine at once (`host.rs`). A projector window lacking the
+  global (WebView2 doesn't run the app's script in a window handed to its opener) reads
+  its same-origin opener's instead. That connection carries the
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
