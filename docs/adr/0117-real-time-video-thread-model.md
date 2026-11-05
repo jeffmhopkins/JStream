@@ -122,7 +122,8 @@ so deterministic renders stay deterministic.
 - **GPU-path encoders** keep today's path: an NV12 encode target from a ring, written by
   the render thread's submit and handed over with its fence.
 - **Everything read back** (CPU-path encoders, virtual cameras, preview encoders on the
-  CPU) is converted to NV12 on the GPU first, halving the bytes, and copied into one of
+  CPU) is converted to NV12 on the GPU first (1.5 bytes a pixel instead of RGBA's 4, so about 60%
+  fewer bytes), and copied into one of
   three staging buffers per mix. A `jstream-readback` thread per stage maps the buffer
   written two ticks earlier, hands it to every consumer, and returns it to the ring. A
   consumer that is behind drops and counts (R-RT-004). The pts is the tick's, so A/V
@@ -184,7 +185,8 @@ Whether the compositor's GPU queue needs a higher GPU priority is left to the be
 ### 10. Every step proves itself on the bench
 The build lands in steps, each with a `jstream bench` report (#1220) showing fps, drops at
 every stage, switch placeholders and audio underruns no worse than before, and better
-where the step aims. Linux CI runs the bench on software rendering for regressions; the
+where the step aims. It also reports what the always-on stage (§6) costs while idle: CPU,
+GPU and memory with a preview open and no output running. Linux CI runs the bench on software rendering for regressions; the
 alpha.5 Windows runs gate the release. A claim of a speed-up says where it was measured
 (R-RT-005).
 
