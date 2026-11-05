@@ -323,7 +323,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, layer order
   (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
   Fit and Stretch to canvas and Reset rotation (`item.set_geometry`), a Blending submenu
-  (`item.set_blend`), Clear crop (`item.set_crop`, with
+  (`item.set_blend`, then its amount as `item.set_opacity` at 100, 75, 50 or 25%), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
