@@ -2672,9 +2672,6 @@ stamp = { hash = "b3:528a4d728be121b6" }
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/Cargo.toml"]
 stamp = { hash = "b3:a772352ba69e809b" }
 
-["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/build.rs"]
-stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the revisions paragraph: modern results still carry serverInfo, and its version is the workspace release version; build.rs is now covered." }
-
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:7ba81bdb272c8e57", by = "agent:blend-amount", note = "Re-read the design-guidance summary; the new sentence (opacity is a blend's amount) fits it, nothing listed is contradicted" }
 

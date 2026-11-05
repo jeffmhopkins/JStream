@@ -55,7 +55,7 @@ each request body to `Server::handle` ([Design](#design)).
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml", "crates/jstream-mcp/build.rs"]
+covers = ["crates/jstream-mcp/src/**", "crates/jstream-mcp/Cargo.toml"]
 depends_on = ["docs/ARCHITECTURE.md#mcp", "docs/adr/0006-mcp-full-access.md", "docs/adr/0013-command-model.md", "docs/adr/0036-mcp-events-polling-tool.md"]
 -->
 
