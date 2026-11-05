@@ -508,8 +508,8 @@ every mix runs at the base rate divided by an integer.
 |---|---|---|
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
-| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
-| Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
+| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
+| Render | Composites every mix on each base-rate tick; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264, JPEG, or PNG for a screenshot) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -1225,8 +1225,9 @@ left-sited chroma. The render thread (in `jstream-core`) runs it: a video sessio
 opened on the context gets each composite of its video mix converted into the next of
 that mix's ring of the platform's encode targets, which it is pushed as a GPU frame, in
 its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
-on the CPU path and the virtual cameras still get their mix read back, and a mix none
-of them is fed is not read back. Built-in video filters are kinds with
+on the CPU path and the virtual cameras still get their mix read back, through a ring
+of map-read buffers the render thread collects without waiting for the GPU (§4 of the
+ADR), and a mix none of them is fed is not read back. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));

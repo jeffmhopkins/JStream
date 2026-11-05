@@ -35,6 +35,9 @@ The code is ported from spikes S1 to S3. This first cut has:
   `GetProcessTimes`, for `stats.tick`'s load. **`WindowsThreadCpu`** (`ThreadCpu`): the
   process's threads from a ToolHelp snapshot, each one's kernel and user time from
   `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`.
+  **`WindowsThreadPriority`** (`ThreadPriority`): MMCSS through
+  `AvSetMmThreadCharacteristicsW`, the `Playback` task for video and `Pro Audio` for
+  audio, reverted when the guard drops.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
     of each, and the running processes (a ToolHelp snapshot: each one's ID, its

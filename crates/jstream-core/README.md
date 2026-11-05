@@ -36,7 +36,9 @@ state machine. Contents:
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `set_thread_cpu`
-  (`profile.get`'s threads, below); `open_plugin_dir`
+  (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
+  program stage's render and mixer threads take as they start, on Windows their MMCSS
+  tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
@@ -2789,8 +2791,9 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   mixer panic, a rejected mix block
   or a mixer poll error is fatal: the encoder would get no more audio.
 
-The render thread reuses each capture's buffer, its composite and readback buffers, and
-its GPU textures through the cache. Each tick allocates, for every mix it draws, one
+The render thread keeps each capture's latest CPU frame as it was delivered, with no
+copy of its own, and reuses its composite targets, each mix's readback ring, and its GPU
+textures through the cache. Each tick allocates, for every mix it draws, one
 frame-sized buffer per encoder session on the CPU path fed from that mix, the frame the
 session takes ownership of (`VideoInput::push` cannot hand buffers back), and the item
 list `compose` fills for that mix; a session on the GPU path gets a handle to an encode
@@ -3243,7 +3246,18 @@ BT.709 in the target's range) is a submit of its own that stages the target's fe
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
 mix none of them is fed is not read back, and each readback is counted
-(`OutputStats::readbacks`, one per mix read back). A mix that stops being drawn hands
+(`OutputStats::readbacks`, one per mix read back). The readback never waits for the
+GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw
+records it into the mix's `ReadbackRing` of three map-read buffers, kept with the
+compositor, and collects whichever earlier ones have mapped, polling without a wait. A
+frame read back goes out a tick or two after it was drawn, with the time it was drawn
+for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
+nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
+repeats the last frame at the tick, and no push goes back in time
+(`MixFrame::push_time`). A frame not read back because all three buffers were still on
+their way is counted in `render_ticks`. Between ticks the render thread sleeps until
+the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
+the mixer thread take the host's `ThreadPriority` as they start. A mix that stops being drawn hands
 its ring to the collector; the rest drop before the compositor and the context. A
 target the platform refuses is fatal: the session could not be fed.
 

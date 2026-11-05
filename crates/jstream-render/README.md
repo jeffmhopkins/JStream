@@ -355,7 +355,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
    tests do. `Compositor::readback_wait` says how long the last `render`'s readback
    waited for the map, which `profile.get` counts in the finish phase rather than in a
-   scene's own time.
+   scene's own time. A **`ReadbackRing`** reads outputs back without waiting
+   ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): `record`
+   copies the output into one of up to `READBACK_DEPTH` (three) map-read buffers in a
+   submit of its own and starts its map, tagged by the caller; `collect` polls the
+   device without blocking and hands back, oldest first, every frame whose map has
+   finished, as tightly packed RGBA8. With every buffer still on its way `record`
+   returns `false` for the caller to count, and a new size waits until none is out.
 
 6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target
