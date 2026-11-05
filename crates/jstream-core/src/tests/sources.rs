@@ -10,7 +10,7 @@ use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{
     Action, AssetRoot, Batch, Call, Edit, Event, ItemId, PixelSize, Reference, SceneId, Settings,
-    SourceId, SourceKind,
+    SourceId, SourceKind, TimelineCue, TimelineId, TimelineInfo, TimelineLoop,
 };
 use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
@@ -916,6 +916,96 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     assert!(plays(&engine, 0), "shown again, it plays from the start");
     clock.advance(100);
     assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #1172: a `source.restart` cue on a late tick starts the file at the cue's time, so
+/// 200 ms later the picture is that far in, not back at the first frame.
+#[test]
+fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
+    let dir = temp_dir("media-restart-cue");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(false)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    timeline_id: TimelineId::new("t"),
+                    name: String::new(),
+                    duration_ms: 2_000,
+                    looping: TimelineLoop::Once,
+                    cues: vec![TimelineCue::new(
+                        500,
+                        &Action::SourceRestart {
+                            source_id: SourceId::new("video"),
+                        },
+                    )],
+                },
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    timeline_id: TimelineId::new("kicker"),
+                    name: String::new(),
+                    duration_ms: 2_000,
+                    looping: TimelineLoop::Once,
+                    cues: Vec::new(),
+                },
+            },
+        ]),
+    )
+    .expect("created");
+    assert!(plays(&engine, 0), "the first frame");
+    block_on(control.call(Call::Action {
+        action: Action::TimelinePlay {
+            timeline_id: TimelineId::new("t"),
+        },
+    }))
+    .expect("play");
+    clock.advance(700);
+    block_on(control.call(Call::Action {
+        action: Action::TimelinePlay {
+            timeline_id: TimelineId::new("kicker"),
+        },
+    }))
+    .expect("the late tick");
+    assert!(
+        plays(&engine, 2),
+        "restarted at the cue (500 ms), so 700 ms is frame 2, not frame 0; showing {:?}",
+        shown(&engine, "video")
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

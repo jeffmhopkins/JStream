@@ -54,6 +54,7 @@ mod tests {
             "https://github.com/jeffmhopkins/JStream/blob/main/LICENSE-MIT",
             "https://github.com/jeffmhopkins/JStream/blob/main/docs/GETTING-STARTED.md",
             "https://github.com/jeffmhopkins/JStream/commit/0123456789abcdef0123456789abcdef01234567",
+            "https://github.com/jeffmhopkins/JStream/releases/tag/v0.1.0-alpha.4.2",
         ] {
             assert!(is_project_page(page), "{page}");
         }

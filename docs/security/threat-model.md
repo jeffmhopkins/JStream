@@ -37,6 +37,15 @@ depends_on = ["docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-004"]
 No telemetry leaves the machine, and logs and crash reports stay local
 ([R-SEC-004](../RULES.md#R-SEC-004)).
 
+The desktop app may `GET`
+[GitHub's public releases list](https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=20)
+to compare the running version with the latest release, pre-releases included. The
+request sends no body, no token and no version: its user agent is the fixed word
+`JStream`, and GitHub sees the machine's address. It runs when the user chooses Help ›
+Check for updates, and once at launch only when Settings › Check for updates at launch
+is on, which stays off until the user turns it on. A failure is silent at launch and
+shown by the menu item. Nothing is downloaded or installed. That read is not telemetry.
+
 <a id="attackers"></a>
 ## Who we defend against
 <!-- @section
@@ -78,7 +87,9 @@ Every arrow into the engine crosses one of five boundaries:
 3. **Helper processes**: browser pages and CLAP hosts. See [Browser source](#browser)
    and [Plugins](#plugins).
 4. **Shared memory to other processes**: the virtual camera. See [Virtual camera](#vcam).
-5. **The network out**: streaming servers and Google. See [Secrets](#secrets).
+5. **The network out**: streaming servers, Google, and, when the user asks or has turned
+   the launch check on, GitHub's releases API (see [Assets](#assets)). See
+   [Secrets](#secrets).
 
 <a id="server"></a>
 ## Control server
