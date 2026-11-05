@@ -166,7 +166,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 | `0.1.0-alpha.1` | The first portable Windows build: scenes, sources, mixing, streaming, recording and the virtual camera, driven from the UI or an agent | 📦 released as `v0.1.0-alpha.1` | `██████████` 100% | 114 | 0 | 0 |
 | `0.1.0-alpha.2` | Fixes and UI work on the first build | 📦 released as `v0.1.0-alpha.2` | `██████████` 100% | 1 | 0 | 0 |
 | `0.1.0-alpha.3` | Fixes, compositor blend modes and capture pickers | 📦 released as `v0.1.0-alpha.3` | no items | 0 | 0 | 0 |
-| `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 🔨 next: waits on 24 gate items, 22 merged | `█████████░` 93% | 27 | 2 | 0 |
+| `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 📦 released as `v0.1.0-alpha.4` | `██████████` 100% | 29 | 0 | 0 |
 | Not scheduled | Roadmap items no release is gathering yet | ⏳ later | `█░░░░░░░░░` 8% | 1 | 0 | 11 |
 
 <details>
@@ -300,20 +300,20 @@ An item counts toward the release it first ships in. A release's gate items are 
 
 </details>
 
-<details open>
-<summary><b>0.1.0-alpha.4</b>: 27 of 29 merged</summary>
+<details>
+<summary><b>0.1.0-alpha.4</b>: 29 of 29 merged</summary>
 
 | ID | Item | Gate | Milestone | Status | PRs |
 |---|---|---|---|---|---|
-| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🚧 | M3 | 🔍 in review | #1146 |
-| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | 🚧 | M3 | 🔍 in review: Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile | #1179 |
 | X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🚧 | M3 | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
 | MO2 | Native motion: continuous wiggle, oscillate and drift on items, drawn each frame (item.set_motion) | 🚧 | M3 | 🧪 merged, Windows run pending: Protocol 0.81; landed with wave/alpha4 (#1176), with camera motion and the follow-cursor camera (#1157, ADR-0113, 0.85); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, and step 5e the follow camera (#1159) | #1125, #1176 |
 | MO3 | A one-shot shake that a hotkey fires and that decays | 🚧 | M3 | 🧪 merged, Windows run pending: item.trigger_motion, protocol 0.84; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1156, #1176 |
 | MO5 | Audio-reactive motion modifiers drawn from the render loop | 🚧 | M3 | 🧪 merged, Windows run pending: Protocol 0.86; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, with real audio | #1149, #1176 |
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | 🚧 | M3 | 🧪 merged, Windows run pending: Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🚧 | M3 | 🧪 merged, Windows run pending: Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
+| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🚧 | M3 | 🧪 merged, Windows run pending: Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | 🚧 | M3 | 🧪 merged, Windows run pending: Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | 🚧 | M3 | 🧪 merged, Windows run pending: Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
 | AG1 | MCP prompts only for what undo can't take back (destructiveHint) | 🚧 | M3 | ✅ merged | #1055 |
 | AG2 | Agents reach the desktop app: jstream.exe --mcp with a token file, and Connect an agent docs | 🚧 | M3 | ✅ merged | #1091 |
 | AG3 | Layering and reflection guidance for agents in MCP | 🚧 | M3 | ✅ merged | #1079 |
@@ -349,12 +349,12 @@ Each goal is a milestone of the roadmap.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `███████░░░` 74% | 31 | 2 | 9 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 79% | 33 | 0 | 9 |
 
-143 of 156 items are merged; 19 of those still wait on a run on Windows hardware.
+145 of 156 items are merged; 21 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 32 items, by next step: 🔨 build 14, 🧪 Windows run 17, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 32 items, by next step: 🔨 build 12, 🧪 Windows run 19, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -389,9 +389,9 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | MO5 | Audio-reactive motion modifiers drawn from the render loop | M3 | 🧪 Windows run | Protocol 0.86; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, with real audio | #1149, #1176 |
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🧪 Windows run | Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🧪 Windows run | Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
-| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🔨 build |  | #1146 |
+| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🧪 Windows run | Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🧪 Windows run | Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
-| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🔨 build, then 🧪 Windows run | Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile | #1179 |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🧪 Windows run | Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
 
 </details>
 
@@ -558,7 +558,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 31 of 42 merged</summary>
+<summary><b>M3</b> Depth and reach: 33 of 42 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -594,7 +594,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | 🧪 merged, Windows run pending: Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🧪 merged, Windows run pending: Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA1 | Page API part 1: ADR-0102 and shared values (values.set, values.list) | ✅ merged | #1077, #1127 |
-| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🔍 in review | #1146 |
+| PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🧪 merged, Windows run pending: Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | ✅ merged | #1100 |
 | PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | ✅ merged | #1106 |
@@ -603,7 +603,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | 🧪 merged, Windows run pending: Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
 | CH1 | File filters such as Apply LUT on the program and output chains | ✅ merged | #1134 |
 | LB1 | A local web browser source's first load passes on Linux | ✅ merged | #1094 |
-| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | 🔍 in review: Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile | #1179 |
+| RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | 🧪 merged, Windows run pending: Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
 
 </details>
 <!-- @generated end progress -->
