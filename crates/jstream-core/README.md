@@ -844,7 +844,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   quietly so the probe reaches none) and puts a Move toward the program scene on the
   studio, by item, with the default preset's duration and easing and its `unmatched`
   (none for a `cut`): every other item pairs with itself and holds still, and only the
-  changed one appears or disappears with its effect. A transition in flight is
+  changed one appears or disappears with its effect. A preset that lasts no time, the
+  initial cut included, starts no run, so the item shows or hides on the next frame
+  even when it has its own effect. A `cut` that stores a duration still plays that
+  effect over it. A transition in flight is
   continued from what is on screen; a press program doesn't see (another keyframe's
   placement) leaves it as it is. A source the next plan reaches again restarts as on a
   switch (`restart_on_show`).
