@@ -1089,6 +1089,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   has its own image: a frame sheet, several pictures taken at an interval and tiled in
   time order into one PNG, from `video.frames` or, starting with a switch, from the
   `scene` tool's `scene.switch_and_watch` (#1061), sent the same way.
+- **`serverInfo.version`** is the workspace release version, the one the apps ship
+  (`jstream-mcp`'s `build.rs` reads `[workspace.package] version`). The crate itself
+  stays at `0.0.0` ([The version](runbooks/release.md#version)), so `CARGO_PKG_VERSION`
+  would report that (#1189).
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
