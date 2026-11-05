@@ -192,8 +192,9 @@ fn hide_plays_the_items_own_disappear_effect() {
     );
 }
 
-/// Under the initial `cut` preset, `inherit` is no animation: the item shows on the next
-/// frame, with no run. An item's own effect still plays, over the cut's duration.
+/// Under a `cut`, `inherit` is no animation. The initial cut lasts no time (#1209), so
+/// an item's own effect has nothing to play over and shows on the next frame too. A
+/// cut that stores a duration still plays that effect over it (ADR-0101).
 #[test]
 fn under_a_cut_an_inherited_effect_shows_at_once_and_an_own_one_plays() {
     let engine = scene(Vec::new());
@@ -211,14 +212,46 @@ fn under_a_cut_an_inherited_effect_shows_at_once_and_an_own_one_plays() {
         }],
     );
     act(&control, hide("a1")).expect("hides");
-    let tracks = tracks(&engine).expect("its own effect runs");
+    assert_eq!(
+        tracks(&engine),
+        None,
+        "a zero-length cut has no run, own effect included"
+    );
+
+    apply(
+        &control,
+        vec![Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("cut"),
+            name: None,
+            kind: None,
+            duration_ms: Some(300),
+            easing: None,
+            patch: Settings::new(),
+        }],
+    );
+    act(&control, show("a1")).expect("shows again");
+    // Appear is still `inherit`, so the stored duration does not start a run.
+    assert_eq!(tracks(&engine), None, "inherit stays instant");
+    apply(
+        &control,
+        vec![Edit::ItemSetTransition {
+            item_id: ItemId::new("a2"),
+            transition: ItemTransition {
+                disappear: TransitionEffect::Slide,
+                ..ItemTransition::default()
+            },
+        }],
+    );
+    act(&control, hide("a2")).expect("hides");
+    let tracks = tracks(&engine).expect("its own effect runs over the stored duration");
     assert!(
         tracks.iter().any(|track| matches!(
             track,
             Track::Disappear {
                 effect: Effect::Slide,
+                timing,
                 ..
-            }
+            } if timing.duration_ms == 300.0
         )),
         "{tracks:?}"
     );

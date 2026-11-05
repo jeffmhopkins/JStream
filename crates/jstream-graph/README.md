@@ -555,7 +555,9 @@ the engine's; this crate does no I/O.
   addressed to them (then `item.set_motion` for their motion and `item.set_effects` for
   their effects, keeping a filter of an unknown
   kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
-  initial `cut` is updated in place when the file has it, and deleted when it doesn't),
+  initial `cut` is updated in place when the file has it, and deleted when it doesn't;
+  the stock Cut a collection used to start with, 300 ms ease-in-out and otherwise
+  unchanged, loads at duration 0, #1209),
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
@@ -669,7 +671,8 @@ loading with its master send and its audio off, so an older collection never sta
 recording a webcam's microphone, and saving that back; a file without `master` or any output's `filters` (as saved before their chains
 existed) loading with those chains empty and the sources' filters intact; a removed
 master send's round trip, a webcam's among them (its audio on, no send back); a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
-transitions' round trip (with the initial `cut` deleted, or kept but changed) and a
+transitions' round trip (with the initial `cut` deleted, or kept but changed), the
+old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
 preset of another kind version refused; hotkeys' round trip, and a file whose binding
 names a missing scene refused; a clone's
 link surviving a round trip after its original is deleted; the migration runner over stand-in
