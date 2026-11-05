@@ -608,7 +608,8 @@ state machine. Contents:
   leaving the latest collection and no temporary file), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
-  resolution, a fade that ends on the clock, an item's effects planned with the
+  resolution, a fade that ends on the clock, a cut (including one that still stores a
+  duration) showing the new scene on the next frame, an item's effects planned with the
   scene once a transition onto it ends, a switch mid-transition, and a GPU
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent

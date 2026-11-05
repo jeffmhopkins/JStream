@@ -1203,8 +1203,10 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   removing the hotkey bindings that name it in the same edit; its inverse re-creates
   the preset and restores them. The
   default preset can't be deleted (`invalid_argument` on `preset_id`);
-  `transition.set_default` moves it. A new collection holds one preset, `cut`, as its
-  default.
+  `transition.set_default` moves it. A new collection holds one preset, `cut`, named
+  Cut, as its default, with `duration_ms` 0: a switch that uses it shows the new scene
+  on the next frame. A `cut` ignores a stored duration, so one saved at 300 ms (the
+  preset this collection used to start with) still cuts.
 - `scene.set_transitions {scene_id, transition_in?, transition_out?}` sets both of a
   scene's overrides (absent clears one), and `item.set_transition {item_id,
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,

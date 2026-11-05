@@ -1435,6 +1435,42 @@ fn parse_errors_quote_nothing_from_the_file() {
     );
 }
 
+/// #1209: a file that still stores the old stock Cut (300 ms, ease-in-out, unchanged)
+/// loads it as an instant cut. A cut someone retimed keeps its duration.
+#[test]
+fn an_old_stock_cut_loads_as_an_instant_cut() {
+    use jstream_protocol::TransitionPresetId;
+    let mut value: Value = serde_json::from_str(V6).expect("v6");
+    value["transitions"] = json!({
+        "presets": [{
+            "id": "cut",
+            "name": "Cut",
+            "kind": "cut",
+            "kind_version": 1,
+            "duration_ms": 300,
+            "easing": "ease_in_out"
+        }],
+        "default": "cut"
+    });
+    let loaded = load(&value.to_string()).expect("the old stock cut loads");
+    let preset = loaded
+        .state()
+        .preset(&TransitionPresetId::new("cut"))
+        .expect("cut");
+    assert_eq!(preset.duration_ms(), 0);
+
+    value["transitions"]["presets"][0]["duration_ms"] = json!(500);
+    let kept = load(&value.to_string()).expect("a retimed cut loads");
+    assert_eq!(
+        kept.state()
+            .preset(&TransitionPresetId::new("cut"))
+            .expect("cut")
+            .duration_ms(),
+        500,
+        "a duration someone set is kept; a switch still cuts because the kind is cut"
+    );
+}
+
 /// Presets, the default, scene overrides and item settings survive a save and load,
 /// including a collection that deleted the initial `cut` preset.
 #[test]
