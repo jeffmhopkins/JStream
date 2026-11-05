@@ -45,6 +45,11 @@ version = "0.1.0-alpha.4"
 goal = "A functional alpha for building layered, animated scenes over MCP on Windows"
 tag = "v0.1.0-alpha.4"
 
+[[release]]
+id = "alpha.4.1"
+version = "0.1.0-alpha.4.1"
+goal = "alpha.4 with the Windows run's fixes: dropped frames, stream and preview quality, browser sources from the zip"
+
 [[milestone]]
 id = "M0"
 title = "Foundation and risk spikes"

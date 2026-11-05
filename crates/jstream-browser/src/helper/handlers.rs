@@ -38,6 +38,10 @@ wrap_app! {
             // No first-run, crash-restore or error dialogs in a browser nobody sees.
             command_line.append_switch(Some(&"no-first-run".into()));
             command_line.append_switch(Some(&"noerrdialogs".into()));
+            // No browser window of Chrome's own: the Chrome runtime opens one at start
+            // (a visible "New Tab" window) unless told not to, and the helper only ever
+            // makes windowless browsers (#1186).
+            command_line.append_switch(Some(&"no-startup-window".into()));
             // Profiles live in memory and nothing is kept, so on a Linux desktop Chromium
             // has no reason to open the user's keyring, which could prompt to unlock it.
             #[cfg(target_os = "linux")]

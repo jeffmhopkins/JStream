@@ -20,6 +20,8 @@ const PACKAGES: &[&str] = &[
     "jstream-daemon",
     "jstream-cli",
     "jstream-vcam-windows",
+    // The CLAP plugin host the engine starts beside itself (ADR-0035, #1187).
+    "jstream-plugin-host",
 ];
 
 /// The hosts' features for browser sources: their CEF backend, which loads no CEF itself.
@@ -54,6 +56,7 @@ const BINARIES: &[&str] = &[
     "jstream-daemon.exe",
     "jstream-cli.exe",
     "jstream_vcam_windows.dll",
+    "jstream-plugin-host.exe",
 ];
 
 /// Repository files copied into the zip as they are.
@@ -91,7 +94,8 @@ Settings, scenes and logs go in %APPDATA%\\JStream. To keep them in this folder 
 jstream.exe: they then go in the `data` folder here.
 
 jstream-daemon.exe is the engine without a window, and jstream-cli.exe controls it.
-jstream_vcam_windows.dll is the virtual camera. Registering it is optional: one admin
+jstream-plugin-host.exe runs CLAP audio plugins, one process each, for the audio
+filters that use them. jstream_vcam_windows.dll is the virtual camera. Registering it is optional: one admin
 prompt, only when you choose to.
 
 The browser folder holds the browser helper that runs web-page sources, sandboxed, with

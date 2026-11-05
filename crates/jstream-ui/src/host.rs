@@ -6,6 +6,11 @@
 //! engine's WebSocket URL and control token, and whether its virtual camera can be
 //! used. In a browser the global is absent and the UI shows the connect form.
 //!
+//! A projector window the app opens for `window.open` (`projector.rs`) may not run that
+//! script: on Windows, WebView2 doesn't run it on a window handed to its opener. Such a
+//! window reads the global from its opener instead, which the browser allows only when
+//! the opener is a page of the same origin, the app's own.
+//!
 //! Docs: crates/jstream-ui/README.md#design
 
 use leptos::prelude::window;
@@ -24,9 +29,26 @@ pub struct HostEngine {
     pub token: String,
 }
 
+/// The desktop app's global: this page's own, else its opener's when the opener is a
+/// page of the same origin (reading a property of a cross-origin opener throws).
+fn global() -> Option<JsValue> {
+    let own = |target: &JsValue| {
+        Reflect::get(target, &JsValue::from_str(DESKTOP_GLOBAL))
+            .ok()
+            .filter(JsValue::is_object)
+    };
+    let window = JsValue::from(window());
+    own(&window).or_else(|| {
+        let opener = Reflect::get(&window, &JsValue::from_str("opener"))
+            .ok()
+            .filter(JsValue::is_object)?;
+        own(&opener)
+    })
+}
+
 /// The engine the desktop app hands the page, if the page runs in it.
 pub fn desktop() -> Option<HostEngine> {
-    let global = Reflect::get(&window(), &JsValue::from_str(DESKTOP_GLOBAL)).ok()?;
+    let global = global()?;
     let field = |name: &str| {
         Reflect::get(&global, &JsValue::from_str(name))
             .ok()?
@@ -38,7 +60,7 @@ pub fn desktop() -> Option<HostEngine> {
 /// What the desktop app says about its virtual camera (the global's `vcam`), if the
 /// page runs in it: `registered`, `not_registered`, `outdated` or `off`.
 pub fn desktop_vcam() -> Option<String> {
-    let global = Reflect::get(&window(), &JsValue::from_str(DESKTOP_GLOBAL)).ok()?;
+    let global = global()?;
     Reflect::get(&global, &JsValue::from_str("vcam"))
         .ok()?
         .as_string()

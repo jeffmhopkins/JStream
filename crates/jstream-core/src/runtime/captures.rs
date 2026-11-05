@@ -824,11 +824,22 @@ pub(crate) fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Op
             let yuv = Yuv::new(info.color);
             out.resize(len, 0);
             for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
-                let luma = frame.row(0, y)?;
-                let chroma = frame.row(1, y / 2)?;
-                for (x, d) in dst.chunks_exact_mut(4).enumerate() {
-                    let c = (x / 2) * 2;
-                    d.copy_from_slice(&yuv.rgba(luma[x], chroma[c], chroma[c + 1]));
+                let luma = &frame.row(0, y)?[..width];
+                let chroma = &frame.row(1, y / 2)?[..chroma_len];
+                // Two pixels share each chroma sample, so its terms are worked out once
+                // for both (#1191: this runs on the render thread for every new frame).
+                let mut pairs = dst.chunks_exact_mut(8);
+                for ((d, l), c) in (&mut pairs)
+                    .zip(luma.chunks_exact(2))
+                    .zip(chroma.chunks_exact(2))
+                {
+                    yuv.pair(l[0], l[1], c[0], c[1], d);
+                }
+                // An odd width's last pixel has a chroma sample of its own.
+                let last = pairs.into_remainder();
+                if !last.is_empty() {
+                    let c = width - 1;
+                    last.copy_from_slice(&yuv.rgba(luma[c], chroma[c], chroma[c + 1]));
                 }
             }
         }
@@ -870,6 +881,22 @@ impl Yuv {
             cb_g: fixed(2.0 * kb * (1.0 - kb) / kg),
             cr_g: fixed(2.0 * kr * (1.0 - kr) / kg),
             cb_b: fixed(2.0 * (1.0 - kb)),
+        }
+    }
+
+    /// Two opaque RGBA8 pixels side by side, `y0` then `y1`, sharing one chroma sample,
+    /// into `out` (8 bytes): the same values [`Self::rgba`] gives each.
+    #[inline]
+    fn pair(&self, y0: u8, y1: u8, cb: u8, cr: u8, out: &mut [u8]) {
+        let cb = (i64::from(i32::from(cb) - 128) * i64::from(self.c)) >> 16;
+        let cr = (i64::from(i32::from(cr) - 128) * i64::from(self.c)) >> 16;
+        let r = cr * i64::from(self.cr_r);
+        let g = -cb * i64::from(self.cb_g) - cr * i64::from(self.cr_g);
+        let b = cb * i64::from(self.cb_b);
+        let channel = |v: i64| ((v + (1 << 15)) >> 16).clamp(0, 255) as u8;
+        for (px, y) in out.chunks_exact_mut(4).zip([y0, y1]) {
+            let l = i64::from((i32::from(y) - self.y.0) * self.y.1);
+            px.copy_from_slice(&[channel(l + r), channel(l + g), channel(l + b), 255]);
         }
     }
 
@@ -1056,6 +1083,58 @@ mod tests {
             jstream_protocol::SourceId::new("cam"),
         );
         assert!(start(&backends, &nope).is_err());
+    }
+
+    /// #1191: NV12 is converted two pixels at a time, sharing their chroma terms, with
+    /// the same values as converting each pixel on its own, an odd width's last one too.
+    #[test]
+    fn nv12_converts_by_pairs_as_it_does_pixel_by_pixel() {
+        use jstream_media::{
+            ColorInfo, ColorRange, ColorSpace, MediaTime, Plane, VideoFrame, VideoFrameInfo,
+        };
+        use jstream_platform::VideoSurface;
+        for (width, color) in [
+            (6, ColorInfo::default()),
+            (5, ColorInfo::default()),
+            (
+                7,
+                ColorInfo {
+                    space: ColorSpace::Bt601,
+                    range: ColorRange::Full,
+                },
+            ),
+        ] {
+            let height = 3_u32;
+            let w = width as usize;
+            let chroma_len = w.div_ceil(2) * 2;
+            // Rows padded past the picture, with bytes that cover the range.
+            let luma: Vec<u8> = (0..(w + 3) * 3).map(|i| (i * 37 % 256) as u8).collect();
+            let chroma: Vec<u8> = (0..(chroma_len + 2) * 2)
+                .map(|i| (i * 91 % 256) as u8)
+                .collect();
+            let info = VideoFrameInfo {
+                size: FrameSize::new(width, height).expect("size"),
+                format: PixelFormat::Nv12,
+                color,
+                pts: MediaTime::zero(Timebase::NANOS),
+            };
+            let planes = vec![
+                Plane::new(luma.clone(), w + 3),
+                Plane::new(chroma.clone(), chroma_len + 2),
+            ];
+            let frame = VideoFrame::new(info, planes).expect("an NV12 frame");
+            let mut out = Vec::new();
+            rgba_from_surface(&VideoSurface::Cpu(frame), &mut out).expect("NV12");
+            let yuv = super::Yuv::new(color);
+            let mut expected = Vec::new();
+            for y in 0..height as usize {
+                for x in 0..w {
+                    let c = (y / 2) * (chroma_len + 2) + (x / 2) * 2;
+                    expected.extend(yuv.rgba(luma[y * (w + 3) + x], chroma[c], chroma[c + 1]));
+                }
+            }
+            assert_eq!(out, expected, "width {width}");
+        }
     }
 
     /// Leaving the GPU path restarts a display capture on the CPU path, but not a

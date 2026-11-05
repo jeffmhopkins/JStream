@@ -58,7 +58,8 @@ Contents ([Design](#design) explains the choices):
   scene's Pop out submenu) and `pop_out_source` (an object's), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
   natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
-  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
+  app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
+  same-origin opener's for a projector window), if the page runs there,
   and `desktop_vcam()`, what that global says about the virtual camera.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
@@ -190,7 +191,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
-  and `App` connects to that engine at once (`host.rs`). That connection carries the
+  and `App` connects to that engine at once (`host.rs`). A projector window lacking the
+  global (WebView2 doesn't run the app's script in a window handed to its opener) reads
+  its same-origin opener's instead. That connection carries the
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
@@ -1007,7 +1010,7 @@ browser, and `mod.rs` is the component.
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
   `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
@@ -1017,8 +1020,12 @@ browser, and `mod.rs` is the component.
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
-  channel number, so a late frame of the old stream is never drawn; until the new
-  stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  channel number, so a late frame of the old stream is never drawn, once the change has
+  held for 250 ms (`preview::SETTLE`). A scene switch changes the selection before the
+  program, so for that moment the canvas wants the new scene on its own; settling keeps
+  the program stream, with its transition, through the switch (#1205). Until a new
+  stream's first frame, the last picture stays on the canvas; only a canvas that has
+  shown no picture yet, or whose stream had ended, says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and

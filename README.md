@@ -25,6 +25,15 @@ retired_sections = { "today" = [] }
 > The control protocol still changes from release to release. Don't rely on it for a show
 > that matters yet. [Progress](#progress) shows how far each milestone has got.
 
+> [!NOTE]
+> **Known issues in alpha.4 on Windows.** Browser sources don't start from the zip, which
+> also lacks the plugin host that CLAP audio plugins need (#1185, #1186, #1187, fixed by
+> #1213). Snapshots and frame sheets draw browser pages and captures black (#1184).
+> Streaming can drop frames, and the editor preview and recordings look soft (#1191,
+> #1193, #1217). Hotkeys aren't heard while another app has the focus (#1188), and the
+> follow-pointer camera can lose the cursor (#1216). These lead the alpha.5 work, with the
+> rest of the alpha.4 run's findings.
+
 > [!TIP]
 > **Human?** Start at [For humans](#humans): download an alpha, build a first scene and go
 > live with [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
@@ -54,7 +63,7 @@ around one idea: **everything is an API**.
 - **3D scenes**: a scene can have a camera that the items sit in front of, moving through
   them, with depth of field.
 - **Transitions** with a studio preview, and keyframe scenes that animate between
-  layouts. Native motion and audio-reactive motion on items are coming in alpha.4.
+  layouts, and native motion, one-shot and audio-reactive, on items and cameras.
 - **Independent routing**: outputs take video mixes and audio buses, not scenes, so a
   stream and a recording can show different things, and audio runs through a bus mixer.
 - **Desktop or headless**: the same engine runs inside the desktop app or as a daemon that
@@ -167,6 +176,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 | `0.1.0-alpha.2` | Fixes and UI work on the first build | 📦 released as `v0.1.0-alpha.2` | `██████████` 100% | 1 | 0 | 0 |
 | `0.1.0-alpha.3` | Fixes, compositor blend modes and capture pickers | 📦 released as `v0.1.0-alpha.3` | no items | 0 | 0 | 0 |
 | `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 📦 released as `v0.1.0-alpha.4` | `██████████` 100% | 29 | 0 | 0 |
+| `0.1.0-alpha.4.1` | alpha.4 with the Windows run's fixes: dropped frames, stream and preview quality, browser sources from the zip | 🔨 next | no items | 0 | 0 | 0 |
 | Not scheduled | Roadmap items no release is gathering yet | ⏳ later | `█░░░░░░░░░` 8% | 1 | 0 | 11 |
 
 <details>
