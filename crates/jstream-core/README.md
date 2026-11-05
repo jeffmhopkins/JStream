@@ -650,7 +650,10 @@ state machine. Contents:
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
-  source built and rebuilt, a stored frame winning over the live source, a kind that
+  source built and rebuilt, drawn sharper when enlarged and left at its own size when a
+  legacy scale of `1e35` overflows (`an_enlarged_text_item_draws_its_source_at_a_density`,
+  `a_legacy_scale_that_draws_nothing_leaves_the_text_at_its_own_size`), a stored frame
+  winning over the live source, a kind that
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
@@ -1696,7 +1699,10 @@ A source the program mix shows enlarged is drawn at a density, when its kind can
 per pixel of the frame's extent, from the placements the collection holds (not a
 gesture's live values, so a drag is measured once it commits), the most of any item, in
 the program's passes and the video mixes', and the items whose effects draw it into
-their layer. A source a video chain runs over counts as 1,
+their layer. A legacy item counts only when `legacy_quad` returns a quad. A crop or a
+zero scale leaves none, and so does a finite scale whose size or a corner overflows
+`f32`: the compositor draws nothing there, and the item doesn't raise the density
+(#1168). A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the
