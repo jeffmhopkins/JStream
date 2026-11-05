@@ -2346,7 +2346,7 @@ stamp = { hash = "b3:0c6ce721ce92f8e8", by = "agent:cursor", note = "Re-read: th
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/updates.rs"]
-stamp = { hash = "b3:ddc67068424e1889", by = "agent:cursor", note = "Re-read: the scheme bullet says GET /jstream-update-check is answered by the app on another thread and the page's connect-src stays self plus the engine; the window bullet says there is still no Tauri IPC and the check ignores the request and always reads the same list; links.rs allows the release-tag URL Check for updates opens. shell.rs and updates.rs match." }
+stamp = { hash = "b3:82180f3a8382696f", by = "agent:cursor", note = "Re-read updates.rs against the scheme and window bullets: the path is still answered on another thread, the page still cannot choose the address, and connect-src is unchanged. The GitHub GET is now per_page=20." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/tauri.conf.json"]
 stamp = { hash = "b3:558b5c5512b30191" }
@@ -2391,7 +2391,7 @@ stamp = { hash = "b3:0c6ce721ce92f8e8", by = "agent:cursor", note = "Re-read: co
 stamp = { hash = "b3:45624952598c1f3a" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/updates.rs"]
-stamp = { hash = "b3:ddc67068424e1889", by = "agent:cursor", note = "Re-read: contents add updates.rs (GET /jstream-update-check returns GitHub's releases list or an error and sends no version); lib.rs exports the module; links.rs allows a release-tag URL; shell.rs answers that path on a background thread; the tests list names the request and the list, rate-limit and malformed replies." }
+stamp = { hash = "b3:82180f3a8382696f", by = "agent:cursor", note = "Re-read updates.rs against the contents bullet: GET /jstream-update-check still returns GitHub's releases list or an error and sends no version. The request is now per_page=20, the newest page, so the body stays under the 1 MiB cap." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/tests/delay_load.rs"]
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Purpose against #327: covers now includes tests/**, and the Tests bullet names the new integration test tests/delay_load.rs (media_foundation_is_delay_loaded, Windows MSVC only), which reads the built jstream.exe's PE headers and requires each DLL in build.rs's delay-load list in the delay-import table and none in the import table; the unit-test list and the rest of the contents are unchanged" }
@@ -6522,7 +6522,7 @@ stamp = { hash = "b3:e62d5f1a75c6baa0" }
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#assets"."body"]
-stamp = { hash = "b3:53ee1ed9221b6748", by = "agent:cursor", note = "Re-read: the new paragraph records the desktop app's GET of GitHub's releases list (no body, token or version; user agent JStream; launch check off until the user turns it on; not telemetry). The asset table and the no-telemetry rule still hold." }
+stamp = { hash = "b3:e61f217ceab74d3a", by = "agent:cursor", note = "Re-read the releases paragraph against updates.rs: still a GET with no body, token or version and user agent JStream, opt-in at launch, nothing downloaded. The registered URL is now per_page=20, which I loaded: a JSON array, newest first, pre-releases included and no drafts." }
 
 ["THREAT-MODEL#assets"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:wave-owner", note = "Re-read after main's wave/m1-3 landing (#754) merged into wave/m3-3. This branch: the stream-keys row names the macOS Keychain, used by the daemon where it is live on macOS (#639; corrected in the merge, since the wave's row said no app used it), and ADR-0071's accepted, unbuilt Linux fallback, which R-SEC-001 now names as its one exception. Main's change: the paired-device row's browser cookie, 'once there is a TLS listener'. Holds." }

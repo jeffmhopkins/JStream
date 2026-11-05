@@ -38,7 +38,7 @@ No telemetry leaves the machine, and logs and crash reports stay local
 ([R-SEC-004](../RULES.md#R-SEC-004)).
 
 The desktop app may `GET`
-[GitHub's public releases list](https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=100)
+[GitHub's public releases list](https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=20)
 to compare the running version with the latest release, pre-releases included. The
 request sends no body, no token and no version: its user agent is the fixed word
 `JStream`, and GitHub sees the machine's address. It runs when the user chooses Help ›

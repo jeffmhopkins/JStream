@@ -4,8 +4,9 @@
 //! for [`PATH`]. The page cannot choose an address: this answers with one `GET` of
 //! GitHub's public releases list, or a short error, and nothing the page sent is
 //! forwarded. The request carries no body, no token and no version. The user agent is
-//! the word `JStream`. Pre-releases are included (`per_page=100`); the page decides
-//! which is newer.
+//! the word `JStream`. Pre-releases are included. GitHub returns the newest releases
+//! first, so `per_page=20` is the recent page and stays under the body cap. The page
+//! decides which is newer.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -25,7 +26,7 @@ pub const PATH: &str = "/jstream-update-check";
 /// GitHub's public releases list for this repository, pre-releases included.
 /// Registered in `docs/external.toml` (`gh-releases-api`).
 pub const RELEASES_URL: &str =
-    "https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=100";
+    "https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=20";
 
 /// Sent as `User-Agent`. It does not include the running version.
 const USER_AGENT: &str = "JStream";
@@ -351,11 +352,11 @@ mod tests {
     fn the_request_is_a_get_of_the_releases_list_and_names_no_version() {
         let (host, path) = target(RELEASES_URL).expect("the releases URL");
         assert_eq!(host, "api.github.com");
-        assert_eq!(path, "/repos/jeffmhopkins/JStream/releases?per_page=100");
+        assert_eq!(path, "/repos/jeffmhopkins/JStream/releases?per_page=20");
         let bytes = request_bytes(host, &path);
         let text = String::from_utf8(bytes).expect("ascii");
         assert!(
-            text.starts_with("GET /repos/jeffmhopkins/JStream/releases?per_page=100 HTTP/1.1\r\n")
+            text.starts_with("GET /repos/jeffmhopkins/JStream/releases?per_page=20 HTTP/1.1\r\n")
         );
         assert!(text.contains("User-Agent: JStream\r\n"));
         assert!(!text.contains("0.1.0"), "the running version is not sent");

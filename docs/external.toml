@@ -638,11 +638,11 @@ checked_note = "Re-read the object paths, the plain algorithm and the unlocking 
 
 [[external]]
 id = "gh-releases-api"
-url = "https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=100"
-relied_on = "GitHub's public releases list for this repository, pre-releases included (the default list includes them; per_page=100). The desktop app GETs it, with no body and a fixed user agent, to compare with the running version (threat model Assets)"
+url = "https://api.github.com/repos/jeffmhopkins/JStream/releases?per_page=20"
+relied_on = "GitHub's public releases list for this repository, newest first, pre-releases included (the default list includes them; per_page=20). The desktop app GETs it, with no body and a fixed user agent, to compare with the running version (threat model Assets)"
 review_every = "365d"
-status = "unverified"
-checked_note = "Not loaded from the builder sandbox"
+status = "ok"
+checked_note = "Re-read: a JSON array of release objects, newest first, each with tag_name, draft and prerelease; the published alphas are pre-releases and none in the list is a draft"
 
 [[external]]
 id = "gh-releases"
