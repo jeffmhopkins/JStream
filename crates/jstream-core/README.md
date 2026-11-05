@@ -2081,9 +2081,10 @@ the live values changed, a transition is running in it (its picture changes with
 one of the displays or windows it shows took a new frame,
 a keyframe was asked for, or 2 s passed since its last keyframe; one whose queue is full isn't drawn. H.264 runs on a `jstream-encode`
 `VideoSession` that avoids hardware (so a preview never takes an output's hardware
-session), VBR, with a keyframe every 2 s, reopened when the picture size changes; its
+session), VBR at about half a bit per pixel per frame (at most 32 Mbit/s, so text in an
+editing view stays sharp, #1203), with a keyframe every 2 s, reopened when the picture size changes; its
 packets go out with the `rev` of the picture they encode. If it can't be opened the
-stream falls back to JPEG when the client accepts JPEG, and ends with an end frame
+stream falls back to JPEG (quality 95) when the client accepts JPEG, and ends with an end frame
 otherwise, as it does when more than 30 draws in a row fail, or after a panic on the thread. When a
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).

@@ -60,7 +60,7 @@ impl EncoderDraft {
             RateControl::Vbr { kbps, max_kbps } => (true, kbps, max_kbps),
             RateControl::Cbr { kbps } => (false, kbps, kbps.saturating_mul(3) / 2),
             // A rate control this build doesn't know: the form starts from the default.
-            _ => (false, 2500, 3750),
+            _ => (false, 6000, 9000),
         };
         EncoderDraft {
             name: name.to_owned(),

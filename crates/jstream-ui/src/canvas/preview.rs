@@ -29,8 +29,9 @@ pub const MAX_BACKLOG: u32 = 3;
 
 /// The `preview.subscribe` for a stage `width` × `height` CSS pixels at
 /// `pixel_ratio` device pixels per CSS pixel: a picture as sharp as the stage, kept
-/// between 320×180 and 1280×720 so a tiny window still shows something and a large
-/// one doesn't make the engine encode more than an editing view needs. H.264 is asked
+/// between 320×180 and the largest the engine sends (1920×1080), so a tiny window still
+/// shows something and a large one shows the canvas at full resolution (#1203: at the
+/// old 1280×720 cap a window capture's text was unreadable). H.264 is asked
 /// for first when `h264` (the browser can decode it), with JPEG as the fallback.
 pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Action {
     let side = |css: f32, low: u32, high: u32| {
@@ -48,8 +49,8 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
     };
     Action::PreviewSubscribe {
         channel: CHANNEL,
-        max_width: Some(side(width, 320, 1280).min(*PreviewSettings::WIDTH.end())),
-        max_height: Some(side(height, 180, 720).min(*PreviewSettings::HEIGHT.end())),
+        max_width: Some(side(width, 320, *PreviewSettings::WIDTH.end())),
+        max_height: Some(side(height, 180, *PreviewSettings::HEIGHT.end())),
         fps: Some(FPS),
         codecs,
         scene_id: None,
@@ -418,7 +419,7 @@ mod tests {
         };
         assert_eq!(channel, CHANNEL);
         assert_eq!(scene_id, None, "the program mix");
-        assert_eq!((max_width, max_height), (Some(1280), Some(720)));
+        assert_eq!((max_width, max_height), (Some(1600), Some(900)));
         assert_eq!(fps, Some(FPS));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);
         let Action::PreviewSubscribe {
@@ -432,6 +433,16 @@ mod tests {
         };
         assert_eq!((max_width, max_height), (Some(320), Some(180)));
         assert_eq!(codecs, vec![PreviewCodec::Jpeg]);
+        // #1203: a large stage gets the full 1080p picture, not a 720p one.
+        let Action::PreviewSubscribe {
+            max_width,
+            max_height,
+            ..
+        } = subscribe(1600.0, 900.0, 1.5, true)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
         // Each request resolves on the engine's side.
         for action in [
             subscribe(1.0, 1.0, 1.0, true),

@@ -1010,7 +1010,7 @@ browser, and `mod.rs` is the component.
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
   `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the

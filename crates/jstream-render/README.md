@@ -231,10 +231,14 @@ steady path.
 Working space is linear light in an `Rgba16Float` colour target, as ARCH's data model
 requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 
-1. **Upload** (when the image is new, not per frame). Tightly packed straight RGBA8
-   sRGB bytes are converted on the CPU: a 256-entry table decodes each RGB byte with
-   the sRGB transfer, RGB is multiplied by alpha, and each channel is rounded to
-   binary16. The result goes into an `Rgba16Float` texture (`TEXTURE_BINDING |
+1. **Upload** (when the image or its version is new: once, for a still, and once per
+   new frame for a changing source such as a CPU capture or a media file). Tightly
+   packed straight RGBA8 sRGB bytes are converted on the CPU: each RGB byte is decoded
+   with the sRGB transfer, multiplied by alpha and rounded to binary16, and alpha is
+   rounded to binary16. Every such half is read from a table built once per process
+   (each channel byte at each alpha, about 128 KiB), so a texel is four lookups: a
+   1080p frame takes about 4 ms instead of the 23 ms computing each texel took
+   (measured on a 2.8 GHz Xeon cloud VM, release build, #1191). The result goes into an `Rgba16Float` texture (`TEXTURE_BINDING |
    COPY_DST`) with `queue.write_texture`, which needs no row padding. The bind group
    (texture + linear sampler) is created once and stored on `Image`.
 
@@ -244,7 +248,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    transparent black resolves to red about 188 at alpha 128 instead of 255. Premultiplied
    texels average correctly. `Rgba16Float` keeps the linear, premultiplied values
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
-   instead of 4, and the conversion is CPU work at upload time only.
+   instead of 4, and the conversion is CPU work at upload time only, on the thread
+   that uploads (the render thread, for an output).
 
    **Imported textures** (`import`, `import_frame`, `import_premultiplied`,
    `import_opaque`) are not
