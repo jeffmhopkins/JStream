@@ -7,7 +7,7 @@
 //!   link with a target) opens only for one of the UI's own projector pages
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
 //!   script, full screen when the page asks for it. A link to one of the project's own
-//!   pages on GitHub ([`links`]: the UI's Help menu and About dialog) opens in the
+//!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
 //!   system browser instead. Any other is refused.
 //! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
 //!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
@@ -77,9 +77,9 @@ fn allowed(url: &Url, blank: bool) -> bool {
     allowed
 }
 
-/// Opens `url`, one of the project's pages ([`links::is_project_page`]), in the system
-/// browser: Explorer hands an `https` URL to the default browser. The URL is one
-/// argument, never parsed by a shell.
+/// Opens `url`, one [`links::opens_in_browser`] accepts, in the system browser:
+/// Explorer hands an `https` URL to the default browser. The URL is one argument,
+/// never parsed by a shell.
 fn open_in_browser(url: &Url) {
     let explorer = std::env::var_os("SystemRoot")
         .map(|root| std::path::Path::new(&root).join("explorer.exe"))
@@ -102,7 +102,7 @@ fn open_projector(
     features: NewWindowFeatures,
 ) -> NewWindowResponse<Wry> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
-    if url.scheme() == "https" && links::is_project_page(url.as_str()) {
+    if url.scheme() == "https" && links::opens_in_browser(url.as_str()) {
         open_in_browser(url);
         return NewWindowResponse::Deny;
     }

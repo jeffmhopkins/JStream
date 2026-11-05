@@ -608,7 +608,8 @@ state machine. Contents:
   leaving the latest collection and no temporary file), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
-  resolution, a fade that ends on the clock, an item's effects planned with the
+  resolution, a fade that ends on the clock, a cut (including one that still stores a
+  duration) showing the new scene on the next frame, an item's effects planned with the
   scene once a transition onto it ends, a switch mid-transition, and a GPU
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
@@ -650,7 +651,10 @@ state machine. Contents:
   also checks that a recording audio source is metered, and that turning its audio
   off closes its input and its meter and turning it on opens them again. The live
   sources (`src/tests/sources.rs`): a colour source built, rebuilt and dropped, a text
-  source built and rebuilt, a stored frame winning over the live source, a kind that
+  source built and rebuilt, drawn sharper when enlarged and left at its own size when a
+  legacy scale of `1e35` overflows (`an_enlarged_text_item_draws_its_source_at_a_density`,
+  `a_legacy_scale_that_draws_nothing_leaves_the_text_at_its_own_size`), a stored frame
+  winning over the live source, a kind that
   isn't built showing the capture, a missing file showing nothing, an animated image
   advancing on the clock, on the sources thread by itself and after a clock swap, and
   a `waveform` source painted
@@ -843,7 +847,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   quietly so the probe reaches none) and puts a Move toward the program scene on the
   studio, by item, with the default preset's duration and easing and its `unmatched`
   (none for a `cut`): every other item pairs with itself and holds still, and only the
-  changed one appears or disappears with its effect. A transition in flight is
+  changed one appears or disappears with its effect. A preset that lasts no time, the
+  initial cut included, starts no run, so the item shows or hides on the next frame
+  even when it has its own effect. A `cut` that stores a duration still plays that
+  effect over it. A transition in flight is
   continued from what is on screen; a press program doesn't see (another keyframe's
   placement) leaves it as it is. A source the next plan reaches again restarts as on a
   switch (`restart_on_show`).
@@ -1696,7 +1703,10 @@ A source the program mix shows enlarged is drawn at a density, when its kind can
 per pixel of the frame's extent, from the placements the collection holds (not a
 gesture's live values, so a drag is measured once it commits), the most of any item, in
 the program's passes and the video mixes', and the items whose effects draw it into
-their layer. A source a video chain runs over counts as 1,
+their layer. A legacy item counts only when `legacy_quad` returns a quad. A crop or a
+zero scale leaves none, and so does a finite scale whose size or a corner overflows
+`f32`: the compositor draws nothing there, and the item doesn't raise the density
+(#1168). A source a video chain runs over counts as 1,
 since its filters' settings are in its pixels. `LiveSources::densities` turns each scale
 into the next quarter step of a doubling at or above it (1, 1.19, 1.41, … up to 32, ADR-0079) and,
 when that differs from the source's density, queues a build at it: the thread creates the

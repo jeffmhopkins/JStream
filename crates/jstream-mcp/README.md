@@ -27,7 +27,9 @@ async runtime.
 Contents (a first cut; [Design](#design) explains the choices):
 - **Server** (`server.rs`): `Server`, which answers one JSON-RPC message at a time
   (`Server::handle`), with `MODERN_VERSION` and `LEGACY_VERSIONS`, the MCP revisions it
-  serves. Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
+  serves. `serverInfo.version` is the workspace release version (`build.rs` reads
+  `[workspace.package] version`; this crate stays at `0.0.0`), not `0.0.0` (#1189).
+  Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
   an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
   less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
@@ -242,7 +244,8 @@ to move forward, so the server is dual-era, which 2026-07-28 allows:
 
 - A request whose `_meta` carries `io.modelcontextprotocol/protocolVersion` is served
   statelessly under 2026-07-28: `server/discover`, `tools/list` and `tools/call`. Results
-  carry `resultType`, `serverInfo` in `_meta`, and caching hints on the two cacheable ones.
+  carry `resultType`, `serverInfo` in `_meta` (its `version` is the workspace release
+  version, not this crate's `0.0.0`), and caching hints on the two cacheable ones.
   Another version gets error `-32022` listing the supported ones, and a missing
   `clientCapabilities` gets `-32602`.
 - `initialize` selects the handshake-based era for the rest of the connection, at

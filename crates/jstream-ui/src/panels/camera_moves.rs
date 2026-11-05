@@ -194,7 +194,7 @@ pub fn CameraMoves(
     let follow_fields = move || {
         following().then(|| {
             view! {
-                <div class="camera-row">
+                <div class="camera-sub">
                     <label class="select-field">
                         <span class="field-label">"Follows"</span>
                         <select
@@ -217,16 +217,14 @@ pub fn CameraMoves(
                         </select>
                     </label>
                     {follow_number(FollowField::Zoom)}
-                </div>
-                <div class="camera-row">
                     {follow_number(FollowField::Yaw)}
                     {follow_number(FollowField::Pitch)}
                     {follow_number(FollowField::Lean)}
                     {follow_number(FollowField::Smooth)}
+                    // Bound at once, as everywhere: the keys zoom the live camera (ADR-0112).
+                    <HotkeyRow label="Zoom in" action=zoom(1) />
+                    <HotkeyRow label="Zoom out" action=zoom(-1) />
                 </div>
-                // Bound at once, as everywhere: the keys zoom the live camera (ADR-0112).
-                <HotkeyRow label="Zoom in" action=zoom(1) />
-                <HotkeyRow label="Zoom out" action=zoom(-1) />
             }
         })
     };
@@ -438,7 +436,8 @@ pub fn CameraMoves(
     };
 
     view! {
-        <label class="camera-row">
+        <h3 class="camera-head">"Follow pointer"</h3>
+        <label class="camera-check">
             <input
                 type="checkbox"
                 aria-label="Follow pointer"
@@ -451,7 +450,7 @@ pub fn CameraMoves(
         {follow_fields}
         <span class="field-note">{follow_note}</span>
         <div class="camera-motion">
-            <span class="label">"Camera motion"</span>
+            <h3 class="camera-head">"Camera motion"</h3>
             {move || (0..draft.with(|d| d.camera_motion.len())).map(row).collect_view()}
             <button
                 type="button"

@@ -1522,6 +1522,20 @@ fn check_kind_version(
     Ok(())
 }
 
+/// The duration a loaded preset keeps. The stock Cut a collection used to start with
+/// stored 300 ms while a `cut` already showed the new scene on the next frame (#1209).
+/// A file that still has that preset, unchanged, loads it at 0. Any other duration, or
+/// a cut someone renamed or retimed, is kept: a `cut` ignores it when a switch runs.
+fn loaded_cut_duration(preset: &FilePreset) -> u32 {
+    let stock = preset.id.as_str() == INITIAL_PRESET
+        && preset.name == "Cut"
+        && preset.kind == "cut"
+        && preset.duration_ms == 300
+        && preset.easing == Easing::EaseInOut
+        && preset.settings.is_empty();
+    if stock { 0 } else { preset.duration_ms }
+}
+
 /// Pushes the edits that turn a new collection's one `cut` preset into the file's
 /// presets and default: each preset created (the `cut` one updated in place), the
 /// default set, and the initial `cut` deleted if the file doesn't have it.
@@ -1534,12 +1548,13 @@ fn rebuild_transitions(
     for preset in &file.presets {
         let object = format!("transition `{}`", preset.id);
         check_kind_version(graph, &object, &preset.kind, Some(preset.kind_version))?;
+        let duration_ms = loaded_cut_duration(preset);
         let edit = if preset.id == initial {
             Edit::TransitionUpdate {
                 preset_id: preset.id.clone(),
                 name: Some(preset.name.clone()),
                 kind: Some(preset.kind.clone()),
-                duration_ms: Some(preset.duration_ms),
+                duration_ms: Some(duration_ms),
                 easing: Some(preset.easing),
                 patch: preset.settings.clone(),
             }
@@ -1548,7 +1563,7 @@ fn rebuild_transitions(
                 preset_id: preset.id.clone(),
                 name: preset.name.clone(),
                 kind: preset.kind.clone(),
-                duration_ms: preset.duration_ms,
+                duration_ms,
                 easing: preset.easing,
                 settings: preset.settings.clone(),
             }

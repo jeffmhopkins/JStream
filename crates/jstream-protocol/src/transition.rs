@@ -250,14 +250,16 @@ impl Default for TransitionsInfo {
     }
 }
 
-/// The preset every new collection starts with: `cut`, a 300 ms ease-in-out cut, so a
-/// switch behaves as it did before presets existed until the collection gets others.
+/// The preset every new collection starts with: `cut`, named Cut, lasting no time.
+/// A switch that uses it shows the new scene on the next frame ([`TransitionStarted`]
+/// reports `duration_ms` 0). A `cut` ignores `duration_ms`; 0 is what the preset stores
+/// so a client that reads it doesn't play a fade (#1209).
 pub fn initial_preset() -> TransitionPresetInfo {
     TransitionPresetInfo {
         preset_id: TransitionPresetId::new(INITIAL_PRESET),
         name: "Cut".into(),
         kind: CUT.into(),
-        duration_ms: 300,
+        duration_ms: 0,
         easing: Easing::EaseInOut,
         settings: Settings::new(),
     }
@@ -395,6 +397,17 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
 mod tests {
     use super::{Easing, ItemTransition, TransitionEffect, builtin_kinds};
     use serde_json::json;
+
+    /// #1209: the preset a new collection starts with is an instant cut.
+    #[test]
+    fn the_initial_preset_is_an_instant_cut() {
+        let preset = super::initial_preset();
+        assert_eq!(preset.preset_id.as_str(), super::INITIAL_PRESET);
+        assert_eq!(preset.name, "Cut");
+        assert_eq!(preset.kind, super::CUT);
+        assert_eq!(preset.duration_ms, 0);
+        assert!(preset.settings.is_empty());
+    }
 
     /// The curves at fixed points, to six decimals: what every UI that previews a
     /// transition must draw (ADR-0029 §5).
