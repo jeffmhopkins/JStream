@@ -5981,12 +5981,13 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, _, _, frames, _, _| {
+            let draw: DrawFn = Box::new(move |_, _, _, frames, at, _| {
                 for frame in frames.iter_mut().filter(|frame| frame.due) {
                     frame.out.clear();
                     for _ in 0..frame.size.width() as usize * frame.size.height() as usize {
                         frame.out.extend_from_slice(&rgba);
                     }
+                    frame.ready = Some(at);
                 }
                 Ok(None)
             });

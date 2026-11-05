@@ -1220,7 +1220,43 @@ impl Compositor {
         pass.draw(0..3, 0..1);
     }
 
-    fn readback_buffer(&self, width: u32, height: u32) -> Result<wgpu::Buffer, RenderError> {
+    /// Records the copy of `output`, this compositor's, into `buffer`, a
+    /// [`Self::readback_buffer`] of its size, rows padded as the readback's are.
+    pub(crate) fn record_copy_out(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        output: &Output,
+        buffer: &wgpu::Buffer,
+    ) {
+        let (width, height) = (output.width(), output.height());
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: output.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_row_bytes(width)),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    pub(crate) fn readback_buffer(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<wgpu::Buffer, RenderError> {
         let stride = u64::from(padded_row_bytes(width));
         let size = stride
             .checked_mul(u64::from(height))
@@ -1344,7 +1380,7 @@ fn push_f32(buf: &mut Vec<u8>, value: f32) {
     buf.extend_from_slice(&value.to_le_bytes());
 }
 
-fn padded_row_bytes(width: u32) -> u32 {
+pub(crate) fn padded_row_bytes(width: u32) -> u32 {
     let row = width.saturating_mul(4);
     let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
     row.div_ceil(align) * align

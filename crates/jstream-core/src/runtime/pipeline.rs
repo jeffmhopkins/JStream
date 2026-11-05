@@ -66,8 +66,8 @@ use jstream_protocol::{
     ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
-    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, Reclaimed, RenderError,
-    ResourceCache,
+    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
+    RenderError, ResourceCache,
 };
 use jstream_sources::AudioScopes;
 
@@ -197,14 +197,56 @@ pub(crate) struct MixFrame {
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
     /// virtual camera is fed it. Without, `out` is left as it was.
     pub(crate) readback: bool,
-    /// Where it is read back: RGBA8 at `size` once a draw succeeds.
+    /// Where it is read back: RGBA8 at `size` once a readback the draw recorded has
+    /// finished, a tick or two after it was drawn (ADR-0117 §4).
     pub(crate) out: Vec<u8>,
+    /// Set by the draw when `out` holds a frame newly read back, to the time it was
+    /// drawn for: the pts it goes out with.
+    pub(crate) ready: Option<MediaTime>,
+    /// Set by [`Frames::draw`] when it moves a newly read frame into `shown`, to its
+    /// time, until [`MixFrame::push_time`] takes it.
+    pub(crate) fresh: Option<MediaTime>,
+    /// Set by the draw when this tick's frame went into a readback still on its way:
+    /// the tick pushes nothing rather than repeat the frame before it. Cleared by
+    /// [`MixFrame::push_time`].
+    pub(crate) awaiting: bool,
+    /// The time of the last frame pushed from `shown`, which the next one must pass.
+    pushed: Option<MediaTime>,
+    /// This tick's [`MixFrame::push_time`].
+    pub(crate) push_at: Option<MediaTime>,
+    /// Ticks this mix was not read back because every readback buffer was still on its
+    /// way (R-RT-004), counted by the draw.
+    pub(crate) unread: u64,
     /// The platform's NV12 encode target on the compositor's device to convert it into
     /// this tick (ARCH › GPU pipeline, step 4), for the sessions on the GPU path.
     pub(crate) nv12: Option<GpuFrame>,
 }
 
 impl MixFrame {
+    /// The time this tick pushes `shown` at, to the sessions on the CPU path and a
+    /// virtual camera, or `None` for no push. A due frame newly read back goes out with
+    /// the time it was drawn for, so a readback's latency never shifts it from audio;
+    /// one whose readback is on its way pushes nothing; otherwise, and always on a
+    /// broken stage, the last frame repeats at `due`. Never a time at or before the last
+    /// one pushed: a readback that lands after a repeat is dropped.
+    fn push_time(&mut self, due: MediaTime, broken: bool) -> Option<MediaTime> {
+        let fresh = self.fresh.take();
+        let awaiting = std::mem::take(&mut self.awaiting);
+        if !self.due {
+            return None;
+        }
+        let at = match fresh {
+            Some(pts) if !broken => pts,
+            _ if awaiting && !broken => return None,
+            _ => due,
+        };
+        if self.pushed.is_some_and(|pushed| at <= pushed) {
+            return None;
+        }
+        self.pushed = Some(at);
+        Some(at)
+    }
+
     /// A frame of `mix` not yet drawn or due.
     fn new(
         mix: Option<VideoMixId>,
@@ -221,6 +263,12 @@ impl MixFrame {
             next: 0,
             readback: false,
             out: Vec::new(),
+            ready: None,
+            fresh: None,
+            awaiting: false,
+            pushed: None,
+            push_at: None,
+            unread: 0,
             nv12: None,
         }
     }
@@ -256,7 +304,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
              _: &LiveParams,
              captures: &dyn Captures,
              frames: &mut [MixFrame],
-             _: MediaTime,
+             at: MediaTime,
              _: &mut DrawMeter| {
                 let first = shot
                     .captures()
@@ -293,6 +341,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                         }
                         _ => out.resize(size.width() as usize * size.height() as usize * 4, 0),
                     }
+                    frame.ready = Some(at);
                 }
                 Ok(None)
             },
@@ -1462,6 +1511,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
+        let mut readbacks = Readbacks::default();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
@@ -1471,6 +1521,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             // this tick claims its layers without drawing, so they aren't retired and
             // reallocated when it is due again.
             cache.begin_frame();
+            readbacks.retain(frames);
             for frame in frames.iter().filter(|frame| !frame.due) {
                 let claimed = snapshot::claim_layers(
                     &mut compositor,
@@ -1490,15 +1541,28 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     view,
                     live,
                     captures,
+                    // The readback is the ring's, recorded after the draw.
                     snapshot::DrawAt {
                         size: frame.size,
-                        readback: frame.readback,
+                        readback: false,
                     },
                 )
                 .and_then(|output| {
                     let started = Instant::now();
                     if frame.readback {
-                        copy_pixels(&output, &mut frame.out)?;
+                        // Recorded now and collected once mapped, a tick or two on: the
+                        // render thread never waits for the GPU (ADR-0117 §4).
+                        let ring = readbacks.ring(frame);
+                        if ring.record(&compositor, &output, at)? {
+                            frame.awaiting = true;
+                        } else {
+                            frame.unread += 1;
+                        }
+                        let mut newest = None;
+                        ring.collect(&compositor, &mut frame.out, |pts, _| newest = Some(pts));
+                        if newest.is_some() {
+                            frame.ready = newest;
+                        }
                     }
                     let converted = match &frame.nv12 {
                         Some(target) => nv12.submit(&compositor, output.texture(), target),
@@ -1515,6 +1579,57 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         });
         Ok(draw)
     })
+}
+
+/// The readback rings of the mixes read back, one per mix by its feed's identity
+/// ([`Frames::add`]), kept in the draw so they go with its compositor's device.
+#[derive(Default)]
+struct Readbacks {
+    rings: Vec<(ReadbackKey, ReadbackRing<MediaTime>)>,
+}
+
+/// A mix's identity, as [`Frames::add`] matches feeds.
+#[derive(PartialEq)]
+struct ReadbackKey {
+    mix: Option<VideoMixId>,
+    size: FrameSize,
+    divisor: u32,
+    owner: Option<OutputId>,
+}
+
+impl ReadbackKey {
+    fn is(&self, frame: &MixFrame) -> bool {
+        self.mix == frame.mix
+            && self.size == frame.size
+            && self.divisor == frame.divisor
+            && self.owner == frame.owner
+    }
+}
+
+impl Readbacks {
+    /// Drops the rings of mixes no longer drawn, or no longer read back.
+    fn retain(&mut self, frames: &[MixFrame]) {
+        self.rings
+            .retain(|(key, _)| frames.iter().any(|frame| frame.readback && key.is(frame)));
+    }
+
+    /// The ring of `frame`, made the first time it is read back.
+    fn ring(&mut self, frame: &MixFrame) -> &mut ReadbackRing<MediaTime> {
+        let at = match self.rings.iter().position(|(key, _)| key.is(frame)) {
+            Some(at) => at,
+            None => {
+                let key = ReadbackKey {
+                    mix: frame.mix.clone(),
+                    size: frame.size,
+                    divisor: frame.divisor,
+                    owner: frame.owner.clone(),
+                };
+                self.rings.push((key, ReadbackRing::default()));
+                self.rings.len() - 1
+            }
+        };
+        &mut self.rings[at].1
+    }
 }
 
 /// The NV12 conversion of the compositor's output into encode targets, built on the
@@ -2750,13 +2865,17 @@ impl Frames {
             .zip(&mut self.encode)
         {
             let target = frame.nv12.take();
-            if frame.due && drawn.is_ok() {
-                if frame.readback {
-                    std::mem::swap(&mut frame.out, shown);
-                }
-                if let Some(target) = target {
-                    encode.shown = Some(target);
-                }
+            // A frame read back reaches `shown` once its map has finished, whatever this
+            // tick's draw did.
+            if let Some(pts) = frame.ready.take() {
+                std::mem::swap(&mut frame.out, shown);
+                frame.fresh = Some(pts);
+            }
+            if frame.due
+                && drawn.is_ok()
+                && let Some(target) = target
+            {
+                encode.shown = Some(target);
             }
         }
         drawn
@@ -2857,6 +2976,8 @@ fn render_loop(job: RenderJob) {
     // divisor draw on every `divisor`th, or later when an overrun skips one.
     let mut index: u64 = 0;
     let mut skipped: u64 = 0;
+    // Frames not read back because every readback buffer was still on its way.
+    let mut unread: u64 = 0;
     // Frames GPU sessions missed because their mix's every encode target was held.
     let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
@@ -3127,12 +3248,18 @@ fn render_loop(job: RenderJob) {
             // gesture never waits on a mix with a divisor.
             reader.adopt();
         }
+        for frame in &mut frames.mixes {
+            unread = unread.saturating_add(std::mem::take(&mut frame.unread));
+        }
         drops.publish(
             capture_drops(captures.stats())
-                .saturating_add(render_tick_drops(skipped))
+                .saturating_add(render_tick_drops(skipped.saturating_add(unread)))
                 .saturating_add(encode_frame_drops(encode_held)),
         );
         gpu_captures.store(captures.gpu_captures(), Ordering::Relaxed);
+        for frame in &mut frames.mixes {
+            frame.push_at = frame.push_time(due, broken);
+        }
         for (((frame, shown), targets), encode) in frames
             .mixes
             .iter()
@@ -3150,9 +3277,10 @@ fn render_loop(job: RenderJob) {
                         // is dropped, not repeated.
                         (true, _) if starved => true,
                         (true, Some(target)) => push_gpu(&tap.input, target, due),
-                        (false, _) if !shown.is_empty() => {
-                            push_frame(&tap.input, frame.size, due, shown)
-                        }
+                        (false, _) if !shown.is_empty() => match frame.push_at {
+                            Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
+                            None => true,
+                        },
                         _ => true,
                     },
                     |tap| collector.free(Garbage::Video(tap.input)),
@@ -3166,9 +3294,9 @@ fn render_loop(job: RenderJob) {
             let cam = &mut cams[at];
             let program = frames
                 .program_frame(size, cam.owner())
-                .map(|at| &frames.shown[at]);
+                .map(|at| (&frames.shown[at], frames.mixes[at].push_at));
             let stays = match program {
-                Some(shown) if !shown.is_empty() => cam.push(size, due, shown),
+                Some((shown, Some(pts))) if !shown.is_empty() => cam.push(size, pts, shown),
                 _ => cam.stay(),
             };
             if stays {
@@ -3391,20 +3519,6 @@ fn render_open_error(err: &RenderError) -> String {
         err.to_string()
     } else {
         format!("opening the compositor: {err}")
-    }
-}
-
-/// Copies the readback of `output` into `out`, reusing its allocation.
-fn copy_pixels(output: &jstream_render::Output, out: &mut Vec<u8>) -> Result<(), RenderError> {
-    match output.pixels() {
-        Some(snapshot) => {
-            out.clear();
-            out.extend_from_slice(snapshot.rgba());
-            Ok(())
-        }
-        None => Err(RenderError::Readback {
-            detail: "the compositor returned no pixels".into(),
-        }),
     }
 }
 
@@ -4823,6 +4937,37 @@ mod tests {
 
     fn us(ticks: i64) -> MediaTime {
         MediaTime::new(ticks, Timebase::MICROS)
+    }
+
+    /// A frame read back goes out with the time it was drawn for, a frame whose readback
+    /// is on its way pushes nothing, anything else repeats at the tick, a broken stage
+    /// always repeats, and no push goes back in time.
+    #[test]
+    fn a_frame_read_back_pushes_at_the_time_it_was_drawn_for() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.due = true;
+        // In flight: no push, and no repeat of the frame before.
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(100), false), None);
+        // Landed a tick later, with the next one in flight.
+        frame.fresh = Some(us(100));
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(133), false), Some(us(100)));
+        // Nothing drawn this tick (a failed draw, a fallback opening): a repeat.
+        assert_eq!(frame.push_time(us(166), false), Some(us(166)));
+        // The readback recorded before the repeat lands after it, and is dropped.
+        frame.fresh = Some(us(133));
+        assert_eq!(frame.push_time(us(200), false), None);
+        assert_eq!(frame.fresh, None, "taken");
+        // A broken stage repeats at the tick whatever is on its way.
+        frame.fresh = Some(us(200));
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(233), true), Some(us(233)));
+        assert!(!frame.awaiting, "cleared");
+        // A frame not due pushes nothing.
+        frame.due = false;
+        assert_eq!(frame.push_time(us(266), false), None);
     }
 
     /// Less than a period late keeps the tick. A period or more skips to the latest
