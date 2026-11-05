@@ -16,10 +16,16 @@
 //! request, picks the codec and registers the stream with the engine's [`PreviewHub`];
 //! `preview.unsubscribe` and the session's end drop it.
 //!
+//! **The program stage.** An H.264 stream of the program is drawn by the program stage
+//! (ADR-0117 §6): the hub holds the stage while such a stream is open, opening it when
+//! no output has, and hands the stream's encoder session to it ([`Staged`]); the
+//! stage's render thread draws the program at the stream's size and feeds the session,
+//! and a sender thread forwards its packets. Every other stream is the hub's own.
+//!
 //! **The hub.** One `jstream-preview` thread per engine, started by the first
-//! subscription and ended when none is left, serves every stream. It owns its own
-//! compositor, like `video.snapshot`'s thread, and never runs on the render thread or
-//! takes part in the program stage, so a preview costs an output nothing. On each pass
+//! subscription and ended when none is left, serves every stream. For the streams it
+//! draws itself it owns a compositor, like `video.snapshot`'s thread, never on the
+//! render thread. On each pass
 //! it reads the published render snapshot and `rev` and the live values on the render
 //! parameter channel (ADR-0032), and for each stream that is due draws the shot with
 //! them at the stream's size, reads it back and encodes it. A stream is due at most
@@ -89,7 +95,10 @@ use jstream_platform::Capture;
 use crate::chain::Chains;
 use crate::lock;
 use crate::profile::DrawMeter;
-use crate::runtime::{CaptureBackends, RenderCaptures, RenderSnapshot, spawn_captures};
+use crate::runtime::{
+    CaptureBackends, FRAME_DEN, FRAME_NUM, Program, RenderCaptures, RenderSnapshot, output_size,
+    spawn_captures,
+};
 use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
 /// How many frames a session's binary channel holds for a reader that falls behind.
@@ -508,6 +517,8 @@ struct Work {
     /// The newest capture frame version the last picture drew
     /// ([`HubCaptures::frames`]).
     frames: u64,
+    /// The session the program stage feeds, while it draws this stream.
+    staged: Option<Staged>,
 }
 
 /// An H.264 stream's encoder session, its input and its packets.
@@ -533,6 +544,7 @@ impl Work {
             shown: None,
             draw_errors: 0,
             frames: 0,
+            staged: None,
         }
     }
 }
@@ -616,6 +628,176 @@ pub(crate) struct PreviewCapture {
     pub(crate) codecs: Arc<dyn Codecs>,
     /// The media clock's timebase, which [`PreviewSource::current`]'s time is on.
     pub(crate) clock: Timebase,
+    /// Opens or shares the program stage that draws the program for H.264 streams.
+    pub(crate) stage: Option<StageOpener>,
+}
+
+/// Gives the hub the program stage to draw the program on (ADR-0117 §6): the running one,
+/// or one it opens now. `Ok(None)` when it can't be had yet (an output is starting).
+pub(crate) type StageOpener = Arc<dyn Fn() -> Result<Option<Arc<Program>>, String> + Send + Sync>;
+
+/// How soon the hub asks again for a stage it couldn't have yet, and after a stage that
+/// failed to open.
+const STAGE_RETRY: Duration = Duration::from_millis(200);
+const STAGE_RETRY_FAILED: Duration = Duration::from_secs(5);
+
+/// A program stream fed by the program stage (ADR-0117 §6): the stage's render thread
+/// draws the program at the stream's size on the engine's one compositor and pushes it
+/// into this session; a `jstream-preview-send` thread sends its packets as they come.
+/// The hub only opens it, asks for keyframes and closes it.
+struct Staged {
+    session: Option<VideoSession>,
+    sender: Option<JoinHandle<()>>,
+    /// Set before the session is closed, so the sender knows its end was asked for.
+    closing: Arc<AtomicBool>,
+    size: FrameSize,
+    stage: Weak<Program>,
+}
+
+impl Staged {
+    /// Opens `stream`'s encoder at `size`, hands its input to `stage`, and starts the
+    /// sender. `rev` is the collection's `rev` now, which each picture carries.
+    fn open(
+        stream: &Arc<PreviewStream>,
+        codecs: &dyn Codecs,
+        size: FrameSize,
+        stage: &Arc<Program>,
+        rev: &Arc<AtomicU64>,
+    ) -> Result<Self, String> {
+        let H264 {
+            session, packets, ..
+        } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
+        let divisor = (FRAME_DEN / FRAME_NUM.max(1) / stream.settings.fps.max(1)).max(1);
+        stage.attach_preview(size, divisor, session.input());
+        let closing = Arc::new(AtomicBool::new(false));
+        let sender = {
+            let stream = Arc::clone(stream);
+            let closing = Arc::clone(&closing);
+            let rev = Arc::clone(rev);
+            thread::Builder::new()
+                .name("jstream-preview-send".into())
+                .spawn(move || send_packets(&stream, &packets, size, &rev, &closing))
+                .map_err(|err| format!("starting the preview sender: {err}"))?
+        };
+        Ok(Self {
+            session: Some(session),
+            sender: Some(sender),
+            closing,
+            size,
+            stage: Arc::downgrade(stage),
+        })
+    }
+
+    /// Whether it is open at `size` on `stage`.
+    fn is(&self, size: FrameSize, stage: &Arc<Program>) -> bool {
+        self.size == size
+            && self
+                .stage
+                .upgrade()
+                .is_some_and(|open| Arc::ptr_eq(&open, stage))
+    }
+}
+
+impl Drop for Staged {
+    fn drop(&mut self) {
+        self.closing.store(true, Ordering::Release);
+        // The session finishes, the render thread lets go of its input, and the
+        // sender's subscription ends.
+        self.session.take();
+        if let Some(sender) = self.sender.take()
+            && sender.join().is_err()
+        {
+            tracing::error!("preview sender panicked");
+        }
+    }
+}
+
+/// The sender thread of a [`Staged`] stream: sends each packet as it comes, its time
+/// counted from the first. A session that ends without being closed ends the stream.
+fn send_packets(
+    stream: &PreviewStream,
+    packets: &Subscription,
+    size: FrameSize,
+    rev: &AtomicU64,
+    closing: &AtomicBool,
+) {
+    let mut base = None;
+    loop {
+        match packets.recv() {
+            Ok(packet) => {
+                let pts = packet
+                    .pts()
+                    .rescale(Timebase::MICROS, Rounding::Nearest)
+                    .map_or(0, MediaTime::ticks);
+                let base = *base.get_or_insert(pts);
+                stream.send(picture(
+                    stream,
+                    PreviewCodec::H264,
+                    packet.is_keyframe(),
+                    size,
+                    pts.saturating_sub(base),
+                    Rev(rev.load(Ordering::Acquire)),
+                    packet.data(),
+                ));
+            }
+            Err(end) => {
+                if !closing.load(Ordering::Acquire) {
+                    stream.end(
+                        Rev(rev.load(Ordering::Acquire)),
+                        &format!("the H.264 encoder stopped: {end}"),
+                    );
+                }
+                return;
+            }
+        }
+    }
+}
+
+/// Whether `stream` is one the program stage draws for, given its `work` so far.
+fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bool {
+    can_stage
+        && stream.shows_program()
+        && stream.codec == PreviewCodec::H264
+        && stream.codecs.is_some()
+        && work.is_none_or(|work| work.codec == PreviewCodec::H264)
+}
+
+/// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas`, and
+/// passes a keyframe request on.
+fn serve_staged(
+    stream: &Arc<PreviewStream>,
+    work: &mut Work,
+    stage: &Arc<Program>,
+    canvas: (u32, u32),
+    rev: &Arc<AtomicU64>,
+) -> Result<(), String> {
+    let (width, height) = stream.settings.picture_size(canvas.0, canvas.1);
+    let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
+    if !work
+        .staged
+        .as_ref()
+        .is_some_and(|staged| staged.is(size, stage))
+    {
+        // The old session (or the hub's own) closes first.
+        work.staged = None;
+        work.h264 = None;
+        let codecs = stream
+            .codecs
+            .as_ref()
+            .ok_or("this engine has no H.264 encoder")?;
+        work.staged = Some(Staged::open(stream, codecs.as_ref(), size, stage, rev)?);
+        // A new session starts on a keyframe.
+        stream.keyframe.store(false, Ordering::Release);
+    }
+    if stream.keyframe.swap(false, Ordering::AcqRel)
+        && let Some(session) = work
+            .staged
+            .as_ref()
+            .and_then(|staged| staged.session.as_ref())
+    {
+        session.request_keyframe();
+    }
+    Ok(())
 }
 
 impl PreviewCapture {
@@ -648,6 +830,15 @@ impl PreviewHub {
     /// starts.
     pub(crate) fn set_capture(&self, capture: PreviewCapture) {
         lock(&self.inner.state).capture = Some(capture);
+    }
+
+    /// Draws every stream on the hub's own compositor from the next start of the
+    /// thread, for tests of that path.
+    #[cfg(test)]
+    pub(crate) fn clear_stage(&self) {
+        if let Some(capture) = lock(&self.inner.state).capture.as_mut() {
+            capture.stage = None;
+        }
     }
 
     fn next_id(&self) -> u64 {
@@ -778,6 +969,12 @@ fn run(
         of: None,
     };
     let mut works: HashMap<u64, Work> = HashMap::new();
+    // The program stage while a program stream is drawn on it, and when to ask again
+    // for one that couldn't be had.
+    let opener = capture.and_then(|capture| capture.stage.as_ref());
+    let mut stage: Option<Arc<Program>> = None;
+    let mut stage_at = Instant::now();
+    let rev_now = Arc::new(AtomicU64::new(0));
     loop {
         let streams: Vec<Arc<PreviewStream>> = {
             let mut state = lock(&inner.state);
@@ -811,8 +1008,26 @@ fn run(
         let mut wake_at = now + MAX_SLEEP;
         // A closed stream's encoder is dropped (and its thread joined) here.
         works.retain(|id, _| streams.iter().any(|stream| stream.id == *id));
-        // The program's captures only while a stream shows the program.
-        let shows_program = streams.iter().any(|stream| stream.shows_program());
+        rev_now.store(rev.0, Ordering::Release);
+        let program_canvas = program
+            .shot()
+            .canvas()
+            .map_or((16, 16), |c| (c.width(), c.height()));
+        let wants_stage = streams
+            .iter()
+            .any(|stream| stageable(stream, works.get(&stream.id), opener.is_some()));
+        stage = follow_stage(
+            stage,
+            opener,
+            wants_stage,
+            program_canvas,
+            now,
+            &mut stage_at,
+        );
+        // The program's captures only while a stream the hub draws itself shows it.
+        let shows_program = streams.iter().any(|stream| {
+            stream.shows_program() && !stageable(stream, works.get(&stream.id), stage.is_some())
+        });
         // A source's own snapshot is captured as a draft's is.
         let drafts: Vec<Arc<RenderSnapshot>> = streams
             .iter()
@@ -830,6 +1045,28 @@ fn run(
             let work = works
                 .entry(stream.id)
                 .or_insert_with(|| Work::new(stream, now));
+            if let Some(stage) = stage
+                .as_ref()
+                .filter(|_| stageable(stream, Some(work), true))
+            {
+                match serve_staged(stream, work, stage, program_canvas, &rev_now) {
+                    Ok(()) => {
+                        let period = Duration::from_secs(1) / stream.settings.fps;
+                        wake_at = wake_at.min(now + period);
+                        continue;
+                    }
+                    Err(reason) if stream.settings.codecs.contains(&PreviewCodec::Jpeg) => {
+                        tracing::warn!(channel = stream.channel, error = %reason, "preview falls back to JPEG");
+                        work.codec = PreviewCodec::Jpeg;
+                    }
+                    Err(reason) => {
+                        stream.end(rev, &reason);
+                        continue;
+                    }
+                }
+            }
+            // Drawn by the hub from here: the stage no longer feeds it.
+            work.staged = None;
             let planned = match (&stream.source_id, &stream.scene) {
                 (Some(source_id), _) => Some(sources.get(source_id)),
                 (None, Some(scene_id)) => Some(scenes.get(scene_id)),
@@ -881,6 +1118,44 @@ fn run(
         let timeout = wake_at.saturating_duration_since(Instant::now());
         // A new stream wakes the thread; so does the hub's drop.
         drop(inner.wake.wait_timeout(state, timeout));
+    }
+}
+
+/// The program stage to hold from now on: kept while a stream wants it, opened when one
+/// does and none is held (at most every [`STAGE_RETRY`]), and let go of otherwise. A
+/// stage only the hub holds is let go of once the canvas differs from its size, so the
+/// next one opens at the new canvas, as an output's start would.
+fn follow_stage(
+    stage: Option<Arc<Program>>,
+    opener: Option<&StageOpener>,
+    wanted: bool,
+    canvas: (u32, u32),
+    now: Instant,
+    retry_at: &mut Instant,
+) -> Option<Arc<Program>> {
+    let opener = opener.filter(|_| wanted)?;
+    if let Some(stage) = stage {
+        let resized = output_size(canvas).is_ok_and(|size| size != stage.size());
+        if !(resized && Arc::strong_count(&stage) == 1) {
+            return Some(stage);
+        }
+        drop(stage);
+        *retry_at = now;
+    }
+    if now < *retry_at {
+        return None;
+    }
+    match opener() {
+        Ok(Some(stage)) => Some(stage),
+        Ok(None) => {
+            *retry_at = now + STAGE_RETRY;
+            None
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, "the preview draws the program itself: the program stage did not open");
+            *retry_at = now + STAGE_RETRY_FAILED;
+            None
+        }
     }
 }
 

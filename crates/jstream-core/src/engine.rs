@@ -31,9 +31,9 @@ use crate::preview::{
 use crate::profile::{DrawMeter, Profiler};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
-    SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch, launch_program,
-    launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Program, Release, RenderHub, RenderSnapshot,
+    Running, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
+    launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -693,14 +693,35 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
-        // The preview captures what the program shows itself.
+        let host = self.host();
+        // The preview draws the program on the program stage, which it opens when no
+        // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
+        // opener holds the engine weakly: the hub belongs to it.
+        let stage: crate::preview::StageOpener = {
+            let shared = Arc::downgrade(&self.shared);
+            let media = Arc::downgrade(&host);
+            let drops = Arc::downgrade(&self.drops);
+            Arc::new(move || {
+                let (Some(shared), Some(media), Some(drops)) =
+                    (shared.upgrade(), media.upgrade(), drops.upgrade())
+                else {
+                    return Ok(None);
+                };
+                Engine {
+                    shared,
+                    media: Some(media),
+                    drops,
+                }
+                .preview_stage()
+            })
+        };
         self.shared.previews.set_capture(PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
             codecs: Arc::clone(&backends.codecs),
             clock: backends.clock.timebase(),
+            stage: Some(stage),
         });
-        let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;
@@ -757,6 +778,14 @@ impl Engine {
     pub fn output_stats(&self) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
         lock(&host.gate).running.values().next().map(Running::stats)
+    }
+
+    /// Whether the program stage runs, for tests of what holds it.
+    #[cfg(test)]
+    pub(crate) fn stage_running(&self) -> bool {
+        self.media
+            .as_ref()
+            .is_some_and(|host| lock(&host.gate).program().is_some())
     }
 
     /// Encoder and subscriber counters for `output_id`, if it is running.
@@ -1048,6 +1077,16 @@ impl Engine {
     pub fn with_cpu_compositor(self) -> Self {
         self.shared.previews.set_draw(crate::preview::cpu_draw());
         self.with_draw(crate::runtime::cpu_draw())
+    }
+
+    /// Keeps every preview stream on the preview thread's own compositor, for tests of
+    /// that path: the program stage draws none (ADR-0117 §6). Call after
+    /// [`with_backends`](Self::with_backends).
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn without_preview_stage(self) -> Self {
+        self.shared.previews.clear_stage();
+        self
     }
 
     /// Replaces how the preview thread draws, for tests that watch what it is given.
@@ -1893,6 +1932,51 @@ impl Engine {
             Action::OutputStop { output_id } => self.stop_pipeline(output_id),
             other => Err(not_implemented(other.name())),
         }
+    }
+
+    /// The program stage a preview stream of the program draws on (ADR-0117 §6): the
+    /// running one, or one opened now. `Ok(None)` while an output is starting or a
+    /// failed one still joins, or when the engine has no backends: the preview then
+    /// draws on its own for now and asks again later. Never waits for a start.
+    pub(crate) fn preview_stage(&self) -> Result<Option<Arc<Program>>, String> {
+        let Some(host) = &self.media else {
+            return Ok(None);
+        };
+        // Taken as a start takes it, so only one ever opens the stage; a start under
+        // way is not waited for.
+        let _starting = match host.starts.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(None),
+        };
+        {
+            let gate = lock(&host.gate);
+            if let Some(program) = gate.program() {
+                return Ok(Some(program));
+            }
+            if gate.must_wait() || gate.pending.is_some() {
+                return Ok(None);
+            }
+        }
+        let parts = {
+            let state = lock(&self.shared.state);
+            let backends = lock(&host.backends);
+            let Some(backends) = backends.as_ref() else {
+                return Ok(None);
+            };
+            parts_from(
+                backends,
+                Arc::clone(&lock(&host.draw)),
+                *lock(&host.open_timeout),
+                Arc::clone(&state.render),
+                state.audio.wanted(),
+                canvas_size(&state.graph),
+            )
+        };
+        let program = launch_program(self, parts)?;
+        lock(&host.gate).set_program(&program);
+        tracing::info!("program stage opened for the preview");
+        Ok(Some(program))
     }
 
     fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {

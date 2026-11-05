@@ -1188,7 +1188,11 @@ deprecated `privacy.set` is refused with `unsupported` and audited as a refusal,
 `privacy.get` always answers `on: false`, and the engine never emits `privacy.changed`.
 The calls go in 1.0. What a microphone records is decided by the collection: a webcam's
 paired microphone opens only while its audio is on and the source has at least one send
-(see *Audio sources* below), so a webcam no bus hears never records.
+(see *Audio sources* below), so a webcam no bus hears never records. Audio inputs open
+while the program stage runs, and the stage runs while an H.264 preview stream of the
+program is open as well as while an output runs
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §6), so a microphone
+the collection hears is open while the app shows the program, as in OBS.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks
@@ -2091,13 +2095,35 @@ otherwise, as it does when more than 30 draws in a row fail, or after a panic on
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
+**Program streams on the program stage**
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §6). An H.264 stream of
+the program isn't drawn by the hub: once the engine has backends, the hub takes the
+program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
+under the start lock but never waiting for a start, asking again 200 ms later while an
+output is starting and 5 s later after a stage that failed to open) and holds it while
+such a stream is open. It opens the stream's encoder session (as above) and hands its
+input to the stage (`Program::attach_preview`). The stage's render thread then draws
+the program at the stream's picture size, every base tick divided by the stream's rate,
+on the stage's compositor, with the stage's captures. At the stage's own size it is the
+program's frame itself, drawn once for every consumer. The render thread reads it back
+without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
+sends each packet as it comes, timed from the stream's first one, with the collection's
+`rev` at that moment. The hub only opens the session again when the picture size
+changes, passes keyframe requests on, and lets go of it when the stream closes. So the
+preview shows what goes out, and costs no second composite, no second device and no
+second capture of the program's displays. Outputs that start while the preview holds the
+stage share it, as they share each other's. A stage only the hub holds is let go of
+once the canvas differs from the size it opened at, and reopened at the new one. JPEG
+and PNG streams, scene, source and draft streams, an engine without backends, and a
+stage that can't be had yet still draw on the hub's compositor as described above.
+
 The hub captures the displays, windows, webcams and capture cards the program mix and
 each streamed scene show itself, so they show with no output running: once the engine has backends, it
 runs the program stage's `RenderCaptures` (`runtime/captures.rs`) on a
 `jstream-capture` thread of its own, started the first time a stream shows one and
 stopped when the `jstream-preview` thread ends (its last stream gone), on the CPU path
 (its compositor isn't on the platform's GPU context). The program's captures run only
-while a stream shows the program. A stream showing a capture
+while a stream the hub draws itself shows the program. A stream showing a capture
 is due when one of the captures it shows took a new frame since its last picture
 (`CaptureFrame::version`), so a still desktop costs no redraw. While an output runs, its stage
 captures the same display again. The sizes these captures see go nowhere; `source.sizes`
@@ -2157,7 +2183,8 @@ covers = ["crates/jstream-core/src/drops.rs"]
 
 [R-RT-004](../../docs/RULES.md#R-RT-004) says overload drops are counted and reported in
 `stats.tick`. The stages already count. The engine does not count a second time.
-The `output.start` that opens the program stage registers its sources (capture,
+The `output.start` or preview stream (see [Preview streams](#preview-streams)) that
+opens the program stage registers its sources (capture,
 render, mixer inputs, mix bus) and starts a sampler thread, `jstream-stats`, that
 calls [`Engine::emit_stats_tick`](src/engine.rs) about once a second. Each encoder
 session registers its two sources (input and subscriber drops) when it opens, and each
@@ -2581,7 +2608,7 @@ Its error text must not carry a stream key
 waits for a start). The call checks the output is idle,
 takes the publish target, records an in-flight generation, emits `starting`, and
 drops the collection lock before it opens devices or joins anything. When no other
-output is running it opens the program stage and waits,
+output is running and no preview stream holds the program stage, it opens the stage and waits,
 up to 10 s, for the render thread to open its compositor (on the platform's GPU
 context, or without one on a hardware adapter first and the software adapter as the
 fallback; see [Runtime](#runtime)); that bound only
@@ -2595,7 +2622,7 @@ hardware session is refused, as above), and drops a one-shot publish target so
 the host sets another before retrying (an opener is kept); the other outputs keep
 running. `output.stop` on an `active` output emits `stopping`, drops its pipeline
 outside the lock (the program stage and an encoder session stop with the last output
-on them) (its drop sets the stop flag and joins the threads; the output
+on them, the stage only once no preview stream holds it either) (its drop sets the stop flag and joins the threads; the output
 thread's drain, and the wait for it, are bounded, see the RTMP paragraph below), then emits
 `stopped`. `output.stop` during the in-flight start cancels that generation, emits
 `stopping`, waits until the start has dropped whatever it opened, then emits
@@ -3413,8 +3440,10 @@ in Design), and each bus monitor's block into its feed (the routes come over a
 channel, see *Bus monitors* in Design). Once the stage is up, the engine routes the
 collection's buses, faders and sends into its mixer until it stops (see *Audio
 routing* in Design). Every running output shares that one program stage (capture,
-render, mixer, audio inputs); the first `output.start` builds it and the
-last `output.stop` tears it down, and starts are serialized. Encode threads are the
+render, mixer, audio inputs); the first `output.start` builds it, unless an H.264
+preview stream of the program already has, and it stops once the last output and
+the last such stream have let go of it. Starts are serialized, and the preview opens
+the stage under the same lock. Encode threads are the
 ones inside the encoder sessions: outputs with the same video mix and encoder profile
 share one video session (an output with its own video chain would get its own); those of them with no audio chain that carry the master bus share one audio session of
 it; an output with an audio chain, or one carrying another bus, has an audio session of
