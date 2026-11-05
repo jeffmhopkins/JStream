@@ -96,8 +96,9 @@ mailbox like a capture's. A frame in a slot is one of:
 - **planes in a GPU-uploadable layout**: straight sRGB RGBA8 or BGRA8, or NV12, written
   by the producer into a staging ring of its own (`Queue::write_texture` or a mapped
   buffer, which wgpu allows from any thread) and converted on the GPU by the composite's
-  first pass: NV12 to RGB, sRGB decode and premultiply. The bits match today's CPU
-  conversions (tests compare them, as the #1193 tables do), so nothing looks different.
+  first pass: NV12 to RGB, sRGB decode and premultiply. The result matches today's CPU
+  conversions to within one step of the stored format (a GPU may round a float to half
+  either way), and tests compare them as the #1193 tables do, so nothing looks different.
 
 The render thread only samples a slot's frame, or records the copy out of the producer's
 ring. A source that cannot hand over a GPU-uploadable layout converts on the shared
