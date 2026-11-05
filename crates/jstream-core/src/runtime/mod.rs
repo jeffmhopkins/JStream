@@ -18,6 +18,7 @@ mod vcam;
 pub(crate) use captures::Backends as CaptureBackends;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
+pub(crate) use captures::{format_fps, pixel_format_name, readable as readable_format};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
 pub(crate) use devices::SharedVideoDevices;
 pub(crate) use pipeline::DeviceLoss;

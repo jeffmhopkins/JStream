@@ -244,11 +244,106 @@ pub enum ParamType {
         /// Longest allowed value, in characters.
         max_len: u32,
     },
+    /// One part of the format a video capture device is opened in, picked from the
+    /// formats `capture.targets` lists for the device that parameter `target` names, so
+    /// a UI can offer those. Since 0.89. Its value is `part`'s:
+    /// [`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),
+    /// [`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]
+    /// one of [`PIXEL_FORMATS`]. Its default, `""` or `0`, leaves that part to the
+    /// engine.
+    CaptureFormat {
+        /// Which part of the format.
+        part: CaptureFormatPart,
+        /// The ID of the parameter naming the device, a
+        /// [`ParamType::CaptureTarget`] of kind `device`.
+        target: String,
+    },
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
     #[schemars(skip)]
     Unknown,
+}
+
+/// Which part of a video capture device's format a [`ParamType::CaptureFormat`]
+/// parameter picks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CaptureFormatPart {
+    /// The frame size: `<width>x<height>`, or `""` for the engine's choice.
+    Resolution,
+    /// Frames per second: a number from 0 to [`MAX_CAPTURE_FPS`], `0` for the engine's
+    /// choice.
+    Fps,
+    /// How the device encodes its frames: one of [`PIXEL_FORMATS`], or `""` for the
+    /// engine's choice.
+    PixelFormat,
+    /// A part this version of the protocol doesn't know. Never sent.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+/// The `pixel_format` values a [`CaptureFormatPart::PixelFormat`] parameter takes
+/// besides `""`, as a `capture.targets` format names them.
+pub const PIXEL_FORMATS: [&str; 6] = ["mjpeg", "yuy2", "nv12", "i420", "bgra", "rgba"];
+
+/// The highest frame rate a [`CaptureFormatPart::Fps`] parameter takes.
+pub const MAX_CAPTURE_FPS: f64 = 1000.0;
+
+/// The longest side a [`CaptureFormatPart::Resolution`] parameter takes, in pixels.
+pub const MAX_CAPTURE_SIDE: u32 = 16384;
+
+/// Parses a [`CaptureFormatPart::Resolution`] value: `Some(None)` for `""`,
+/// `Some(Some((width, height)))` for `<width>x<height>` with each side from 1 to
+/// [`MAX_CAPTURE_SIDE`], and `None` for anything else.
+pub fn parse_resolution(value: &str) -> Option<Option<(u32, u32)>> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Some(None);
+    }
+    let (w, h) = value.split_once('x')?;
+    let side = |s: &str| {
+        let s = s.trim();
+        (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse::<u32>().ok())
+            .flatten()
+            .filter(|n| (1..=MAX_CAPTURE_SIDE).contains(n))
+    };
+    Some(Some((side(w)?, side(h)?)))
+}
+
+/// Checks a [`ParamType::CaptureFormat`] value.
+fn check_capture_format(part: CaptureFormatPart, value: &Value) -> Result<(), String> {
+    match part {
+        CaptureFormatPart::Resolution => match value.as_str().map(parse_resolution) {
+            Some(Some(_)) => Ok(()),
+            _ => Err(format!(
+                "must be a size as `<width>x<height>`, each side 1 to {MAX_CAPTURE_SIDE}, or \"\" for the engine's choice"
+            )),
+        },
+        CaptureFormatPart::Fps => {
+            let Some(n) = value.as_f64() else {
+                return Err("must be a number".into());
+            };
+            check_range(n, Some(0.0), Some(MAX_CAPTURE_FPS))
+        }
+        CaptureFormatPart::PixelFormat => {
+            let Some(s) = value.as_str() else {
+                return Err("must be a string".into());
+            };
+            if s.is_empty() || PIXEL_FORMATS.contains(&s) {
+                Ok(())
+            } else {
+                Err(format!(
+                    "must be one of {}, or \"\" for the engine's choice",
+                    PIXEL_FORMATS.join(", ")
+                ))
+            }
+        }
+        CaptureFormatPart::Unknown => Err("has a format part this engine can't check".into()),
+    }
 }
 
 /// One option of an [`ParamType::Enum`].
@@ -355,6 +450,7 @@ impl ParamDescriptor {
                 None | Some(Reference::Bus { .. }) => Ok(()),
                 Some(_) => Err(not_a_reference("bus")),
             },
+            ParamType::CaptureFormat { part, .. } => check_capture_format(*part, value),
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
     }
@@ -409,6 +505,21 @@ impl ParamDescriptor {
                 "properties": {"type": {"const": "bus"}, "bus_id": {"type": "string"}},
                 "required": ["type", "bus_id"],
             })),
+            ParamType::CaptureFormat { part, .. } => match part {
+                CaptureFormatPart::Resolution => json!({
+                    "type": "string",
+                    "pattern": "^([1-9][0-9]{0,4}x[1-9][0-9]{0,4})?$",
+                }),
+                CaptureFormatPart::Fps => {
+                    bounded("number", Some(Value::from(0)), Some(Value::from(MAX_CAPTURE_FPS)))
+                }
+                CaptureFormatPart::PixelFormat => {
+                    let mut values = vec![""];
+                    values.extend(PIXEL_FORMATS);
+                    json!({"enum": values})
+                }
+                CaptureFormatPart::Unknown => json!({}),
+            },
             ParamType::Unknown => json!({}),
         };
         if let Some(object) = schema.as_object_mut() {

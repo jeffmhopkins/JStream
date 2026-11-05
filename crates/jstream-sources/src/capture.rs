@@ -14,7 +14,9 @@ use crate::describe::{kind, param};
 use crate::source::{changed_non_live, setting};
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_media::{MediaTime, VideoFrame};
-use jstream_protocol::{CaptureTargetKind, KindDescriptor, ParamType, Settings};
+use jstream_protocol::{
+    CaptureFormatPart, CaptureTargetKind, KindDescriptor, ParamType, Settings, parse_resolution,
+};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -51,8 +53,39 @@ pub enum CaptureSpec {
     /// nothing when `None`.
     Window(Option<String>),
     /// A video capture device, such as a webcam or a capture card: the one whose
-    /// video-device ID is given, or the first one listed when `None`.
-    Device(Option<String>),
+    /// video-device ID is given, or the first one listed when `None`, opened in a format
+    /// with what the [`DeviceFormatWant`] asks for.
+    Device(Option<String>, DeviceFormatWant),
+}
+
+/// What a `webcam` source asks of the format its device opens in: each part `None`
+/// leaves it to the engine.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DeviceFormatWant {
+    /// The frame size, width by height.
+    pub size: Option<(u32, u32)>,
+    /// Frames per second, in hundredths (`2997` for 29.97).
+    pub fps_centi: Option<u32>,
+    /// The pixel format, as `capture.targets` names it (`mjpeg`, `nv12`, …).
+    pub pixel_format: Option<String>,
+}
+
+impl DeviceFormatWant {
+    /// Whether it asks nothing.
+    pub fn is_any(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// Frames per second in hundredths, rounded: how a frame rate is compared.
+pub fn fps_centi(fps: f64) -> u32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to a non-negative value well inside u32"
+    )]
+    let centi = (fps.clamp(0.0, 1.0e7) * 100.0).round() as u32;
+    centi
 }
 
 /// Which of the capture kinds.
@@ -103,8 +136,9 @@ impl CaptureKind {
                 kind: CaptureTargetKind::Window,
                 max_len: MAX_TARGET,
             },
-            Flavor::Device => ParamType::String {
-                multiline: false,
+            // Since protocol 0.89 a device is one too; before, it was a plain string.
+            Flavor::Device => ParamType::CaptureTarget {
+                kind: CaptureTargetKind::Device,
                 max_len: MAX_TARGET,
             },
         };
@@ -116,11 +150,14 @@ impl CaptureKind {
             Flavor::Display => "The ID of the display to capture, as `capture.targets` lists \
                                 it. Empty captures the primary display."
                 .into(),
-            Flavor::Device => "The ID of the webcam or capture card, as the platform lists \
-                               it. Empty captures the first device listed."
+            Flavor::Device => "The ID of the webcam or capture card, as `capture.targets` \
+                               lists it. Empty captures the first device listed."
                 .into(),
         });
         let mut params = vec![target];
+        if flavor == Flavor::Device {
+            params.extend(format_params(param_id));
+        }
         // A webcam has no pointer to show; a display or window capture may leave it out.
         if flavor != Flavor::Device {
             let mut show_cursor = param("show_cursor", "Show cursor", ParamType::Bool, json!(true));
@@ -139,19 +176,97 @@ impl CaptureKind {
 
     /// What the settings say to capture.
     fn spec(&self, settings: &Settings) -> Result<CaptureSpec, SourceError> {
+        let target = self.target(settings)?;
+        Ok(match self.flavor {
+            Flavor::Display => CaptureSpec::Display(target),
+            Flavor::Window => CaptureSpec::Window(target),
+            Flavor::Device => CaptureSpec::Device(target, format_want(settings)?),
+        })
+    }
+
+    /// The target or device the settings name, `None` for the default.
+    fn target(&self, settings: &Settings) -> Result<Option<String>, SourceError> {
         let param = &self.descriptor.params[0].id;
         let value = setting(settings, param)?;
         let target = value.as_str().ok_or_else(|| SourceError::Setting {
             param: param.clone(),
             reason: "must be a string".into(),
         })?;
-        let target = (!target.is_empty()).then(|| target.to_owned());
-        Ok(match self.flavor {
-            Flavor::Display => CaptureSpec::Display(target),
-            Flavor::Window => CaptureSpec::Window(target),
-            Flavor::Device => CaptureSpec::Device(target),
-        })
+        Ok((!target.is_empty()).then(|| target.to_owned()))
     }
+}
+
+/// A `webcam`'s format parameters: its resolution, frame rate and pixel format, each
+/// picked from what `capture.targets` lists for the device that `target` names.
+fn format_params(target: &str) -> Vec<jstream_protocol::ParamDescriptor> {
+    let part = |id: &str, label: &str, part, default, description: &str| {
+        let mut p = param(
+            id,
+            label,
+            ParamType::CaptureFormat {
+                part,
+                target: target.into(),
+            },
+            default,
+        );
+        p.description = Some(description.into());
+        p.group = Some("Format".into());
+        p
+    };
+    vec![
+        part(
+            "resolution",
+            "Resolution",
+            CaptureFormatPart::Resolution,
+            json!(""),
+            "The frame size to capture, as `<width>x<height>` (`1920x1080`), one the \
+             device lists in `capture.targets`. Empty lets the engine choose: the largest \
+             up to 1920x1080.",
+        ),
+        part(
+            "fps",
+            "Frame rate",
+            CaptureFormatPart::Fps,
+            json!(0),
+            "The frames per second to capture, one the device lists for the resolution. \
+             0 lets the engine choose: the fastest.",
+        ),
+        part(
+            "pixel_format",
+            "Video format",
+            CaptureFormatPart::PixelFormat,
+            json!(""),
+            "How the device sends its frames: `mjpeg` (compressed, decoded by the \
+             engine), `yuy2`, `nv12`, `i420`, `bgra` or `rgba`. Empty lets the engine \
+             choose: uncompressed when it can.",
+        ),
+    ]
+}
+
+/// What a `webcam`'s format settings ask. A device that offers no format matching them
+/// opens in the engine's choice, so they never stop a capture.
+fn format_want(settings: &Settings) -> Result<DeviceFormatWant, SourceError> {
+    let bad = |param: &str, reason: &str| SourceError::Setting {
+        param: param.into(),
+        reason: reason.into(),
+    };
+    let size = setting(settings, "resolution")?
+        .as_str()
+        .and_then(parse_resolution)
+        .ok_or_else(|| bad("resolution", "must be `<width>x<height>` or empty"))?;
+    let fps = setting(settings, "fps")?
+        .as_f64()
+        .filter(|n| n.is_finite() && *n >= 0.0)
+        .ok_or_else(|| bad("fps", "must be a number of at least 0"))?;
+    let pixel_format = setting(settings, "pixel_format")?
+        .as_str()
+        .ok_or_else(|| bad("pixel_format", "must be a string"))?
+        .trim();
+    Ok(DeviceFormatWant {
+        size,
+        fps_centi: (fps > 0.0).then(|| fps_centi(fps)),
+        pixel_format: (!pixel_format.is_empty()).then(|| pixel_format.to_owned()),
+    })
 }
 
 impl SourceKind for CaptureKind {

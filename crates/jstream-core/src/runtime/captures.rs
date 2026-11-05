@@ -40,7 +40,7 @@ use jstream_platform::{
     CursorCapture, DeviceId, GpuFrame, PlatformError, VideoDeviceFormat, VideoDevices,
     VideoSurface,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, DeviceFormatWant, fps_centi};
 
 use crate::snapshot::{CaptureFrame, CaptureImage, CaptureKey, Captures};
 
@@ -180,12 +180,13 @@ pub(crate) fn start(
 /// starts, else on the CPU path. Fails with the reason when neither starts. A video
 /// device is opened as [`open_device`] says.
 fn start_on(backends: &Backends, spec: &CaptureKey) -> Result<Opened, String> {
-    if let CaptureSpec::Device(id) = &spec.spec {
+    if let CaptureSpec::Device(id, want) = &spec.spec {
         return open_device(
             backends.devices.as_ref(),
             backends.gpu_devices.as_deref(),
             backends.codecs.as_ref(),
             id.as_deref(),
+            want,
         );
     }
     let target = target(backends.cpu.as_ref(), &spec.spec)?;
@@ -225,7 +226,7 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
         CaptureSpec::Display(Some(id)) => Ok(CaptureTarget::Display(DeviceId::new(id.clone()))),
         CaptureSpec::Window(Some(id)) => Ok(CaptureTarget::Window(DeviceId::new(id.clone()))),
         CaptureSpec::Window(None) => Err("no window is chosen".into()),
-        CaptureSpec::Device(_) => Err("a video device is not a capture target".into()),
+        CaptureSpec::Device(..) => Err("a video device is not a capture target".into()),
         CaptureSpec::Display(None) => {
             let targets = capture
                 .targets()
@@ -245,7 +246,7 @@ fn target(capture: &dyn Capture, spec: &CaptureSpec) -> Result<CaptureTarget, St
 }
 
 /// Opens the video device `id`, or the first one listed, in the format
-/// [`device_format`] picks. An MJPEG format comes with the platform's capture decoder
+/// [`device_format_for`] picks for `want`. An MJPEG format comes with the platform's capture decoder
 /// ([`Codecs::capture_decoder`]); without one, only uncompressed formats are chosen.
 ///
 /// An uncompressed format is opened on `gpu`, the backend on the compositor's device,
@@ -259,6 +260,7 @@ fn open_device(
     gpu: Option<&dyn VideoDevices>,
     codecs: &dyn Codecs,
     id: Option<&str>,
+    want: &DeviceFormatWant,
 ) -> Result<Opened, String> {
     let id = match id {
         Some(id) => DeviceId::new(id),
@@ -282,7 +284,7 @@ fn open_device(
             Err(err) => no_decoder = Some(err.to_string()),
         }
     }
-    let format = device_format(&formats, decoder.is_some()).ok_or_else(|| match &no_decoder {
+    let (format, matched) = device_format_for(&formats, decoder.is_some(), want).ok_or_else(|| match &no_decoder {
         Some(err) => {
             format!(
                 "{id} offers no uncompressed format the engine reads, and the platform has no MJPEG decoder: {err}"
@@ -292,6 +294,9 @@ fn open_device(
     })?;
     if let Some(err) = &no_decoder {
         tracing::info!(device = %id, error = %err, "no MJPEG decoder; choosing among the uncompressed formats");
+    }
+    if !matched {
+        tracing::warn!(device = %id, ?want, "the device offers no format the source asks for; opening the engine's choice");
     }
     tracing::info!(
         device = %id,
@@ -327,6 +332,67 @@ fn open_device(
     }
 }
 
+/// The format a webcam or capture card is opened in for a source that asks `want`, and
+/// whether it is one `want` asked for: the [`device_format`] among the formats with
+/// each part `want` names, else, when none has them all, the [`device_format`] of all.
+/// `None` when no format is a candidate.
+pub(crate) fn device_format_for(
+    formats: &[VideoDeviceFormat],
+    mjpeg: bool,
+    want: &DeviceFormatWant,
+) -> Option<(VideoDeviceFormat, bool)> {
+    if want.is_any() {
+        return device_format(formats, mjpeg).map(|f| (f, true));
+    }
+    let wanted: Vec<_> = formats.iter().copied().filter(|f| wants(want, f)).collect();
+    match device_format(&wanted, mjpeg) {
+        Some(format) => Some((format, true)),
+        None => device_format(formats, mjpeg).map(|f| (f, false)),
+    }
+}
+
+/// Whether `format` has each part `want` names.
+fn wants(want: &DeviceFormatWant, format: &VideoDeviceFormat) -> bool {
+    let size = (format.size.width(), format.size.height());
+    want.size.is_none_or(|w| w == size)
+        && want
+            .fps_centi
+            .is_none_or(|w| w == fps_centi(format_fps(format)))
+        && want
+            .pixel_format
+            .as_deref()
+            .is_none_or(|w| pixel_format_name(format.encoding) == Some(w))
+}
+
+/// A format's frames per second, from its frame period.
+pub(crate) fn format_fps(format: &VideoDeviceFormat) -> f64 {
+    let period = format.frame_period;
+    f64::from(period.den()) / f64::from(period.num().max(1))
+}
+
+/// How `capture.targets` and a `webcam`'s `pixel_format` setting name an encoding:
+/// `None` for one the engine doesn't read.
+pub(crate) fn pixel_format_name(encoding: CaptureEncoding) -> Option<&'static str> {
+    match encoding {
+        CaptureEncoding::Mjpeg => Some("mjpeg"),
+        CaptureEncoding::Yuy2 => Some("yuy2"),
+        CaptureEncoding::Raw(PixelFormat::Nv12) => Some("nv12"),
+        CaptureEncoding::Raw(PixelFormat::I420) => Some("i420"),
+        CaptureEncoding::Raw(PixelFormat::Bgra8) => Some("bgra"),
+        CaptureEncoding::Raw(PixelFormat::Rgba8) => Some("rgba"),
+        _ => None,
+    }
+}
+
+/// Whether the engine reads a format's frames: uncompressed in a format
+/// [`rgba_from_surface`] converts, or MJPEG when `mjpeg` says a decoder is there.
+pub(crate) fn readable(format: &VideoDeviceFormat, mjpeg: bool) -> bool {
+    matches!(
+        format.encoding.delivered_format(),
+        Some(PixelFormat::Rgba8 | PixelFormat::Bgra8 | PixelFormat::Nv12)
+    ) || (mjpeg && format.encoding == CaptureEncoding::Mjpeg)
+}
+
 /// The format a webcam or capture card is opened in, from those it lists.
 ///
 /// The candidates are the formats whose frames arrive uncompressed in a format
@@ -340,12 +406,7 @@ pub(crate) fn device_format(
 ) -> Option<VideoDeviceFormat> {
     let pixels = |f: &VideoDeviceFormat| u64::from(f.size.width()) * u64::from(f.size.height());
     let fits = |pixels: u64| pixels <= MAX_DEVICE_PIXELS;
-    let candidate = |f: &&VideoDeviceFormat| {
-        matches!(
-            f.encoding.delivered_format(),
-            Some(PixelFormat::Rgba8 | PixelFormat::Bgra8 | PixelFormat::Nv12)
-        ) || (mjpeg && f.encoding == CaptureEncoding::Mjpeg)
-    };
+    let candidate = |f: &&VideoDeviceFormat| readable(f, mjpeg);
     let mut best: Option<&VideoDeviceFormat> = None;
     for format in formats.iter().filter(candidate) {
         let Some(current) = best else {
@@ -492,7 +553,7 @@ impl RenderCaptures {
         let mut slots = std::mem::take(&mut self.slots);
         for (spec, slot) in &mut slots {
             let on_gpu = matches!(slot.state, State::Running { gpu: true, .. });
-            if matches!(spec.spec, CaptureSpec::Device(_)) && !on_gpu {
+            if matches!(spec.spec, CaptureSpec::Device(..)) && !on_gpu {
                 // Only a GPU frame uses the compositor's device; a device on the CPU path
                 // delivers none, and one that failed starts again on the CPU path, keeping
                 // its last frame meanwhile.
@@ -892,7 +953,7 @@ impl Yuv {
 #[cfg(test)]
 mod tests {
     use super::{
-        Backends, MAX_DEVICE_PIXELS, State, device_format, rgba_from_surface, spawn, start,
+        Backends, DeviceFormatWant, MAX_DEVICE_PIXELS, State, device_format, rgba_from_surface, spawn, start,
         start_on,
     };
     use crate::snapshot::{CaptureKey, Captures};
@@ -1013,20 +1074,20 @@ mod tests {
         let with: Arc<dyn Codecs> = Arc::new(FakeCodecs);
         let without: Arc<dyn Codecs> = Arc::new(NoMjpeg);
         for (codecs, spec, size) in [
-            (&with, CaptureSpec::Device(None), (1280, 720)),
+            (&with, CaptureSpec::Device(None, DeviceFormatWant::default()), (1280, 720)),
             (
                 &with,
-                CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+                CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
                 (1280, 720),
             ),
             (
                 &without,
-                CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+                CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
                 (640, 360),
             ),
             (
                 &with,
-                CaptureSpec::Device(Some(FAKE_CAPTURE_CARD.into())),
+                CaptureSpec::Device(Some(FAKE_CAPTURE_CARD.into()), DeviceFormatWant::default()),
                 (1280, 720),
             ),
         ] {
@@ -1052,7 +1113,7 @@ mod tests {
         }
         let backends = backends(&clock, &devices, with);
         let nope = crate::snapshot::CaptureKey::for_source(
-            CaptureSpec::Device(Some("nope".into())),
+            CaptureSpec::Device(Some("nope".into()), DeviceFormatWant::default()),
             jstream_protocol::SourceId::new("cam"),
         );
         assert!(start(&backends, &nope).is_err());
@@ -1074,7 +1135,7 @@ mod tests {
         )
         .expect("the capture thread starts");
         let webcam = CaptureKey::for_source(
-            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
             jstream_protocol::SourceId::new("cam"),
         );
         let display = CaptureKey::primary();
@@ -1191,7 +1252,7 @@ mod tests {
         let clock = FakeClock::new(Timebase::MICROS);
         let devices = FakeVideoDevices::new(clock.clone());
         let webcam = CaptureKey::for_source(
-            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
             jstream_protocol::SourceId::new("cam"),
         );
         let with: Arc<dyn Codecs> = Arc::new(FakeCodecs);
@@ -1225,7 +1286,7 @@ mod tests {
         let clock = FakeClock::new(Timebase::MICROS);
         let devices = FakeVideoDevices::new(clock.clone());
         let webcam = CaptureKey::for_source(
-            CaptureSpec::Device(Some(FAKE_WEBCAM.into())),
+            CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
             jstream_protocol::SourceId::new("cam"),
         );
         let wanted = BTreeSet::from([webcam.clone()]);

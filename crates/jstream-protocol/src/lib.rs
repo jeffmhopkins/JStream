@@ -90,8 +90,9 @@ pub use id::{
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
-    EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
-    VisibleIf, check_asset_path, not_a_reference,
+    CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary, MAX_CAPTURE_FPS,
+    MAX_CAPTURE_SIDE, Media, PIXEL_FORMATS, ParamDescriptor, ParamType, VisibleIf,
+    check_asset_path, not_a_reference, parse_resolution,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
@@ -127,7 +128,7 @@ pub use profile::{
     ThreadProfile, UnitProfile,
 };
 pub use query::{
-    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,
+    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,
     PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
