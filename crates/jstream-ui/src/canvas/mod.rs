@@ -1999,7 +1999,9 @@ struct NameRotation {
 /// otherwise the item's own projection, tilt and turn included. When the top-left or
 /// the far end of the top edge is behind the viewer, or the edge has no direction (a
 /// box turned edge-on), the name stays upright on `bounds`. A mirrored projection (a
-/// turn past the side, or a camera behind the item) insets into the box.
+/// turn past the side, or a camera behind the item) insets into the box. The glyphs
+/// still grow toward the rotated frame's negative y, so on a mirrored box the name
+/// sits about one line deeper than on an unmirrored one.
 fn name_label(
     geometry: &ItemGeometry,
     view: Option<&CameraView>,
