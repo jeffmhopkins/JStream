@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `░░░░░░░░░░` 0% | 0 | 0 | 17 | 2 |
+| `░░░░░░░░░░` 0% | 0 | 0 | 18 | 1 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -193,7 +193,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | ⏳ planned | #1195, #1196 |  |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
 |  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
-|  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned, ❔ this release or the next | #1222, #1223, #1224 |  |
+|  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 |  |
 |  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned, ❔ this release or the next | #1182, #1181 |  |
 
 ### Whole app

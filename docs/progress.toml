@@ -194,7 +194,6 @@ release = "alpha.5"
 title = "MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources"
 status = "planned"
 issues = [1222, 1223, 1224]
-undecided = true
 
 [[target]]
 release = "alpha.5"
