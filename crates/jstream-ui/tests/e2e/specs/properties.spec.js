@@ -1,7 +1,8 @@
 // The Properties dialog: opened from an item's menu, it edits a draft of the source's
 // name and settings that OK sends as one edit, showing each setting the kind marks live
 // as a live value meanwhile (ADR-0091), and lists the source's filters (seeded: Sharpen,
-// then Blur turned off). The mock engine
+// then Blur turned off). Dragging its title moves the dialog, which reopens where it
+// was left, and the header's × still closes it. The mock engine
 // describes no kinds, so the settings form itself is covered natively; the webcam's
 // live picture gets its descriptor from the page's socket (`describeKinds`).
 import { test, expect, connect, describeKinds, openAddSource, rev } from '../fixtures.js';
@@ -205,4 +206,69 @@ test('a text source picks an installed font from the list, or another file', asy
   await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => rev(page)).toBe(startRev + 2);
+});
+
+/** Within a pixel: the drag follows the pointer, and layout can sit on a half pixel. */
+function closeTo(actual, expected) {
+  expect(Math.abs(actual - expected)).toBeLessThan(1.5);
+}
+
+test('dragging the header moves the dialog, and it reopens there', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const dialog = await openProperties(page);
+  const before = await dialog.boundingBox();
+  const title = dialog.locator('.modal-title');
+  const titleBox = await title.boundingBox();
+  const from = { x: titleBox.x + 12, y: titleBox.y + titleBox.height / 2 };
+  const dx = 80;
+  const dy = 30;
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(from.x + dx, from.y + dy, { steps: 8 });
+  await page.mouse.up();
+
+  const moved = await dialog.boundingBox();
+  closeTo(moved.x, before.x + dx);
+  closeTo(moved.y, before.y + dy);
+  const viewport = page.viewportSize();
+  expect(moved.x).toBeGreaterThanOrEqual(-0.5);
+  expect(moved.y).toBeGreaterThanOrEqual(-0.5);
+  expect(moved.x + moved.width).toBeLessThanOrEqual(viewport.width + 0.5);
+  expect(moved.y + moved.height).toBeLessThanOrEqual(viewport.height + 0.5);
+
+  // A drag past the corner stays inside the window, header included.
+  const titleNow = await title.boundingBox();
+  await page.mouse.move(titleNow.x + 12, titleNow.y + titleNow.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(-400, -300, { steps: 6 });
+  await page.mouse.up();
+  const clamped = await dialog.boundingBox();
+  expect(clamped.x).toBeGreaterThanOrEqual(-0.5);
+  expect(clamped.y).toBeGreaterThanOrEqual(-0.5);
+  expect(clamped.x + clamped.width).toBeLessThanOrEqual(viewport.width + 0.5);
+  expect(clamped.y + clamped.height).toBeLessThanOrEqual(viewport.height + 0.5);
+  expect(clamped.x).toBeLessThan(moved.x);
+  expect(clamped.y).toBeLessThan(moved.y);
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  const again = await openProperties(page);
+  const reopened = await again.boundingBox();
+  closeTo(reopened.x, clamped.x);
+  closeTo(reopened.y, clamped.y);
+
+  // A press on × does not drag, and a click there still closes the dialog.
+  const at = await again.boundingBox();
+  const close = again.locator('.modal-close');
+  const closeBox = await close.boundingBox();
+  await page.mouse.move(closeBox.x + closeBox.width / 2, closeBox.y + closeBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(closeBox.x + closeBox.width / 2 + 48, closeBox.y + closeBox.height / 2 + 36, { steps: 4 });
+  await page.mouse.up();
+  await expect(again).toBeVisible();
+  const stayed = await again.boundingBox();
+  closeTo(stayed.x, at.x);
+  closeTo(stayed.y, at.y);
+  await close.click();
+  await expect(again).toBeHidden();
 });
