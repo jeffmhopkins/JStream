@@ -187,7 +187,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 |  |
 |  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned | #1225, #1216, #1214, #1188 |  |
 |  | Looping media files play without a gap at the wrap | ⏳ planned | #445 |  |
-|  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 |  |
+|  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240 |
 |  | Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter | ⏳ planned | #1226, #1227, #1232 |  |
 |  | Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read | ⏳ planned | #1228, #1060 |  |
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | ⏳ planned | #1195, #1196 |  |
