@@ -31,6 +31,11 @@ pub const LEGACY_VERSIONS: [&str; 2] = ["2025-11-25", "2025-06-18"];
 /// The server's name in `serverInfo`.
 const SERVER_NAME: &str = "jstream-mcp";
 
+/// The app's release version in `serverInfo`. This crate stays at `0.0.0`; the
+/// workspace version is what the apps ship (docs/runbooks/release.md). Set by
+/// `build.rs`.
+const SERVER_VERSION: &str = env!("JSTREAM_VERSION");
+
 /// The client name sent in the engine `hello` when the MCP client gave none.
 const DEFAULT_CLIENT_NAME: &str = "jstream-mcp";
 
@@ -597,7 +602,7 @@ impl Drop for Timer {
 }
 
 fn server_info() -> Value {
-    json!({"name": SERVER_NAME, "version": env!("CARGO_PKG_VERSION")})
+    json!({"name": SERVER_NAME, "version": SERVER_VERSION})
 }
 
 fn supported_versions() -> Vec<&'static str> {

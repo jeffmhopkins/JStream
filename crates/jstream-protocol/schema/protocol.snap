@@ -10225,7 +10225,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "default": "cut",
                 "presets": [
                   {
-                    "duration_ms": 300,
+                    "duration_ms": 0,
                     "easing": "ease_in_out",
                     "kind": "cut",
                     "name": "Cut",

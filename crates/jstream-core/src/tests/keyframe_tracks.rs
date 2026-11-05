@@ -532,3 +532,25 @@ fn a_hotkey_bound_to_a_switch_goes_with_its_keyframe_scene() {
     };
     assert_eq!(removed_hotkeys.len(), 1);
 }
+
+/// #1174: a placed keyframe is drawn through the engine's graph, not a copy rebuilt on
+/// every batch. A batch that does not open live source settings leaves no copy, and
+/// the track still draws.
+#[test]
+fn a_placed_keyframe_does_not_keep_a_drawn_copy() {
+    let (engine, control) = three_tracks();
+    assert!(!engine.has_settings_copy());
+    act(&control, "g", Some("gk"), None).expect("g to gk");
+    assert_eq!(placed(&engine, &view("g", Some("gk"))), [150.0]);
+    assert!(
+        !engine.has_settings_copy(),
+        "a placed keyframe rebuilt a copy of the collection"
+    );
+    block_on(control.call(Call::Batch(edits(vec![Edit::SceneRename {
+        scene_id: SceneId::new("p"),
+        name: "Program".into(),
+    }]))))
+    .expect("renamed");
+    assert_eq!(placed(&engine, &view("g", Some("gk"))), [150.0]);
+    assert!(!engine.has_settings_copy());
+}

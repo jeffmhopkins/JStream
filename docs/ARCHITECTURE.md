@@ -273,9 +273,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
-  - **A placed scene can switch its own keyframe** as studio state
-    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
-    Keyframe tracks under [Protocol](#protocol).
+  - **A placed scene can switch its own keyframe** as runtime state on the engine's
+    graph ([ADR-0116](adr/0116-keyframe-tracks.md),
+    [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
+    collection: see Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
@@ -1089,6 +1090,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   has its own image: a frame sheet, several pictures taken at an interval and tiled in
   time order into one PNG, from `video.frames` or, starting with a switch, from the
   `scene` tool's `scene.switch_and_watch` (#1061), sent the same way.
+- **`serverInfo.version`** is the workspace release version, the one the apps ship
+  (`jstream-mcp`'s `build.rs` reads `[workspace.package] version`). The crate itself
+  stays at `0.0.0` ([The version](runbooks/release.md#version)), so `CARGO_PKG_VERSION`
+  would report that (#1189).
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
@@ -1412,7 +1417,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
-  valid at the same `schema_version`. Scene filters and item effects (version 2) and a
+  valid at the same `schema_version`. A file that still stores that Cut at 300 ms,
+  ease-in-out and otherwise unchanged, loads it at duration 0 (#1209), with no schema
+  bump: a `cut` already showed the new scene on the next frame. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
