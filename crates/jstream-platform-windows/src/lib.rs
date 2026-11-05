@@ -23,9 +23,9 @@ mod clock;
 mod codec;
 #[cfg(windows)]
 mod com;
-// The extension filter is tested on every platform; the dialog itself is Windows.
 mod credential;
 mod decode;
+// The extension filter is tested on every platform; the dialog itself is Windows.
 #[cfg(any(windows, test))]
 mod dialog;
 #[cfg(windows)]

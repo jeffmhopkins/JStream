@@ -1,6 +1,6 @@
 {
   "identifier": "browse",
   "description": "The app's own pages may open one native file, save or folder dialog and receive the path the person picked. No other command is granted.",
-  "windows": ["main", "projector-*"],
+  "windows": ["main"],
   "permissions": ["allow-pick-path"]
 }

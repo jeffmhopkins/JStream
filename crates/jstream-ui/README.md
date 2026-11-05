@@ -477,7 +477,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   nothing while the primary item is one.
 - **The properties form** is generated from the kind's descriptor (`kind.describe`,
   read once per kind and kept), with no code per kind (ADR-0025): a checkbox, number
-  (and slider when bounded), select, colour, text,   asset (root and path) or reference
+  (and slider when bounded), select, colour, text, asset (root and path) or reference
   select (of the scenes, the other sources, or the buses, with None for `null`, which
   for a `waveform`'s or `spectrum`'s `audio` is the program mix; a source reference
   restricted to audio, such as their `audio_source`, offers only the sources that
