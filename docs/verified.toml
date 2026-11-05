@@ -621,7 +621,7 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:556bb2daa429cf3e", by = "agent:claude", note = "EncoderProfile::DEFAULT is 8000 kbit/s; this section names no default rate, still holds" }
+stamp = { hash = "b3:481fa2cd0cdc8ce6", by = "agent:grok", note = "Re-read the control protocol section: it does not quote the example Cut duration; examples.snap now stores that preset at 0, matching initial_preset." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
 stamp = { hash = "b3:16bb9ddf4e3f1f67", by = "agent:grok", note = "Re-read the control protocol section: it does not state the Cut preset's stored duration; the schema default is now 0 and a cut still reports duration 0 on studio.changed." }
@@ -3690,7 +3690,7 @@ stamp = { hash = "b3:ed14903859b328e5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:556bb2daa429cf3e", by = "agent:claude", note = "snapshots changed only in EncoderProfile's doc text and the default profile's wire example (8000); a default value isn't a wire change, no minor bump" }
+stamp = { hash = "b3:481fa2cd0cdc8ce6", by = "agent:grok", note = "Re-read the snapshot rule: examples.snap's state.get Cut duration is now 0, the same default protocol.snap already has; the wire format is unchanged." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
 stamp = { hash = "b3:16bb9ddf4e3f1f67", by = "agent:grok", note = "Re-read the schema rule: protocol.snap's TransitionsInfo default duration is now 0, an existing field's default, not a new or removed command, so the protocol version stays put." }
