@@ -127,10 +127,60 @@ fn a_fade_draws_on_program_until_it_ends_on_the_clock() {
     assert_eq!(hub.load().shot().transition_tracks(), None, "ended");
     assert_eq!(hub.load().shot().program(), Some(&SceneId::new("b")));
 
-    // The default preset is the initial `cut`: no transition at all.
+    // The default preset is the initial `cut`: no transition at all, and the new
+    // scene is on program on this frame, not after a blend (#1209).
     switch(&control, "a", None).expect("cut back");
     assert_eq!(started(drain(&mut events)), [Some(("cut".into(), 0))]);
+    let shot = hub.load();
+    assert_eq!(shot.shot().transition_tracks(), None);
+    assert_eq!(shot.shot().program(), Some(&SceneId::new("a")));
+    clock.advance(frame_us());
+    engine.replan();
+    let shot = hub.load();
+    assert_eq!(
+        shot.shot().transition_tracks(),
+        None,
+        "the next frame is still a cut"
+    );
+    assert_eq!(shot.shot().program(), Some(&SceneId::new("a")));
+}
+
+/// #1209: a fresh collection's Cut lasts no time, and a `cut` saved with a duration
+/// still reports 0 and shows the new scene at once.
+#[test]
+fn a_cut_is_instant_even_when_its_preset_stores_a_duration() {
+    let (engine, clock) = studio();
+    let control = connected(&engine);
+    let mut events = control.events();
+    match query(&control, Query::StateGet) {
+        Ok(QueryResult::StateGet { transitions, .. }) => {
+            let preset = transitions
+                .presets
+                .iter()
+                .find(|preset| preset.preset_id.as_str() == "cut")
+                .expect("the initial cut");
+            assert_eq!(preset.duration_ms, 0, "a fresh Cut stores no duration");
+            assert_eq!(transitions.default.as_str(), "cut");
+        }
+        other => panic!("not state.get: {other:?}"),
+    }
+    batch(&control, edits(vec![preset("held", "cut", 300)]))
+        .expect("a cut that still stores 300 ms");
+    drain(&mut events);
+    switch(&control, "b", Some("held")).expect("switch");
+    assert_eq!(started(drain(&mut events)), [Some(("held".into(), 0))]);
+    let hub = engine.render_hub();
+    assert_eq!(hub.load().shot().program(), Some(&SceneId::new("b")));
     assert_eq!(hub.load().shot().transition_tracks(), None);
+    clock.advance(frame_us());
+    engine.replan();
+    assert_eq!(hub.load().shot().transition_tracks(), None);
+    assert_eq!(hub.load().shot().program(), Some(&SceneId::new("b")));
+}
+
+/// One base frame, in microseconds: long enough that a 300 ms blend would still be running.
+fn frame_us() -> u64 {
+    1_000_000 / 30
 }
 
 #[test]

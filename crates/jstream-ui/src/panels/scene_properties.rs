@@ -384,10 +384,15 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             });
         });
     };
-    let number = move |label: &'static str, field: CameraField, step: &'static str| {
+    // `caption` is the short axis mark beside a triplet field; empty when the row
+    // names the control. `label` is the input's accessible name.
+    let number = move |caption: &'static str,
+                       label: &'static str,
+                       field: CameraField,
+                       step: &'static str| {
         view! {
             <label class="camera-number">
-                <span class="label">{label}</span>
+                {(!caption.is_empty()).then(|| view! { <span class="label">{caption}</span> })}
                 <input
                     type="number"
                     step=step
@@ -413,39 +418,58 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         draft.with(|d| d.camera.is_some()).then(|| {
             view! {
                 <div class="camera-fields">
+                    <h3 class="camera-head">"Camera"</h3>
                     <div class="camera-row">
                         <span class="label">"Position"</span>
-                        {number("Position X", CameraField::Position(0), "1")}
-                        {number("Position Y", CameraField::Position(1), "1")}
-                        {number("Position Z", CameraField::Position(2), "1")}
+                        <div class="camera-axes">
+                            {number("X", "Position X", CameraField::Position(0), "1")}
+                            {number("Y", "Position Y", CameraField::Position(1), "1")}
+                            {number("Z", "Position Z", CameraField::Position(2), "1")}
+                        </div>
                     </div>
                     <div class="camera-row">
                         <span class="label">"Looks at"</span>
-                        {number("Target X", CameraField::Target(0), "1")}
-                        {number("Target Y", CameraField::Target(1), "1")}
-                        {number("Target Z", CameraField::Target(2), "1")}
+                        <div class="camera-axes">
+                            {number("X", "Target X", CameraField::Target(0), "1")}
+                            {number("Y", "Target Y", CameraField::Target(1), "1")}
+                            {number("Z", "Target Z", CameraField::Target(2), "1")}
+                        </div>
                     </div>
                     <div class="camera-row">
-                        {number("Field of view (°)", CameraField::Fov, "0.5")}
-                        {number("Roll (°)", CameraField::Roll, "0.5")}
+                        <span class="label">"Field of view"</span>
+                        <div class="camera-control">
+                            {number("", "Field of view", CameraField::Fov, "0.5")}
+                            <span class="unit">"°"</span>
+                        </div>
                     </div>
-                    <label class="camera-row">
-                        <input
-                            type="checkbox"
-                            aria-label="Nearest on top"
-                            prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.depth_sort))
-                            on:change=move |event| {
-                                let sorted = event_target_checked(&event);
-                                draft.update(|d| {
-                                    if let Some(camera) = d.camera.as_mut() {
-                                        camera.depth_sort = sorted;
-                                    }
-                                });
-                            }
-                        />
-                        <span>"Nearest on top (off: stacking order)"</span>
-                    </label>
-                    <label class="camera-row">
+                    <div class="camera-row">
+                        <span class="label">"Roll"</span>
+                        <div class="camera-control">
+                            {number("", "Roll", CameraField::Roll, "0.5")}
+                            <span class="unit">"°"</span>
+                        </div>
+                    </div>
+                    <h3 class="camera-head">"Rendering"</h3>
+                    <div class="camera-line">
+                        <label class="camera-check">
+                            <input
+                                type="checkbox"
+                                aria-label="Nearest on top"
+                                prop:checked=move || draft.with(|d| d.camera.is_some_and(|c| c.depth_sort))
+                                on:change=move |event| {
+                                    let sorted = event_target_checked(&event);
+                                    draft.update(|d| {
+                                        if let Some(camera) = d.camera.as_mut() {
+                                            camera.depth_sort = sorted;
+                                        }
+                                    });
+                                }
+                            />
+                            <span>"Nearest on top"</span>
+                        </label>
+                        <span class="camera-hint">"off: stacking order decides"</span>
+                    </div>
+                    <label class="camera-check">
                         <input
                             type="checkbox"
                             aria-label="Depth of field"
@@ -462,9 +486,18 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         <span>"Depth of field"</span>
                     </label>
                     {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
-                        <div class="camera-row">
-                            {number("Focus distance", CameraField::Focus, "1")}
-                            {number("Blur (px)", CameraField::Blur, "0.5")}
+                        <div class="camera-sub">
+                            <div class="camera-row">
+                                <span class="label">"Focus distance"</span>
+                                {number("", "Focus distance", CameraField::Focus, "1")}
+                            </div>
+                            <div class="camera-row">
+                                <span class="label">"Blur"</span>
+                                <div class="camera-control">
+                                    {number("", "Blur", CameraField::Blur, "0.5")}
+                                    <span class="unit">"px"</span>
+                                </div>
+                            </div>
                             <button
                                 type="button"
                                 class="btn"
@@ -705,9 +738,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
                 </label>
-                <div class="field camera-field">
-                    <label class="camera-toggle">
-                        <span class="label">{camera_label}</span>
+                <div class="camera-field">
+                    <label class="camera-check">
                         <input
                             type="checkbox"
                             aria-label=camera_label
@@ -715,9 +747,10 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             prop:checked=move || draft.with(|d| d.camera.is_some())
                             on:change=move |event| toggle_camera(event_target_checked(&event))
                         />
+                        <span>{camera_label}</span>
                     </label>
-                    {camera_fields}
                     <span class="field-note">{camera_note}</span>
+                    {camera_fields}
                     {move || (!keyframe && draft.with(|d| d.camera.is_some())).then(|| view! {
                         <CameraMoves scene_id=id.get_value() draft=draft />
                     })}

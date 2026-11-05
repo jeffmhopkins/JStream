@@ -10,7 +10,7 @@ use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::{FakeClip, FakeClock, FakeMediaDecoders};
 use jstream_protocol::{
     Action, AssetRoot, Batch, Call, Edit, Event, ItemId, PixelSize, Reference, SceneId, Settings,
-    SourceId, SourceKind,
+    SourceId, SourceKind, TimelineCue, TimelineId, TimelineInfo, TimelineLoop,
 };
 use jstream_sources::CaptureSpec;
 use serde_json::{Value, json};
@@ -238,6 +238,73 @@ fn an_enlarged_text_item_draws_its_source_at_a_density() {
 
     batch(&control, Batch::single(scaled(1.0))).expect("back to its size");
     assert_eq!(sizes(), (extent, extent), "at its own size again");
+}
+
+/// #1168: a text source shown only through a legacy scale of `1e35` whose size overflows
+/// `f32` stays at its own size. The item draws nothing, so it is not rebuilt at
+/// `MAX_DENSITY`.
+#[test]
+fn a_legacy_scale_that_draws_nothing_leaves_the_text_at_its_own_size() {
+    use jstream_protocol::{Finite32, ItemTransform, Vec2};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // Sixteen M's at 200px of letter spacing: wider than `f32::MAX / 1e35`, so the
+    // scale's product overflows, and still under half of 8192, so a density of 2 would
+    // fit. A wider frame would stay at its own size anyway, and a narrower one would
+    // still draw.
+    let wide = "M".repeat(16);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "caption",
+                "text",
+                settings(&[("text", json!(wide)), ("letter_spacing", json!(200.0))]),
+            ),
+            add("a", "i1", "caption"),
+        ]),
+    )
+    .expect("created");
+    let sizes = || {
+        assert!(engine.settle_sources(), "the sources were built in time");
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .frame(&SourceId::new("caption"))
+            .map(|frame| frame.sizes())
+            .expect("the caption is shown")
+    };
+    let (pixels, extent) = sizes();
+    assert_eq!(pixels, extent, "at its own size");
+    assert!(
+        !(extent[0] as f32 * 1e35).is_finite(),
+        "the text must be wide enough that a 1e35 scale overflows, got {extent:?}"
+    );
+    assert!(
+        extent[0] <= 4095 && extent[1] <= 4095,
+        "a density of 2 must still fit, or the source would stay at its own size anyway: {extent:?}"
+    );
+
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetTransform {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            transform: ItemTransform {
+                position: Vec2::new(0.0, 0.0).expect("finite"),
+                scale: Vec2::new(1e35, 1.0).expect("finite"),
+                rotation_deg: Finite32::new(0.0).expect("finite"),
+            },
+        }),
+    )
+    .expect("scaled");
+    assert_eq!(
+        sizes(),
+        (extent, extent),
+        "an item that draws nothing is not magnified"
+    );
 }
 
 /// A `timer`'s settings as the graph completes them: its kind's defaults under `patch`.
@@ -849,6 +916,96 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     assert!(plays(&engine, 0), "shown again, it plays from the start");
     clock.advance(100);
     assert!(plays(&engine, 1));
+    let _ = fs::remove_dir_all(dir);
+}
+
+/// #1172: a `source.restart` cue on a late tick starts the file at the cue's time, so
+/// 200 ms later the picture is that far in, not back at the first frame.
+#[test]
+fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
+    let dir = temp_dir("media-restart-cue");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(true)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(false)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source("video", "media", video),
+            add("a", "i1", "video"),
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    timeline_id: TimelineId::new("t"),
+                    name: String::new(),
+                    duration_ms: 2_000,
+                    looping: TimelineLoop::Once,
+                    cues: vec![TimelineCue::new(
+                        500,
+                        &Action::SourceRestart {
+                            source_id: SourceId::new("video"),
+                        },
+                    )],
+                },
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline: TimelineInfo {
+                    timeline_id: TimelineId::new("kicker"),
+                    name: String::new(),
+                    duration_ms: 2_000,
+                    looping: TimelineLoop::Once,
+                    cues: Vec::new(),
+                },
+            },
+        ]),
+    )
+    .expect("created");
+    assert!(plays(&engine, 0), "the first frame");
+    block_on(control.call(Call::Action {
+        action: Action::TimelinePlay {
+            timeline_id: TimelineId::new("t"),
+        },
+    }))
+    .expect("play");
+    clock.advance(700);
+    block_on(control.call(Call::Action {
+        action: Action::TimelinePlay {
+            timeline_id: TimelineId::new("kicker"),
+        },
+    }))
+    .expect("the late tick");
+    assert!(
+        plays(&engine, 2),
+        "restarted at the cue (500 ms), so 700 ms is frame 2, not frame 0; showing {:?}",
+        shown(&engine, "video")
+    );
     let _ = fs::remove_dir_all(dir);
 }
 

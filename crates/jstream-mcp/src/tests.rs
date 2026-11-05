@@ -193,6 +193,9 @@ fn handshake_list_and_call_round_trip() {
     assert_eq!(init["protocolVersion"], "2025-11-25");
     assert_eq!(init["capabilities"], json!({"tools": {}}));
     assert_eq!(init["serverInfo"]["name"], "jstream-mcp");
+    // #1189: the crate stays at 0.0.0; serverInfo carries the app's release version.
+    assert_eq!(init["serverInfo"]["version"], env!("JSTREAM_VERSION"));
+    assert_ne!(init["serverInfo"]["version"], "0.0.0");
     assert!(
         init["instructions"]
             .as_str()
@@ -310,7 +313,7 @@ fn handshake_list_and_call_round_trip() {
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
                "sends": [], "hotkeys": [],
                "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
-                                            "duration_ms": 300, "easing": "ease_in_out"}],
+                                            "duration_ms": 0, "easing": "ease_in_out"}],
                                "default": "cut"}})
     );
     let started = f.call_tool(
@@ -424,6 +427,10 @@ fn stateless_requests_round_trip() {
     assert_eq!(
         result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"],
         "jstream-mcp"
+    );
+    assert_eq!(
+        result["_meta"]["io.modelcontextprotocol/serverInfo"]["version"],
+        env!("JSTREAM_VERSION")
     );
     assert_eq!(result["cacheScope"], "public");
     assert!(result["ttlMs"].as_u64().is_some());

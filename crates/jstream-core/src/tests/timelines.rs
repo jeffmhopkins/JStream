@@ -6,12 +6,15 @@
 use super::{add, block_on, code, connected, create, drain, query};
 use crate::Engine;
 use jstream_control::Control;
+use jstream_media::Timebase;
+use jstream_platform::fake::FakeClock;
 use jstream_protocol::{
     Action, Batch, Call, CallResult, Chord, Edit, Event, HistoryCall, HistoryOp, ItemId, Query,
     QueryResult, SceneId, Settings, SourceId, SourceKind, TimelineChange, TimelineCue, TimelineId,
     TimelineInfo, TimelineLoop,
 };
 use serde_json::json;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn colour(id: &str) -> Edit {
@@ -510,4 +513,148 @@ fn a_timeline_that_plays_itself_is_rate_limited() {
         f64::from(u32::try_from(count).unwrap_or(u32::MAX)) <= bound,
         "{count} cues fired in {elapsed:.3} s, more than {bound}"
     );
+}
+
+fn stop(id: &str) -> Action {
+    Action::TimelineStop {
+        timeline_id: TimelineId::new(id),
+    }
+}
+
+/// An engine whose media clock tests move by hand, with the usual two scenes.
+fn clocked() -> (Engine, FakeClock, crate::InProcessControl) {
+    let engine = Engine::new();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            create("a"),
+            create("b"),
+            colour("red"),
+            add("a", "i", "red"),
+            Edit::ItemSetVisible {
+                item_id: ItemId::new("i"),
+                scene_id: None,
+                visible: false,
+            },
+        ],
+    );
+    (engine, clock, control)
+}
+
+fn shared_values(control: &dyn Control) -> Vec<(String, serde_json::Value)> {
+    let Ok(QueryResult::ValuesList { values }) = query(control, Query::ValuesList { prefix: None })
+    else {
+        panic!("not values.list");
+    };
+    values
+        .into_iter()
+        .map(|value| (value.name, value.value))
+        .collect()
+}
+
+fn playing_ids(control: &dyn Control) -> Vec<String> {
+    match query(control, Query::StudioGet) {
+        Ok(QueryResult::StudioGet { timelines, .. }) => timelines
+            .into_iter()
+            .map(|timeline| timeline.timeline_id.as_str().to_owned())
+            .collect(),
+        other => panic!("not studio.get: {other:?}"),
+    }
+}
+
+/// Plays every timeline named, at clock 0, then jumps the clock and plays `kicker` so
+/// one tick runs late across everything already playing.
+fn tick_late(control: &dyn Control, clock: &FakeClock, ids: &[&str], to_ms: i64) {
+    for id in ids {
+        act(control, play(id)).expect("play");
+    }
+    clock.advance(u64::try_from(to_ms).expect("a forward jump"));
+    act(control, play("kicker")).expect("the late tick");
+}
+
+/// #1172: a tick that arrives late collects every timeline's due fires, then runs them.
+/// A `timeline.stop` earlier in that round must drop the fires already collected for
+/// the stopped timeline; a cue from before the stop still runs.
+#[test]
+fn a_late_tick_skips_cues_after_a_stop_in_the_same_round() {
+    let (_engine, clock, control) = clocked();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, stop("b"))]),
+            timeline(
+                "b",
+                2_000,
+                TimelineLoop::Once,
+                vec![cue(400, value("early", 1)), cue(600, value("late", 1))],
+            ),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        shared_values(&control),
+        [("early".to_owned(), json!(1))],
+        "the cue after the stop must not run"
+    );
+    assert!(
+        !playing_ids(&control).iter().any(|id| id == "b"),
+        "b stopped"
+    );
+}
+
+/// #1172: a `timeline.play` in the same late round restarts the target, so fires
+/// collected for the old start do not run. The new play's cues wait for the next round.
+#[test]
+fn a_late_tick_skips_cues_of_a_timeline_restarted_in_the_same_round() {
+    let (_engine, clock, control) = clocked();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, play("b"))]),
+            timeline(
+                "b",
+                2_000,
+                TimelineLoop::Once,
+                vec![cue(600, value("late", 1))],
+            ),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert!(
+        shared_values(&control).is_empty(),
+        "b's old cue at 600 ran after b was restarted at 500: {:?}",
+        shared_values(&control)
+    );
+    assert!(
+        playing_ids(&control).iter().any(|id| id == "b"),
+        "b plays on from the restart"
+    );
+}
+
+/// A timeline that reaches its end in a late tick still fires the cues that were due
+/// before the end. Skipping every fire of a timeline that is no longer playing would
+/// drop this one.
+#[test]
+fn a_late_tick_still_fires_a_cue_before_the_timeline_ends() {
+    let (_engine, clock, control) = clocked();
+    apply(
+        &control,
+        vec![
+            timeline(
+                "b",
+                650,
+                TimelineLoop::Once,
+                vec![cue(600, value("late", 1))],
+            ),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    tick_late(&control, &clock, &["b"], 700);
+    assert_eq!(shared_values(&control), [("late".to_owned(), json!(1))]);
+    assert!(!playing_ids(&control).iter().any(|id| id == "b"), "b ended");
 }
