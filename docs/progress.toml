@@ -43,6 +43,7 @@ tag = "v0.1.0-alpha.3"
 id = "alpha.4"
 version = "0.1.0-alpha.4"
 goal = "A functional alpha for building layered, animated scenes over MCP on Windows"
+tag = "v0.1.0-alpha.4"
 
 [[milestone]]
 id = "M0"
@@ -1329,11 +1330,11 @@ prs = [1077,  1127]
 id = "PA2"
 milestone = "M3"
 title = "Page API part 2: window.jstream with clock, visibility, scenes and values"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1146]
-needs = ["build"]
+prs = [1146,  1178]
+note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
 
 [[item]]
 id = "PF1"
@@ -1412,9 +1413,8 @@ prs = [1094]
 id = "RL4"
 milestone = "M3"
 title = "Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows"
-status = "review"
+status = "hardware"
 release = "alpha.4"
 gate = true
 prs = [1179]
-note = "Cut once every other alpha.4 gate item is merged; the acceptance run builds a layered, animated scene over MCP on Windows and reads its profile"
-needs = ["build",  "hardware"]
+note = "Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build"
