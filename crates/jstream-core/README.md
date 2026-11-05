@@ -3254,8 +3254,11 @@ frame read back goes out a tick or two after it was drawn, with the time it was 
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
 repeats the last frame at the tick, and no push goes back in time
-(`MixFrame::push_time`). A frame not read back because all three buffers were still on
-their way is counted in `render_ticks`. Between ticks the render thread sleeps until
+(`MixFrame::push_time`). When all three buffers are still on their way the GPU is
+behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
+as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
+ticks, frames collected in the same tick as a newer one, and frames that land behind
+a repeat are all counted in `render_ticks`. Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
 the mixer thread take the host's `ThreadPriority` as they start. A mix that stops being drawn hands
 its ring to the collector; the rest drop before the compositor and the context. A

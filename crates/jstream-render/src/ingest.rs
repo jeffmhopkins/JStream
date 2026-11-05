@@ -318,7 +318,9 @@ impl Ingest {
     ) -> Result<(), RenderError> {
         let header = planes.header()?;
         let len = planes.len().next_multiple_of(4);
-        if len as u64 > gpu.max_buffer_size {
+        // Checked before a buffer is made or its bind group cached: the shader binds the
+        // whole buffer, so it must fit one storage binding as well as one buffer.
+        if len as u64 > source_limit(gpu) {
             return Err(RenderError::TooLarge {
                 what: "frame",
                 width: planes.width,
@@ -382,7 +384,7 @@ impl Ingest {
         {
             return (buffer.clone(), bind.clone());
         }
-        let size = len.next_power_of_two().min(gpu.max_buffer_size).max(len);
+        let size = len.next_power_of_two().min(source_limit(gpu)).max(len);
         let buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render ingest source"),
             size,
@@ -406,6 +408,11 @@ impl Ingest {
         self.source = Some((buffer.clone(), bind.clone()));
         (buffer, bind)
     }
+}
+
+/// The most bytes the source buffer may hold: one buffer, bound whole.
+fn source_limit(gpu: &Gpu) -> u64 {
+    gpu.max_buffer_size.min(gpu.max_storage_binding)
 }
 
 /// A read-only storage buffer holding `bytes`. Not `create_buffer_init`, which panics
@@ -665,6 +672,26 @@ mod tests {
                 &format!("{color:?}"),
             );
         }
+    }
+
+    /// A frame too large for one storage binding is refused before any buffer is made
+    /// for it, and the next frame that fits still converts (#1236 B1).
+    #[test]
+    fn a_frame_past_the_binding_limit_is_refused_and_the_next_converts() {
+        let Some(mut opened) = open() else { return };
+        let compositor = &mut opened.compositor;
+        compositor.cap_storage_binding(4096);
+        let large = compositor.upload_rgba8(64, 64, &[255; 64 * 64 * 4]);
+        assert!(
+            matches!(large, Err(crate::RenderError::TooLarge { .. })),
+            "{large:?}"
+        );
+        let small = compositor
+            .upload_rgba8(8, 8, &[255; 8 * 8 * 4])
+            .expect("a frame that fits converts");
+        let halves = read_halves(compositor, &small);
+        // Opaque white: 1.0 in every channel.
+        assert!(halves.iter().all(|half| *half == 0x3c00), "{halves:?}");
     }
 
     /// A frame of another layout, or one whose planes are short, is refused.

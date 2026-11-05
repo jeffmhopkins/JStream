@@ -360,8 +360,11 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    copies the output into one of up to `READBACK_DEPTH` (three) map-read buffers in a
    submit of its own and starts its map, tagged by the caller; `collect` polls the
    device without blocking and hands back, oldest first, every frame whose map has
-   finished, as tightly packed RGBA8. With every buffer still on its way `record`
-   returns `false` for the caller to count, and a new size waits until none is out.
+   finished, as tightly packed RGBA8, in the order they were recorded. With every
+   buffer still on its way (`is_full`) `record` returns `false` for the caller to
+   count, and a new size waits until none is out. The source buffer of the ingest pass
+   is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
+   buffer: a larger frame is `TooLarge` before any buffer is made for it.
 
 6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target

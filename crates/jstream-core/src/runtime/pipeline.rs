@@ -241,6 +241,11 @@ impl MixFrame {
             _ => due,
         };
         if self.pushed.is_some_and(|pushed| at <= pushed) {
+            // A frame read back after a repeat already went out past it: dropped, and
+            // counted (R-RT-004).
+            if fresh.is_some() {
+                self.unread += 1;
+            }
             return None;
         }
         self.pushed = Some(at);
@@ -1534,6 +1539,33 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
                 let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
+                // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
+                // is collected first, freeing its buffer.
+                let mut handed: u64 = 0;
+                if frame.readback {
+                    let ring = readbacks.ring(frame);
+                    ring.collect(&compositor, &mut frame.out, |pts, _| {
+                        frame.ready = Some(pts);
+                        handed += 1;
+                    });
+                    // Every buffer still on its way: the GPU is behind. A mix only read
+                    // back skips its composite, so the queue doesn't grow, and the tick
+                    // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
+                    // are kept, as a mix not due keeps them.
+                    if ring.is_full() && frame.nv12.is_none() {
+                        frame.unread += 1;
+                        frame.awaiting = true;
+                        snapshot::claim_layers(
+                            &mut compositor,
+                            (&mut cache, &mut chains),
+                            shot,
+                            view,
+                            frame.size,
+                        )
+                        .map_err(|err| draw_error(&compositor, &err))?;
+                        continue;
+                    }
+                }
                 let drawn = snapshot::compose_metered(
                     &mut compositor,
                     (&mut cache, &mut chains, &mut *meter),
@@ -1550,19 +1582,17 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                 .and_then(|output| {
                     let started = Instant::now();
                     if frame.readback {
-                        // Recorded now and collected once mapped, a tick or two on: the
-                        // render thread never waits for the GPU (ADR-0117 §4).
+                        // Recorded now and collected once mapped, a tick or two on.
                         let ring = readbacks.ring(frame);
-                        if ring.record(&compositor, &output, at)? {
-                            frame.awaiting = true;
-                        } else {
+                        if !ring.record(&compositor, &output, at)? {
                             frame.unread += 1;
                         }
-                        let mut newest = None;
-                        ring.collect(&compositor, &mut frame.out, |pts, _| newest = Some(pts));
-                        if newest.is_some() {
-                            frame.ready = newest;
-                        }
+                        // Pushes wait for what is on its way rather than repeat.
+                        frame.awaiting = ring.pending() > 0;
+                        ring.collect(&compositor, &mut frame.out, |pts, _| {
+                            frame.ready = Some(pts);
+                            handed += 1;
+                        });
                     }
                     let converted = match &frame.nv12 {
                         Some(target) => nv12.submit(&compositor, output.texture(), target),
@@ -1571,6 +1601,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     meter.phase_since(Phase::Finish, started);
                     converted
                 });
+                // Only the newest frame collected this tick goes out; the rest are
+                // counted.
+                frame.unread += handed.saturating_sub(1);
                 drawn.map_err(|err| draw_error(&compositor, &err))?;
             }
             // A failed frame skips this: what it retired waits for the next frame's
@@ -5009,6 +5042,7 @@ mod tests {
         frame.fresh = Some(us(133));
         assert_eq!(frame.push_time(us(200), false), None);
         assert_eq!(frame.fresh, None, "taken");
+        assert_eq!(frame.unread, 1, "the dropped readback is counted");
         // A broken stage repeats at the tick whatever is on its way.
         frame.fresh = Some(us(200));
         frame.awaiting = true;

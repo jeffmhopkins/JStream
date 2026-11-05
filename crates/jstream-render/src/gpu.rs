@@ -48,6 +48,9 @@ pub(crate) struct Gpu {
     pub adapter: wgpu::Adapter,
     pub max_texture_dimension_2d: u32,
     pub max_buffer_size: u64,
+    /// The most bytes one storage-buffer binding may cover, which a shader that reads a
+    /// whole buffer (the ingest pass) is held to as well as `max_buffer_size`.
+    pub max_storage_binding: u64,
     /// The platform context the device came from, or `None` for a device of its own.
     pub context: Option<ContextKey>,
     /// How the device has failed ([`watch`]).
@@ -205,6 +208,7 @@ impl Gpu {
             adapter,
             max_texture_dimension_2d: limits.max_texture_dimension_2d,
             max_buffer_size: limits.max_buffer_size,
+            max_storage_binding: limits.max_storage_buffer_binding_size,
             context: None,
             faults,
             submit: SubmitLock::new(),

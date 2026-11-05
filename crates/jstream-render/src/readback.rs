@@ -134,9 +134,12 @@ impl<T> ReadbackRing<T> {
     }
 
     /// Polls the device without waiting, then hands every frame whose map has finished,
-    /// oldest first, to `ready`: its tag and its tightly packed RGBA8 (`out`, reused).
-    /// A map that failed (a lost device) frees its buffer and hands nothing. Returns how
-    /// many were handed over.
+    /// oldest first by the order they were recorded in, to `ready`: its tag and its
+    /// tightly packed RGBA8 (`out`, reused). Maps finish in the order their submits
+    /// complete, which is the order they were recorded in on one queue; should a later
+    /// one finish first, it is handed first and the earlier one after it, so a caller
+    /// that orders by tag drops that one. A map that failed (a lost device) frees its
+    /// buffer and hands nothing. Returns how many were handed over.
     pub fn collect(
         &mut self,
         compositor: &Compositor,
@@ -172,6 +175,12 @@ impl<T> ReadbackRing<T> {
             slot.state.store(IDLE, Ordering::Release);
         }
         handed
+    }
+
+    /// Whether every buffer is on its way, so [`record`](Self::record) would refuse
+    /// a frame of the ring's size.
+    pub fn is_full(&self) -> bool {
+        self.slots.len() >= READBACK_DEPTH && self.slots.iter().all(|slot| slot.tag.is_some())
     }
 
     /// How many readbacks are on their way.
@@ -273,6 +282,7 @@ mod tests {
             assert!(ring.record(compositor, &output, tag).expect("record"));
         }
         // No poll between: every map is still pending.
+        assert!(ring.is_full());
         assert!(!ring.record(compositor, &output, 99).expect("record"));
         let larger = render(compositor, 8, 2, 0.0);
         assert!(!ring.record(compositor, &larger, 100).expect("record"));
@@ -280,6 +290,7 @@ mod tests {
             collect_all(&mut ring, compositor, READBACK_DEPTH).len(),
             READBACK_DEPTH
         );
+        assert!(!ring.is_full());
         assert!(ring.record(compositor, &larger, 7).expect("record"));
         let got = collect_all(&mut ring, compositor, 1);
         assert_eq!(got.len(), 1);

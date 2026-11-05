@@ -657,6 +657,7 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            max_storage_binding: self.gpu.max_storage_binding,
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
@@ -1278,6 +1279,11 @@ impl Compositor {
     /// Lowers the buffer limit, as a smaller adapter's would be.
     pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
         self.gpu.max_buffer_size = bytes;
+    }
+
+    /// Lowers the storage-binding limit, as a smaller adapter's would be.
+    pub(crate) fn cap_storage_binding(&mut self, bytes: u64) {
+        self.gpu.max_storage_binding = bytes;
     }
 }
 
