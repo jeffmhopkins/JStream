@@ -362,7 +362,7 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…' })).toBeFocused();
   // Left from File wraps to Help, the bar's last menu.
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('Help')).toBeVisible();
@@ -395,7 +395,7 @@ test('the Help menu links to the project and opens the About dialog', async ({ p
   // Help lists the project's pages, each opening in a new tab, then About.
   await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
   await expect(help.getByRole('menuitem')).toHaveText([
-    'Documentation', 'Getting started', 'Release notes', 'Report an issue', 'About JStream',
+    'Documentation', 'Getting started', 'Release notes', 'Report an issue', 'Check for updates', 'About JStream',
   ]);
   const issue = help.getByRole('menuitem', { name: 'Report an issue' });
   await expect(issue).toHaveAttribute('href', `${repo}/issues/new`);
@@ -426,6 +426,40 @@ test('the Help menu links to the project and opens the About dialog', async ({ p
   await expect(about).toHaveCount(0);
 });
 
+test('Check for updates reports from this page, and Settings keeps the launch check', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  const header = page.locator('header.app-header');
+  await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'Help' }).getByRole('menuitem', { name: 'Check for updates' }).click();
+  const check = page.getByRole('dialog', { name: 'Check for updates' });
+  await expect(check).toBeVisible();
+  // The page under test is a browser, so the desktop app's request isn't there.
+  await expect(check).toContainText('Check for updates runs in the desktop app.');
+  // The header's × is also named Close, so the footer's button is the one pressed.
+  await check.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
+  await expect(check).toHaveCount(0);
+
+  await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const box = settings.getByRole('checkbox', { name: 'Check for updates at launch' });
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await expect(box).toBeChecked();
+  await settings.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
+  await expect(settings).toHaveCount(0);
+
+  await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeChecked();
+  await settings.getByRole('checkbox', { name: 'Check for updates at launch' }).uncheck();
+  await page.keyboard.press('Escape');
+  await expect(settings).toHaveCount(0);
+  await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).not.toBeChecked();
+});
+
 test('an arrow key pressed before the next menu is drawn still moves along the bar', async ({ page, daemon }) => {
   // A slow frame, as on a loaded machine: the next menu's first item is focused only once
   // a frame is drawn, so the second Left lands before it.
@@ -446,7 +480,7 @@ test('an arrow key pressed before the next menu is drawn still moves along the b
   await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  await expect(dropdown('File').getByRole('menuitem', { name: 'Disconnect' })).toBeFocused();
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…' })).toBeFocused();
   await expect(dropdown('Edit')).toHaveCount(0);
 });
 

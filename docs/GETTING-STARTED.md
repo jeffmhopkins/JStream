@@ -91,8 +91,11 @@ which shows wherever no item covers it.
 
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements. **Help** links to these docs, the release notes and the issue
-tracker, and **About JStream** there shows the version you run, which an issue report
-should name.
+tracker. **Check for updates** there compares this build with the latest release,
+including pre-releases, and links a newer one; nothing is downloaded. **About JStream**
+shows the version you run, which an issue report should name. **File › Settings…** can
+look once at start and show a notice only when a newer release exists; that check stays
+off until you turn it on.
 
 To watch a scene, a source, the program or a multiview on another screen, choose
 **Pop out** on a scene's or a source's right-click menu, or a projector under **View**: each opens in a window of its

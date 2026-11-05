@@ -20,3 +20,4 @@ pub mod pick;
 #[cfg(windows)]
 pub mod shell;
 pub mod ui;
+pub mod updates;

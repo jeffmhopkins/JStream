@@ -126,7 +126,6 @@ test('the 3D camera section fits the settings column', async ({ page, daemon }) 
   const follow = dialog.getByRole('checkbox', { name: 'Follow pointer' });
   await expect(follow).toBeEnabled();
   await follow.check();
-  // The stepper's − and + buttons share the label, so the field is the textbox.
   await expect(dialog.getByRole('textbox', { name: 'From the right' })).toBeVisible();
   await dialog.getByRole('button', { name: '+ Add camera motion' }).click();
 

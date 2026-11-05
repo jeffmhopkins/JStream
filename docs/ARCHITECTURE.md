@@ -273,9 +273,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
-  - **A placed scene can switch its own keyframe** as studio state
-    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
-    Keyframe tracks under [Protocol](#protocol).
+  - **A placed scene can switch its own keyframe** as runtime state on the engine's
+    graph ([ADR-0116](adr/0116-keyframe-tracks.md),
+    [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
+    collection: see Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
@@ -1067,7 +1068,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pack`, `pairing`, `ui_settings` and `values`;
+  `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
+  may set a shared value a page may send off the machine,
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  is not an undoable edit, and a page granted the value may send it off,
+  [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets

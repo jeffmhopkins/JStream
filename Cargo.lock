@@ -2946,6 +2946,8 @@ dependencies = [
  "jstream-protocol",
  "jstream-server",
  "jstream-sources",
+ "rustls",
+ "rustls-native-certs",
  "tauri",
  "tauri-build",
  "tokio",

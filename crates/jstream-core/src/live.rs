@@ -714,10 +714,14 @@ impl LiveSources {
     }
 
     /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0115):
-    /// [`Source::restart`] on its running instance, at its own time now. A source with no
-    /// running instance has nothing to restart.
-    pub(crate) fn restart(&mut self, source_id: &SourceId) {
-        let now = self.now();
+    /// [`Source::restart`] on its running instance, at `at`. A cue passes the cue's time,
+    /// so a late tick starts a media file at the cue rather than when the tick ran; a
+    /// call from a client passes the clock's now. `at` is brought onto the source
+    /// clock's time base. A source with no running instance has nothing to restart.
+    pub(crate) fn restart(&mut self, source_id: &SourceId, at: MediaTime) {
+        let now = at
+            .rescale(self.now().timebase(), Rounding::Down)
+            .unwrap_or_else(|_| self.now());
         if let Some(running) = self
             .entries
             .get_mut(source_id)

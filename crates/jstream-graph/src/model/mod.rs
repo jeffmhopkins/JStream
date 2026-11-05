@@ -198,9 +198,9 @@ pub struct State {
     /// In label order.
     pub(crate) labels: Vec<Label>,
     /// The keyframe scene each placed scene is drawn through (keyframe tracks,
-    /// ADR-0116): studio state, which only a drawn copy holds
-    /// ([`Graph::with_placed_keyframes`](crate::Graph::with_placed_keyframes)). Empty in
-    /// the collection, never saved and never undone.
+    /// ADR-0116, ADR-0118): runtime state on the engine's graph.
+    /// [`Graph::apply`](crate::Graph::apply) keeps it, nothing saves it, and it is not a
+    /// revision. Empty until a switch sets it.
     pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
 }
 
@@ -444,7 +444,7 @@ impl State {
     }
 
     /// The keyframe scene that scene `scene_id` is drawn through where another scene
-    /// places it (ADR-0116), if a drawn copy sets one and it is still one of its
+    /// places it (ADR-0116), if this graph sets one and it is still one of its
     /// keyframe scenes.
     pub fn placed_keyframe(&self, scene_id: &SceneId) -> Option<&Scene> {
         let keyframe = self.scene(self.placed_keyframes.get(scene_id)?)?;
