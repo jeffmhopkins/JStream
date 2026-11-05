@@ -2295,7 +2295,7 @@ stamp = { hash = "b3:2ab5528eec0ba929", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:57b645b2cd4b91d0", by = "agent:claude", note = "host.rs hands WindowsThreadPriority on Windows; the design bullet now lists it beside the CPU readers." }
+stamp = { hash = "b3:a886f18973df1421", by = "agent:grok", note = "Re-read the window bullet: Explorer still gets one https argument, and the only added URL is the exact OpenH264 licence string from links.rs; every other new window is still refused." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
@@ -2331,7 +2331,7 @@ stamp = { hash = "b3:0eae7e205e846d7a", by = "agent:claude", note = "host.rs han
 stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "lib.rs only adds `pub mod links;`, built on every platform (shell stays Windows-only); the module doc and Docs line are unchanged and still hold" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "Re-read links.rs against the window bullet: is_project_page takes the repository URL from CARGO_PKG_REPOSITORY, then nothing or / ? # and only ASCII letters, digits and / # ? . _ = & -, so no comma, backslash, quote, space or percent escape reaches Explorer; its native tests cover the bypasses" }
+stamp = { hash = "b3:94106d46d8780417", by = "agent:grok", note = "Re-read the window bullet: Explorer still gets one https argument, and the only added URL is the exact OpenH264 licence string from links.rs; every other new window is still refused." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "#780: re-read against logs.rs creating the log file user-only; the design's token and crash-report bullets don't describe the log file's access, and the crash reports still leave the log file alone; holds" }
@@ -2340,7 +2340,7 @@ stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "#780: re-rea
 stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "main.rs only adds handled: jstream_core::HANDLED_PANIC_THREADS to the crash Program; Design's crash hook text (installed with the log file, redacted line through crash_line) still holds; Purpose names the handled threads" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = '''Re-read shell.rs against the window bullet: open_projector sends an https project page (links::is_project_page) to %SystemRoot%\explorer.exe with the URL as one argument and returns Deny, so it never loads in a webview; projector windows, on_navigation and the projectors' deny-all on_new_window are unchanged; no IPC added''' }
+stamp = { hash = "b3:d56e9a3fd820d660", by = "agent:grok", note = "Re-read the window bullet: Explorer still gets one https argument, and the only added URL is the exact OpenH264 licence string from links.rs; every other new window is still refused." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -2352,7 +2352,7 @@ stamp = { hash = "b3:558b5c5512b30191" }
 stamp = { hash = "b3:149754bd87c54333", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."body"]
-stamp = { hash = "b3:b2a5f2262ff04d27", by = "agent:claude", note = "Engine host bullet adds the --mcp case (fixed port, data-folder token file, MCP on); the not-here-yet list no longer names MCP and the outside-client token; matches app.rs and host.rs" }
+stamp = { hash = "b3:e8b91f0036a66bd5", by = "agent:grok", note = "Re-read the window contents bullet: it now names Cisco's OpenH264 licence beside the project's pages, matching links.rs; the window is still Windows-only and links.rs is still tested everywhere." }
 
 ["CRATE-jstream-desktop#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps change is the helper row (Linux executable) and the daemon's cef on Linux; the desktop app stays Windows-only and its browser text (bootstrap exe and DLL) still holds." }
@@ -2373,7 +2373,7 @@ stamp = { hash = "b3:0eae7e205e846d7a", by = "agent:claude", note = "host.rs gai
 stamp = { hash = "b3:1623266b66cf75be", by = "agent:help-about", note = "lib.rs only adds `pub mod links;` (not cfg(windows)), matching the contents list" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/links.rs"]
-stamp = { hash = "b3:b1a5cefcd687e90b", by = "agent:help-about", note = "links.rs is the new module the Window bullet names: is_project_page, built and tested everywhere" }
+stamp = { hash = "b3:94106d46d8780417", by = "agent:grok", note = "Re-read the window contents bullet: it now names Cisco's OpenH264 licence beside the project's pages, matching links.rs; the window is still Windows-only and links.rs is still tested everywhere." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note on body, kept: re-read (#565 B1): host.rs vcam_status now reports outdated as well; purpose says registered and current, and names the optional registration and unregistration modes the daemon provides for now | merge: re-read after merging wave/m1-3 (e993e0e): #567 replaced the desktop's crash.rs with jstream-crash (Crash reports and tests bullets, host.rs taking Secrets); this branch's vcam_status (registered and current) and the not-yet registration modes are untouched and hold | #780 (body and logs.rs): logs.rs deletes the old log file and creates a new user-only one at each start (create_private_file on Windows, jstream-crash's create_new, mode 0600, elsewhere) in a folder created 0700 on Unix; the Log file bullet says so, and the Tests bullet names the capped log file as user-only, checked on Unix (the_file_and_a_new_folder_are_user_only is cfg(unix), review N1)" }
@@ -2382,7 +2382,7 @@ stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note
 stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Crash reports bullet edited: no report for a panic on a thread in jstream_core::HANDLED_PANIC_THREADS, an effect-pack load the engine catches and logs, matching main.rs's new handled field; the other bullets are unchanged" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:17c21289c6bf4cb7", by = "agent:help-about", note = "shell.rs gains the hand-off of project links to Explorer, which the Window bullet now names; still the Windows-only window, navigation guard, projectors and shutdown" }
+stamp = { hash = "b3:d56e9a3fd820d660", by = "agent:grok", note = "Re-read the window contents bullet: it now names Cisco's OpenH264 licence beside the project's pages, matching links.rs; the window is still Windows-only and links.rs is still tested everywhere." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
