@@ -62,6 +62,12 @@ goal = "alpha.4 with the Windows run's fixes: dropped frames, stream and preview
 tag = "v0.1.0-alpha.4.1"
 
 [[release]]
+id = "alpha.4.2"
+version = "0.1.0-alpha.4.2"
+goal = "alpha.4.1 with fewer dropped frames: CPU frames converted on the GPU, readback without waiting, and raised thread priority for render and mix"
+tag = "v0.1.0-alpha.4.2"
+
+[[release]]
 id = "alpha.5"
 version = "0.1.0-alpha.5"
 goal = "A seamless, full-quality preview on a thread model that uses more cores, proved by a bench, then pop-out projectors, application settings and saved projects"
