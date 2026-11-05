@@ -1,6 +1,6 @@
 // 3D scenes (ADR-0094): the scene Properties dialog's camera, and the canvas seen
 // through it, where Alt-drag orbits the camera. The mock engine keeps scene cameras.
-import { test, expect, connect, recordCalls, rev } from '../fixtures.js';
+import { test, expect, connect, describeKinds, openAddSource, recordCalls, rev } from '../fixtures.js';
 
 /** The seed item's outline in the overlay. */
 function outline(page) {
@@ -94,4 +94,55 @@ test('scene properties give a scene a camera, and Alt-drag orbits it', async ({ 
   // One undo puts the camera back.
   await page.keyboard.press('Control+z');
   await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
+});
+
+// A window capture so Follow pointer can be turned on. The mock describes no kinds.
+const WINDOW = [
+  {
+    kind_id: 'window', category: 'source', name: 'Window capture', version: 1, video: true, audio: false,
+    params: [],
+  },
+];
+
+/** Whether `.props-settings` has grown wider than the column. */
+function settingsFit(dialog) {
+  return dialog.locator('.props-settings').evaluate((el) => el.scrollWidth <= el.clientWidth + 1);
+}
+
+test('the 3D camera section fits the settings column', async ({ page, daemon }) => {
+  await describeKinds(page, WINDOW);
+  await connect(page, daemon);
+  const add = await openAddSource(page);
+  await add.getByRole('option', { name: 'Window capture' }).click();
+  await add.getByRole('button', { name: 'Create' }).click();
+  await expect(add).toBeHidden();
+  const source = page.getByRole('dialog', { name: 'Properties' });
+  await source.getByRole('button', { name: 'Cancel' }).click();
+  await expect(source).toBeHidden();
+
+  const dialog = await sceneProperties(page);
+  await dialog.getByRole('checkbox', { name: '3D camera' }).check();
+  await dialog.getByRole('checkbox', { name: 'Depth of field' }).check();
+  const follow = dialog.getByRole('checkbox', { name: 'Follow pointer' });
+  await expect(follow).toBeEnabled();
+  await follow.check();
+  await expect(dialog.getByLabel('From the right')).toBeVisible();
+  await dialog.getByRole('button', { name: '+ Add camera motion' }).click();
+
+  // Default 860-wide dialog, then the dialog clamped to a shorter viewport.
+  await expect.poll(() => settingsFit(dialog)).toBe(true);
+  await page.setViewportSize({ width: 720, height: 640 });
+  await expect.poll(() => settingsFit(dialog)).toBe(true);
+
+  // The check sits in front of its text, on the same line.
+  const aligned = await dialog.locator('.camera-check', { hasText: 'Nearest on top' }).evaluate((el) => {
+    const box = el.querySelector('input').getBoundingClientRect();
+    const text = el.querySelector('span').getBoundingClientRect();
+    return box.right <= text.left + 1 && box.top < text.bottom && text.top < box.bottom;
+  });
+  expect(aligned).toBe(true);
+
+  // The angle stepper keeps room for the number, not only the degree mark.
+  const yawWidth = await dialog.getByLabel('From the right').evaluate((el) => el.clientWidth);
+  expect(yawWidth).toBeGreaterThan(28);
 });

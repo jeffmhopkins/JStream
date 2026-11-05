@@ -404,7 +404,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back.
+  one revision, which one undo puts back. With a window capture in the scene, the
+  camera, Depth of field and Follow pointer on, and a camera-motion row added, the
+  settings column's `scrollWidth` stays within its `clientWidth` at the dialog's width
+  and when a 720-wide viewport clamps the dialog; the Nearest on top check sits in
+  front of its text, and the From the right stepper keeps room for its number.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the

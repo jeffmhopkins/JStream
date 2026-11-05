@@ -240,6 +240,73 @@ fn an_enlarged_text_item_draws_its_source_at_a_density() {
     assert_eq!(sizes(), (extent, extent), "at its own size again");
 }
 
+/// #1168: a text source shown only through a legacy scale of `1e35` whose size overflows
+/// `f32` stays at its own size. The item draws nothing, so it is not rebuilt at
+/// `MAX_DENSITY`.
+#[test]
+fn a_legacy_scale_that_draws_nothing_leaves_the_text_at_its_own_size() {
+    use jstream_protocol::{Finite32, ItemTransform, Vec2};
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // Sixteen M's at 200px of letter spacing: wider than `f32::MAX / 1e35`, so the
+    // scale's product overflows, and still under half of 8192, so a density of 2 would
+    // fit. A wider frame would stay at its own size anyway, and a narrower one would
+    // still draw.
+    let wide = "M".repeat(16);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "caption",
+                "text",
+                settings(&[("text", json!(wide)), ("letter_spacing", json!(200.0))]),
+            ),
+            add("a", "i1", "caption"),
+        ]),
+    )
+    .expect("created");
+    let sizes = || {
+        assert!(engine.settle_sources(), "the sources were built in time");
+        engine
+            .render_hub()
+            .load()
+            .shot()
+            .frame(&SourceId::new("caption"))
+            .map(|frame| frame.sizes())
+            .expect("the caption is shown")
+    };
+    let (pixels, extent) = sizes();
+    assert_eq!(pixels, extent, "at its own size");
+    assert!(
+        !(extent[0] as f32 * 1e35).is_finite(),
+        "the text must be wide enough that a 1e35 scale overflows, got {extent:?}"
+    );
+    assert!(
+        extent[0] <= 4095 && extent[1] <= 4095,
+        "a density of 2 must still fit, or the source would stay at its own size anyway: {extent:?}"
+    );
+
+    batch(
+        &control,
+        Batch::single(Edit::ItemSetTransform {
+            item_id: ItemId::new("i1"),
+            scene_id: None,
+            transform: ItemTransform {
+                position: Vec2::new(0.0, 0.0).expect("finite"),
+                scale: Vec2::new(1e35, 1.0).expect("finite"),
+                rotation_deg: Finite32::new(0.0).expect("finite"),
+            },
+        }),
+    )
+    .expect("scaled");
+    assert_eq!(
+        sizes(),
+        (extent, extent),
+        "an item that draws nothing is not magnified"
+    );
+}
+
 /// A `timer`'s settings as the graph completes them: its kind's defaults under `patch`.
 fn timer_settings(patch: &Settings) -> Settings {
     let registry = jstream_sources::Registry::builtin();
