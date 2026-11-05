@@ -273,9 +273,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
-  - **A placed scene can switch its own keyframe** as studio state
-    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
-    Keyframe tracks under [Protocol](#protocol).
+  - **A placed scene can switch its own keyframe** as runtime state on the engine's
+    graph ([ADR-0116](adr/0116-keyframe-tracks.md),
+    [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
+    collection: see Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits

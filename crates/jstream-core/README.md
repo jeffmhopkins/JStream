@@ -327,11 +327,12 @@ state machine. Contents:
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
   animation clock as their actions' calls ([Timelines](#timelines)). `source.restart`
-  restarts a live source (`LiveSources::restart`).
+  restarts a live source at the action's time (`LiveSources::restart`).
 - **Keyframe tracks** (`engine.rs`,
-  [ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): the keyframe each placed scene
-  is switched to, studio state beside the program scene that `scene.set_keyframe` sets
-  ([Keyframe tracks](#keyframe-tracks)).
+  [ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
+  [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
+  placed scene is switched to, runtime state on the engine's graph that a batch keeps,
+  which `scene.set_keyframe` sets ([Keyframe tracks](#keyframe-tracks)).
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
@@ -1161,27 +1162,32 @@ and the client and request that started it. Nothing of it is saved or undone.
   until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
-  round sends its loops and ends after its cues fire. When all 16 rounds ran with cues
-  due (timelines that start each other, or one that plays itself, at 0), the next tick
-  waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so such a cycle fires at most 16
-  cues a frame instead of spinning the ticker.
+  round sends its loops and ends after its cues fire. A round collects every
+  timeline's due fires before it runs them, and skips a fire when an earlier cue in
+  that round stopped its timeline or started it again (`started_ns`); a timeline that
+  only reached its own end still runs the cues that were due before the end. When all
+  16 rounds ran with cues due (timelines that start each other, or one that plays
+  itself, at 0), the next tick waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so
+  such a cycle fires at most 16 cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
   start the ticker while a timeline plays (`start_ticker`).
 - **A cue** runs through `State::action`, as the call would (with no audit or activity
   entry of its own, and nothing logged), credited to the client and request that
   started the timeline, with `cue_at` set to its exact time:
-  `action_now` gives that time to `scene.switch`, `item.show`/`hide`/`toggle` and
-  `item.trigger_motion`, so the transition, appear effect or fire it starts begins at
-  the cue's time, however late the tick. Its result is `timeline.cue_fired`'s `error`.
+  `action_now` gives that time to `scene.switch`, `item.show`/`hide`/`toggle`,
+  `item.trigger_motion` and `source.restart`, so the transition, appear effect, fire or
+  file it starts begins at the cue's time, however late the tick. Its result is
+  `timeline.cue_fired`'s `error`.
 - **Seek:** `timeline.seek` validates `at_ms` (within a `once` timeline's length, before
   a loop's jump back), starts the clock `at_ms` earlier, and runs at once the state cues
   before `at_ms` that `Timeline::seek` keeps.
 - **Removal:** after every batch, undo or redo, `changed` stops each timeline the
   collection no longer holds (`reconcile_timelines`), with `timeline.changed` `removed`.
-- **`source.restart`** calls `LiveSources::restart`, which restarts the source's running
-  instance (`Source::restart`, at its own time now): a `browser` page reloads, a `media`
-  file seeks to 0 and an effect pack's stand-in starts its program again. A source with
-  no running instance has nothing to restart.
+- **`source.restart`** calls `LiveSources::restart` at `action_now` (the cue's time
+  while a cue runs, otherwise the clock's now), which restarts the source's running
+  instance (`Source::restart`): a `browser` page reloads, a `media` file seeks to 0 and
+  an effect pack's stand-in starts its program again. A source with no running instance
+  has nothing to restart.
 
 <a id="privacy"></a>
 ## No privacy screen
@@ -1205,20 +1211,23 @@ the collection hears is open while the app shows the program, as in OBS.
 ## Keyframe tracks
 <!-- @section
 covers = ["crates/jstream-core/src/tests/keyframe_tracks.rs"]
-depends_on = ["crates/jstream-protocol/README.md#keyframe-tracks", "docs/adr/0116-keyframe-tracks.md"]
+depends_on = ["crates/jstream-protocol/README.md#keyframe-tracks", "docs/adr/0116-keyframe-tracks.md", "docs/adr/0118-placed-keyframes-on-the-graph.md"]
 -->
 
 The engine keeps the keyframe each placed scene is switched to
-([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)) in `placed_keyframes`, studio
-state like the program scene: no `rev`, never undone or saved, listed by `studio.get`'s
-`keyframes`.
-- **Drawing:** `refresh_shown` hands the planners a copy of the collection with the
-  switched keyframes in `State::placed_keyframes` (`Graph::with_placed_keyframes`),
-  beside the open gestures' live settings. The snapshot planner (`Planner::nested`)
-  draws a placed scene through the view `view_id(scene, keyframe)`, unless the placing
-  scene's own keyframe overrides an item in its tree, which keeps drawing it. Audio
-  activity (`reachable`) follows the same view, so a child the keyframe hides is silent:
-  `route_audio` and the meters read the drawn copy, not the collection.
+([ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
+[ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)) on the graph
+(`Graph::place_keyframe`): no `rev`, never undone or saved, listed by `studio.get`'s
+`keyframes`. A batch keeps the field.
+- **Drawing:** planners read that graph. `refresh_shown` copies the collection only
+  while a gesture has live source settings (`Graph::with_values`); the copy carries the
+  switched keyframes because it clones the graph. A placed keyframe alone does not
+  rebuild a copy on each batch. The snapshot planner (`Planner::nested`) draws a placed
+  scene through the view `view_id(scene, keyframe)`, unless the placing scene's own
+  keyframe overrides an item in its tree, which keeps drawing it. Audio activity
+  (`reachable`) follows the same view, so a child the keyframe hides is silent:
+  `route_audio` and the meters read the graph the planners draw (the collection graph,
+  or the settings copy while one is open).
 - **A switch** (`set_keyframe`) checks the scene, keyframe and preset, and does nothing
   when the scene already shows that keyframe. When program draws the scene
   (`State::draws`) and isn't the scene itself or one of its keyframe scenes
