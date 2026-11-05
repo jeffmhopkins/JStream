@@ -1416,7 +1416,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
-  valid at the same `schema_version`. Scene filters and item effects (version 2) and a
+  valid at the same `schema_version`. A file that still stores that Cut at 300 ms,
+  ease-in-out and otherwise unchanged, loads it at duration 0 (#1209), with no schema
+  bump: a `cut` already showed the new scene on the next frame. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
