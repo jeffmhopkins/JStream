@@ -85,7 +85,9 @@ from `tilt_deg` -90 to 0, or a card that turns in from `turn_deg` 70, reads as a
 designed move; keep angles under 90 and pair them with opacity. `item.set_blend` sets \
 how an item composites: `screen` or `additive` for light leaks, glints and glows over \
 the picture, `multiply` for shadows and textures, `overlay` for a tinted wash; most \
-items stay `normal`. Opacity goes up to 4 (400%): above 1 it multiplies the item's \
+items stay `normal`. Opacity is a blend's amount: below 1 it mixes what is below the \
+item with the blended result, so a half-strength `overlay` is the mode at 0.5. \
+Opacity goes up to 4 (400%): above 1 it multiplies the item's \
 light without covering more, so an `additive` glow or a blurred, masked reflection can \
 be brighter than its source draws it. \
 Layering: build a scene as separate layers by role (the background, what glows or \
