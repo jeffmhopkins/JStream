@@ -1578,7 +1578,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
                     // are kept, as a mix not due keeps them.
                     if ring.is_full() && frame.nv12.is_none() {
-                        frame.unread += 1;
+                        // This tick's collected frames, but the newest, are counted
+                        // here too, as below.
+                        frame.unread += 1 + handed.saturating_sub(1);
                         frame.awaiting = true;
                         snapshot::claim_layers(
                             &mut compositor,
