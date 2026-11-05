@@ -6135,6 +6135,48 @@ mod cpu_pipeline {
         assert_eq!(log.pixels[0], ([30, 20, 10, 255], [30, 20, 10, 255]));
     }
 
+    /// With a host's [`ThreadPriority`](jstream_platform::ThreadPriority), the stage's
+    /// render thread is raised for video and its mixer for audio, each on itself, and
+    /// both go back as the stage stops (ADR-0117 §8).
+    #[test]
+    fn the_stage_raises_its_render_and_mixer_threads() {
+        use jstream_platform::ThreadRole;
+        use jstream_platform::fake::FakePriority;
+
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (engine, control, mut events) = vcam_engine(
+            &fakes,
+            solid([10, 20, 30, 255]),
+            scripted(&log),
+            (64, 36),
+            None,
+        );
+        let priority = FakePriority::new();
+        engine.set_thread_priority(Arc::new(priority.clone()));
+        start_output(&control, &mut events, "cam");
+        assert!(pump_until(&fakes.clock, &fakes.audio, || {
+            !log.lock().expect("vcam log").pixels.is_empty()
+        }));
+        let mut raised = priority.log().raised;
+        raised.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            raised,
+            [
+                ("jstream-mixer".to_owned(), ThreadRole::Audio),
+                ("jstream-render".to_owned(), ThreadRole::Video),
+            ]
+        );
+        block_on(control.call(output_call("cam", false))).expect("output.stop");
+        assert_eq!(
+            output_steps(&mut events),
+            vec![OutputState::Stopping, OutputState::Stopped]
+        );
+        let mut reverted = priority.log().reverted;
+        reverted.sort();
+        assert_eq!(reverted, ["jstream-mixer", "jstream-render"]);
+    }
+
     /// A virtual camera shares the program stage with a stream: both run at once, and
     /// stopping the camera leaves the stream running.
     #[test]

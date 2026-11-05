@@ -58,8 +58,8 @@ use jstream_media::{
 use jstream_platform::wgpu;
 use jstream_platform::{
     AudioEncoderConfig, AudioIo, Backends, Capture, CodecInfo, CodecRole, Codecs, GpuContext,
-    GpuFrame, GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
-    VideoEncoderConfig, VideoSurface,
+    GpuFrame, GpuInterop, HardwarePreference, MediaClock, RaisedThread, RateControl,
+    ThreadPriority, ThreadRole, VcamFormat, VideoDevices, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
@@ -1803,6 +1803,32 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
     }
 }
 
+/// The longest the render thread sleeps before it looks again for a stop, a session or
+/// the clock: a clock that runs slow or jumps is followed within this.
+const MAX_TICK_WAIT: Duration = Duration::from_millis(4);
+
+/// How long until `due` on the media clock, from `now`, at most [`MAX_TICK_WAIT`] and
+/// never zero, so a clock that cannot say still leaves the thread asleep a moment.
+fn until_due(now: MediaTime, due: MediaTime) -> Duration {
+    let left = due
+        .checked_sub(now)
+        .map(|left| left.as_secs_f64())
+        .unwrap_or_default();
+    let floor = Duration::from_micros(100);
+    if left.is_finite() && left > 0.0 {
+        Duration::from_secs_f64(left).clamp(floor, MAX_TICK_WAIT)
+    } else {
+        floor
+    }
+}
+
+/// Puts the calling thread in its role's scheduling class until the guard drops, when
+/// the host gave the engine a [`ThreadPriority`] (ADR-0117 §8). Called once, as the
+/// thread starts, before its loop.
+fn raise(priority: Option<&dyn ThreadPriority>, role: ThreadRole) -> Option<RaisedThread> {
+    priority?.raise(role)
+}
+
 /// Opens the program stage: the capture and the audio devices, then the render and
 /// mixer threads, and waits for the compositor to open. On failure everything opened
 /// is dropped again.
@@ -1877,7 +1903,9 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         }
     };
     let mixer_collector = collector.clone();
+    let priority = engine.thread_priority();
     let render = spawn("jstream-render", {
+        let priority = priority.clone();
         let job = RenderJob {
             context: context.clone(),
             gpu: Arc::clone(&parts.gpu),
@@ -1904,7 +1932,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             losses: loss_tx,
             meter: engine.profiler().program_meter(),
         };
-        move || render_thread(job)
+        move || {
+            let _raised = raise(priority.as_deref(), ThreadRole::Video);
+            render_thread(job);
+        }
     });
     // The render and mixer threads own the collector's senders, so the collector ends
     // once both have (or here, if they never started).
@@ -1931,7 +1962,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             monitors: monitor_feeds,
         };
         let mixing = Mixing { mixer, metering };
-        move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
+        move || {
+            let _raised = raise(priority.as_deref(), ThreadRole::Audio);
+            mixer_thread(mixing, clock, &out, stop, fail, &collector);
+        }
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -3013,7 +3047,9 @@ fn render_loop(job: RenderJob) {
         let now = clock.now();
         let due = next.unwrap_or(now);
         if now < due {
-            thread::sleep(Duration::from_millis(1));
+            // Asleep until the tick is due, rather than waking every millisecond to
+            // look (ADR-0117 §8); a long wait wakes on the way, for a stop or a session.
+            thread::sleep(until_due(now, due));
             continue;
         }
         let (due, missed) = match catch_up(due, now, period) {
@@ -4937,6 +4973,19 @@ mod tests {
 
     fn us(ticks: i64) -> MediaTime {
         MediaTime::new(ticks, Timebase::MICROS)
+    }
+
+    /// The render thread sleeps until the tick is due, a few milliseconds at most.
+    #[test]
+    fn the_render_thread_sleeps_until_the_tick() {
+        use super::{MAX_TICK_WAIT, until_due};
+        assert_eq!(
+            until_due(us(1_000), us(3_500)),
+            Duration::from_micros(2_500)
+        );
+        assert_eq!(until_due(us(0), us(33_333)), MAX_TICK_WAIT);
+        assert_eq!(until_due(us(10), us(20)), Duration::from_micros(100));
+        assert_eq!(until_due(us(20), us(10)), Duration::from_micros(100));
     }
 
     /// A frame read back goes out with the time it was drawn for, a frame whose readback

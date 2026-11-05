@@ -1,5 +1,6 @@
-//! The process's CPU time on Windows, for `stats.tick`'s load (protocol 0.48), and each
-//! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103).
+//! The process's CPU time on Windows, for `stats.tick`'s load (protocol 0.48), each
+//! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103), and the
+//! Multimedia Class Scheduler Service tasks of its real-time threads (ADR-0117 §8).
 
 /// Adds a FILETIME's two halves into its 100 ns count, as `GetProcessTimes` reports
 /// kernel and user time.
@@ -9,21 +10,25 @@ fn filetime_hns(high: u32, low: u32) -> u64 {
 }
 
 #[cfg(windows)]
-pub use os::{WindowsProcessCpu, WindowsThreadCpu};
+pub use os::{WindowsProcessCpu, WindowsThreadCpu, WindowsThreadPriority};
 
 #[cfg(windows)]
 mod os {
     use std::time::Duration;
 
-    use jstream_platform::{ProcessCpu, ThreadCpu, ThreadTime};
+    use jstream_platform::{
+        ProcessCpu, RaisedThread, ThreadCpu, ThreadPriority, ThreadRole, ThreadTime,
+    };
     use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HLOCAL, LocalFree};
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
     };
     use windows::Win32::System::Threading::{
-        GetCurrentProcess, GetCurrentProcessId, GetProcessTimes, GetThreadDescription,
-        GetThreadTimes, OpenThread, THREAD_QUERY_LIMITED_INFORMATION,
+        AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, GetCurrentProcess,
+        GetCurrentProcessId, GetProcessTimes, GetThreadDescription, GetThreadTimes, OpenThread,
+        THREAD_QUERY_LIMITED_INFORMATION,
     };
+    use windows::core::w;
 
     use super::filetime_hns;
 
@@ -96,6 +101,30 @@ mod os {
                 next = unsafe { Thread32Next(snapshot.0, &mut entry) };
             }
             Some(threads)
+        }
+    }
+
+    /// Real-time threads in the Multimedia Class Scheduler Service: the render thread in
+    /// its `Playback` task, the mixer in `Pro Audio`, so a busy desktop doesn't starve
+    /// them of their period. The service reverts a thread when its handle is reverted.
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct WindowsThreadPriority;
+
+    impl ThreadPriority for WindowsThreadPriority {
+        fn raise(&self, role: ThreadRole) -> Option<RaisedThread> {
+            let task = match role {
+                ThreadRole::Video => w!("Playback"),
+                ThreadRole::Audio => w!("Pro Audio"),
+            };
+            let mut index = 0u32;
+            // SAFETY: `task` is a static NUL-terminated string and `index` a local that
+            // outlives the call.
+            let handle = unsafe { AvSetMmThreadCharacteristicsW(task, &mut index) }.ok()?;
+            Some(RaisedThread::new(move || {
+                // SAFETY: the handle came from `AvSetMmThreadCharacteristicsW` on this
+                // thread, which `RaisedThread` stays on, and is reverted once.
+                let _ = unsafe { AvRevertMmThreadCharacteristics(handle) };
+            }))
         }
     }
 
