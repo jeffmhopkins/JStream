@@ -168,7 +168,7 @@ in, and **What's left** lists each unfinished item with the steps it still needs
 <!-- @generated begin progress -->
 ### Next release: `0.1.0-alpha.5`
 
-A seamless, full-quality preview on a thread model that uses more cores, proved by a bench, then pop-out projectors, application settings and saved projects. The latest shipped release is `v0.1.0-alpha.4.1`. Its progress counts its targets and any roadmap items it carries. Priority is the maintainer's order, 1 first; a ❔ target may move to the release after, so it isn't counted.
+A seamless, full-quality preview on a thread model that uses more cores, proved by a bench, then pop-out projectors, application settings and saved projects. The latest shipped release is `v0.1.0-alpha.4.2`. Its progress counts its targets and any roadmap items it carries. Priority is the maintainer's order, 1 first; a ❔ target may move to the release after, so it isn't counted.
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
