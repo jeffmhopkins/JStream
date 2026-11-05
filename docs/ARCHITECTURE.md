@@ -1068,7 +1068,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pack`, `pairing`, `ui_settings` and `values`;
+  `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
+  may set a shared value a page may send off the machine,
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  is not an undoable edit, and a page granted the value may send it off,
+  [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets

@@ -159,7 +159,7 @@ release = "alpha.5"
 title = "Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings"
 status = "planned"
 issues = [1209, 1189]
-prs = [1240, 1245]
+prs = [1240, 1245, 1255]
 
 [[target]]
 release = "alpha.5"
