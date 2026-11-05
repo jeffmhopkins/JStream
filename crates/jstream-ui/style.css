@@ -1329,13 +1329,129 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .modal.props-dialog { width: 860px; height: 640px; }
 .scene-props-dialog .props-settings { display: grid; align-content: start; gap: 12px; }
 .field-note { color: var(--dim); font-size: 11px; }
-.camera-field .camera-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.camera-fields { display: grid; gap: 6px; margin: 6px 0; }
-.camera-row { display: flex; align-items: end; gap: 8px; }
-.camera-row > .label { width: 64px; flex: none; }
-.camera-number { display: grid; gap: 2px; flex: 1; min-width: 0; }
-.camera-number .label { font-size: 10px; color: var(--dim); }
-.camera-number input { width: 100%; min-width: 0; }
+/* The 3D camera block: one column, a fixed label column, controls in the rest.
+   Not a `.field`: that two-column grid put the controls in the auto column. */
+.camera-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
+}
+.camera-fields, .camera-motion, .camera-sub {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.camera-sub { margin-left: 22px; }
+.camera-head {
+  margin: 8px 0 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.camera-fields > .camera-head:first-child { margin-top: 2px; }
+.camera-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--text);
+}
+.camera-check input[type="checkbox"] {
+  flex: none;
+  width: auto;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.camera-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.camera-hint { color: var(--dim); font-size: 11px; min-width: 0; }
+.camera-row,
+.camera-sub .number-field,
+.camera-sub .select-field,
+.camera-field .hotkey-row {
+  display: grid;
+  grid-template-columns: minmax(0, 110px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  justify-content: stretch;
+}
+.camera-row > .label,
+.camera-sub .field-label,
+.camera-field .hotkey-row .key { color: var(--muted); font-size: 12px; min-width: 0; }
+.camera-axes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.camera-number {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 5.5rem;
+  min-width: min(100%, 5.5rem);
+  max-width: 8rem;
+}
+.camera-number .label { flex: none; color: var(--dim); font-size: 12px; }
+.camera-number input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  height: 30px;
+  padding: 0 6px;
+}
+.camera-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.camera-control .camera-number { flex: 1 1 auto; max-width: 8rem; }
+.camera-control .unit { flex: none; color: var(--dim); font-size: 12px; }
+.camera-sub select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: 30px;
+}
+.camera-field .stepper {
+  width: 100%;
+  max-width: 12rem;
+  min-width: min(100%, 8rem);
+}
+.camera-field .stepper button {
+  flex: none;
+  width: 22px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+.camera-field .stepper button:first-child { border-right: 1px solid var(--border); }
+.camera-field .stepper button:last-child { border-left: 1px solid var(--border); }
+.camera-field .stepper input { min-width: 2.5rem; }
+.camera-field .hotkeys { justify-content: flex-start; min-width: 0; }
+.camera-field .field-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  min-width: 0;
+}
+.camera-field .motion-row,
+.camera-field .motion-row-actions { min-width: 0; }
+.camera-sub > .btn,
+.camera-motion > .motion-button { justify-self: start; width: auto; max-width: 100%; }
 .hotkey-field { font-family: "IBM Plex Mono", ui-monospace, monospace; cursor: pointer; }
 .props-head { display: flex; align-items: center; gap: 10px; }
 .props-head .icon { color: var(--muted); }
