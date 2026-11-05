@@ -3964,6 +3964,7 @@ impl CaptureFrame<'_> {
     pub(crate) fn size(&self) -> (f32, f32) {
         let size = match self.image {
             CaptureImage::Rgba { size, .. } => size,
+            CaptureImage::Cpu(frame) => frame.info().size,
             CaptureImage::Gpu(frame) => frame.info().size,
         };
         (size.width() as f32, size.height() as f32)
@@ -3975,6 +3976,11 @@ impl CaptureFrame<'_> {
 pub(crate) enum CaptureImage<'a> {
     /// Tightly packed straight sRGB RGBA8 at `size`, uploaded on a new version.
     Rgba { size: FrameSize, rgba: &'a [u8] },
+    /// A capture's CPU frame as it arrived (packed RGBA8 or BGRA8, or NV12), read as
+    /// opaque and converted on the GPU as it is uploaded on a new version
+    /// ([`ResourceCache::upload_frame`], ADR-0117 §2), so the drawing thread never
+    /// converts it pixel by pixel.
+    Cpu(&'a jstream_media::VideoFrame),
     /// A texture shared with the platform, on the compositor's device: sampled where
     /// it is, with no CPU copy ([`ResourceCache::import`]).
     Gpu(&'a GpuFrame),
@@ -4186,6 +4192,9 @@ pub(crate) fn compose_metered(
                 size.height(),
                 rgba,
             )?,
+            CaptureImage::Cpu(frame) => {
+                cache.upload_frame(compositor, &key, capture.version, frame)?
+            }
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };

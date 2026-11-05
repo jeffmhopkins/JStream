@@ -1,6 +1,6 @@
 //! The two passes: composite in FP16 linear light, then resolve to straight sRGB.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jstream_platform::FrameSync;
@@ -11,6 +11,7 @@ use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
+use crate::ingest::Ingest;
 use crate::mips::{MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
@@ -96,6 +97,9 @@ pub struct Compositor {
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
+    /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
+    /// because uploads take `&self`; only the thread drawing with the compositor takes it.
+    ingest: Mutex<Option<Ingest>>,
 }
 
 impl Compositor {
@@ -116,8 +120,9 @@ impl Compositor {
 
     /// Uploads tightly packed straight-alpha sRGB RGBA8.
     ///
-    /// The bytes are premultiplied in linear light on the CPU and stored as
-    /// `Rgba16Float`, so the linear filter cannot darken transparent edges.
+    /// The bytes are premultiplied in linear light on the GPU and stored as
+    /// `Rgba16Float`, so the linear filter cannot darken transparent edges. This thread
+    /// only copies them into a buffer and records the conversion (ADR-0117 §2).
     ///
     /// # Errors
     /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::ImageBytes`] when
@@ -432,6 +437,32 @@ impl Compositor {
         image::rewrite(&self.maker(), image, rgba)
     }
 
+    /// Uploads a CPU video frame read as opaque: packed RGBA8 or BGRA8, or NV12 with its
+    /// matrix and range, converted to premultiplied linear on the GPU (ADR-0117 §2). A
+    /// capture's alpha means nothing, so every texel is opaque (#451).
+    ///
+    /// # Errors
+    /// [`RenderError::UnsupportedTexture`] for another layout, [`RenderError::Invalid`]
+    /// for planes too short for the frame or an odd-sized NV12 frame's missing chroma,
+    /// and [`RenderError::TooLarge`] when a side exceeds the adapter limit.
+    pub fn upload_frame(&self, frame: &jstream_media::VideoFrame) -> Result<Image, RenderError> {
+        image::upload_frame(&self.maker(), frame)
+    }
+
+    /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
+    /// as [`Self::upload_frame`] reads it, without allocating a texture.
+    ///
+    /// # Errors
+    /// As for [`Self::upload_frame`], and [`RenderError::Invalid`] when `image` is not
+    /// an upload this compositor made at the frame's size.
+    pub fn rewrite_frame(
+        &self,
+        image: &Image,
+        frame: &jstream_media::VideoFrame,
+    ) -> Result<(), RenderError> {
+        image::rewrite_frame(&self.maker(), image, frame)
+    }
+
     /// Draws `filter` over `input` into a new layer of the filter's
     /// [`VideoFilter::output_size`], at the media-clock time `clock`. The filter keeps
     /// its state, so a stateful kind (a video delay) must see every frame in order.
@@ -508,6 +539,7 @@ impl Compositor {
                 layout: &self.image_layout,
                 sampler: &self.sampler,
                 owner: &self.owner,
+                ingest: &self.ingest,
             },
             runtime: &mut self.filters,
             encoder: &mut encoder,
@@ -625,6 +657,7 @@ impl Compositor {
             adapter: self.gpu.adapter.clone(),
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
+            max_storage_binding: self.gpu.max_storage_binding,
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
@@ -637,6 +670,7 @@ impl Compositor {
             layout: &self.image_layout,
             sampler: &self.sampler,
             owner: &self.owner,
+            ingest: &self.ingest,
         }
     }
 
@@ -701,6 +735,7 @@ impl Compositor {
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
+            ingest: Mutex::new(None),
         }
     }
 
@@ -1186,7 +1221,43 @@ impl Compositor {
         pass.draw(0..3, 0..1);
     }
 
-    fn readback_buffer(&self, width: u32, height: u32) -> Result<wgpu::Buffer, RenderError> {
+    /// Records the copy of `output`, this compositor's, into `buffer`, a
+    /// [`Self::readback_buffer`] of its size, rows padded as the readback's are.
+    pub(crate) fn record_copy_out(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        output: &Output,
+        buffer: &wgpu::Buffer,
+    ) {
+        let (width, height) = (output.width(), output.height());
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: output.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_row_bytes(width)),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+    }
+
+    pub(crate) fn readback_buffer(
+        &self,
+        width: u32,
+        height: u32,
+    ) -> Result<wgpu::Buffer, RenderError> {
         let stride = u64::from(padded_row_bytes(width));
         let size = stride
             .checked_mul(u64::from(height))
@@ -1208,6 +1279,11 @@ impl Compositor {
     /// Lowers the buffer limit, as a smaller adapter's would be.
     pub(crate) fn cap_buffer_size(&mut self, bytes: u64) {
         self.gpu.max_buffer_size = bytes;
+    }
+
+    /// Lowers the storage-binding limit, as a smaller adapter's would be.
+    pub(crate) fn cap_storage_binding(&mut self, bytes: u64) {
+        self.gpu.max_storage_binding = bytes;
     }
 }
 
@@ -1310,7 +1386,7 @@ fn push_f32(buf: &mut Vec<u8>, value: f32) {
     buf.extend_from_slice(&value.to_le_bytes());
 }
 
-fn padded_row_bytes(width: u32) -> u32 {
+pub(crate) fn padded_row_bytes(width: u32) -> u32 {
     let row = width.saturating_mul(4);
     let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
     row.div_ceil(align) * align

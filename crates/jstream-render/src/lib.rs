@@ -17,9 +17,11 @@ mod error;
 mod filter;
 mod gpu;
 mod image;
+mod ingest;
 mod mips;
 mod model;
 mod place;
+mod readback;
 mod scene;
 pub mod transition;
 
@@ -37,6 +39,7 @@ pub use gpu::{OpenOptions, adapter_available};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{GpuModel, Lighting, ModelDraw};
+pub use readback::{READBACK_DEPTH, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]

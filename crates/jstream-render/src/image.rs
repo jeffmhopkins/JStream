@@ -3,19 +3,22 @@
 //! The composite pass samples with a linear filter. Filtering straight-alpha texels blends
 //! the colour of fully transparent neighbours into an edge, which darkens it (a fringe), so
 //! uploaded bytes are premultiplied once, on upload, in linear light: sRGB decode, then
-//! RGB times alpha, stored as `Rgba16Float`. Imported textures are sampled as they are:
+//! RGB times alpha, stored as `Rgba16Float`. The conversion runs on the GPU
+//! ([`crate::ingest`], ADR-0117 §2). Imported textures are sampled as they are:
 //! straight sRGB (a captured frame), or premultiplied sRGB code values (a browser page),
 //! which the shader converts to premultiplied linear after the filter.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
-use jstream_media::{FrameSize, VideoFrameInfo};
+use jstream_media::{FrameSize, VideoFrame, VideoFrameInfo};
 use jstream_platform::{FrameSync, GpuFrame};
 
+#[cfg(test)]
 use crate::color::srgb_channel_to_linear;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
+use crate::ingest::{Ingest, Planes};
 use crate::mips::{Mips, Region};
 
 /// How many mip chains an image keeps, one per crop it was placed in 3D with, the most
@@ -77,6 +80,7 @@ pub(crate) struct Maker<'a> {
     pub layout: &'a wgpu::BindGroupLayout,
     pub sampler: &'a wgpu::Sampler,
     pub owner: &'a Owner,
+    pub ingest: &'a Mutex<Option<Ingest>>,
 }
 
 /// A sampled image on the compositor's device.
@@ -116,6 +120,9 @@ pub struct Image {
     /// Mip chains, one per crop the image was placed in 3D with, most recently used
     /// first, at most [`MAX_CHAINS`].
     mips: Arc<Mutex<Vec<Arc<Mips>>>>,
+    /// An upload's bind group for the conversion that writes it ([`crate::ingest`]);
+    /// `None` for every other image.
+    ingest: Option<wgpu::BindGroup>,
 }
 
 impl Image {
@@ -249,7 +256,7 @@ impl Image {
         self.alpha == Alpha::Premultiplied
             && self.target.is_none()
             && self.texture.format() == UPLOAD_FORMAT
-            && self.texture.usage().contains(wgpu::TextureUsages::COPY_DST)
+            && self.ingest.is_some()
     }
 }
 
@@ -273,6 +280,22 @@ pub(crate) fn upload(
     rgba: &[u8],
 ) -> Result<Image, RenderError> {
     check_bytes(width, height, rgba)?;
+    upload_planes(maker, &Planes::straight(width, height, rgba))
+}
+
+/// [`upload`] of a CPU video frame read as opaque ([`Planes::opaque`]).
+pub(crate) fn upload_frame(maker: &Maker<'_>, frame: &VideoFrame) -> Result<Image, RenderError> {
+    upload_planes(maker, &Planes::opaque(frame)?)
+}
+
+fn upload_planes(maker: &Maker<'_>, planes: &Planes<'_>) -> Result<Image, RenderError> {
+    let (width, height) = (planes.width(), planes.height());
+    if width == 0 || height == 0 {
+        return Err(RenderError::Invalid {
+            what: "image",
+            detail: format!("size is {width}x{height}; both dimensions must be non-zero"),
+        });
+    }
     check_dimension(maker.gpu, width, height)?;
     let texture = maker.gpu.device.create_texture(&wgpu::TextureDescriptor {
         label: Some("jstream-render-image"),
@@ -281,18 +304,22 @@ pub(crate) fn upload(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: UPLOAD_FORMAT,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        // `COPY_SRC` so a test can read back what the conversion wrote.
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::STORAGE_BINDING
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
-    write_texels(maker.gpu, &texture, width, height, rgba)?;
-    Ok(finish(
-        maker,
-        texture,
-        width,
-        height,
-        Alpha::Premultiplied,
-        None,
-    ))
+    let mut ingest = maker.ingest.lock().unwrap_or_else(PoisonError::into_inner);
+    let ingest = match &mut *ingest {
+        Some(ingest) => ingest,
+        empty => empty.insert(Ingest::new(maker.gpu)?),
+    };
+    let bind = ingest.image_bind_group(maker.gpu, &texture);
+    ingest.convert(maker.gpu, &bind, planes)?;
+    let mut image = finish(maker, texture, width, height, Alpha::Premultiplied, None);
+    image.ingest = Some(bind);
+    Ok(image)
 }
 
 /// Uploads `texels` (RGBA, row-major, `width * height` of them) as `Rgba16Float` exactly
@@ -355,14 +382,55 @@ pub(crate) fn upload_unit_f16(
 /// ordered after every submit already on the queue, so frames that sampled the old
 /// contents still see them.
 pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(), RenderError> {
-    if !image.owner.is(maker.owner) || !image.is_upload() {
+    check_bytes(image.width, image.height, rgba)?;
+    rewrite_planes(
+        maker,
+        image,
+        &Planes::straight(image.width, image.height, rgba),
+    )
+}
+
+/// [`rewrite`] with a CPU video frame read as opaque ([`Planes::opaque`]).
+pub(crate) fn rewrite_frame(
+    maker: &Maker<'_>,
+    image: &Image,
+    frame: &VideoFrame,
+) -> Result<(), RenderError> {
+    rewrite_planes(maker, image, &Planes::opaque(frame)?)
+}
+
+fn rewrite_planes(
+    maker: &Maker<'_>,
+    image: &Image,
+    planes: &Planes<'_>,
+) -> Result<(), RenderError> {
+    let bind = match &image.ingest {
+        Some(bind) if image.owner.is(maker.owner) && image.is_upload() => bind,
+        _ => {
+            return Err(RenderError::Invalid {
+                what: "image",
+                detail: "only an upload made by this compositor can be rewritten".into(),
+            });
+        }
+    };
+    if (planes.width(), planes.height()) != (image.width, image.height) {
         return Err(RenderError::Invalid {
             what: "image",
-            detail: "only an upload made by this compositor can be rewritten".into(),
+            detail: format!(
+                "a {}x{} frame can't refill a {}x{} upload",
+                planes.width(),
+                planes.height(),
+                image.width,
+                image.height
+            ),
         });
     }
-    check_bytes(image.width, image.height, rgba)?;
-    write_texels(maker.gpu, &image.texture, image.width, image.height, rgba)?;
+    let mut ingest = maker.ingest.lock().unwrap_or_else(PoisonError::into_inner);
+    let ingest = match &mut *ingest {
+        Some(ingest) => ingest,
+        empty => empty.insert(Ingest::new(maker.gpu)?),
+    };
+    ingest.convert(maker.gpu, bind, planes)?;
     image.mark_changed();
     Ok(())
 }
@@ -391,39 +459,6 @@ fn check_bytes(width: u32, height: u32, rgba: &[u8]) -> Result<(), RenderError> 
             expected,
         });
     }
-    Ok(())
-}
-
-fn write_texels(
-    gpu: &Gpu,
-    texture: &wgpu::Texture,
-    width: u32,
-    height: u32,
-    rgba: &[u8],
-) -> Result<(), RenderError> {
-    let row_bytes = width.checked_mul(8).ok_or(RenderError::TooLarge {
-        what: "image",
-        width,
-        height,
-        limit: gpu.max_texture_dimension_2d,
-    })?;
-    let texels = premultiply_to_f16(rgba);
-    // `write_texture`, unlike a buffer-to-texture copy, does not need 256-byte rows.
-    gpu.queue.write_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        &texels,
-        wgpu::TexelCopyBufferLayout {
-            offset: 0,
-            bytes_per_row: Some(row_bytes),
-            rows_per_image: Some(height),
-        },
-        extent(width, height),
-    );
     Ok(())
 }
 
@@ -548,6 +583,7 @@ fn finish(
         target: None,
         generation: Arc::new(AtomicU64::new(0)),
         mips: Arc::new(Mutex::new(Vec::new())),
+        ingest: None,
     }
 }
 
@@ -578,12 +614,10 @@ fn extent(width: u32, height: u32) -> wgpu::Extent3d {
 /// RGB is decoded with the sRGB transfer, then multiplied by alpha. Alpha is linear in the
 /// source and stays so. A fully transparent texel becomes all zero whatever its RGB was.
 ///
-/// Every upload of a changing source (a webcam's CPU frames, a media file's) goes through
-/// this on the render thread, so it reads each texel's four halves from
-/// [`PremultiplyTable`] instead of computing them: on a 1080p frame that took it from
-/// about 23 ms to about 4 ms (measured on a 2.8 GHz Xeon cloud VM, release build), with
-/// the same bits (a test compares them for every byte at every alpha).
-fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
+/// The CPU reference for the GPU conversion ([`crate::ingest`]), which tests compare
+/// with: it reads each texel's four halves from [`PremultiplyTable`].
+#[cfg(test)]
+pub(crate) fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
     let table = PremultiplyTable::get();
     let mut out = vec![0; rgba.len() / 4 * 8];
     for (texel, px) in out.chunks_exact_mut(8).zip(rgba.chunks_exact(4)) {
@@ -604,12 +638,14 @@ fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
 /// Every half [`premultiply_to_f16`] can write, built once per process: for each alpha
 /// `a` and channel byte `c`, `f16(linear(c / 255) * a / 255)`, and for each alpha the
 /// half of `a / 255`: about 128 KiB.
+#[cfg(test)]
 struct PremultiplyTable {
     /// Indexed by `a * 256 + c`.
     color: Vec<u16>,
     alpha: [u16; 256],
 }
 
+#[cfg(test)]
 impl PremultiplyTable {
     fn get() -> &'static PremultiplyTable {
         static TABLE: std::sync::OnceLock<PremultiplyTable> = std::sync::OnceLock::new();

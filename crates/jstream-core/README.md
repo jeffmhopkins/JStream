@@ -36,7 +36,9 @@ state machine. Contents:
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `set_thread_cpu`
-  (`profile.get`'s threads, below); `open_plugin_dir`
+  (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
+  program stage's render and mixer threads take as they start, on Windows their MMCSS
+  tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
   `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
@@ -461,8 +463,8 @@ state machine. Contents:
   the same for a GPU capture of another size), a mix of another aspect ratio
   letterboxed and a `scene` mix drawing its own scene, the scene each mix plans and the
   captures only a mix shows, the program stage's output size following the canvas,
-  captures converted to RGBA8 at
-  their own size (NV12 with its matrix and range), and nested-scene layers reused
+  captures uploaded at
+  their own size (NV12 converted on the GPU with its matrix and range), and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
@@ -2734,11 +2736,14 @@ compositor scales it to its item's placement. Which device it composites on, and
 the capture reaches it, is chosen when the program stage opens (see [Runtime](#runtime)). On the GPU path it
 keeps each capture's newest `GpuFrame` until a newer one replaces it, and the cache attaches the
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
-screen and nothing more. On the CPU path it converts each capture's newest frame to
-RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture delivers, converted
-with its frame's matrix and range), opaque: alpha is 255 on every pixel, as the GPU
-path reads a capture's (#451); only what the program mix shows is captured, so
-a program without a `display` or `window` source converts nothing. Each tick first calls `RenderReader::adopt`, which
+screen and nothing more. On the CPU path it keeps each capture's newest frame as it
+arrived (packed RGBA or BGRA, or NV12, which Windows' capture delivers), checking only
+that its rows are long enough, and the compositor uploads it with
+`ResourceCache::upload_frame`, which converts it on the GPU with its frame's matrix and
+range ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §2), opaque: alpha
+is 1 on every pixel, as the GPU path reads a capture's (#451). The render thread copies
+the bytes into a buffer and converts no pixel; only what the program mix shows is
+captured, so a program without a `display` or `window` source uploads nothing. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. Then it does the
@@ -2786,8 +2791,9 @@ and what is fatal ([R-RT-006](../../docs/RULES.md#R-RT-006)):
   mixer panic, a rejected mix block
   or a mixer poll error is fatal: the encoder would get no more audio.
 
-The render thread reuses each capture's buffer, its composite and readback buffers, and
-its GPU textures through the cache. Each tick allocates, for every mix it draws, one
+The render thread keeps each capture's latest CPU frame as it was delivered, with no
+copy of its own, and reuses its composite targets, each mix's readback ring, and its GPU
+textures through the cache. Each tick allocates, for every mix it draws, one
 frame-sized buffer per encoder session on the CPU path fed from that mix, the frame the
 session takes ownership of (`VideoInput::push` cannot hand buffers back), and the item
 list `compose` fills for that mix; a session on the GPU path gets a handle to an encode
@@ -3240,7 +3246,21 @@ BT.709 in the target's range) is a submit of its own that stages the target's fe
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
 mix none of them is fed is not read back, and each readback is counted
-(`OutputStats::readbacks`, one per mix read back). A mix that stops being drawn hands
+(`OutputStats::readbacks`, one per mix read back). The readback never waits for the
+GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw
+records it into the mix's `ReadbackRing` of three map-read buffers, kept with the
+compositor, and collects whichever earlier ones have mapped, polling without a wait. A
+frame read back goes out a tick or two after it was drawn, with the time it was drawn
+for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
+nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
+repeats the last frame at the tick, and no push goes back in time
+(`MixFrame::push_time`). When all three buffers are still on their way the GPU is
+behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
+as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
+ticks, frames collected in the same tick as a newer one, and frames that land behind
+a repeat are all counted in `render_ticks`. Between ticks the render thread sleeps until
+the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
+the mixer thread take the host's `ThreadPriority` as they start. A mix that stops being drawn hands
 its ring to the collector; the rest drop before the compositor and the context. A
 target the platform refuses is fatal: the session could not be fed.
 

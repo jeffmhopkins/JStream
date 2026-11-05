@@ -480,7 +480,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
   leave `cpu_ms` out. On Windows (`WindowsThreadCpu`), macOS (`MacosThreadCpu`) and
   Linux (`LinuxThreadCpu`) it also hands it the thread CPU reader, for `profile.get`'s
-  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)).
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). On
+  Windows it hands it `WindowsThreadPriority` too, so the program stage's render and
+  mixer threads run in their MMCSS tasks
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.

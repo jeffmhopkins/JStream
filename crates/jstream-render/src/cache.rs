@@ -151,6 +151,38 @@ impl<K: Ord + Clone> ResourceCache<K> {
         Ok(self.replace(key, image, version))
     }
 
+    /// [`Self::upload`] of a CPU video frame read as opaque, converted on the GPU as
+    /// [`Compositor::upload_frame`] converts it: packed RGBA8 or BGRA8, or NV12.
+    ///
+    /// # Errors
+    /// As for [`Compositor::upload_frame`]. The entry is left as it was.
+    pub fn upload_frame(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        frame: &jstream_media::VideoFrame,
+    ) -> Result<&Image, RenderError> {
+        let size = frame.info().size;
+        let at = self.frame;
+        let reuse = self.live.get(key).is_some_and(|entry| {
+            entry.image.is_upload()
+                && entry.image.width() == size.width()
+                && entry.image.height() == size.height()
+        });
+        if reuse {
+            let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+            if entry.version != version {
+                compositor.rewrite_frame(&entry.image, frame)?;
+                entry.version = version;
+            }
+            entry.used = at;
+            return Ok(&entry.image);
+        }
+        let image = compositor.upload_frame(frame)?;
+        Ok(self.replace(key, image, version))
+    }
+
     /// The image for `key` showing `frame`, a frame on this compositor's device, and
     /// marks it used this frame. Nothing is copied: the frame's texture is sampled as
     /// [`Compositor::import_frame`] samples it.

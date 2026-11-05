@@ -48,7 +48,7 @@ use jstream_graph::Graph;
 use jstream_media::FrameSize;
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
@@ -132,6 +132,9 @@ struct Shared {
     /// Where the engine's time goes, for `profile.get` (ADR-0103). Its locks are its
     /// own; only its source meters and plan totals are taken under the collection lock.
     profile: Profiler,
+    /// What raises the render and mixer threads as each stage starts (ADR-0117 §8), once
+    /// the host sets it. Its lock is its own, taken only as a stage launches.
+    priority: Mutex<Option<Arc<dyn ThreadPriority>>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -199,6 +202,7 @@ impl Default for Engine {
                     load: LoadMeter::default(),
                     output_meters: Arc::default(),
                     profile,
+                    priority: Mutex::new(None),
                     #[cfg(feature = "wasm-plugins")]
                     automation: crate::plugins::automation::Registry::default(),
                     effect_packs: Mutex::new(None),
@@ -799,6 +803,18 @@ impl Engine {
     /// empty. Read outside the collection lock, at most about once a second.
     pub fn set_thread_cpu(&self, threads: Arc<dyn ThreadCpu>) {
         self.shared.profile.set_threads(threads);
+    }
+
+    /// Raises the render and mixer threads with `priority` (on Windows their MMCSS
+    /// tasks, ADR-0117 §8) on each program stage started from now on. Without one they
+    /// run at the OS's normal priority.
+    pub fn set_thread_priority(&self, priority: Arc<dyn ThreadPriority>) {
+        *lock(&self.shared.priority) = Some(priority);
+    }
+
+    /// What raises the real-time threads, if the host set one.
+    pub(crate) fn thread_priority(&self) -> Option<Arc<dyn ThreadPriority>> {
+        lock(&self.shared.priority).clone()
     }
 
     /// The engine's profiler, which the drawing threads' meters publish to.

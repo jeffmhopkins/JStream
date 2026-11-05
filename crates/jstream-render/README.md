@@ -130,9 +130,10 @@ and calls this crate.
   no adapter at all, and `RenderError::NoAdapter` ends with `NO_ADAPTER_HINT`, which
   names the package to install. `adapter_available` checks for any adapter without
   opening a device, for a host's startup warning (#1073).
-- A source image is either straight-alpha sRGB RGBA8 bytes the compositor uploads, or
-  a `GpuFrame` / `wgpu::Texture` already on this device. An upload is premultiplied in
-  linear light and stored as `Rgba16Float`, so filtering cannot darken transparent
+- A source image is either straight-alpha sRGB RGBA8 bytes or a CPU video frame
+  (RGBA8, BGRA8 or NV12, read as opaque) the compositor uploads, or a `GpuFrame` /
+  `wgpu::Texture` already on this device. An upload is premultiplied in linear light on
+  the GPU and stored as `Rgba16Float`, so filtering cannot darken transparent
   edges ([Passes](#design)). An imported texture (`import`) must be `Rgba8UnormSrgb` or
   `Bgra8UnormSrgb`, so the sampler decodes it to linear, and is read as straight
   alpha: exact for an opaque capture, a fringe at partly transparent edges. A browser
@@ -232,15 +233,23 @@ Working space is linear light in an `Rgba16Float` colour target, as ARCH's data 
 requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
 
 1. **Upload** (when the image or its version is new: once, for a still, and once per
-   new frame for a changing source such as a CPU capture or a media file). Tightly
-   packed straight RGBA8 sRGB bytes are converted on the CPU: each RGB byte is decoded
-   with the sRGB transfer, multiplied by alpha and rounded to binary16, and alpha is
-   rounded to binary16. Every such half is read from a table built once per process
-   (each channel byte at each alpha, about 128 KiB), so a texel is four lookups: a
-   1080p frame takes about 4 ms instead of the 23 ms computing each texel took
-   (measured on a 2.8 GHz Xeon cloud VM, release build, #1191). The result goes into an `Rgba16Float` texture (`TEXTURE_BINDING |
-   COPY_DST`) with `queue.write_texture`, which needs no row padding. The bind group
-   (texture + linear sampler) is created once and stored on `Image`.
+   new frame for a changing source such as a CPU capture or a media file). The bytes
+   are converted on the GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md)
+   §2, `ingest.rs`): the uploading thread copies them as they are, behind a 16-word
+   header, into a storage buffer the compositor keeps (it only grows) and records one
+   compute dispatch in a submit of its own, under the `SubmitLock`; it does no per-pixel
+   work. The shader writes premultiplied linear `Rgba16Float` into the image's texture
+   (`TEXTURE_BINDING | STORAGE_BINDING | COPY_SRC`). Tightly packed straight RGBA8 sRGB
+   (`upload_rgba8`, `rewrite_rgba8`) has each RGB byte decoded with the sRGB transfer and
+   multiplied by alpha; a CPU video frame (`upload_frame`, `rewrite_frame`: packed RGBA8
+   or BGRA8, or NV12 with its matrix and range, rows of any stride) is read as opaque, NV12
+   in the 16.16 fixed point `jstream-core`'s capture path used. The sRGB decode and the
+   alpha come from tables built on the CPU with the same functions as before, so only the
+   rounding to binary16 is the GPU's: a texel is within one half step of the CPU
+   conversion it replaced, which tests check for every channel byte at every alpha and
+   for NV12 in each matrix and range. The pipeline is built on the first upload. The
+   bind group (texture + linear sampler) and the conversion's own bind group are created
+   once and stored on `Image`.
 
    **Why premultiply first.** The linear filter averages neighbouring texels. Averaging
    straight alpha mixes a transparent texel's RGB into its opaque neighbour, so a
@@ -248,8 +257,7 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    transparent black resolves to red about 188 at alpha 128 instead of 255. Premultiplied
    texels average correctly. `Rgba16Float` keeps the linear, premultiplied values
    without the banding 8 bits would give in the darks; it costs 8 bytes per texel
-   instead of 4, and the conversion is CPU work at upload time only, on the thread
-   that uploads (the render thread, for an output).
+   instead of 4, and the conversion is one GPU dispatch at upload time only.
 
    **Imported textures** (`import`, `import_frame`, `import_premultiplied`,
    `import_opaque`) are not
@@ -347,7 +355,16 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    waits on the GPU. The tick that feeds an encoder does not call it. Snapshots and
    tests do. `Compositor::readback_wait` says how long the last `render`'s readback
    waited for the map, which `profile.get` counts in the finish phase rather than in a
-   scene's own time.
+   scene's own time. A **`ReadbackRing`** reads outputs back without waiting
+   ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): `record`
+   copies the output into one of up to `READBACK_DEPTH` (three) map-read buffers in a
+   submit of its own and starts its map, tagged by the caller; `collect` polls the
+   device without blocking and hands back, oldest first, every frame whose map has
+   finished, as tightly packed RGBA8, in the order they were recorded. With every
+   buffer still on its way (`is_full`) `record` returns `false` for the caller to
+   count, and a new size waits until none is out. The source buffer of the ingest pass
+   is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
+   buffer: a larger frame is `TooLarge` before any buffer is made for it.
 
 6. **NV12** (`convert/`), when the caller records it. `Nv12Converter::bind` ties a
    source (`Rgba8UnormSrgb` or `Bgra8UnormSrgb`, the compositor's output) to a target

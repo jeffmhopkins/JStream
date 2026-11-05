@@ -252,6 +252,9 @@ pub fn engine(
     // `profile.get`'s threads (ADR-0103).
     #[cfg(windows)]
     engine.set_thread_cpu(Arc::new(jstream_platform_windows::WindowsThreadCpu));
+    // The render and mixer threads' MMCSS tasks (ADR-0117 §8).
+    #[cfg(windows)]
+    engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
     engine.start_stats_heartbeat();
     Ok(engine)
 }

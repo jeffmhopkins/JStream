@@ -180,8 +180,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Everywhere it watches the data folder's `effects` for effect packs
   (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the
   engine's load while nothing is live, and on Windows it hands the engine
-  `WindowsProcessCpu` for that readout's CPU share and `WindowsThreadCpu` for
-  `profile.get`'s threads.
+  `WindowsProcessCpu` for that readout's CPU share, `WindowsThreadCpu` for
+  `profile.get`'s threads and `WindowsThreadPriority` for the render and mixer threads'
+  MMCSS tasks ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
   When the app exits, the server closes its connections and the engine stops.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing

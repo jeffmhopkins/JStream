@@ -44,6 +44,11 @@ Contents:
   for `profile.get`'s threads
   ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)); `None` where the
   platform can't list them. It is read on the same threads, never a real-time one.
+  `ThreadPriority` (`Send + Sync`) puts the calling thread in the OS's scheduling class
+  for its `ThreadRole` (`Video` for the render thread, `Audio` for the mixer) until the
+  `RaisedThread` guard it returns drops on that thread
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `None` where the
+  OS refuses.
 - **Frames:** `VideoSurface`, the frame type that crosses the seam: `Cpu`, a
   `VideoFrame` in system memory, or `Gpu`, a `GpuFrame` in a texture shared with the
   platform. It is `#[non_exhaustive]`.
@@ -253,7 +258,8 @@ Contents:
   `MemoryKeyStore` (an in-memory `StreamKeyStore` that can be made to fail),
   `MemoryTokenStore` (the same for `OAuthTokenStore`, apart from any key store),
   `FakeCpu` (a `ProcessCpu` whose reading the test sets), `FakeThreads` (a `ThreadCpu`
-  whose list the test sets) and
+  whose list the test sets), `FakePriority` (a `ThreadPriority` that records each raise
+  and revert by thread name) and
   `fake::backends`. `plugin_host::fake::FakePluginHosts` (scans find the files a test
   adds; `refuse_starts` fails starts, `start_hung` starts hosts already hung, and
   `start_loading` starts hosts that don't get ready until `finish_loading`) runs each

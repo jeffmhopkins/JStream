@@ -147,6 +147,9 @@ pub fn engine(
     engine.set_thread_cpu(Arc::new(jstream_platform_macos::MacosThreadCpu));
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     engine.set_thread_cpu(Arc::new(jstream_platform_linux::LinuxThreadCpu));
+    // The render and mixer threads' MMCSS tasks (ADR-0117 §8).
+    #[cfg(windows)]
+    engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
     engine.start_stats_heartbeat();
     Ok(engine)
 }
