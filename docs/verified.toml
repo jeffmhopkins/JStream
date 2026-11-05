@@ -5664,7 +5664,7 @@ stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "scene-re
 stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "scenes.spec.js: the search box is now 'Search sources' and the funnel is matched with exact: true next to the tool bar's buttons; fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/stream-stats.spec.js"]
-stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Re-read against stream-stats.spec.js's hover step: it uses showPanel and the existing statsTicks fixture, so the harness description holds." }
+stamp = { hash = "b3:d01d303ced538ef1", by = "agent:claude", note = "#1191: stream-stats.spec.js now expects the default profile's 6000 kbps CBR line; the harness itself is unchanged, still holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/studio.spec.js"]
 stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for #868: recordCalls joined the fixtures (passes every message on; sent(type) finds edits and actions in the requests); the new transitions.spec.js uses it, and no longer checks an Inspector hotkey row since IN-08 is #865's; daemon, seed and setup unchanged. | kept from the merged side: #304's studio.spec.js uses the harness's connect and showPanel (Transitions is a tab behind Outputs); docking.spec.js expects the sixth panel; harness text unchanged and accurate; holds" }
@@ -5688,7 +5688,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:7a0ae014dd2cec54", by = "agent:claude", note = "#1119: the Codec downloads bullet now says About lists the installed download with notice, link and terms and that Delete takes it out of About, as codec-downloads.spec.js checks" }
+stamp = { hash = "b3:0137c5f4785ecb3c", by = "agent:claude", note = "#1191: edited the Stream stats entry to the default profile's H.264 at 6000 kbps, matching the spec" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/canvas.spec.js"]
 stamp = { hash = "b3:87accd39f503289f", by = "agent:obs-ui-thread", note = "The tests list names canvas.spec's lock case and menus.spec's Lock and Screenshot (source/scene) labels and the screenshot toast (the mock refuses png, so a toast shows)." }
@@ -5772,7 +5772,7 @@ stamp = { hash = "b3:30c9d70da9b2b731", by = "agent:ui-parity", note = "Added th
 stamp = { hash = "b3:eddd853fbaab0be8", by = "agent:obs-ui-thread", note = "scenes.spec.js: the search box is now 'Search sources' and the funnel is matched with exact: true next to the tool bar's buttons; fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/stream-stats.spec.js"]
-stamp = { hash = "b3:1c247e1d066e4b31", by = "agent:ui-parity", note = "Edited the Stream stats bullet: hovering the chart's right edge reads the newest sample 'now', further left the one before '1 s ago', and the tooltip goes when the pointer leaves." }
+stamp = { hash = "b3:d01d303ced538ef1", by = "agent:claude", note = "#1191: edited the Stream stats entry to the default profile's H.264 at 6000 kbps, matching the spec" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/studio.spec.js"]
 stamp = { hash = "b3:8d7ee11b9ff325d1", by = "agent:claude", note = "Re-read for #868 after merging wave/m1-5: scenes.spec covers a click switching program and studio mode's preview, hover button and kept mode; studio.spec turns studio mode on and covers the bar's visibility and the preset picker's sent edits; the new transitions.spec covers the submenus, the Properties dialog (hotkey read back by the dialog), the canvas margin and the Inspector's scene switches; the wave's mixer spec text holds. | kept from the merged side: #304's Studio mode bullet now runs on the Transitions tab and drops the canvas-follows-program check (the wave's canvas follows the selected scene); Docking names Transitions beside Outputs; 29 tests pass locally against Chromium; holds" }

@@ -29,7 +29,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(stats.locator('.stats-pill')).toHaveText('READY');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
   await expect(stats).toContainText('Record to /tmp/stats.mp4');
-  await expect(stats).toContainText('H.264 · 2500 kbps CBR');
+  await expect(stats).toContainText('H.264 · 6000 kbps CBR');
 
   await card.getByRole('button', { name: 'Start' }).click();
   await expect(card.locator('.badge')).toHaveText('Live');
