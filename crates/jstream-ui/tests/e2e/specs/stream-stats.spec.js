@@ -29,7 +29,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(stats.locator('.stats-pill')).toHaveText('READY');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
   await expect(stats).toContainText('Record to /tmp/stats.mp4');
-  await expect(stats).toContainText('H.264 · 6000 kbps CBR');
+  await expect(stats).toContainText('H.264 · 8000 kbps CBR');
 
   await card.getByRole('button', { name: 'Start' }).click();
   await expect(card.locator('.badge')).toHaveText('Live');
@@ -45,7 +45,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(stats.locator('.stats-uptime')).toHaveText('01:02:03');
   const tiles = stats.locator('.stats-tile');
   await expect(tiles.nth(0)).toContainText('2.65 Mbps');
-  await expect(tiles.nth(0)).toContainText('target 6.16 Mbps');
+  await expect(tiles.nth(0)).toContainText('target 8.16 Mbps');
   await expect(tiles.nth(1)).toContainText('0.00% this run');
   await expect(stats.locator('.stats-health')).toContainText('Stream health: Excellent');
   await expect(stats.locator('.stats-chart polyline')).toHaveCount(1);

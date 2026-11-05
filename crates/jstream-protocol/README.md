@@ -1034,7 +1034,7 @@ is refused with `invalid_argument` naming the field. Whether the machine has an 
 for the codec is not checked there, since a profile is valid on any machine: an
 `output.start` on a machine with none fails. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
-no `profile_id` back at the engine's default (H.264 CBR 6000 kbit/s, a keyframe every
+no `profile_id` back at the engine's default (H.264 CBR 8000 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.

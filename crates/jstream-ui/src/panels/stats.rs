@@ -827,8 +827,8 @@ mod tests {
 
         let mut profile = EncoderProfile::DEFAULT;
         // Video and audio, as `kbps` counts both.
-        assert_eq!(target_kbps(&profile), Some(6160));
-        assert_eq!(video_line(&profile), "H.264 · 6000 kbps CBR");
+        assert_eq!(target_kbps(&profile), Some(8160));
+        assert_eq!(video_line(&profile), "H.264 · 8000 kbps CBR");
         assert_eq!(audio_line(&profile), "AAC · 160 kbps");
         profile.video.codec = VideoCodec::Av1;
         profile.video.rate_control = RateControl::Vbr {
