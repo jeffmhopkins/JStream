@@ -461,8 +461,8 @@ state machine. Contents:
   the same for a GPU capture of another size), a mix of another aspect ratio
   letterboxed and a `scene` mix drawing its own scene, the scene each mix plans and the
   captures only a mix shows, the program stage's output size following the canvas,
-  captures converted to RGBA8 at
-  their own size (NV12 with its matrix and range), and nested-scene layers reused
+  captures uploaded at
+  their own size (NV12 converted on the GPU with its matrix and range), and nested-scene layers reused
   frame after frame then freed after the fence, render-snapshot generations, the
   reader slot and the collector in `runtime/render.rs`, the render thread adopting a
   published snapshot (CPU stand-in), an output starting a capture for each display and
@@ -2734,11 +2734,14 @@ compositor scales it to its item's placement. Which device it composites on, and
 the capture reaches it, is chosen when the program stage opens (see [Runtime](#runtime)). On the GPU path it
 keeps each capture's newest `GpuFrame` until a newer one replaces it, and the cache attaches the
 frame's hold only to the frame that draws it, so a held capture slot is the frame on
-screen and nothing more. On the CPU path it converts each capture's newest frame to
-RGBA8 (RGBA copied, BGRA swizzled, NV12, which Windows' capture delivers, converted
-with its frame's matrix and range), opaque: alpha is 255 on every pixel, as the GPU
-path reads a capture's (#451); only what the program mix shows is captured, so
-a program without a `display` or `window` source converts nothing. Each tick first calls `RenderReader::adopt`, which
+screen and nothing more. On the CPU path it keeps each capture's newest frame as it
+arrived (packed RGBA or BGRA, or NV12, which Windows' capture delivers), checking only
+that its rows are long enough, and the compositor uploads it with
+`ResourceCache::upload_frame`, which converts it on the GPU with its frame's matrix and
+range ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §2), opaque: alpha
+is 1 on every pixel, as the GPU path reads a capture's (#451). The render thread copies
+the bytes into a buffer and converts no pixel; only what the program mix shows is
+captured, so a program without a `display` or `window` source uploads nothing. Each tick first calls `RenderReader::adopt`, which
 compares one pointer with the published snapshot and, when a new one arrived, adopts
 it: it stores its generation in the hub's reader slot (one `SeqCst` store) and hands
 the snapshot it held to the program stage's `jstream-collector` thread. Then it does the

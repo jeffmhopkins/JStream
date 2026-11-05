@@ -24,8 +24,10 @@
 //! - `model_1080p`: one built-in sphere drawn into a 1080p layer through that camera,
 //!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
 //!   model; and the same with a cube, the cheapest closed shape.
-//! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (CPU premultiply in linear
-//!   light, then the queue write), as an image or browser source does on a new frame.
+//! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (the bytes copied into a
+//!   buffer, then premultiplied in linear light on the GPU), as an image or media source
+//!   does on a new frame: `rewrite` with the GPU's work waited for, `rewrite_call` the
+//!   calling thread's part alone, which is what a render tick pays.
 
 use std::hint::black_box;
 use std::io::Write;
@@ -338,6 +340,24 @@ fn rewrite(c: &mut Criterion) {
             // The write is staged until a submit; submit it so staging does not pile up.
             compositor.queue().submit([]);
             wait(&compositor);
+        });
+    });
+    // What the calling thread (the render thread) spends, without waiting for the GPU
+    // to run the conversion: the cost a tick pays for a new CPU frame (ADR-0117 §2).
+    group.bench_function("rewrite_call", |b| {
+        b.iter_custom(|iters| {
+            let mut spent = std::time::Duration::ZERO;
+            for _ in 0..iters {
+                next ^= 1;
+                let started = std::time::Instant::now();
+                compositor
+                    .rewrite_rgba8(&image, &frames[next])
+                    .expect("invariant: the image bytes match");
+                spent += started.elapsed();
+                compositor.queue().submit([]);
+                wait(&compositor);
+            }
+            spent
         });
     });
     group.finish();

@@ -17,6 +17,7 @@ mod error;
 mod filter;
 mod gpu;
 mod image;
+mod ingest;
 mod mips;
 mod model;
 mod place;

@@ -34,6 +34,7 @@ use std::thread::JoinHandle;
 
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Rounding, Timebase,
+    VideoFrame,
 };
 use jstream_platform::{
     Capture, CaptureEncoding, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, Codecs,
@@ -329,9 +330,9 @@ fn open_device(
 
 /// The format a webcam or capture card is opened in, from those it lists.
 ///
-/// The candidates are the formats whose frames arrive uncompressed in a format
-/// [`rgba_from_surface`] converts (RGBA, BGRA, or NV12, which YUY2 is delivered as), and
-/// MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at most
+/// The candidates are the formats whose frames arrive uncompressed in a format the
+/// compositor uploads ([`readable_cpu_frame`]: RGBA, BGRA, or NV12, which YUY2 is
+/// delivered as), and MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at most
 /// [`MAX_DEVICE_PIXELS`] (else the smallest), then the fastest, then an uncompressed one
 /// (no decoding), then the first listed. `None` when no format is a candidate.
 pub(crate) fn device_format(
@@ -431,8 +432,6 @@ struct Slot {
     frame: Option<Latest>,
     /// The version of `frame`.
     version: u64,
-    /// The latest CPU frame's pixels, reused from frame to frame.
-    rgba: Vec<u8>,
     warned_format: bool,
     /// The epoch of the slot's latest start: an answer to an earlier one is stopped
     /// again. A video device keeps its epoch when the render thread leaves the GPU path,
@@ -457,7 +456,8 @@ enum State {
 }
 
 enum Latest {
-    Cpu(FrameSize),
+    /// As it arrived: the compositor converts it on the GPU (ADR-0117 §2).
+    Cpu(VideoFrame),
     Gpu(GpuFrame),
 }
 
@@ -619,10 +619,10 @@ impl RenderCaptures {
                 }
                 Ok(Some(surface)) => {
                     *failing = false;
-                    if let Some(size) = rgba_from_surface(&surface, &mut slot.rgba) {
+                    if let Some(frame) = readable_cpu_frame(surface) {
                         self.versions += 1;
                         slot.version = self.versions;
-                        slot.frame = Some(Latest::Cpu(size));
+                        slot.frame = Some(Latest::Cpu(frame));
                     } else if !slot.warned_format {
                         slot.warned_format = true;
                         tracing::warn!(
@@ -656,7 +656,7 @@ impl RenderCaptures {
     fn report_sizes(&mut self) {
         for (spec, slot) in &mut self.slots {
             let size = match &slot.frame {
-                Some(Latest::Cpu(size)) => *size,
+                Some(Latest::Cpu(frame)) => frame.info().size,
                 Some(Latest::Gpu(frame)) => frame.info().size,
                 // A capture restarting keeps the size it had until a frame says otherwise.
                 None => continue,
@@ -731,10 +731,7 @@ impl Captures for RenderCaptures {
         let slot = self.slots.get(spec)?;
         let image = match slot.frame.as_ref()? {
             Latest::Gpu(frame) => CaptureImage::Gpu(frame),
-            Latest::Cpu(size) => CaptureImage::Rgba {
-                size: *size,
-                rgba: &slot.rgba,
-            },
+            Latest::Cpu(frame) => CaptureImage::Cpu(frame),
         };
         Some(CaptureFrame {
             version: slot.version,
@@ -756,7 +753,6 @@ impl Slot {
             state: State::Starting,
             frame: None,
             version: 0,
-            rgba: Vec::new(),
             warned_format: false,
             epoch: 0,
             reported: None,
@@ -778,6 +774,32 @@ fn send_size(sizes: &Option<Sender<SizeChange>>, key: &CaptureKey, size: Option<
 fn add(total: &mut CaptureStats, stats: CaptureStats) {
     total.frames_captured = total.frames_captured.saturating_add(stats.frames_captured);
     total.frames_skipped = total.frames_skipped.saturating_add(stats.frames_skipped);
+}
+
+/// `surface` when it is a CPU frame the compositor converts (packed RGBA8 or BGRA8, or
+/// NV12, which YUY2 is delivered as) with planes long enough for its size. Checking rows
+/// costs one comparison each; the pixels are converted on the GPU (ADR-0117 §2).
+fn readable_cpu_frame(surface: VideoSurface) -> Option<VideoFrame> {
+    let VideoSurface::Cpu(frame) = surface else {
+        return None;
+    };
+    let info = frame.info();
+    let width = info.size.width() as usize;
+    let height = info.size.height();
+    let ok = match info.format {
+        PixelFormat::Rgba8 | PixelFormat::Bgra8 => {
+            let row = width.checked_mul(4)?;
+            (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= row))
+        }
+        PixelFormat::Nv12 => {
+            let chroma = width.div_ceil(2) * 2;
+            (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= width))
+                && (0..height.div_ceil(2))
+                    .all(|y| frame.row(1, y).is_some_and(|r| r.len() >= chroma))
+        }
+        _ => false,
+    };
+    ok.then_some(frame)
 }
 
 /// Converts a CPU capture into `out` as opaque RGBA8, reusing its allocation, and returns

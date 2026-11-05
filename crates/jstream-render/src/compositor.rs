@@ -1,6 +1,6 @@
 //! The two passes: composite in FP16 linear light, then resolve to straight sRGB.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use jstream_platform::FrameSync;
@@ -11,6 +11,7 @@ use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
+use crate::ingest::Ingest;
 use crate::mips::{MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
@@ -96,6 +97,9 @@ pub struct Compositor {
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
+    /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
+    /// because uploads take `&self`; only the thread drawing with the compositor takes it.
+    ingest: Mutex<Option<Ingest>>,
 }
 
 impl Compositor {
@@ -116,8 +120,9 @@ impl Compositor {
 
     /// Uploads tightly packed straight-alpha sRGB RGBA8.
     ///
-    /// The bytes are premultiplied in linear light on the CPU and stored as
-    /// `Rgba16Float`, so the linear filter cannot darken transparent edges.
+    /// The bytes are premultiplied in linear light on the GPU and stored as
+    /// `Rgba16Float`, so the linear filter cannot darken transparent edges. This thread
+    /// only copies them into a buffer and records the conversion (ADR-0117 §2).
     ///
     /// # Errors
     /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::ImageBytes`] when
@@ -432,6 +437,32 @@ impl Compositor {
         image::rewrite(&self.maker(), image, rgba)
     }
 
+    /// Uploads a CPU video frame read as opaque: packed RGBA8 or BGRA8, or NV12 with its
+    /// matrix and range, converted to premultiplied linear on the GPU (ADR-0117 §2). A
+    /// capture's alpha means nothing, so every texel is opaque (#451).
+    ///
+    /// # Errors
+    /// [`RenderError::UnsupportedTexture`] for another layout, [`RenderError::Invalid`]
+    /// for planes too short for the frame or an odd-sized NV12 frame's missing chroma,
+    /// and [`RenderError::TooLarge`] when a side exceeds the adapter limit.
+    pub fn upload_frame(&self, frame: &jstream_media::VideoFrame) -> Result<Image, RenderError> {
+        image::upload_frame(&self.maker(), frame)
+    }
+
+    /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
+    /// as [`Self::upload_frame`] reads it, without allocating a texture.
+    ///
+    /// # Errors
+    /// As for [`Self::upload_frame`], and [`RenderError::Invalid`] when `image` is not
+    /// an upload this compositor made at the frame's size.
+    pub fn rewrite_frame(
+        &self,
+        image: &Image,
+        frame: &jstream_media::VideoFrame,
+    ) -> Result<(), RenderError> {
+        image::rewrite_frame(&self.maker(), image, frame)
+    }
+
     /// Draws `filter` over `input` into a new layer of the filter's
     /// [`VideoFilter::output_size`], at the media-clock time `clock`. The filter keeps
     /// its state, so a stateful kind (a video delay) must see every frame in order.
@@ -508,6 +539,7 @@ impl Compositor {
                 layout: &self.image_layout,
                 sampler: &self.sampler,
                 owner: &self.owner,
+                ingest: &self.ingest,
             },
             runtime: &mut self.filters,
             encoder: &mut encoder,
@@ -637,6 +669,7 @@ impl Compositor {
             layout: &self.image_layout,
             sampler: &self.sampler,
             owner: &self.owner,
+            ingest: &self.ingest,
         }
     }
 
@@ -701,6 +734,7 @@ impl Compositor {
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
+            ingest: Mutex::new(None),
         }
     }
 

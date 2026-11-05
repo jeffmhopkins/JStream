@@ -268,7 +268,23 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                 {
                     let (size, out) = (frame.size, &mut frame.out);
                     out.clear();
-                    match first.map(|capture| capture.image) {
+                    // The GPU path converts a CPU capture as it uploads it; this one
+                    // converts it here, for tests.
+                    let mut converted = Vec::new();
+                    let image = first.map(|capture| match capture.image {
+                        CaptureImage::Cpu(frame) => {
+                            let surface = VideoSurface::Cpu(frame.clone());
+                            match captures::rgba_from_surface(&surface, &mut converted) {
+                                Some(own) => CaptureImage::Rgba {
+                                    size: own,
+                                    rgba: &converted,
+                                },
+                                None => capture.image,
+                            }
+                        }
+                        image => image,
+                    });
+                    match image {
                         Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
                             out.extend_from_slice(rgba);
                         }

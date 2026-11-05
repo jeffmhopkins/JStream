@@ -1208,7 +1208,10 @@ Staging attaches to the queue's next submit, so render holds the context's
 conversion's), and other threads that submit on that queue (the browser source's
 copies, Linux's PipeWire capture copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)), uploaded as
+they arrive (RGBA8, BGRA8 or NV12) and converted to premultiplied linear by a compute
+pass, so the render thread copies bytes but converts no pixel
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §2). A
 browser source's page paints on the same context and is imported the same way, read
 as premultiplied sRGB (`import_premultiplied`), CEF's layout. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
