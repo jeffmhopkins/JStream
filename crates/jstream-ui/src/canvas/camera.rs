@@ -169,7 +169,8 @@ pub fn outline(geometry: &ItemGeometry, view: &CameraView) -> String {
 }
 
 /// The upright box around the part of the box in front of the camera, for a marquee to
-/// touch and a label to sit on, or `None` when none of it is.
+/// touch, or `None` when none of it is. A name whose top edge is in front of the camera
+/// sits on that corner instead; one whose top-left is behind uses these bounds.
 pub fn screen_box(geometry: &ItemGeometry, view: &CameraView) -> Option<ItemGeometry> {
     let quad = polygon(geometry, view)?;
     let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
