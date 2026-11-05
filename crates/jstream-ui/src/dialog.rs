@@ -10,9 +10,7 @@ use leptos::ev;
 use leptos::html;
 use leptos::prelude::*;
 use leptos::web_sys::wasm_bindgen::JsCast;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 /// Whether Enter on an element of this tag presses the dialog's primary button. A text
 /// area takes Enter as a new line, and a button or a select acts on it themselves.
@@ -52,37 +50,62 @@ fn clamp_top(start: f64, size: f64, viewport: f64, delta: f64) -> f64 {
     if top < 0.0 { -start } else { delta }
 }
 
-/// Two header presses this close, in time and in pixels, put the dialog back in the
-/// centre. Farther apart, the second press is a new drag.
-const DOUBLE_CLICK: Duration = Duration::from_millis(500);
+/// Two header presses this close, in milliseconds and in pixels, put the dialog back
+/// in the centre. Farther apart, the second press is a new drag. The clock is the
+/// pointer event's own `timeStamp`: `Instant` has no clock on `wasm32-unknown-unknown`
+/// and traps there.
+const DOUBLE_CLICK_MS: f64 = 500.0;
 /// A press that travels no farther than this is still a click, not a drag.
 const CLICK_PX: f64 = 4.0;
 
-/// Whether a second press at `at`, `elapsed` after one at `previous`, is a double-click.
-fn is_double_click(previous: Option<(f64, f64)>, at: (f64, f64), elapsed: Duration) -> bool {
+/// Whether a second press at `at`, `elapsed_ms` after one at `previous`, is a double-click.
+fn is_double_click(previous: Option<(f64, f64)>, at: (f64, f64), elapsed_ms: f64) -> bool {
     let Some((x, y)) = previous else {
         return false;
     };
-    elapsed <= DOUBLE_CLICK && (at.0 - x).hypot(at.1 - y) <= CLICK_PX
+    elapsed_ms.is_finite()
+        && (0.0..=DOUBLE_CLICK_MS).contains(&elapsed_ms)
+        && (at.0 - x).hypot(at.1 - y) <= CLICK_PX
 }
 
-// Where each dialog was left, by its accessible name, for this page. The engine's UI
-// settings (ADR-0084) are the layout that follows the person; a dialog's place does
-// not, and a reload forgets it.
-thread_local! {
-    static PLACED: RefCell<HashMap<&'static str, (f64, f64)>> = RefCell::new(HashMap::new());
+/// Where each dialog was left, by its accessible name, for this page. The shell
+/// provides it. The engine's UI settings (ADR-0084) are the layout that follows the
+/// person; a dialog's place does not, and a reload forgets it. With no context, a
+/// dialog stays centred.
+#[derive(Clone, Copy)]
+pub struct DialogPlaces(StoredValue<HashMap<&'static str, (f64, f64)>>);
+
+impl DialogPlaces {
+    /// An empty map of places.
+    pub fn new() -> Self {
+        Self(StoredValue::new(HashMap::new()))
+    }
+
+    /// The offset remembered for `label`, or the centred place.
+    fn get(self, label: &'static str) -> (f64, f64) {
+        self.0
+            .with_value(|placed| placed.get(label).copied())
+            .unwrap_or((0.0, 0.0))
+    }
+
+    /// Remembers `at` as where `label`'s dialog was left.
+    fn set(self, label: &'static str, at: (f64, f64)) {
+        self.0.update_value(|placed| {
+            placed.insert(label, at);
+        });
+    }
 }
 
-/// The offset remembered for `label`, or the centred place.
-fn remembered(label: &'static str) -> (f64, f64) {
-    PLACED.with(|placed| placed.borrow().get(label).copied().unwrap_or((0.0, 0.0)))
+impl Default for DialogPlaces {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-/// Remembers `at` as where `label`'s dialog was left.
-fn remember(label: &'static str, at: (f64, f64)) {
-    PLACED.with(|placed| {
-        placed.borrow_mut().insert(label, at);
-    });
+/// Milliseconds on the pointer event's clock (`Event.timeStamp`).
+fn event_ms(event: &ev::PointerEvent) -> f64 {
+    let event: &leptos::web_sys::Event = event.as_ref();
+    event.time_stamp()
 }
 
 /// The window's inner size in CSS pixels. Zero when the page has no size yet.
@@ -157,15 +180,19 @@ pub fn Modal(
     children: Children,
 ) -> impl IntoView {
     let dialog = NodeRef::<html::Div>::new();
-    let offset = RwSignal::new(remembered(label));
-    // The drag in progress, and the last header click that did not itself drag, so a
-    // second press can put the dialog back in the centre.
+    // The shell's map. A dialog drawn without it (none are) stays centred.
+    let places = use_context::<DialogPlaces>();
+    let offset = RwSignal::new(places.map(|p| p.get(label)).unwrap_or((0.0, 0.0)));
+    // The drag in progress, and the last header click that did not itself drag: its
+    // place and the pointer event's time, so a second press can centre the dialog.
     let drag = StoredValue::new(None::<Drag>);
-    let click = StoredValue::new(None::<(Instant, f64, f64)>);
+    let click = StoredValue::new(None::<(f64, f64, f64)>);
     let place = move |next: (f64, f64)| {
         if offset.get_untracked() != next {
             offset.set(next);
-            remember(label, next);
+            if let Some(places) = places {
+                places.set(label, next);
+            }
         }
     };
     // Focus the dialog's first field, so Enter and Escape reach it at once, and pull a
@@ -213,7 +240,7 @@ pub fn Modal(
         // A press that barely moved can be the first of a double-click. A drag, or a
         // cancelled press, cannot.
         if as_click && (at.0 - state.x).hypot(at.1 - state.y) <= CLICK_PX {
-            click.set_value(Some((Instant::now(), state.x, state.y)));
+            click.set_value(Some((event_ms(event), state.x, state.y)));
         } else {
             click.set_value(None);
         }
@@ -281,7 +308,7 @@ pub fn Modal(
         event.prevent_default();
         let at = at_pointer(&event);
         if let Some((when, x, y)) = click.get_value()
-            && is_double_click(Some((x, y)), at, when.elapsed())
+            && is_double_click(Some((x, y)), at, event_ms(&event) - when)
         {
             click.set_value(None);
             place((0.0, 0.0));
@@ -343,8 +370,7 @@ pub fn Modal(
 
 #[cfg(test)]
 mod tests {
-    use super::{CLICK_PX, DOUBLE_CLICK, clamp_axis, clamp_top, enter_submits, is_double_click};
-    use std::time::Duration;
+    use super::{CLICK_PX, DOUBLE_CLICK_MS, clamp_axis, clamp_top, enter_submits, is_double_click};
 
     #[test]
     fn enter_presses_the_primary_button_from_fields_only() {
@@ -393,22 +419,16 @@ mod tests {
     #[test]
     fn a_second_press_close_and_soon_is_a_double_click() {
         let at = (10.0, 20.0);
-        assert!(is_double_click(
-            Some(at),
-            (12.0, 21.0),
-            Duration::from_millis(200)
-        ));
-        assert!(is_double_click(Some(at), at, DOUBLE_CLICK));
-        assert!(!is_double_click(None, at, Duration::from_millis(10)));
+        assert!(is_double_click(Some(at), (12.0, 21.0), 200.0));
+        assert!(is_double_click(Some(at), at, DOUBLE_CLICK_MS));
+        assert!(!is_double_click(None, at, 10.0));
         assert!(!is_double_click(
             Some((at.0 + CLICK_PX + 1.0, at.1)),
             at,
-            Duration::from_millis(10)
+            10.0
         ));
-        assert!(!is_double_click(
-            Some(at),
-            at,
-            DOUBLE_CLICK + Duration::from_millis(1)
-        ));
+        assert!(!is_double_click(Some(at), at, DOUBLE_CLICK_MS + 1.0));
+        // A bad stamp must not count: `NaN` comparisons are never true.
+        assert!(!is_double_click(Some(at), at, f64::NAN));
     }
 }

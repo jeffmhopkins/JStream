@@ -238,7 +238,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   button; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   Dragging the title moves the dialog, which stays inside the window and opens again
-  where it was left; the header's × still closes it.
+  where it was left; a double-click on the title centres it, and the header's × still
+  closes it.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively. A video capture device created through Add source, with its descriptor
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`

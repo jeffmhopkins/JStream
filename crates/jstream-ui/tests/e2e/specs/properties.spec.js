@@ -2,7 +2,8 @@
 // name and settings that OK sends as one edit, showing each setting the kind marks live
 // as a live value meanwhile (ADR-0091), and lists the source's filters (seeded: Sharpen,
 // then Blur turned off). Dragging its title moves the dialog, which reopens where it
-// was left, and the header's × still closes it. The mock engine
+// was left; a double-click on the title centres it, and the header's × still closes
+// it. The mock engine
 // describes no kinds, so the settings form itself is covered natively; the webcam's
 // live picture gets its descriptor from the page's socket (`describeKinds`).
 import { test, expect, connect, describeKinds, openAddSource, rev } from '../fixtures.js';
@@ -230,6 +231,12 @@ test('dragging the header moves the dialog, and it reopens there', async ({ page
   const moved = await dialog.boundingBox();
   closeTo(moved.x, before.x + dx);
   closeTo(moved.y, before.y + dy);
+
+  // A double-click on the title puts the dialog back in the centre.
+  await title.dblclick();
+  const centred = await dialog.boundingBox();
+  closeTo(centred.x, before.x);
+  closeTo(centred.y, before.y);
   const viewport = page.viewportSize();
   expect(moved.x).toBeGreaterThanOrEqual(-0.5);
   expect(moved.y).toBeGreaterThanOrEqual(-0.5);

@@ -276,6 +276,8 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(MixerOrientation::new());
     provide_context(ActivityCleared::new());
     provide_context(crate::canvas::taps::PreviewTaps::new());
+    // Each dialog's place for this page. Not the engine's UI settings (ADR-0084).
+    provide_context(crate::dialog::DialogPlaces::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
