@@ -325,7 +325,8 @@ pub fn Canvas() -> impl IntoView {
         }
         let next = current.showing(want);
         stream.set_value(Some(next.clone()));
-        preview_state.set(PreviewState::Starting);
+        // A picture already shown stays until the new stream draws (#1205).
+        preview_state.update(|state| *state = state.resubscribed());
         let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };

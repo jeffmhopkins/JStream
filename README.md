@@ -176,6 +176,7 @@ An item counts toward the release it first ships in. A release's gate items are 
 | `0.1.0-alpha.2` | Fixes and UI work on the first build | 📦 released as `v0.1.0-alpha.2` | `██████████` 100% | 1 | 0 | 0 |
 | `0.1.0-alpha.3` | Fixes, compositor blend modes and capture pickers | 📦 released as `v0.1.0-alpha.3` | no items | 0 | 0 | 0 |
 | `0.1.0-alpha.4` | A functional alpha for building layered, animated scenes over MCP on Windows | 📦 released as `v0.1.0-alpha.4` | `██████████` 100% | 29 | 0 | 0 |
+| `0.1.0-alpha.4.1` | alpha.4 with the Windows run's fixes: dropped frames, stream and preview quality, browser sources from the zip | 🔨 next | no items | 0 | 0 | 0 |
 | Not scheduled | Roadmap items no release is gathering yet | ⏳ later | `█░░░░░░░░░` 8% | 1 | 0 | 11 |
 
 <details>

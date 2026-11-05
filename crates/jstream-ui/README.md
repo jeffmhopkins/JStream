@@ -1020,8 +1020,11 @@ browser, and `mod.rs` is the component.
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
-  channel number, so a late frame of the old stream is never drawn; until the new
-  stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  channel number, so a late frame of the old stream is never drawn. Until the new
+  stream's first frame, the last picture stays on the canvas (#1205: a scene switch can
+  re-subscribe twice, and a placeholder each time flashed grey boxes); only a canvas
+  that has shown no picture yet, or whose stream had ended, says the preview is
+  starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and

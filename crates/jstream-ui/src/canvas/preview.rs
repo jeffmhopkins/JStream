@@ -279,6 +279,17 @@ pub enum PreviewState {
 }
 
 impl PreviewState {
+    /// The state once the canvas subscribes to another scene's stream: `Live` stays
+    /// `Live`, so the last picture stays on the canvas until the new stream draws
+    /// (#1205: a scene switch re-subscribes, and showing the "Starting" placeholder
+    /// each time flashed grey boxes), and anything else starts again.
+    pub fn resubscribed(&self) -> PreviewState {
+        match self {
+            PreviewState::Live => PreviewState::Live,
+            _ => PreviewState::Starting,
+        }
+    }
+
     /// The text the canvas shows over the background, if any.
     pub fn message(&self) -> Option<String> {
         match self {
@@ -465,5 +476,15 @@ mod tests {
             Some("No preview: x")
         );
         assert_eq!(PreviewState::Live.message(), None);
+        // #1205: a re-subscribe keeps a live picture, and starts again otherwise.
+        assert_eq!(PreviewState::Live.resubscribed(), PreviewState::Live);
+        assert_eq!(
+            PreviewState::Starting.resubscribed(),
+            PreviewState::Starting
+        );
+        assert_eq!(
+            PreviewState::Unavailable("x".into()).resubscribed(),
+            PreviewState::Starting
+        );
     }
 }
