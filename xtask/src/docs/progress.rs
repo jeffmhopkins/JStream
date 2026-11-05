@@ -12,7 +12,8 @@ use anyhow::{Context, Result, bail};
 use super::generate::{begin, escape, with_block};
 use super::parse::{Diag, Doc};
 
-/// The data file: milestones and roadmap items with their status and PRs.
+/// The data file: releases, the next release's targets, milestones and roadmap items
+/// with their status and PRs.
 pub(crate) const DATA: &str = "docs/progress.toml";
 /// The doc that carries the block.
 const TARGET: &str = "README.md";
@@ -59,6 +60,22 @@ struct Release {
     tag: Option<String>,
 }
 
+/// One target of a release: an outcome it aims for, tracked by its issues and PRs. Targets
+/// sit beside the roadmap items a release carries; most come from a run's findings.
+#[derive(Debug)]
+struct Target {
+    release: String,
+    title: String,
+    /// The maintainer's priority, 1 first; unset for the rest.
+    priority: Option<u64>,
+    status: String,
+    issues: Vec<u64>,
+    prs: Vec<u64>,
+    note: Option<String>,
+    /// The maintainer hasn't yet put it in this release rather than the next.
+    undecided: bool,
+}
+
 /// One roadmap item: a PR-sized piece of a milestone.
 #[derive(Debug)]
 struct Item {
@@ -99,6 +116,7 @@ impl Item {
 #[derive(Debug)]
 struct Progress {
     releases: Vec<Release>,
+    targets: Vec<Target>,
     milestones: Vec<Milestone>,
     items: Vec<Item>,
 }
@@ -118,6 +136,47 @@ fn string(t: &toml::Table, key: &str, what: &str, errs: &mut Vec<String>) -> Str
 fn unknown_keys(t: &toml::Table, known: &[&str], what: &str, errs: &mut Vec<String>) {
     for k in t.keys().filter(|k| !known.contains(&k.as_str())) {
         errs.push(format!("{what}: unknown key `{k}`"));
+    }
+}
+
+/// An optional array of issue or PR numbers under `key`.
+fn numbers(t: &toml::Table, key: &str, what: &str, errs: &mut Vec<String>) -> Vec<u64> {
+    let Some(v) = t.get(key) else {
+        return Vec::new();
+    };
+    let nums: Option<Vec<u64>> = v.as_array().and_then(|a| {
+        a.iter()
+            .map(|x| x.as_integer().and_then(|n| u64::try_from(n).ok()))
+            .collect()
+    });
+    let nums = nums
+        .filter(|n| n.iter().all(|&p| p > 0))
+        .unwrap_or_else(|| {
+            let noun = if key == "prs" { "PR" } else { "issue" };
+            errs.push(format!(
+                "{what}: `{key}` must be an array of {noun} numbers"
+            ));
+            Vec::new()
+        });
+    let mut seen = BTreeSet::new();
+    if nums.iter().any(|p| !seen.insert(p)) {
+        let noun = if key == "prs" { "a PR" } else { "an issue" };
+        errs.push(format!("{what}: {noun} is listed twice in `{key}`"));
+    }
+    nums
+}
+
+/// An optional non-empty string under `key`.
+fn optional(t: &toml::Table, key: &str, what: &str, errs: &mut Vec<String>) -> Option<String> {
+    match t.get(key) {
+        None => None,
+        Some(v) => match v.as_str() {
+            Some(s) if !s.trim().is_empty() => Some(s.to_owned()),
+            _ => {
+                errs.push(format!("{what}: `{key}` must be a non-empty string"));
+                None
+            }
+        },
     }
 }
 
@@ -147,7 +206,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
     let mut errs = Vec::new();
     unknown_keys(
         &doc,
-        &["release", "milestone", "item"],
+        &["release", "target", "milestone", "item"],
         "top level",
         &mut errs,
     );
@@ -181,6 +240,85 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
             ));
         }
         releases.push(r);
+    }
+    let mut targets = Vec::new();
+    for t in tables(&doc, "target", &mut errs) {
+        let title = string(t, "title", "target", &mut errs);
+        let what = format!("target `{title}`");
+        unknown_keys(
+            t,
+            &[
+                "release",
+                "title",
+                "priority",
+                "status",
+                "issues",
+                "prs",
+                "note",
+                "undecided",
+            ],
+            &what,
+            &mut errs,
+        );
+        let priority = match t.get("priority") {
+            None => None,
+            Some(v) => match v.as_integer().and_then(|n| u64::try_from(n).ok()) {
+                Some(n) if n > 0 => Some(n),
+                _ => {
+                    errs.push(format!("{what}: `priority` must be a whole number from 1"));
+                    None
+                }
+            },
+        };
+        let undecided = match t.get("undecided") {
+            None => false,
+            Some(v) => v.as_bool().unwrap_or_else(|| {
+                errs.push(format!("{what}: `undecided` must be true or false"));
+                false
+            }),
+        };
+        let g = Target {
+            release: string(t, "release", &what, &mut errs),
+            status: string(t, "status", &what, &mut errs),
+            issues: numbers(t, "issues", &what, &mut errs),
+            prs: numbers(t, "prs", &what, &mut errs),
+            note: optional(t, "note", &what, &mut errs),
+            priority,
+            undecided,
+            title,
+        };
+        match releases.iter().find(|r: &&Release| r.id == g.release) {
+            None if !g.release.is_empty() => errs.push(format!(
+                "{what}: unknown release `{}`; list it as a `[[release]]` first",
+                g.release
+            )),
+            Some(r) if r.tag.is_some() => errs.push(format!(
+                "{what}: release `{}` has shipped; targets are only for releases still to come",
+                g.release
+            )),
+            _ => {}
+        }
+        if !g.status.is_empty() && !STATUSES.iter().any(|(s, _)| *s == g.status) {
+            let names: Vec<&str> = STATUSES.iter().map(|(s, _)| *s).collect();
+            errs.push(format!(
+                "{what}: unknown status `{}` (one of {})",
+                g.status,
+                names.join(", ")
+            ));
+        }
+        if g.status != "planned" && !g.status.is_empty() && g.prs.is_empty() {
+            errs.push(format!(
+                "{what}: status `{}` needs its PRs in `prs`",
+                g.status
+            ));
+        }
+        if g.issues.is_empty() && g.prs.is_empty() {
+            errs.push(format!("{what}: name its `issues` or `prs`"));
+        }
+        if targets.iter().any(|o: &Target| o.title == g.title) {
+            errs.push(format!("duplicate target `{}`", g.title));
+        }
+        targets.push(g);
     }
     let mut milestones = Vec::new();
     for t in tables(&doc, "milestone", &mut errs) {
@@ -217,31 +355,8 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
             &what,
             &mut errs,
         );
-        let prs = match t.get("prs") {
-            None => Vec::new(),
-            Some(v) => {
-                let nums: Option<Vec<u64>> = v.as_array().and_then(|a| {
-                    a.iter()
-                        .map(|x| x.as_integer().and_then(|n| u64::try_from(n).ok()))
-                        .collect()
-                });
-                nums.filter(|n| n.iter().all(|&p| p > 0))
-                    .unwrap_or_else(|| {
-                        errs.push(format!("{what}: `prs` must be an array of PR numbers"));
-                        Vec::new()
-                    })
-            }
-        };
-        let note = match t.get("note") {
-            None => None,
-            Some(v) => match v.as_str() {
-                Some(s) if !s.trim().is_empty() => Some(s.to_owned()),
-                _ => {
-                    errs.push(format!("{what}: `note` must be a non-empty string"));
-                    None
-                }
-            },
-        };
+        let prs = numbers(t, "prs", &what, &mut errs);
+        let note = optional(t, "note", &what, &mut errs);
         let needs = match t.get("needs") {
             None => Vec::new(),
             Some(v) => v
@@ -351,10 +466,6 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
         if item.needs.iter().any(|n| !seen.insert(n)) {
             errs.push(format!("{what}: a step is listed twice in `needs`"));
         }
-        let mut seen = BTreeSet::new();
-        if item.prs.iter().any(|p| !seen.insert(p)) {
-            errs.push(format!("{what}: a PR is listed twice in `prs`"));
-        }
         if items.iter().any(|o: &Item| o.id == item.id) {
             errs.push(format!("duplicate item id `{}`", item.id));
         }
@@ -368,6 +479,7 @@ fn parse(text: &str) -> Result<Progress, Vec<String>> {
     if errs.is_empty() {
         Ok(Progress {
             releases,
+            targets,
             milestones,
             items,
         })
@@ -384,8 +496,7 @@ fn bar(n: usize, total: usize) -> String {
 
 /// The PR list cell.
 fn prs(item: &Item) -> String {
-    let list: Vec<String> = item.prs.iter().map(|p| format!("#{p}")).collect();
-    list.join(", ")
+    refs(&item.prs)
 }
 
 /// The status label of an item.
@@ -400,89 +511,116 @@ fn label(i: &Item) -> String {
     }
 }
 
-/// The progress cells of a group of items: bar and percentage, merged, in review and
-/// planned.
-fn cells(items: &[&Item]) -> String {
-    let merged = items.iter().filter(|i| i.merged()).count();
-    let review = items.iter().filter(|i| i.status == "review").count();
-    if items.is_empty() {
-        return "no items | 0 | 0 | 0".to_owned();
+/// The status label of a target.
+fn target_label(g: &Target) -> String {
+    let label = STATUSES
+        .iter()
+        .find(|(s, _)| *s == g.status)
+        .map_or("", |(_, l)| l);
+    let label = if g.undecided {
+        format!("{label}, ❔ this release or the next")
+    } else {
+        label.to_owned()
+    };
+    match &g.note {
+        Some(n) => format!("{label}: {}", escape(n)),
+        None => label,
     }
-    format!(
-        "{} {}% | {merged} | {review} | {}",
-        bar(merged, items.len()),
-        (merged * 200 + items.len()) / (items.len() * 2),
-        items.len() - merged - review,
-    )
 }
 
-/// The release part of the block: one row per release, and the items of each.
+/// A list of issue or PR numbers as `#n, #m`.
+fn refs(nums: &[u64]) -> String {
+    let list: Vec<String> = nums.iter().map(|p| format!("#{p}")).collect();
+    list.join(", ")
+}
+
+/// The release part of the block: the next release only, with its targets and the
+/// roadmap items it carries. Shipped releases stay in the data, for its checks, but
+/// aren't shown.
 fn releases(p: &Progress, out: &mut String) {
     if p.releases.is_empty() {
         return;
     }
-    let next = p.releases.iter().position(|r| r.tag.is_none());
-    out.push_str(
-        "### By release\n\n\
-         An item counts toward the release it first ships in. A release's gate items are \
-         the ones it waits for; the others are merged work it carries.\n\n\
-         | Release | Goal | Status | Progress | Merged | In review | Planned |\n\
-         |---|---|---|---|---|---|---|\n",
-    );
-    let of = |id: Option<&str>| -> Vec<&Item> {
-        p.items
-            .iter()
-            .filter(|i| i.release.as_deref() == id)
-            .collect()
-    };
-    for (n, r) in p.releases.iter().enumerate() {
-        let status = match (&r.tag, next) {
-            (Some(tag), _) => format!("📦 released as `{}`", escape(tag)),
-            (None, Some(k)) if k == n => {
-                let gate: Vec<&Item> = of(Some(&r.id)).into_iter().filter(|i| i.gate).collect();
-                if gate.is_empty() {
-                    "🔨 next".to_owned()
-                } else {
-                    format!(
-                        "🔨 next: waits on {} gate items, {} merged",
-                        gate.len(),
-                        gate.iter().filter(|i| i.merged()).count()
-                    )
-                }
-            }
-            (None, _) => "⏳ later".to_owned(),
-        };
-        let _ = writeln!(
-            out,
-            "| `{}` | {} | {status} | {} |",
-            escape(&r.version),
-            escape(&r.goal),
-            cells(&of(Some(&r.id)))
-        );
-    }
-    let rest = of(None);
-    if !rest.is_empty() {
-        let _ = writeln!(
-            out,
-            "| Not scheduled | Roadmap items no release is gathering yet | ⏳ later | {} |",
-            cells(&rest)
-        );
-    }
-    for (n, r) in p.releases.iter().enumerate() {
-        let mut items = of(Some(&r.id));
-        if items.is_empty() {
-            continue;
-        }
-        // Unfinished work first, so what the release still waits on leads.
-        let rank = |i: &Item| STATUSES.iter().rev().position(|(s, _)| *s == i.status);
-        items.sort_by_key(|i| (rank(i), !i.gate));
-        let merged = items.iter().filter(|i| i.merged()).count();
-        let open = if next == Some(n) { " open" } else { "" };
+    let latest = p.releases.iter().rev().find_map(|r| r.tag.as_deref());
+    let shipped = latest.map_or_else(String::new, |t| {
+        format!(" The latest shipped release is `{}`.", escape(t))
+    });
+    let Some(next) = p.releases.iter().find(|r| r.tag.is_none()) else {
         let _ = write!(
             out,
-            "\n<details{open}>\n<summary><b>{}</b>: {merged} of {} merged</summary>\n\n\
+            "### Next release\n\nNo release is being gathered yet.{shipped}\n"
+        );
+        out.push_str(WHOLE);
+        return;
+    };
+    let mut targets: Vec<&Target> = p.targets.iter().filter(|g| g.release == next.id).collect();
+    // The maintainer's priorities first, then the rest; undecided ones last. The sort is
+    // stable, so the data file's order holds within each group.
+    targets.sort_by_key(|g| (g.undecided, g.priority.is_none(), g.priority));
+    let mut items: Vec<&Item> = p
+        .items
+        .iter()
+        .filter(|i| i.release.as_deref() == Some(next.id.as_str()))
+        .collect();
+    // Unfinished work first, so what the release still waits on leads.
+    let rank = |i: &Item| STATUSES.iter().rev().position(|(s, _)| *s == i.status);
+    items.sort_by_key(|i| (rank(i), !i.gate));
+    // Progress counts the targets placed in this release and the items it carries.
+    let placed: Vec<&str> = targets
+        .iter()
+        .filter(|g| !g.undecided)
+        .map(|g| g.status.as_str())
+        .chain(items.iter().map(|i| i.status.as_str()))
+        .collect();
+    let total = placed.len();
+    let done = placed
+        .iter()
+        .filter(|s| matches!(**s, "done" | "hardware"))
+        .count();
+    let review = placed.iter().filter(|s| **s == "review").count();
+    let undecided = targets.iter().filter(|g| g.undecided).count();
+    let _ = write!(
+        out,
+        "### Next release: `{}`\n\n{}.{shipped} Its progress counts its targets and any \
+         roadmap items it carries. Priority is the maintainer's order, 1 first; a ❔ target \
+         may move to the release after, so it isn't counted.\n\n\
+         | Progress | Done | In progress | Planned | Undecided |\n|---|---|---|---|---|\n",
+        escape(&next.version),
+        escape(next.goal.trim_end_matches('.')),
+    );
+    if total == 0 {
+        let _ = writeln!(out, "| nothing placed yet | 0 | 0 | 0 | {undecided} |");
+    } else {
+        let _ = writeln!(
+            out,
+            "| {} {}% | {done} | {review} | {} | {undecided} |",
+            bar(done, total),
+            (done * 200 + total) / (total * 2),
+            total - done - review,
+        );
+    }
+    if !targets.is_empty() {
+        out.push_str("\n| Priority | Target | Status | Issues | PRs |\n|---|---|---|---|---|\n");
+        for g in &targets {
+            let _ = writeln!(
+                out,
+                "| {} | {} | {} | {} | {} |",
+                g.priority.map(|n| n.to_string()).unwrap_or_default(),
+                escape(&g.title),
+                target_label(g),
+                refs(&g.issues),
+                refs(&g.prs)
+            );
+        }
+    }
+    if !items.is_empty() {
+        let merged = items.iter().filter(|i| i.merged()).count();
+        let _ = write!(
+            out,
+            "\n<details open>\n<summary><b>Roadmap items in {}</b>: {merged} of {} merged</summary>\n\n\
+             A gate item (🚧) is one the release waits for.\n\n\
              | ID | Item | Gate | Milestone | Status | PRs |\n|---|---|---|---|---|---|\n",
-            escape(&r.version),
+            escape(&next.version),
             items.len()
         );
         for i in items {
@@ -499,8 +637,11 @@ fn releases(p: &Progress, out: &mut String) {
         }
         out.push_str("\n</details>\n");
     }
-    out.push_str("\n### By goal\n\nEach goal is a milestone of the roadmap.\n\n");
+    out.push_str(WHOLE);
 }
+
+/// The heading of the whole app's part of the block, after the next release.
+const WHOLE: &str = "\n### Whole app\n\nEvery roadmap item, by milestone.\n\n";
 
 /// The inside of the block: the releases, then a summary table of the milestones, then
 /// each milestone's items.
@@ -1018,6 +1159,35 @@ id = "a3"
 version = "0.1.0-alpha.3"
 goal = "Empty so far"
 
+[[target]]
+release = "a2"
+title = "Rest"
+status = "planned"
+prs = [31]
+
+[[target]]
+release = "a2"
+title = "Maybe"
+status = "planned"
+issues = [22]
+undecided = true
+
+[[target]]
+release = "a2"
+title = "Pop-outs"
+priority = 2
+status = "done"
+issues = [21]
+prs = [30]
+
+[[target]]
+release = "a2"
+title = "Fast preview"
+priority = 1
+status = "planned"
+issues = [20]
+note = "first"
+
 [[milestone]]
 id = "M1"
 title = "First"
@@ -1058,40 +1228,58 @@ needs = ["build"]
 "#;
 
     #[test]
-    fn renders_releases_then_goals() {
+    fn renders_the_next_release_then_the_whole_app() {
         let p = parse(DATA_RELEASES).expect("invariant: valid");
         let r = render(&p);
-        assert!(r.starts_with("### By release\n"), "{r}");
-        assert!(
-            r.contains("| `0.1.0-alpha.1` | First build | 📦 released as `v0.1.0-alpha.1` | `██████████` 100% | 1 | 0 | 0 |\n"),
-            "{r}"
-        );
-        assert!(
-            r.contains(
-                "| `0.1.0-alpha.2` | Agents \\| scenes | 🔨 next: waits on 1 gate items, 0 merged | `█████░░░░░` 50% | 1 | 1 | 0 |\n"
-            ),
-            "{r}"
-        );
-        assert!(
-            r.contains("| `0.1.0-alpha.3` | Empty so far | ⏳ later | no items | 0 | 0 | 0 |\n"),
-            "{r}"
-        );
-        assert!(r.contains("| Not scheduled |"), "{r}");
-        // The next release is open, with its unfinished items first.
-        let next = r
-            .find("<details open>\n<summary><b>0.1.0-alpha.2</b>: 1 of 2 merged</summary>")
-            .expect("next release open");
-        let gating = r[next..]
+        assert!(r.starts_with("### Next release: `0.1.0-alpha.2`\n\nAgents \\| scenes. The latest shipped release is `v0.1.0-alpha.1`."), "{r}");
+        // Shipped and later releases aren't shown, nor are items no release gathers.
+        assert!(!r.contains("0.1.0-alpha.1</b>"), "{r}");
+        assert!(!r.contains("0.1.0-alpha.3"), "{r}");
+        assert!(!r.contains("Not scheduled"), "{r}");
+        // Two items and three placed targets count; the undecided one doesn't.
+        assert!(r.contains("| `████░░░░░░` 40% | 2 | 1 | 2 | 1 |\n"), "{r}");
+        let first = r
+            .find("| 1 | Fast preview | ⏳ planned: first | #20 |  |")
+            .expect("priority 1");
+        let second = r
+            .find("| 2 | Pop-outs | ✅ merged | #21 | #30 |")
+            .expect("priority 2");
+        let rest = r
+            .find("|  | Rest | ⏳ planned |  | #31 |")
+            .expect("no priority");
+        let maybe = r
+            .find("|  | Maybe | ⏳ planned, ❔ this release or the next | #22 |  |")
+            .expect("undecided");
+        assert!(first < second && second < rest && rest < maybe, "{r}");
+        // Its items follow, unfinished first.
+        let items = r
+            .find("<details open>\n<summary><b>Roadmap items in 0.1.0-alpha.2</b>: 1 of 2 merged</summary>")
+            .expect("items open");
+        let gating = r[items..]
             .find("| A3 | Gating | 🚧 | M1 |")
             .expect("A3 listed");
-        let landed = r[next..].find("| A2 | Landed since |").expect("A2 listed");
+        let landed = r[items..].find("| A2 | Landed since |").expect("A2 listed");
         assert!(gating < landed, "{r}");
+        assert!(r.find("### Whole app").expect("whole app") > items, "{r}");
+        assert!(r.contains("| [M1: First](ROADMAP.md#m1) |"), "{r}");
+    }
+
+    #[test]
+    fn no_next_release_says_so() {
+        let shipped = DATA_RELEASES
+            .split("[[release]]\nid = \"a2\"")
+            .next()
+            .expect("invariant: has a1")
+            .to_owned()
+            + "[[milestone]]\nid = \"M1\"\ntitle = \"First\"\nroadmap = \"ROADMAP.md#m1\"\n\n\
+               [[item]]\nid = \"A1\"\nmilestone = \"M1\"\ntitle = \"Shipped\"\n\
+               status = \"done\"\nprs = [10]\nrelease = \"a1\"\n";
+        let p = parse(&shipped).expect("invariant: valid");
+        let r = render(&p);
         assert!(
-            r.contains("<details>\n<summary><b>0.1.0-alpha.1</b>: 1 of 1 merged</summary>"),
+            r.starts_with("### Next release\n\nNo release is being gathered yet. The latest shipped release is `v0.1.0-alpha.1`.\n\n### Whole app\n"),
             "{r}"
         );
-        assert!(r.find("### By goal").expect("goals") > next, "{r}");
-        assert!(r.contains("| [M1: First](ROADMAP.md#m1) |"), "{r}");
     }
 
     #[test]
@@ -1107,6 +1295,25 @@ id = "a1"
 version = "0.1.0-alpha.1"
 goal = "Old"
 tag = "v0.1.0-alpha.1"
+
+[[target]]
+release = "a1"
+title = "Old aim"
+status = "planned"
+issues = [5]
+
+[[target]]
+release = "a9"
+title = "Lost"
+status = "review"
+priority = 0
+issues = [6, 6]
+
+[[target]]
+release = "a2"
+title = "Empty"
+status = "planned"
+undecided = "yes"
 
 [[milestone]]
 id = "M1"
@@ -1145,6 +1352,13 @@ gate = true
             "item `A1`: release `a1` has shipped, so the item must be merged",
             "item `A2`: unknown release `a9`",
             "item `A3`: `gate` needs the `release`",
+            "target `Old aim`: release `a1` has shipped",
+            "target `Lost`: unknown release `a9`",
+            "target `Lost`: status `review` needs its PRs",
+            "target `Lost`: `priority` must be a whole number from 1",
+            "target `Lost`: an issue is listed twice in `issues`",
+            "target `Empty`: name its `issues` or `prs`",
+            "target `Empty`: `undecided` must be true or false",
         ] {
             assert!(all.contains(needle), "missing {needle:?} in:\n{all}");
         }
