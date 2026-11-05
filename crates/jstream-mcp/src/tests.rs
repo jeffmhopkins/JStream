@@ -310,7 +310,7 @@ fn handshake_list_and_call_round_trip() {
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],
                "sends": [], "hotkeys": [],
                "transitions": {"presets": [{"preset_id": "cut", "name": "Cut", "kind": "cut",
-                                            "duration_ms": 300, "easing": "ease_in_out"}],
+                                            "duration_ms": 0, "easing": "ease_in_out"}],
                                "default": "cut"}})
     );
     let started = f.call_tool(

@@ -39,8 +39,9 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
-  projector windows the UI opens, the project's links it hands to the system browser
-  (`links.rs`, which builds and is tested everywhere), and shutdown.
+  projector windows the UI opens, the links it hands to the system browser (the
+  project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
+  tested everywhere), and shutdown.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -226,11 +227,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   the project's own pages on GitHub (`links.rs`: the repository's URL from the
   workspace's `repository`, or a path, query or fragment under it written only with
   ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu and About dialog
-  link to) opens in the system browser, through Explorer with the URL as one argument,
-  and never in the window. So a page can make the app start one OS process, Explorer,
-  for those URLs only; no comma, backslash, quote, space or percent escape can reach
-  Explorer's command line. Every other new window is refused, and a
-  projector can open none. The page gets no Tauri IPC: the app defines no commands and grants
+  link to), or to Cisco's OpenH264 licence at exactly
+  `https://www.openh264.org/BINARY_LICENSE.txt` (the link in About and in Outputs ›
+  Encoders, #1165), opens in the system browser, through Explorer with the URL as one
+  argument, and never in the window. So a page can make the app start one OS process,
+  Explorer, for those URLs only; the Cisco URL is that one string, and no comma,
+  backslash, quote, space or percent escape can reach Explorer's command line. Every
+  other new window is refused, and a projector can open none. The page gets no Tauri
+  IPC: the app defines no commands and grants
   no capabilities, so the API is the only way in.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page
