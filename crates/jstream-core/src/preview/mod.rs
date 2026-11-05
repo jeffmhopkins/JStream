@@ -98,8 +98,13 @@ pub(crate) const BINARY_BUFFER: usize = 8;
 /// The longest a stream goes without a keyframe, even when nothing changes.
 pub(crate) const KEYFRAME_EVERY: Duration = Duration::from_secs(2);
 
-/// JPEG quality, 1 to 100.
-const JPEG_QUALITY: u8 = 75;
+/// JPEG quality, 1 to 100: near-lossless, as a local preview's bytes cost little and
+/// an editing view must show text sharply (#1203).
+const JPEG_QUALITY: u8 = 95;
+
+/// The highest average H.264 bit rate a preview stream asks for, in kbit/s: 1080p at
+/// 30 fps at about half a bit per pixel.
+const MAX_H264_KBPS: u64 = 32_000;
 
 /// Draw errors in a row that a stream rides out by skipping the picture. One more
 /// ends it.
@@ -537,10 +542,12 @@ impl H264 {
     fn open(codecs: &dyn Codecs, width: u32, height: u32, fps: u32) -> Result<Self, String> {
         let size = FrameSize::new(width, height).map_err(|err| err.to_string())?;
         let frame_period = Timebase::new(1, fps).map_err(|err| err.to_string())?;
-        // About 0.1 bit per pixel per frame: 640 × 360 at 15 fps is about 350 kbit/s.
-        let kbps =
-            (u64::from(width) * u64::from(height) * u64::from(fps) / 10_000).clamp(100, 4000);
-        let kbps = u32::try_from(kbps).unwrap_or(4000);
+        // About 0.5 bit per pixel per frame, so text and fine detail survive (#1203): the
+        // stream stays on this machine or the local network, where 30 Mbit/s for 1080p
+        // at 30 fps costs little. 640 × 360 at 15 fps is about 1.7 Mbit/s.
+        let kbps = (u64::from(width) * u64::from(height) * u64::from(fps) / 2_000)
+            .clamp(100, MAX_H264_KBPS);
+        let kbps = u32::try_from(kbps).unwrap_or(32_000);
         let config = VideoEncoderConfig {
             codec: Codec::H264,
             size,
