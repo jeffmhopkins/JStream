@@ -113,12 +113,14 @@ the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy o
 graph with each edit that applies applied, skipping any that fails, at the same `rev`,
 with no inverse. The engine draws open gestures' source settings through it
 ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)).
-`Graph::with_placed_keyframes` is the third: a copy whose runtime-only
-`State::placed_keyframes` holds the keyframe each placed scene is switched to
-([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)), never saved or compared.
+`Graph::place_keyframe` records the keyframe each placed scene is switched to
+([ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
+[ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)) on the graph itself:
+`apply` keeps the field, the collection file never stores it, and it is not a revision.
 `State::placed_keyframe` reads it back (only while the keyframe scene is still one of
 the scene's), and `State::draws` tells whether a root draws a scene through scene
-sources.
+sources. `Graph::with_placed_keyframes` is a copy with a different map, for a caller
+that does not want to change the graph it has.
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
