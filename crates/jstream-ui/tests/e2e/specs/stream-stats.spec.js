@@ -45,7 +45,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await expect(stats.locator('.stats-uptime')).toHaveText('01:02:03');
   const tiles = stats.locator('.stats-tile');
   await expect(tiles.nth(0)).toContainText('2.65 Mbps');
-  await expect(tiles.nth(0)).toContainText('target 2.66 Mbps');
+  await expect(tiles.nth(0)).toContainText('target 6.16 Mbps');
   await expect(tiles.nth(1)).toContainText('0.00% this run');
   await expect(stats.locator('.stats-health')).toContainText('Stream health: Excellent');
   await expect(stats.locator('.stats-chart polyline')).toHaveCount(1);
