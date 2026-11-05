@@ -344,7 +344,9 @@ impl Host {
         }
     }
 
-    /// Makes the device pages copy onto (UI thread).
+    /// Makes the device pages copy onto (UI thread), and asks every page to paint
+    /// again. The engine drops a page's frames from its last device (#1183), so a static
+    /// page, which paints nothing more on its own, would otherwise show nothing there.
     #[cfg(windows)]
     fn use_adapter(self: &Arc<Self>, luid: Option<u64>) {
         let generation = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
@@ -355,7 +357,16 @@ impl Host {
                 None
             }
         });
+        let painting = gpu.is_some();
         *lock(&self.gpu) = gpu;
+        if painting {
+            let pages: Vec<_> = self.pages().values().cloned().collect();
+            for page in pages {
+                if let Some(host) = lock(&page.browser).as_ref().and_then(|b| b.0.host()) {
+                    host.invalidate(::cef::PaintElementType::VIEW);
+                }
+            }
+        }
     }
 
     fn open(self: &Arc<Self>, id: u32, spec: &PageSpec) {

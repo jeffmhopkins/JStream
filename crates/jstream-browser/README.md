@@ -37,7 +37,10 @@ runs, the engine lends it the stage's own context in its place, so the composito
 samples the pages there, and takes it back (leaving none) when the stage stops, or
 when the stage leaves the GPU path mid-run, after which the pages deliver no frames for
 the rest of that stage
-([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Without
+([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). Each device
+is a wgpu instance of its own, so a page never hands out a frame it copied onto an
+earlier device: it delivers none until it paints on the new one, and the helper asks
+every page to paint again whenever it is given a device (#1183). Without
 a device a page renders and plays but delivers no frames. A page that `paints_on_cpu`
 (CEF on Linux) needs no device: its latest paint is its `cpu_frame`, straight-alpha
 RGBA8, which `jstream-sources` shows as the source's frame and looks at again every
