@@ -306,24 +306,25 @@ mod encoder {
     };
     use windows::Win32::Media::MediaFoundation::{
         CODECAPI_AVEncCommonMaxBitRate, CODECAPI_AVEncCommonMeanBitRate,
-        CODECAPI_AVEncCommonRateControlMode, CODECAPI_AVEncMPVDefaultBPictureCount,
-        CODECAPI_AVEncMPVGOPSize, CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode,
-        ICodecAPI, IMF2DBuffer, IMFAttributes, IMFDXGIBuffer, IMFDXGIDeviceManager,
-        IMFMediaEventGenerator, IMFMediaType, IMFSample, IMFTransform, IMFVideoSampleAllocatorEx,
-        METransformDrainComplete, METransformHaveOutput, METransformNeedInput,
-        MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING, MF_E_SAMPLEALLOCATOR_EMPTY,
-        MF_EVENT_FLAG_NO_WAIT, MF_EVENT_TYPE, MF_MT_AVG_BITRATE, MF_MT_FRAME_RATE,
-        MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE, MF_MT_MPEG2_PROFILE,
-        MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_MT_VIDEO_NOMINAL_RANGE, MF_MT_YUV_MATRIX,
-        MF_SA_D3D11_AWARE, MF_SA_D3D11_BINDFLAGS, MF_TRANSFORM_ASYNC, MF_TRANSFORM_ASYNC_UNLOCK,
-        MFCreateAttributes, MFCreateDXGIDeviceManager, MFCreateMediaType,
-        MFCreateVideoSampleAllocatorEx, MFMediaType_Video, MFNominalRange_16_235,
-        MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, MFT_ENUM_FLAG_LOCALMFT,
-        MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT, MFT_MESSAGE_COMMAND_DRAIN,
-        MFT_MESSAGE_NOTIFY_BEGIN_STREAMING, MFT_MESSAGE_NOTIFY_END_OF_STREAM,
-        MFT_MESSAGE_NOTIFY_START_OF_STREAM, MFT_MESSAGE_SET_D3D_MANAGER, MFVideoFormat_AV1,
-        MFVideoFormat_H264, MFVideoFormat_HEVC, MFVideoFormat_NV12, MFVideoInterlace_Progressive,
-        MFVideoTransferMatrix_BT709, eAVEncAV1VProfile_Main_420_8, eAVEncCommonRateControlMode_CBR,
+        CODECAPI_AVEncCommonQualityVsSpeed, CODECAPI_AVEncCommonRateControlMode,
+        CODECAPI_AVEncMPVDefaultBPictureCount, CODECAPI_AVEncMPVGOPSize,
+        CODECAPI_AVEncVideoForceKeyFrame, CODECAPI_AVLowLatencyMode, ICodecAPI, IMF2DBuffer,
+        IMFAttributes, IMFDXGIBuffer, IMFDXGIDeviceManager, IMFMediaEventGenerator, IMFMediaType,
+        IMFSample, IMFTransform, IMFVideoSampleAllocatorEx, METransformDrainComplete,
+        METransformHaveOutput, METransformNeedInput, MF_E_NO_EVENTS_AVAILABLE, MF_E_NOTACCEPTING,
+        MF_E_SAMPLEALLOCATOR_EMPTY, MF_EVENT_FLAG_NO_WAIT, MF_EVENT_TYPE, MF_MT_AVG_BITRATE,
+        MF_MT_FRAME_RATE, MF_MT_FRAME_SIZE, MF_MT_INTERLACE_MODE, MF_MT_MAJOR_TYPE,
+        MF_MT_MPEG2_PROFILE, MF_MT_PIXEL_ASPECT_RATIO, MF_MT_SUBTYPE, MF_MT_VIDEO_NOMINAL_RANGE,
+        MF_MT_YUV_MATRIX, MF_SA_D3D11_AWARE, MF_SA_D3D11_BINDFLAGS, MF_TRANSFORM_ASYNC,
+        MF_TRANSFORM_ASYNC_UNLOCK, MFCreateAttributes, MFCreateDXGIDeviceManager,
+        MFCreateMediaType, MFCreateVideoSampleAllocatorEx, MFMediaType_Video,
+        MFNominalRange_16_235, MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE,
+        MFT_ENUM_FLAG_LOCALMFT, MFT_ENUM_FLAG_SORTANDFILTER, MFT_ENUM_FLAG_SYNCMFT,
+        MFT_MESSAGE_COMMAND_DRAIN, MFT_MESSAGE_NOTIFY_BEGIN_STREAMING,
+        MFT_MESSAGE_NOTIFY_END_OF_STREAM, MFT_MESSAGE_NOTIFY_START_OF_STREAM,
+        MFT_MESSAGE_SET_D3D_MANAGER, MFVideoFormat_AV1, MFVideoFormat_H264, MFVideoFormat_HEVC,
+        MFVideoFormat_NV12, MFVideoInterlace_Progressive, MFVideoTransferMatrix_BT709,
+        eAVEncAV1VProfile_Main_420_8, eAVEncCommonRateControlMode_CBR,
         eAVEncCommonRateControlMode_PeakConstrainedVBR, eAVEncH264VProfile_High,
         eAVEncH265VProfile_Main_420_8,
     };
@@ -357,6 +358,9 @@ mod encoder {
         }
     }
 
+    /// `CODECAPI_AVEncCommonQualityVsSpeed`: toward quality, in the band hardware MFTs
+    /// map to their quality preset (#1191).
+    const QUALITY_VS_SPEED: u32 = 70;
     /// How long `finish` waits for an asynchronous encoder to drain.
     const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
     /// Input textures on the GPU path: as many frames as the session queues ahead of
@@ -696,6 +700,10 @@ mod encoder {
                 // No B-frames, so packets come out in presentation order and dts == pts.
                 let _ = set_u32(&api, &CODECAPI_AVEncMPVDefaultBPictureCount, 0);
                 let _ = set_bool(&api, &CODECAPI_AVLowLatencyMode, true);
+                // Hardware MFTs otherwise pick their speed preset, which looks poor at a
+                // live bit rate (#1191). 0 is fastest, 100 best; AMD's and Intel's MFTs
+                // map 67 and up to their quality preset.
+                let _ = set_u32(&api, &CODECAPI_AVEncCommonQualityVsSpeed, QUALITY_VS_SPEED);
             }
             let (w, h) = (config.size.width(), config.size.height());
             // Encoders take the output type first.

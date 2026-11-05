@@ -4104,7 +4104,7 @@ mod tests {
             owner: None,
         };
         let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
-        assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
+        assert_eq!(config.rate_control, RateControl::Cbr { kbps: 6000 });
         assert_eq!(config.keyframe_interval, 60);
         assert_eq!(config.hardware, HardwarePreference::Prefer);
 

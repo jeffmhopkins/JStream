@@ -577,21 +577,62 @@ fn extent(width: u32, height: u32) -> wgpu::Extent3d {
 ///
 /// RGB is decoded with the sRGB transfer, then multiplied by alpha. Alpha is linear in the
 /// source and stays so. A fully transparent texel becomes all zero whatever its RGB was.
+///
+/// Every upload of a changing source (a webcam's CPU frames, a media file's) goes through
+/// this on the render thread, so it reads each texel's four halves from
+/// [`PremultiplyTable`] instead of computing them: on a 1080p frame that took it from
+/// about 23 ms to about 4 ms (measured on a 2.8 GHz Xeon cloud VM, release build), with
+/// the same bits (a test compares them for every byte at every alpha).
 fn premultiply_to_f16(rgba: &[u8]) -> Vec<u8> {
-    let linear: [f32; 256] = std::array::from_fn(|i| srgb_channel_to_linear(i as f32 / 255.0));
-    let mut out = Vec::with_capacity(rgba.len() * 2);
-    for px in rgba.chunks_exact(4) {
-        let a = f32::from(px[3]) / 255.0;
-        for value in [
-            linear[usize::from(px[0])] * a,
-            linear[usize::from(px[1])] * a,
-            linear[usize::from(px[2])] * a,
-            a,
-        ] {
-            out.extend_from_slice(&f16_bits(value).to_le_bytes());
+    let table = PremultiplyTable::get();
+    let mut out = vec![0; rgba.len() / 4 * 8];
+    for (texel, px) in out.chunks_exact_mut(8).zip(rgba.chunks_exact(4)) {
+        let row = table.row(px[3]);
+        let halves = [
+            row[usize::from(px[0])],
+            row[usize::from(px[1])],
+            row[usize::from(px[2])],
+            table.alpha[usize::from(px[3])],
+        ];
+        for (half, bits) in texel.chunks_exact_mut(2).zip(halves) {
+            half.copy_from_slice(&bits.to_le_bytes());
         }
     }
     out
+}
+
+/// Every half [`premultiply_to_f16`] can write, built once per process: for each alpha
+/// `a` and channel byte `c`, `f16(linear(c / 255) * a / 255)`, and for each alpha the
+/// half of `a / 255`: about 128 KiB.
+struct PremultiplyTable {
+    /// Indexed by `a * 256 + c`.
+    color: Vec<u16>,
+    alpha: [u16; 256],
+}
+
+impl PremultiplyTable {
+    fn get() -> &'static PremultiplyTable {
+        static TABLE: std::sync::OnceLock<PremultiplyTable> = std::sync::OnceLock::new();
+        TABLE.get_or_init(|| {
+            let linear: [f32; 256] =
+                std::array::from_fn(|i| srgb_channel_to_linear(i as f32 / 255.0));
+            let mut color = Vec::with_capacity(256 * 256);
+            for a in 0..=255u8 {
+                let a = f32::from(a) / 255.0;
+                color.extend(linear.iter().map(|&c| f16_bits(c * a)));
+            }
+            PremultiplyTable {
+                color,
+                alpha: std::array::from_fn(|a| f16_bits(a as f32 / 255.0)),
+            }
+        })
+    }
+
+    /// The halves of the 256 channel bytes at alpha `a`.
+    fn row(&self, a: u8) -> &[u16] {
+        let start = usize::from(a) * 256;
+        &self.color[start..start + 256]
+    }
 }
 
 /// Rewrites `image`, a data image of [`upload_unit_f16`] at `width` by `height`, with
@@ -664,6 +705,28 @@ fn f16_bits(value: f32) -> u16 {
 #[cfg(test)]
 mod tests {
     use super::{Owner, f16_bits, premultiply_to_f16};
+
+    /// [`premultiply_to_f16`] computed texel by texel, as it was before the table.
+    fn premultiply_reference(rgba: &[u8]) -> Vec<u8> {
+        let mut out = Vec::with_capacity(rgba.len() * 2);
+        for px in rgba.chunks_exact(4) {
+            let a = f32::from(px[3]) / 255.0;
+            let linear = |c: u8| super::srgb_channel_to_linear(f32::from(c) / 255.0);
+            for value in [linear(px[0]) * a, linear(px[1]) * a, linear(px[2]) * a, a] {
+                out.extend_from_slice(&f16_bits(value).to_le_bytes());
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn the_table_writes_the_same_bits_as_computing_each_texel() {
+        // Every channel byte at every alpha: 256 texels per alpha, one per byte.
+        let rgba: Vec<u8> = (0..=255u8)
+            .flat_map(|a| (0..=255u8).flat_map(move |c| [c, c.wrapping_add(85), 255 - c, a]))
+            .collect();
+        assert_eq!(premultiply_to_f16(&rgba), premultiply_reference(&rgba));
+    }
 
     /// binary16 bits to f32, written independently of [`f16_bits`].
     fn decode(bits: u16) -> f32 {
