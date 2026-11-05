@@ -300,10 +300,11 @@ state machine. Contents:
   measures through the shot's binding, never holding a scope itself, so no scope's last
   reference drops on the render thread (R-RT-003). An item drawn through two lists that
   share a modifier ID (a keyframe and its parent) shares one envelope, and the first
-  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
+  list planned decides what it hears and measures.   Each binding holds that level as an atomic, which the
   draw paths read by item and ID without allocating. A modifier with nothing heard, a
   preview shot (no follower) and the program mix while no output runs read silence,
-  the modifier's `from`.
+  the modifier's `from`. A scene frame sheet follows those scopes itself, across its
+  pictures, so an audio modifier there hears the mix (#1189).
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot as its pass camera's
@@ -454,7 +455,8 @@ state machine. Contents:
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
-  (a `scene.switch_and_watch` showing a fade as it plays, a scene drawn alone, the
+  (a `scene.switch_and_watch` showing a fade as it plays, a scene drawn alone, a scene
+  sheet that hears a loud mix, the
   limits and the cap on sheets at once, in `tests/frames.rs`; the layout, tiling and
   downscale in `frames.rs`), nested-scene scheduling (order, depth
   bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
@@ -786,7 +788,8 @@ happened. Placeholder output actions do too: they only step the state machine.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
-(see *Frame sheets*).
+(see *Frame sheets*), and a scene sheet follows its audio modifiers under that lock
+before the picture is handed off.
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -1975,7 +1978,8 @@ sheet gets a `jstream-frames` thread, which wakes when each picture is due (the 
 what `video.snapshot` would draw then (`Shared::sample`): the published program
 render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
 it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
-`rev` and the media clock's time. It only collects: once the last picture is due it
+`rev` and the media clock's time. A scene sheet also follows its audio modifiers on
+the way, so they hear the mix instead of staying at silence. It only collects: once the last picture is due it
 hands every sample to the snapshot thread as one job, which draws each at its own time,
 scales it to a tile with an area average (not nearest-neighbour, so thin lines and text
 stay) and tiles them on a dark background. So a slow GPU delays the answer, never a
