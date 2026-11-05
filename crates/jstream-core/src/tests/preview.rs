@@ -117,12 +117,13 @@ fn act(control: &dyn Control, call: Call) -> Result<(), ControlError> {
 }
 
 /// The engine with the platform fakes (whose codecs include an H.264 encoder) and the
-/// CPU stand-ins for both compositors.
+/// CPU stand-ins for both compositors, every stream drawn by the preview thread itself.
 fn with_h264() -> Engine {
     let clock = FakeClock::new(jstream_media::Timebase::MICROS);
     Engine::new()
         .with_backends(fake::backends(&clock).expect("fake backends"))
         .with_cpu_compositor()
+        .without_preview_stage()
 }
 
 fn decode(jpeg: &[u8]) -> (usize, usize) {
@@ -521,6 +522,7 @@ fn recording_captures(
     let engine = Engine::new()
         .with_backends(backends)
         .with_cpu_compositor()
+        .without_preview_stage()
         .with_preview_draw(draw);
     (engine, seen)
 }
@@ -959,4 +961,68 @@ fn a_source_stream_avoids_the_collection_s_ids() {
     act(&control, subscribe_source(4, "webcam")).expect("subscribed");
     let first = frame(&mut frames);
     assert_eq!(first.header.channel, 4);
+}
+
+/// A program stream in H.264 is drawn by the program stage, not the preview thread
+/// (ADR-0117 §6): subscribing opens the stage with no output, its render thread draws
+/// the program at the stream's size and feeds the stream's encoder, and the last such
+/// stream going stops the stage again.
+#[test]
+fn the_program_stage_draws_an_h264_program_stream() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    assert!(!engine.stage_running());
+    act(&control, subscribe(1, Some(30), Vec::new())).expect("subscribed");
+    // The stage's render thread ticks on the media clock.
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    let mut pictures = Vec::new();
+    while pictures.len() < 3 {
+        let picture = frame(&mut frames);
+        assert!(!picture.header.end, "the stream ended: {picture:?}");
+        pictures.push(picture);
+    }
+    assert!(engine.stage_running(), "the preview holds the stage");
+    for picture in &pictures {
+        assert_eq!(picture.header.codec, Some(PreviewCodec::H264));
+        // The default 1920 × 1080 canvas in the default 640 × 360 box.
+        assert_eq!((picture.header.width, picture.header.height), (640, 360));
+    }
+    assert!(pictures[0].header.keyframe);
+    assert!(
+        pictures
+            .windows(2)
+            .all(|pair| pair[0].header.pts_us < pair[1].header.pts_us),
+        "frames out of order"
+    );
+
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 1 },
+        },
+    )
+    .expect("unsubscribed");
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the stream");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
 }

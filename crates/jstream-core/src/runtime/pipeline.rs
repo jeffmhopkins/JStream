@@ -704,8 +704,9 @@ pub(crate) struct AudioTap {
 }
 
 /// The stage every running output shares: capture, the render thread compositing the
-/// program, the audio devices and the mixer thread. It runs while any output holds it
-/// and stops when the last one lets go.
+/// program, the audio devices and the mixer thread. It runs while any output or H.264
+/// preview stream of the program holds it (ADR-0117 §6), and stops when the last one
+/// lets go.
 ///
 /// The render and mixer threads push each frame and block into every encoder session
 /// that is open. A session is handed to them through a channel, never a lock, and
@@ -895,6 +896,30 @@ impl Program {
             claim: lock(&encoders.claim).take(),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
+    }
+
+    /// Feeds the program mix to a preview stream's encoder session (ADR-0117 §6): the
+    /// render thread draws it at `size` on its own compositor, every `divisor`th base
+    /// tick, reads it back and pushes it into `input` until the session closes. At the
+    /// stage's size it is the program's own frame, drawn once for every consumer.
+    pub(crate) fn attach_preview(&self, size: FrameSize, divisor: u32, input: VideoInput) {
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: divisor.max(1),
+            owner: None,
+        };
+        let tap = VideoTap {
+            input,
+            gpu: false,
+            claim: None,
+        };
+        let _ = self.video_taps.send((feed, tap));
+    }
+
+    /// The size the stage composites the program at: the canvas when it opened.
+    pub(crate) fn size(&self) -> FrameSize {
+        self.size
     }
 
     /// Where an output that starts now puts its stream's time zero: the mixer's
@@ -1558,7 +1583,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                         if let Some(why) = compositor.lost() {
                             return Err(DrawError::Lost(why));
                         }
-                        frame.unread += 1;
+                        // This tick's collected frames, but the newest, are counted
+                        // here too, as below.
+                        frame.unread += 1 + handed.saturating_sub(1);
                         frame.awaiting = true;
                         snapshot::claim_layers(
                             &mut compositor,
@@ -2312,7 +2339,7 @@ fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
 /// The size the program stage renders and encodes at: the canvas, rounded down to even
 /// sizes (NV12, the encoders' input, halves both for chroma), and at least 2x2. Each
 /// capture keeps its own size and is scaled by its item's placement (#433).
-fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
+pub(crate) fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
     let even = |edge: u32| (edge & !1).max(2);
     FrameSize::new(even(width), even(height)).map_err(|err| format!("output size: {err}"))
 }
