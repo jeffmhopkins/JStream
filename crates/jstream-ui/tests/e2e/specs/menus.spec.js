@@ -435,7 +435,8 @@ test('Check for updates reports from this page, and Settings keeps the launch ch
   await expect(check).toBeVisible();
   // The page under test is a browser, so the desktop app's request isn't there.
   await expect(check).toContainText('Check for updates runs in the desktop app.');
-  await check.getByRole('button', { name: 'Close' }).click();
+  // The header's × is also named Close, so the footer's button is the one pressed.
+  await check.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(check).toHaveCount(0);
 
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
@@ -445,7 +446,7 @@ test('Check for updates reports from this page, and Settings keeps the launch ch
   await expect(box).not.toBeChecked();
   await box.check();
   await expect(box).toBeChecked();
-  await settings.getByRole('button', { name: 'Close' }).click();
+  await settings.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(settings).toHaveCount(0);
 
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
