@@ -300,7 +300,7 @@ state machine. Contents:
   measures through the shot's binding, never holding a scope itself, so no scope's last
   reference drops on the render thread (R-RT-003). An item drawn through two lists that
   share a modifier ID (a keyframe and its parent) shares one envelope, and the first
-  list planned decides what it hears and measures.   Each binding holds that level as an atomic, which the
+  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
   draw paths read by item and ID without allocating. A modifier with nothing heard, a
   preview shot (no follower) and the program mix while no output runs read silence,
   the modifier's `from`. A scene frame sheet follows those scopes itself, across its
@@ -1979,7 +1979,10 @@ what `video.snapshot` would draw then (`Shared::sample`): the published program
 render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
 it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
 `rev` and the media clock's time. A scene sheet also follows its audio modifiers on
-the way, so they hear the mix instead of staying at silence. It only collects: once the last picture is due it
+the way, so they hear the mix instead of staying at silence. Its envelope starts at
+silence and takes one 50 ms step before the first picture, so a modifier whose attack
+is much longer than that reads lower on the first picture or two than the same item
+on program, whose envelope has already been running. It only collects: once the last picture is due it
 hands every sample to the snapshot thread as one job, which draws each at its own time,
 scales it to a tile with an area average (not nearest-neighbour, so thin lines and text
 stay) and tiles them on a dark background. So a slow GPU delays the answer, never a
