@@ -1,9 +1,12 @@
 //! The script the webview runs before the UI's own, which hands the UI the in-process
 //! engine's URL and control token, and what the app knows about its virtual camera.
 //!
-//! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam }` that can't be
-//! reassigned, and only on a page from the app's own origin: the webview also refuses
-//! to navigate anywhere else (see `shell.rs`), so no other page ever sees the token.
+//! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
+//! browse }` that can't be reassigned, and only on a page from the app's own origin: the
+//! webview also refuses to navigate anywhere else (see `shell.rs`), so no other page
+//! ever sees the token. `collection` is the data folder, which `collection` asset paths
+//! are relative to. `browse` asks the app's one command, `pick_path`, to open a native
+//! dialog and resolves to the path the person picked, or null.
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
 //! The token is the in-memory one the app made at startup, or with `--mcp` the data
 //! folder's user-only token file's; it is never written to a log (R-SEC-001).
@@ -16,12 +19,18 @@ use std::fmt::Write as _;
 pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
 
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
-/// the virtual camera's status ([`crate::host::VcamStatus::as_str`]).
-pub fn script(origin: &str, url: &str, token: &str, vcam: &str) -> String {
+/// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
+/// the data folder.
+pub fn script(origin: &str, url: &str, token: &str, vcam: &str, collection: &str) -> String {
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
-         value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam} }}),\
+         value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam}, collection: {collection},\
+         browse: function (request) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(null);\
+         return internals.invoke(\"pick_path\", request);\
+         }} }}),\
          writable: false, configurable: false, enumerable: false }});\
          }}",
         origin = js_string(origin),
@@ -29,6 +38,7 @@ pub fn script(origin: &str, url: &str, token: &str, vcam: &str) -> String {
         url = js_string(url),
         token = js_string(token),
         vcam = js_string(vcam),
+        collection = js_string(collection),
     )
 }
 
@@ -66,12 +76,15 @@ mod tests {
             "ws://127.0.0.1:4455/api/v1/ws",
             "0a1b",
             "registered",
+            r"C:\Users\me\AppData\Roaming\JStream",
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
         assert!(script.contains("\"__JSTREAM_DESKTOP__\""));
-        assert!(script.contains(
-            "Object.freeze({ url: \"ws://127.0.0.1:4455/api/v1/ws\", token: \"0a1b\", vcam: \"registered\" })"
-        ));
+        assert!(script.contains("url: \"ws://127.0.0.1:4455/api/v1/ws\""));
+        assert!(script.contains("token: \"0a1b\""));
+        assert!(script.contains("vcam: \"registered\""));
+        assert!(script.contains(r#"collection: "C:\\Users\\me\\AppData\\Roaming\\JStream""#));
+        assert!(script.contains("invoke(\"pick_path\", request)"));
         assert!(script.contains("writable: false, configurable: false"));
     }
 

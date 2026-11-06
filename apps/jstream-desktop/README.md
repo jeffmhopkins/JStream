@@ -34,14 +34,19 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   on); `vcam_status`, whether the camera is registered and current.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
   page that says why the app couldn't start.
+- **Update check** (`updates.rs`): answers `GET /jstream-update-check` with GitHub's
+  public releases list, or a short error. The page cannot choose the address. The
+  request sends no body, token or version. Tested without the network.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
-  and the virtual camera's status.
+  the virtual camera's status, the data folder (so a picked file under it can be
+  stored relative to the collection) and `browse`, which opens a native dialog.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
-  tested everywhere), and shutdown.
+  tested everywhere), shutdown, and the one command
+  the page may call (`pick.rs`): a native file, save or folder dialog.
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -52,7 +57,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Tests** (unit tests in each module, run on every platform: the server behind the
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
-  capped log file (user-only, checked on Unix), and the control token registered for redaction; the crash hook's own
+  capped log file (user-only, checked on Unix), the update check's request and the
+  replies it gives a releases list, a rate limit and a malformed message, and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
@@ -191,20 +197,26 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `http://jstream.localhost` (other webviews `jstream://localhost`). Paths are checked
   segment by segment: percent-decoded, no `..`, `\`, `:` or
   NUL, and the canonical file must be inside the canonical folder, so no path or link
-  reaches outside it. Each response has a `Content-Security-Policy`: the bundle's own
+  reaches outside it. `GET /jstream-update-check` is not a file: the app answers it
+  itself, on another thread, with GitHub's public releases list or an error
+  (`updates.rs`). Each response has a `Content-Security-Policy`: the bundle's own
   files, WASM compiled from them, inline scripts and styles only with the response's
   nonce (trunk's placeholder, as `jstream-server` fills it), and connections only to
-  the bundle and the engine's `ws://127.0.0.1:<port>`.
+  the bundle and the engine's `ws://127.0.0.1:<port>`. The update check is that same
+  origin, so the page never connects to GitHub itself.
 - **Handing the page the engine.** Before the page's own scripts, a bootstrap script
-  defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token }` that can't be
-  reassigned, and only when the page's origin is the app's. `jstream-ui` checks for it
+  defines `window.__JSTREAM_DESKTOP__` as a frozen object that can't be reassigned,
+  and only when the page's origin is the app's. `jstream-ui` checks for it
   at start (its `host.rs`) and connects at once; the browser client offers the token as
   its subprotocol, as in a browser ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)).
-  The strings are written as escaped JavaScript literals. The global also carries
-  `vcam`, the virtual camera's status as the app read it at start: `registered`,
-  `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable` (not Windows). The UI
-  uses it only to say whether the camera can start (its outputs panel); the engine
-  still decides.
+  The strings are written as escaped JavaScript literals. The global carries
+  `url`, `token` and `vcam`, the virtual camera's status as the app read it at start:
+  `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
+  (not Windows). The UI uses `vcam` only to say whether the camera can start (its
+  outputs panel); the engine still decides. It also carries `collection`, the data
+  folder, and `browse`, a function. `browse` calls the app's one command, `pick_path`,
+  and resolves to the filesystem path the person picked, or null if they cancelled or
+  the dialog failed.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
@@ -226,16 +238,26 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   the page asked, and full screen when it asked for that (`&full=1`). A link to one of
   the project's own pages on GitHub (`links.rs`: the repository's URL from the
   workspace's `repository`, or a path, query or fragment under it written only with
-  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu and About dialog
-  link to), or to Cisco's OpenH264 licence at exactly
+  ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu, Check for updates
+  and About dialog link to), or to Cisco's OpenH264 licence at exactly
   `https://www.openh264.org/BINARY_LICENSE.txt` (the link in About and in Outputs ›
   Encoders, #1165), opens in the system browser, through Explorer with the URL as one
   argument, and never in the window. So a page can make the app start one OS process,
   Explorer, for those URLs only; the Cisco URL is that one string, and no comma,
   backslash, quote, space or percent escape can reach Explorer's command line. Every
-  other new window is refused, and a projector can open none. The page gets no Tauri
-  IPC: the app defines no commands and grants
-  no capabilities, so the API is the only way in.
+  other new window is refused, and a
+  projector can open none. The page gets one Tauri command, `pick_path` (`pick.rs`),
+  and no other. `build.rs` declares that command to `tauri-build`, which writes
+  `allow-pick-path` under `permissions/autogenerated/` (gitignored, as `gen/` is).
+  The capability `browse` grants that permission to the main window only, and does
+  not grant `core:default`. A projector has no path fields, so it is not granted.
+  The command opens a
+  common-item dialog owned by the calling window and returns the path the person
+  picked. It does not read the file. The UI calls it only through `browse` on the
+  global. A browser of the daemon has no global, so it has no button and no command.
+  The engine is still reached only over the WebSocket API. The one other request the
+  scheme answers is the update check, which ignores whatever the page sends and always
+  reads the same releases list.
 - **Failures are a page, not a crash.** Media Foundation missing (an N edition), no
   data folder, a broken collection file or a missing bundle: the scheme serves a page
   with the reason (HTML-escaped, with a policy that allows nothing) and no bootstrap
@@ -250,7 +272,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
   Foundation import listed nowhere still gets past it.
 - **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
-  and tests everything but the window (`shell.rs`) and `tests/delay_load.rs` without
+  and tests everything but the window (`shell.rs`, `pick.rs`) and `tests/delay_load.rs` without
   GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
   `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
   each marked as never built for Windows where that holds. `tauri.conf.json` names the

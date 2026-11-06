@@ -330,6 +330,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
         (1280, 720),
+        jstream_protocol::DEFAULT_BASE_FPS,
     );
     let opened = open_capture(&parts).expect("a capture path");
     let mut stream = start_capture(&opened.backends, &crate::snapshot::CaptureKey::primary())
@@ -444,6 +445,7 @@ fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
             Arc::new(RenderHub::default()),
             Arc::new(Wanted::default()),
             (1280, 720),
+            jstream_protocol::DEFAULT_BASE_FPS,
         );
         let opened = open_capture(&parts).expect("a capture path");
         assert_eq!(
@@ -1381,7 +1383,7 @@ fn a_hung_gpu_fallback_fails_the_output_at_its_deadline() {
     // Dropped before the engine, which joins the render thread.
     let _release = Release(gate);
     block_on(control.call(output_call("yt", true))).expect("output.start");
-    // The first frame draws; the next ten fail and set the fallback off.
+    // The first frame draws; the next third of a second fails and sets the fallback off.
     let mut received = 0;
     tick_until(&clock, || {
         received = engine

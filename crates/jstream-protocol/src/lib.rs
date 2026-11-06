@@ -96,7 +96,10 @@ pub use kind::{
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
 };
-pub use mix::{MixInput, MixResolution, VideoMix, VideoMixInfo};
+pub use mix::{
+    DEFAULT_BASE_FPS, FAST_BASE_FPS, MixInput, MixResolution, VideoMix, VideoMixInfo,
+    allowed_base_fps,
+};
 pub use motion::{
     MAX_MOTION_ID_LEN, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve, MotionKind, MotionMeasure,
     MotionModifier, MotionProblem, MotionProperty, MotionShape, check_motion, check_motion_id,

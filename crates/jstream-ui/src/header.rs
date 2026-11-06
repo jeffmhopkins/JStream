@@ -1,6 +1,6 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
 //! the File, Edit, View, Layout and Help menus (Help's links and About dialog are in
-//! `about.rs`), the stats readout (frame rate, dropped frames
+//! `about.rs`; Check for updates and Settings are in `updates.rs`), the stats readout (frame rate, dropped frames
 //! and CPU), Studio mode,
 //! Record, and Go Live / End stream. The View and Layout menus change the workspace's
 //! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
@@ -20,6 +20,7 @@ use crate::panels::outputs::{
 };
 use crate::projector::{self, Request, Target};
 use crate::store::Studio;
+use crate::updates::{SettingsDialog, UpdateDialog};
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind};
@@ -305,6 +306,8 @@ pub fn Header(
     let engine_load = RwSignal::new(Load::default());
     let open = RwSignal::new(None::<Menu>);
     let about_open = RwSignal::new(false);
+    let settings_open = RwSignal::new(false);
+    let update_open = RwSignal::new(false);
     let protocol = Signal::derive(move || info.with(|i| i.protocol.clone()));
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
@@ -549,6 +552,16 @@ pub fn Header(
                             <dd>{move || info.with(|i| i.rev.clone())}</dd>
                         </dl>
                         <div class="menu-sep"></div>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
+                                settings_open.set(true);
+                            }
+                        >
+                            "Settings…"
+                        </button>
                         <button class="menuitem" role="menuitem" on:click=move |_| disconnect.with_value(|d| d())>
                             "Disconnect"
                         </button>
@@ -693,6 +706,16 @@ pub fn Header(
                             role="menuitem"
                             on:click=move |_| {
                                 open.set(None);
+                                update_open.set(true);
+                            }
+                        >
+                            "Check for updates"
+                        </button>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
                                 about_open.set(true);
                             }
                         >
@@ -703,6 +726,12 @@ pub fn Header(
             </div>
             <Show when=move || about_open.get()>
                 <About protocol=protocol close=move || about_open.set(false) />
+            </Show>
+            <Show when=move || settings_open.get()>
+                <SettingsDialog close=move || settings_open.set(false) />
+            </Show>
+            <Show when=move || update_open.get()>
+                <UpdateDialog close=move || update_open.set(false) />
             </Show>
             <span class="spacer"></span>
             <span

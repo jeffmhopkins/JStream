@@ -675,6 +675,9 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
             width: number(width, "width")?,
             height: number(height, "height")?,
         },
+        ("canvas.set_frame_rate", [fps]) => Edit::CanvasSetFrameRate {
+            fps: number(fps, "fps")?,
+        },
         ("output.create", [id, url]) => Edit::OutputCreate {
             output_id: OutputId::new(*id),
             kind: OutputKind::Rtmp {

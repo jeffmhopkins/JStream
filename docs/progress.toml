@@ -119,6 +119,8 @@ title = "An Application Settings dialog: plugin management, Check for updates, a
 priority = 3
 status = "planned"
 issues = [1207, 1210, 1212, 1192, 1230]
+prs = [1249]
+note = "#1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open"
 
 [[target]]
 release = "alpha.5"
@@ -159,7 +161,7 @@ release = "alpha.5"
 title = "Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings"
 status = "planned"
 issues = [1209, 1189]
-prs = [1240, 1245]
+prs = [1240, 1245, 1255, 1257]
 
 [[target]]
 release = "alpha.5"

@@ -126,7 +126,7 @@ test('the 3D camera section fits the settings column', async ({ page, daemon }) 
   const follow = dialog.getByRole('checkbox', { name: 'Follow pointer' });
   await expect(follow).toBeEnabled();
   await follow.check();
-  await expect(dialog.getByLabel('From the right')).toBeVisible();
+  await expect(dialog.getByRole('textbox', { name: 'From the right' })).toBeVisible();
   await dialog.getByRole('button', { name: '+ Add camera motion' }).click();
 
   // Default 860-wide dialog, then the dialog clamped to a shorter viewport.
@@ -143,6 +143,6 @@ test('the 3D camera section fits the settings column', async ({ page, daemon }) 
   expect(aligned).toBe(true);
 
   // The angle stepper keeps room for the number, not only the degree mark.
-  const yawWidth = await dialog.getByLabel('From the right').evaluate((el) => el.clientWidth);
+  const yawWidth = await dialog.getByRole('textbox', { name: 'From the right' }).evaluate((el) => el.clientWidth);
   expect(yawWidth).toBeGreaterThan(28);
 });

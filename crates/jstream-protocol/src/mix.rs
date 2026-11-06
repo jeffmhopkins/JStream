@@ -9,6 +9,16 @@
 //! none shows the program at the engine's canvas size and base rate.
 
 use crate::id::{SceneId, VideoMixId};
+
+/// The base frame rate a new collection runs at (ADR-0119).
+pub const DEFAULT_BASE_FPS: u32 = 30;
+/// The faster base frame rate a collection can opt into (ADR-0119).
+pub const FAST_BASE_FPS: u32 = 60;
+
+/// Whether `fps` is a base frame rate the engine runs at.
+pub fn allowed_base_fps(fps: u32) -> bool {
+    fps == DEFAULT_BASE_FPS || fps == FAST_BASE_FPS
+}
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

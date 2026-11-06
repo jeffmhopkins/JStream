@@ -98,14 +98,14 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details and Disconnect, and Undo and Redo. The accent square is the app icon (the desktop app's `icons/icon.png`, copied into the bundle as `icon.png`, also the favicon), and beyond the prototype a Help menu ends the bar ([HD-10](#header)). The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details, Settings… and Disconnect, and Undo and Redo. Settings… is the application settings dialog, which starts with Check for updates at launch ([HD-10](#header)). The accent square is the app icon (the desktop app's `icons/icon.png`, copied into the bundle as `icon.png`, also the favicon), and beyond the prototype a Help menu ends the bar ([HD-10](#header)). The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat waits on YouTube sign-in ([live panels](#live-panels)), so for now it says what it waits on; Stream stats shows an output's own stats without it. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
@@ -114,7 +114,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-07 | Record button | Starts and stops recording. | ✅ | Starts every stopped or failed recording output; "Stop recording" while any runs; disabled with none. |
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
-| HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then About JStream. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. `about.rs`. |
+| HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then Check for updates, then About JStream. Check for updates compares the version the UI was built as with GitHub's public releases list, pre-releases included, which the desktop app fetches. It says "You're up to date" or names the newer version and links its release page. Nothing is downloaded. A page that isn't the desktop app says the check runs there, and a failure (offline, or a reply that can't be read) is shown in the dialog. File › Settings… ([HD-01](#header)) has "Check for updates at launch", off until the user turns it on, kept in the page's storage. When it is on, the desktop app's main window checks once as the workspace opens and shows a dismissable notice under the header only when a newer release exists; a failure shows nothing. `updates.rs`. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. `about.rs`. |
 
 <a id="docking"></a>
 ## Docking and layouts
@@ -157,7 +157,7 @@ Spec: [workspace › canvas structure](../design/ui-prototype/spec-workspace.md#
 | CV-01 | Frame | 16:9 frame (`#141A22`, 1px outline) centred in a `#0A0B0E` area; caption "<scene> · 1920 × 1080" bottom left. | ✅ | The frame is the largest 16:9 box inside 28/28/20px margins; the caption is mono 11px. |
 | CV-02 | Edits the selected scene | The canvas shows and edits the scene selected in Scenes; selecting on the canvas and in Sources is one selection. | ✅ | Laid out from the shared collection and `Selection`, so a box click selects its row and opens its properties. |
 | CV-03 | Live picture | The scene's real picture under the item boxes. | ✅ | The program mix is under the boxes while the canvas shows the program scene (U4p, #302), so its transitions show. Any other scene, a keyframe scene too, shows its own picture: the canvas closes its stream and opens one of that scene (`preview.subscribe`'s `scene_id`, as the projectors do, [DL-07](#dialogs)), on a new channel so no late frame of the old one is drawn. Until the new stream's first frame, the canvas says it is starting. |
-| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | ✅ | The pill adds " · cropped" for a cropped item. Over the live picture an unselected item has no box, except a hidden one, which keeps its dashed outline since it still takes clicks; while the picture isn't there (its stream starting, refused or ended, CV-03), every box gets a faint outline and its name. |
+| CV-04 | Selection chrome | 2px accent outline, 8 white 10px handles, rotation knob on a stem, size pill under the item ("460 × 410 · cropped"); hover outline on other items. | ✅ | The pill adds " · cropped" for a cropped item. Over the live picture an unselected item has no box, except a hidden one, which keeps its dashed outline since it still takes clicks; while the picture isn't there (its stream starting, refused or ended, CV-03), every box gets a faint outline and its name. The name sits just inside the box's top-left and runs along its top edge, so it turns with the box; a flip does not move it. It stays upright on the box's bounds when that edge is behind the viewer or has no direction, and through a camera those bounds are the visible part's. On a mirrored box it sits about one line deeper. |
 | CV-05 | Move with snapping | Drag moves; snaps edges and centres to the canvas and other items within 6px, with magenta guides; Ctrl turns snapping off for the drag. | ✅ | A rotated item doesn't snap, as in the prototype. The live picture follows the drag through live values ([ADR-0032](adr/0032-live-edits-and-undo.md), #747), and the drop is one undoable edit. For OBS users, a locked item ([OB-02](#objects)) is selected by a click but never dragged: its selection shows no handles or knob, its readout ends “· locked”, and a drag of several moves only the unlocked ones. |
 | CV-06 | Resize | Handles keep the aspect ratio; Ctrl stretches; Shift halves pointer speed; minimum 10px. | ✅ | A corner follows the axis that snapped, else the larger change; an edge scales the other axis about the centre. |
 | CV-07 | Rotate | Knob rotates; Ctrl steps 45°; snaps to 0/90/180 within 3°. | ✅ | Off the 90° snap, the angle rounds to 0.1°. |
@@ -274,7 +274,9 @@ capture's target is picked from a list of the displays or open windows the engin
 reports (`capture.targets`), not typed as an ID. Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
-first and "Other file…" for any other file.
+first and "Other file…" for any other file. In the desktop app, an asset path whose
+root is the collection folder or an absolute path has a Browse… button; a file under
+the collection folder is stored relative to it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -362,7 +364,8 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
 prototype doesn't show; that stays ([Beyond](#beyond)). A stopped card's Edit changes an
-RTMP output's server URL or a recording's file path (`output.set_path`, #1072).
+RTMP output's server URL or a recording's file path (`output.set_path`, #1072). In the
+desktop app a recording's path has a Browse… button that opens a save dialog.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
@@ -438,7 +441,10 @@ The real UI does these and the prototype doesn't show them. Matching the prototy
 not remove them; they move into the prototype's look.
 
 - Connecting: the connect form, the desktop app's automatic connection, and the
-  connection details (engine URL, protocol, client, revision) with Disconnect.
+  connection details (engine URL, protocol, client, revision) with Disconnect. In the
+  desktop app, path fields have a Browse… button (`browse.rs`) that opens a native
+  dialog for the app's own engine; a browser page has none, and another engine leaves
+  the button disabled.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
   one-time code for a remote browser and lists and revokes paired devices. In the
   workspace it sits under the properties in the Inspector panel, since it hides itself
@@ -446,7 +452,8 @@ not remove them; they move into the prototype's look.
 - WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Plugins section
   under the pairing panel in the Inspector lists the installed plugins with why one is
-  off and what it asks for that isn't granted, installs one from its package folder, and
+  off and what it asks for that isn't granted, installs one from its package folder
+  (a folder dialog in the desktop app), and
   turns a disabled one back on. Its grant dialog offers only what the plugin's manifest
   asks for: `read`, always on, the other classes with what each lets it do, the hosts,
   and folders when it asks for them. It opens after an install that asks for more than

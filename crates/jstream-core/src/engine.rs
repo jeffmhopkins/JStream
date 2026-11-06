@@ -45,7 +45,7 @@ use crate::values::SharedValues;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
     Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
@@ -1978,6 +1978,7 @@ impl Engine {
                 Arc::clone(&state.render),
                 state.audio.wanted(),
                 canvas_size(&state.graph),
+                state.graph.state().base_fps(),
             )
         };
         let program = launch_program(self, parts)?;
@@ -2112,6 +2113,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
+                    state.graph.state().base_fps(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -2492,7 +2494,7 @@ impl Engine {
             return waiting;
         }
         let begin = Instant::now();
-        let start = match self.shared.sample(scene_id.as_ref()) {
+        let start = match self.shared.sample(scene_id.as_ref(), None) {
             Ok(sample) => sample.at,
             Err(error) => {
                 reply.send(Err(error));
@@ -2689,6 +2691,10 @@ fn take_samples(
     scene_id: Option<&SceneId>,
     begin: Instant,
 ) -> Result<Vec<frames::Sample>, ProtocolError> {
+    // A scene sheet has no render-thread follower. This one measures the same scopes
+    // for the sheet's pictures, so an audio modifier hears the mix (#1189). A program
+    // sheet uses the published snapshot, whose levels the render thread already set.
+    let mut heard = scene_id.map(|_| SceneHearing::default());
     let mut samples = Vec::with_capacity(strip.count as usize);
     for index in 0..strip.count {
         let due = begin + Duration::from_millis(strip.offset_ms(index));
@@ -2698,17 +2704,53 @@ fn take_samples(
         let shared = shared.upgrade().ok_or_else(|| ProtocolError::Internal {
             reason: "the engine ended while taking the frame sheet".into(),
         })?;
-        samples.push(shared.sample(scene_id)?);
+        samples.push(shared.sample(scene_id, heard.as_mut())?);
     }
     Ok(samples)
+}
+
+/// The envelope a scene frame sheet keeps across its pictures.
+#[derive(Default)]
+struct SceneHearing {
+    follower: crate::reactive::Follower,
+    /// Whether the lead step has run. The follower's first step is zero time, which
+    /// stays at silence; the lead gives the first picture audio that is already playing.
+    primed: bool,
+}
+
+/// How far before a picture the first measure steps, so a short attack has time to rise.
+const HEAR_LEAD_MS: i64 = 50;
+
+fn hear_scene(hearing: &mut SceneHearing, bindings: &crate::reactive::Bindings, at: MediaTime) {
+    if !hearing.primed {
+        if let Some(earlier) = earlier_by(at, HEAR_LEAD_MS) {
+            hearing.follower.follow(bindings, earlier);
+        }
+        hearing.primed = true;
+    }
+    hearing.follower.follow(bindings, at);
+}
+
+/// `at` minus `ms` milliseconds, or `None` when that instant is not in `at`'s time base.
+fn earlier_by(at: MediaTime, ms: i64) -> Option<MediaTime> {
+    let lead = MediaTime::new(ms, Timebase::MILLIS)
+        .rescale(at.timebase(), Rounding::Down)
+        .ok()?;
+    at.checked_sub(lead).ok()
 }
 
 impl Shared {
     /// What `video.snapshot` would draw now, for a frame sheet: the program mix's
     /// published render snapshot, or `scene_id`'s scene planned alone as its preview
     /// stream plans it, with the live values, `rev` and the media clock's time, all
-    /// read under the collection lock. `not_found` for a scene not in the collection.
-    fn sample(&self, scene_id: Option<&SceneId>) -> Result<frames::Sample, ProtocolError> {
+    /// read under the collection lock. `heard` follows a scene sheet's audio modifiers
+    /// (#1189); a program sheet passes `None` and keeps the render thread's levels.
+    /// `not_found` for a scene not in the collection.
+    fn sample(
+        &self,
+        scene_id: Option<&SceneId>,
+        heard: Option<&mut SceneHearing>,
+    ) -> Result<frames::Sample, ProtocolError> {
         let mut state = lock(&self.state);
         let snapshot = match scene_id {
             None => state.render.load(),
@@ -2720,6 +2762,9 @@ impl Shared {
                             entity: EntityKind::Scene,
                             id: scene_id.to_string(),
                         })?;
+                if let Some(heard) = heard {
+                    hear_scene(heard, shot.audio(), state.live.now());
+                }
                 RenderSnapshot::following(None, shot)
             }
         };

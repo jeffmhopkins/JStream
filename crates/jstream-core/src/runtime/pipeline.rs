@@ -90,13 +90,32 @@ use crate::runtime::{
 };
 use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, View};
 
-/// Base frame rate of this cut: one frame every 1/30 s.
+/// Numerator of a base-rate frame period. The denominator is the collection's base
+/// frame rate, 30 by default and 60 when it opts in (ADR-0119).
 pub(crate) const FRAME_NUM: u32 = 1;
-pub(crate) const FRAME_DEN: u32 = 30;
+/// The default base frame rate, for a stage that has not been told otherwise.
+pub(crate) const FRAME_DEN: u32 = jstream_protocol::DEFAULT_BASE_FPS;
 
-/// The base frame period: what a frame may take for the program to keep up (ADR-0103).
+/// The rate a virtual camera offers. The Windows contract is 1080p BGRA at 30 fps
+/// (`jstream-vcam-windows` paces samples to that). A faster base rate feeds it every
+/// `base_fps / VCAM_FPS` tick; both allowed rates divide evenly.
+pub(crate) const VCAM_FPS: u32 = 30;
+
+const _: () = assert!(
+    VCAM_FPS > 0
+        && jstream_protocol::DEFAULT_BASE_FPS.is_multiple_of(VCAM_FPS)
+        && jstream_protocol::FAST_BASE_FPS.is_multiple_of(VCAM_FPS)
+);
+
+/// The base frame period at `fps`: what a frame may take for the program to keep up
+/// (ADR-0103).
+pub(crate) fn frame_budget_at(fps: u32) -> Duration {
+    Duration::from_secs(u64::from(FRAME_NUM)) / fps.max(1)
+}
+
+/// The default base frame period.
 pub(crate) fn frame_budget() -> Duration {
-    Duration::from_secs(u64::from(FRAME_NUM)) / FRAME_DEN
+    frame_budget_at(FRAME_DEN)
 }
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
@@ -106,12 +125,17 @@ const SAMPLE_RATE: u32 = 48_000;
 /// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
-/// frame. One more reports the output failed: one second at the base rate.
-const MAX_DRAW_ERRORS: u32 = 30;
+/// frame. One more reports the output failed: one second at `fps`.
+fn max_draw_errors(fps: u32) -> u32 {
+    fps.max(1)
+}
+
 /// Composite errors in a row on the platform's GPU context after which the render thread
-/// leaves it ([`Switch`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A
-/// third of a second at the base rate, so one bad frame does not cost the GPU path.
-const GPU_FALLBACK_ERRORS: u32 = 10;
+/// leaves it ([`Switch`]), well before [`max_draw_errors`] would fail the output. A
+/// third of a second at `fps`, so one bad frame does not cost the GPU path.
+fn gpu_fallback_errors(fps: u32) -> u32 {
+    fps.max(1) / 3
+}
 /// Device losses within [`LOSS_WINDOW`] that end the drawing: the render thread opens a
 /// new device after each of the first two, and fails the output at the third
 /// (#349's decision: a GPU that keeps resetting is not retried for ever).
@@ -728,6 +752,8 @@ pub(crate) struct Program {
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
+    /// The base frame rate this stage opened at (ADR-0119).
+    pub(crate) base_fps: u32,
     format: AudioFormat,
     /// How far the mixer's blocks run behind the clock; an output's stream origin
     /// sits that far back.
@@ -796,21 +822,27 @@ impl Program {
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
             // A settings error is no refusal: only the encoder's open is classified below.
-            let config = video_config(&feed, &key.2)?;
+            let config = video_config(&feed, &key.2, self.base_fps)?;
             let listed =
                 !hardware_held.is_empty() && hardware_listed(self.codecs.as_ref(), config.codec);
             let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
-            let video =
-                open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
-                    if limited {
-                        StartError::HardwareSessionLimit {
-                            outputs: hardware_held.to_vec(),
-                            reason,
-                        }
-                    } else {
-                        StartError::Failed(reason)
+            let video = open_video(
+                self.codecs.as_ref(),
+                context,
+                &feed,
+                &profile,
+                self.base_fps,
+            )
+            .map_err(|reason| {
+                if limited {
+                    StartError::HardwareSessionLimit {
+                        outputs: hardware_held.to_vec(),
+                        reason,
                     }
-                })?;
+                } else {
+                    StartError::Failed(reason)
+                }
+            })?;
             if config.hardware == HardwarePreference::Prefer && !video.info().codec.hardware {
                 tracing::warn!(
                     output_id = %output,
@@ -1479,6 +1511,8 @@ pub(crate) struct Parts {
     /// The collection's canvas (width, height) when the program stage opens: the output
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
+    /// The collection's base frame rate when the stage opens (ADR-0119).
+    base_fps: u32,
 }
 
 pub(crate) fn parts_from(
@@ -1488,9 +1522,11 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
+    base_fps: u32,
 ) -> Parts {
     Parts {
         canvas,
+        base_fps,
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
         video_devices: Arc::clone(&backends.video_devices),
@@ -1932,7 +1968,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         monitor_routes,
     )?;
     let bus = mixer.bus();
-    let period = frame_period(parts.clock.timebase())?;
+    let period = frame_period(parts.clock.timebase(), parts.base_fps)?;
+    engine
+        .profiler()
+        .set_budget(frame_budget_at(parts.base_fps));
     if period.ticks() <= 0 {
         return Err("the media clock is too coarse for the frame rate".into());
     }
@@ -1985,6 +2024,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             cams: vcam_inputs,
             size,
             period,
+            base_fps: parts.base_fps,
             stop: Arc::clone(&stop),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
@@ -2050,6 +2090,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
+        base_fps: parts.base_fps,
         format,
         latency,
         video_taps,
@@ -2152,7 +2193,7 @@ pub(crate) fn launch(
     };
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
-    let info = stream_info(&encoders.feed, origin, &encoders.key.2)?;
+    let info = stream_info(&encoders.feed, origin, &encoders.key.2, program.base_fps)?;
     let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -2245,8 +2286,9 @@ pub(crate) fn launch(
 }
 
 /// Starts a virtual-camera output on `program`: starts the camera at `canvas`, as BGRA8
-/// at the base frame rate, hands the render thread a tap that sends it every program
-/// frame, and starts the camera thread that publishes them. No encoder session opens.
+/// at [`VCAM_FPS`] (30 fps, the camera contract, not the base rate), hands the render
+/// thread a tap that sends it every camera tick, and starts the camera thread that
+/// publishes them. No encoder session opens.
 /// On failure `vcam` drops, which stops the camera and returns its sink to the engine.
 /// The stop sets the output's stop flag and waits for the camera thread to stop the
 /// camera, as long as it waits for any output thread.
@@ -2264,8 +2306,7 @@ pub(crate) fn launch_vcam(
     vcam.start(VcamFormat {
         size: canvas,
         pixel_format: PixelFormat::Bgra8,
-        frame_period: Timebase::new(FRAME_NUM, FRAME_DEN)
-            .map_err(|err| format!("frame period: {err}"))?,
+        frame_period: Timebase::new(1, VCAM_FPS).map_err(|err| format!("frame period: {err}"))?,
     })?;
     let stop = Arc::new(AtomicBool::new(false));
     let output_drops = Arc::new(AtomicU64::new(0));
@@ -2329,8 +2370,9 @@ fn engine_format() -> Result<AudioFormat, String> {
     .map_err(|err| format!("engine audio format: {err}"))
 }
 
-fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
-    let base = Timebase::new(FRAME_NUM, FRAME_DEN).map_err(|err| format!("frame period: {err}"))?;
+fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
+    let base =
+        Timebase::new(FRAME_NUM, fps.max(1)).map_err(|err| format!("frame period: {err}"))?;
     MediaTime::new(1, base)
         .rescale(clock, Rounding::Nearest)
         .map_err(|err| format!("frame period on the media clock: {err}"))
@@ -2534,8 +2576,12 @@ fn check_video_encoder(codecs: &dyn Codecs, config: &VideoEncoderConfig) -> Resu
 }
 
 /// The video encoder settings for `profile` at `feed`'s size and rate.
-fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderConfig, String> {
-    let period = Timebase::new(FRAME_NUM.saturating_mul(feed.divisor), FRAME_DEN)
+fn video_config(
+    feed: &Feed,
+    profile: &EncoderProfile,
+    base_fps: u32,
+) -> Result<VideoEncoderConfig, String> {
+    let period = Timebase::new(FRAME_NUM.saturating_mul(feed.divisor), base_fps.max(1))
         .map_err(|err| format!("frame period: {err}"))?;
     let video = &profile.video;
     let rate_control = match video.rate_control {
@@ -2557,7 +2603,7 @@ fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderCon
         // Frames per keyframe interval at the mix's rate, at least one.
         keyframe_interval: video
             .keyframe_interval_s
-            .saturating_mul(FRAME_DEN)
+            .saturating_mul(base_fps.max(1))
             .checked_div(FRAME_NUM.saturating_mul(feed.divisor))
             .unwrap_or(1)
             .max(1),
@@ -2573,8 +2619,9 @@ fn open_video(
     context: Option<&GpuContext>,
     feed: &Feed,
     profile: &EncoderProfile,
+    base_fps: u32,
 ) -> Result<VideoSession, String> {
-    let config = video_config(feed, profile)?;
+    let config = video_config(feed, profile, base_fps)?;
     let session = VideoSession::open_on(codecs, context, config, SessionOptions::default())
         .map_err(|err| video_open_failure(codecs, &config, &err))?;
     match session.path() {
@@ -2617,6 +2664,7 @@ fn stream_info(
     feed: &Feed,
     origin: MediaTime,
     profile: &EncoderProfile,
+    base_fps: u32,
 ) -> Result<StreamInfo, String> {
     let video_kbps = match profile.video.rate_control {
         ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
@@ -2626,7 +2674,7 @@ fn stream_info(
         codec: video_codec(profile)?,
         size: feed.size,
         origin,
-        frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM.saturating_mul(feed.divisor)),
+        frame_rate: f64::from(base_fps.max(1)) / f64::from(FRAME_NUM.saturating_mul(feed.divisor)),
         video_kbps,
         audio_kbps: profile.audio.kbps,
         sample_rate: SAMPLE_RATE,
@@ -2732,6 +2780,8 @@ struct RenderJob {
     cams: Receiver<VcamTap>,
     size: FrameSize,
     period: MediaTime,
+    /// The base frame rate this stage opened at (ADR-0119).
+    base_fps: u32,
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
@@ -3034,6 +3084,7 @@ fn render_loop(job: RenderJob) {
         cams: cam_inputs,
         size,
         period,
+        base_fps,
         stop,
         ready,
         readbacks,
@@ -3046,6 +3097,9 @@ fn render_loop(job: RenderJob) {
         losses: loss_sender,
         mut meter,
     } = job;
+    let max_errors = max_draw_errors(base_fps);
+    let fallback_errors = gpu_fallback_errors(base_fps);
+    let camera_every = u64::from(base_fps / VCAM_FPS).max(1);
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
         Ok(draw) => draw,
@@ -3127,6 +3181,11 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         meter.skip(missed);
         index = index.saturating_add(missed);
+        // The tick being drawn, before `index` steps to the next one. The camera
+        // contract is slower than the base rate, so it takes this tick only when
+        // the base tick lands on one of its own.
+        let tick = index;
+        let camera_due = tick.is_multiple_of(camera_every);
         let drawn = frames.schedule(index);
         index = index.saturating_add(1);
         // Encode targets only while compositing on the context: after a fallback a
@@ -3298,7 +3357,7 @@ fn render_loop(job: RenderJob) {
                     // context's GPU frames, so while one runs there is no fallback: the
                     // errors run on to MAX_DRAW_ERRORS, as without one.
                     if on_context
-                        && draw_errors >= GPU_FALLBACK_ERRORS
+                        && draw_errors >= fallback_errors
                         && !frames.feeds_gpu()
                         && gpu_gate.leave()
                     {
@@ -3325,7 +3384,7 @@ fn render_loop(job: RenderJob) {
                                 report(&fail, why.failed(&fell));
                             }
                         }
-                    } else if draw_errors > MAX_DRAW_ERRORS {
+                    } else if draw_errors > max_errors {
                         broken = true;
                         // No longer adopting snapshots, so it holds no gesture up.
                         reader.stop();
@@ -3397,7 +3456,9 @@ fn render_loop(job: RenderJob) {
                 .program_frame(size, cam.owner())
                 .map(|at| (&frames.shown[at], frames.mixes[at].push_at));
             let stays = match program {
-                Some((shown, Some(pts))) if !shown.is_empty() => cam.push(size, pts, shown),
+                Some((shown, Some(pts))) if camera_due && !shown.is_empty() => {
+                    cam.push(size, pts, shown)
+                }
                 _ => cam.stay(),
             };
             if stays {
@@ -4146,9 +4207,9 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, EncodeRing, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw, Switch,
-        SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock, open_video,
-        output_size, push_each, stream_info, video_config,
+        DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw,
+        Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock,
+        open_video, output_size, push_each, stream_info, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -4334,9 +4395,13 @@ mod tests {
             divisor: 1,
             owner: None,
         };
-        let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
+        let config = video_config(size, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 8000 });
+        assert_eq!(config.frame_period, Timebase::new(1, 30).expect("30 fps"));
         assert_eq!(config.keyframe_interval, 60);
+        let fast = video_config(size, &EncoderProfile::DEFAULT, 60).expect("60 fps");
+        assert_eq!(fast.frame_period, Timebase::new(1, 60).expect("60 fps"));
+        assert_eq!(fast.keyframe_interval, 120);
         assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
@@ -4346,7 +4411,7 @@ mod tests {
         };
         profile.video.keyframe_interval_s = 4;
         profile.video.hardware = ProfileHardware::Require;
-        let config = video_config(size, &profile).expect("vbr");
+        let config = video_config(size, &profile, FRAME_DEN).expect("vbr");
         assert_eq!(
             config.rate_control,
             RateControl::Vbr {
@@ -4358,13 +4423,13 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Require);
 
         profile.video.hardware = ProfileHardware::Prefer;
-        let config = video_config(size, &profile).expect("prefer");
+        let config = video_config(size, &profile, FRAME_DEN).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
         profile.video.hardware = ProfileHardware::Avoid;
-        let config = video_config(size, &profile).expect("avoid");
+        let config = video_config(size, &profile, FRAME_DEN).expect("avoid");
         assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
-        assert!(video_config(size, &profile).is_err());
+        assert!(video_config(size, &profile, FRAME_DEN).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
         for (codec, want) in [
@@ -4373,17 +4438,22 @@ mod tests {
             (VideoCodec::Av1, Codec::Av1),
         ] {
             profile.video.codec = codec;
-            assert_eq!(video_config(size, &profile).expect("known").codec, want);
             assert_eq!(
-                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                video_config(size, &profile, FRAME_DEN)
+                    .expect("known")
+                    .codec,
+                want
+            );
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile, FRAME_DEN)
                     .expect("known")
                     .codec,
                 want
             );
         }
         profile.video.codec = VideoCodec::Unknown;
-        assert!(video_config(size, &profile).is_err());
-        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
+        assert!(video_config(size, &profile, FRAME_DEN).is_err());
+        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile, FRAME_DEN).is_err());
     }
 
     /// #965: an output whose hardware encoder fell back to software at its first frame
@@ -4486,7 +4556,7 @@ mod tests {
         let config = |codec, hardware| VideoEncoderConfig {
             codec,
             hardware,
-            ..video_config(&feed, &EncoderProfile::DEFAULT).expect("default")
+            ..video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default")
         };
         use HardwarePreference::{Avoid, Prefer, Require};
         let mf = Listed(
@@ -4550,7 +4620,7 @@ mod tests {
             profile.video.hardware = ProfileHardware::Require;
             profile
         };
-        let err = open_video(&software, None, &feed, &require).err();
+        let err = open_video(&software, None, &feed, &require, FRAME_DEN).err();
         assert_eq!(
             err.as_deref(),
             Some(
@@ -4561,7 +4631,7 @@ mod tests {
         // when the list has no encoder at all: Linux without a VA-API H.264 driver and
         // without OpenH264 (#807 B1).
         let bare = Listed(Ok(vec![]), true);
-        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT) else {
+        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN) else {
             panic!("refused");
         };
         assert!(
@@ -4569,7 +4639,7 @@ mod tests {
             "{err}"
         );
         // The open fails for a reason the list doesn't explain: its own error stands.
-        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT) else {
+        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN) else {
             panic!("refused");
         };
         assert!(err.starts_with("opening the video encoder:"), "{err}");
@@ -4598,7 +4668,7 @@ mod tests {
                 FakeCodecs.video_decoder(config)
             }
         }
-        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT).is_ok());
+        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN).is_ok());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
@@ -4738,7 +4808,7 @@ mod tests {
             divisor: 2,
             owner: None,
         };
-        let config = video_config(&feed, &EncoderProfile::DEFAULT).expect("default");
+        let config = video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
         assert_eq!(config.size, feed.size);
         assert_eq!(config.frame_period, Timebase::new(2, 30).expect("timebase"));
         // 2 s at 15 fps.
@@ -4747,13 +4817,22 @@ mod tests {
             divisor: 60,
             ..feed.clone()
         };
-        let config = video_config(&slow, &EncoderProfile::DEFAULT).expect("slow");
+        let config = video_config(&slow, &EncoderProfile::DEFAULT, FRAME_DEN).expect("slow");
         assert_eq!(config.keyframe_interval, 1, "at least one frame");
         assert_eq!(
-            stream_info(&feed, us(0), &EncoderProfile::DEFAULT)
+            stream_info(&feed, us(0), &EncoderProfile::DEFAULT, FRAME_DEN)
                 .expect("h264")
                 .frame_rate,
             15.0
+        );
+        let fast = video_config(&feed, &EncoderProfile::DEFAULT, 60).expect("60 fps");
+        assert_eq!(fast.frame_period, Timebase::new(1, 30).expect("half of 60"));
+        assert_eq!(fast.keyframe_interval, 60);
+        assert_eq!(
+            stream_info(&feed, us(0), &EncoderProfile::DEFAULT, 60)
+                .expect("h264")
+                .frame_rate,
+            30.0
         );
     }
 
@@ -4774,6 +4853,7 @@ mod tests {
             None,
             &feed(None, 1),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         let input = || cpu_tap(session.input());
@@ -4823,6 +4903,7 @@ mod tests {
             None,
             &shared,
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(shared.clone(), cpu_tap(session.input()));
@@ -4851,6 +4932,7 @@ mod tests {
             None,
             &feed(),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         assert!(!frames.feeds_gpu());
@@ -4896,6 +4978,7 @@ mod tests {
             None,
             &feed(),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(
@@ -4997,6 +5080,7 @@ mod tests {
             None,
             &program,
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(program, cpu_tap(session.input()));

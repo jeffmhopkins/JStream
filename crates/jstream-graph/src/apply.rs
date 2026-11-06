@@ -724,6 +724,13 @@ fn apply_edit(
                 height: old.height,
             }])
         }
+        Edit::CanvasSetFrameRate { fps } => {
+            if !jstream_protocol::allowed_base_fps(*fps) {
+                return Err(invalid(at, "fps", "must be 30 or 60"));
+            }
+            let old = std::mem::replace(&mut state.base_fps, *fps);
+            Ok(vec![Edit::CanvasSetFrameRate { fps: old }])
+        }
         Edit::ItemSetSource { item_id, source_id } => {
             let (si, ii) = find_item(state, item_id)?;
             if state.source(source_id).is_none() {

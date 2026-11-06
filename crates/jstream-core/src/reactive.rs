@@ -9,7 +9,9 @@
 //! tick, before any mix is drawn, the render thread's [`Follower`] measures each heard
 //! scope once, advances each binding's envelope by the time since the last tick, and
 //! stores its level in the shot, where every mix drawing that tick reads it: program,
-//! preview, a scene source and a reflection agree. An envelope is kept by item and
+//! preview, a scene source and a reflection agree. A scene frame sheet keeps a
+//! [`Follower`] of its own on the `jstream-frames` thread and does the same for its
+//! pictures. An envelope is kept by item and
 //! modifier ID, so it carries across a new shot, and across a keyframe Move whose two
 //! sides share the ID.
 //!
@@ -80,8 +82,9 @@ pub(crate) fn heard_scopes(
 pub(crate) struct Binding {
     audio: Audio,
     scope: Arc<AudioScope>,
-    /// The envelope's level, `0..=1`, as `f32` bits: the render thread's [`Follower`]
-    /// stores it once a tick, and every mix of the tick reads it.
+    /// The envelope's level, `0..=1`, as `f32` bits: the render thread's [`Follower`],
+    /// or a scene frame sheet's own, stores it once a tick, and every mix of the tick
+    /// reads it.
     level: AtomicU32,
 }
 
@@ -194,8 +197,8 @@ fn address(scope: &Arc<AudioScope>) -> usize {
     Arc::as_ptr(scope) as usize
 }
 
-/// The render thread's half: a meter per heard scope and an envelope per item and
-/// modifier, advanced once a tick ([`Follower::follow`]).
+/// The render thread's half, and a scene frame sheet's own: a meter per heard scope
+/// and an envelope per item and modifier, advanced once a tick ([`Follower::follow`]).
 #[derive(Debug, Default)]
 pub(crate) struct Follower {
     /// Each heard scope's meter.

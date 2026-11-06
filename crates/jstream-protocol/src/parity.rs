@@ -588,6 +588,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::StateGet {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
+                base_fps: 30,
                 sources: sources(),
                 scenes: vec![
                     SceneInfo {
@@ -860,6 +861,10 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 height: 720,
             }),
             invalid("edits.0.width", "must be from 1 to 8192"),
+        ),
+        (
+            Batch::single(Edit::CanvasSetFrameRate { fps: 24 }),
+            invalid("edits.0.fps", "must be 30 or 60"),
         ),
         // The first edit applies inside the batch, the second fails, and the whole batch
         // is rolled back.

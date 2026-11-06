@@ -173,7 +173,7 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-place
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60)
 ├── sources        Source { id, kind, settings, filters { video[], audio[] }, duplicated_from?, labels, favourite, audio? }   video and/or audio
 │                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
@@ -684,7 +684,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
-  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
+  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89)
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
   0.32). `encoder.create`, `encoder.update` and `encoder.delete`
@@ -1068,7 +1069,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pack`, `pairing`, `ui_settings` and `values`;
+  `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
+  may set a shared value a page may send off the machine,
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  is not an undoable edit, and a page granted the value may send it off,
+  [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets

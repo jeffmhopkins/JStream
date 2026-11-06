@@ -3390,7 +3390,7 @@ mod cpu_pipeline {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    /// One base-rate period of the pipeline on a microsecond clock (1/30 s).
+    /// One base-rate period of the pipeline on a microsecond clock (1/30 s, nearest).
     const PERIOD_US: u64 = 33_333;
 
     struct Fakes {
@@ -4191,9 +4191,11 @@ mod cpu_pipeline {
 
         fakes.clock.advance(10 * PERIOD_US);
         assert!(wait_until(|| readbacks(&engine) >= 2), "no second frame");
+        // Ten periods at the base rate, with a little slack for the millisecond stamp.
+        let jumped_ms = 10 * PERIOD_US / 1_000;
         assert!(
-            wait_until(|| late_video() >= 300),
-            "the second frame was stamped {} ms, not at the clock",
+            wait_until(|| u64::from(late_video()) + 50 >= jumped_ms),
+            "the second frame was stamped {} ms, not at the clock ({jumped_ms} ms)",
             late_video()
         );
 
@@ -5880,7 +5882,8 @@ mod cpu_pipeline {
         // rate on ticks that aren't skipped is checked by
         // `frames_draw_each_feed_once_on_its_ticks`.
         let micros = jstream_platform::MediaClock::now(&fakes.clock).ticks();
-        let base = u64::try_from(micros / 33_333).expect("clock after zero");
+        let base = u64::try_from(micros / i64::try_from(PERIOD_US).expect("period"))
+            .expect("clock after zero");
         assert!(
             half + 6 >= full / 2 && half <= full + 2 && half <= base / 2 + 2,
             "{half} recorded frames against {full} streamed over {base} base ticks"
@@ -6043,6 +6046,44 @@ mod cpu_pipeline {
         assert_eq!(
             output_steps(events),
             vec![OutputState::Starting, OutputState::Active]
+        );
+    }
+
+    /// Opting the collection into 60 fps opens the stage at that rate. The virtual
+    /// camera stays on its 30 fps contract (ADR-0119).
+    #[test]
+    fn a_60_fps_collection_opens_the_stage_at_60_and_the_camera_at_30() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) = vcam_engine(
+            &fakes,
+            solid([10, 20, 30, 255]),
+            scripted(&log),
+            (64, 36),
+            None,
+        );
+        batch(&control, edits(vec![Edit::CanvasSetFrameRate { fps: 60 }])).expect("frame rate");
+        drain(&mut events);
+        start_output(&control, &mut events, "cam");
+        let profile = query(
+            &control,
+            Query::ProfileGet {
+                seconds: None,
+                top: None,
+            },
+        )
+        .expect("profile");
+        let QueryResult::ProfileGet { profile } = profile else {
+            panic!("not a profile");
+        };
+        assert!((profile.frame_budget_ms.get() - 16.666).abs() < 0.01);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || {
+            !log.lock().expect("vcam log").starts.is_empty()
+        }));
+        let log = log.lock().expect("vcam log");
+        assert_eq!(
+            log.starts[0].frame_period,
+            Timebase::new(1, 30).expect("1/30")
         );
     }
 

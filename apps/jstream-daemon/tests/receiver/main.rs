@@ -471,7 +471,8 @@ impl Rig {
 
     /// Waits for the output to have sent `seconds` of video by its own stats, in the run
     /// since its last [`start`](Self::start). An earlier run's last entry doesn't count:
-    /// it would end the wait before a restarted output sent anything.
+    /// it would end the wait before a restarted output sent anything. The count is the
+    /// default base rate, 30 fps.
     async fn stream_for(&self, id: &str, seconds: u64) {
         let since = self
             .starts
@@ -716,6 +717,48 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     );
     rig.stop("live").await;
     drop(receiver.finish());
+}
+
+/// Opting into 60 fps (ADR-0119) makes the program stream run at 60. FLV stamps are
+/// whole milliseconds, so a 16.7 ms frame is 16 or 17 ms and the measured rate is a
+/// few fps either side of 60. The profile's one-second keyframe is 60 frames.
+#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
+    let dir = scratch("rate60");
+    let rig = Rig::new(&dir).await;
+    rig.edit(red_scene_with_mic()).await;
+    rig.edit(json!([{"type": "canvas.set_frame_rate", "fps": 60}]))
+        .await;
+    rig.edit(json!([
+        {"type": "encoder.create", "profile_id": "low", "name": "Low",
+         "profile": {
+            "video": {"codec": "h264", "rate_control": {"type": "cbr", "kbps": 800},
+                      "keyframe_interval_s": 1, "hardware": "avoid"},
+            "audio": {"codec": "aac", "kbps": 128}}},
+    ]))
+    .await;
+    let port = free_port();
+    rig.stream_to("live", port).await;
+    rig.edit(json!([{"type": "output.set_encoder", "output_id": "live", "profile_id": "low"}]))
+        .await;
+    let receiver = Receiver::start(port, KEY, &dir.join("live.flv"));
+    rig.start("live").await;
+    rig.until("two seconds at 60 fps", |rig| {
+        rig.stats("live").last().is_some_and(|s| s.frames >= 120)
+    })
+    .await;
+    rig.stop("live").await;
+    let p = probe(&receiver.finish());
+    assert!(
+        close(p.measured_fps(), 60.0, 4.0),
+        "60 fps, within a millisecond of stamp: {p:?}"
+    );
+    let spacing = p.keyframe_spacing();
+    assert!(
+        spacing.contains(&60),
+        "a one-second keyframe is 60 frames: {spacing:?}"
+    );
 }
 
 /// Two outputs at once on one program: a wide stream, and a vertical one on a 180x320

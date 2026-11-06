@@ -30,9 +30,9 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
-  Help menu (the project's pages, and About), the stats
+  Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
@@ -41,6 +41,14 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
+  built as with GitHub's public releases list, pre-releases included, which the desktop
+  app fetches for it. It says "You're up to date" or names the newer version and links
+  its release page. File › Settings… holds "Check for updates at launch", off until the
+  user turns it on; the desktop app's main window then checks once as the workspace
+  opens and shows a dismissable notice only when a newer release exists. A failure is
+  quiet there and reported by the menu. A page that isn't the desktop app says the
+  check runs there. Nothing is downloaded. The comparison is tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -60,7 +68,13 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  and `desktop_vcam()`, what that global says about the virtual camera.
+  `desktop_vcam()`, what that global says about the virtual camera, and `browse`,
+  which calls the global's `browse` to open a native dialog. `same_engine` says
+  whether the open session is that app's own engine.
+- **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
+  file is stored (`place_asset`, tested natively): under the collection folder as a
+  `collection` path, otherwise `absolute`. App assets offer no button. With no desktop
+  shell the button is not rendered; connected to another engine it is disabled.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
@@ -191,7 +205,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
-  app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
+  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection` and
+  `browse`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -494,7 +509,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (stored as an `absolute` asset of its path), and "Other file…", which shows the
   root and path below it (`font_choices`, tested natively); a stored file the list
   doesn't name selects "Other file…". Until the list arrives, or if the engine can't
-  list fonts, only the root and path show. Fields
+  list fonts, only the root and path show. In the desktop app, while the session is
+  that app's own engine, a Browse… button sits beside an asset path whose root is the
+  collection folder or an absolute path (`browse.rs`). It opens a file dialog filtered
+  by the parameter's `accept`, with every file still offered, and stores a file under
+  the collection folder as a `collection` path and any other file as `absolute`
+  (`place_asset`, tested natively). App assets have no button. A browser page renders
+  none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
@@ -649,7 +670,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
   belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
-- **The shell** is the header bar over the workspace. A failed call shows in a
+- **The shell** is the header bar over the workspace. When the desktop app's launch
+  check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
+  A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
@@ -739,7 +762,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then About JStream. The About dialog's version is the workspace's
+  system browser), then Check for updates and About JStream. Check for updates and
+  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
   protocol the session's `welcome`. Below the licence it lists each codec
@@ -755,7 +780,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) or a recording's file path (`output.set_path`,
   #1072) with the card's Edit, and the encoder profile, deletes a stopped
-  output, and starts and stops each. A card's Audio select picks the bus the output
+  output, and starts and stops each. In the desktop app a recording's path, on the add
+  form and on Edit, has the same Browse… button, opening a save dialog for an `.mp4`;
+  a stream's URL has none. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
   camera's card has none. A card's Video select picks the mix it shows
@@ -838,7 +865,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
-  plugin asks for the package folder and an ID, suggested from the folder's name
+  plugin asks for the package folder (in the desktop app, a Browse… button opens a
+  folder dialog) and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
   with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
   next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
@@ -1004,8 +1032,13 @@ browser, and `mod.rs` is the component.
   picture only the selected items, the box under the pointer and hidden items (which
   aren't in the picture but still take clicks) are outlined, so an unselected source
   shows no box; without the picture every box gets a faint outline and
-  its name. Hidden items are drawn dashed, and the box under the pointer gets a light
-  outline. A keyframe scene shows its
+  its name. The name sits just inside the box's top-left corner and runs along its
+  top edge, so it turns with the box; a flip mirrors the picture and not the box, and
+  the name stays on that corner. On a mirrored box the glyphs still grow into the
+  box, so the name sits about one line deeper. When that corner or the far end of
+  the edge is behind the viewer, or the edge has no direction, the name stays
+  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
@@ -1117,8 +1150,11 @@ browser, and `mod.rs` is the component.
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
   compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
-  (`camera::polygon`, #1054). A press hits the box the engine draws on top: the nearest
-  along the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  (`camera::polygon`, #1054). The name uses the projected top-left when that corner and
+  the far end of the top edge are both in front of the camera, and stays upright on the
+  visible part's bounds when either is not. A press hits the box the engine
+  draws on top: the nearest along the view (`CameraView::depth_of`) when the
+  camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
   the pointer, and nothing snaps; a group moves by the delta on the first selected

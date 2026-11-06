@@ -165,6 +165,7 @@ impl Graph {
         QueryResult::StateGet {
             rev: self.rev,
             canvas: self.state.canvas(),
+            base_fps: self.state.base_fps(),
             sources: self
                 .state
                 .sources()
@@ -437,6 +438,7 @@ mod tests {
             QueryResult::StateGet {
                 rev: Rev(0),
                 canvas: jstream_protocol::Canvas::DEFAULT,
+                base_fps: jstream_protocol::DEFAULT_BASE_FPS,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],
