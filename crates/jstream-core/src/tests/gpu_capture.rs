@@ -330,6 +330,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
         (1280, 720),
+        jstream_protocol::DEFAULT_BASE_FPS,
     );
     let opened = open_capture(&parts).expect("a capture path");
     let mut stream = start_capture(&opened.backends, &crate::snapshot::CaptureKey::primary())
@@ -444,6 +445,7 @@ fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
             Arc::new(RenderHub::default()),
             Arc::new(Wanted::default()),
             (1280, 720),
+            jstream_protocol::DEFAULT_BASE_FPS,
         );
         let opened = open_capture(&parts).expect("a capture path");
         assert_eq!(
@@ -1387,7 +1389,7 @@ fn a_hung_gpu_fallback_fails_the_output_at_its_deadline() {
         received = engine
             .output_stats()
             .map_or(0, |stats| stats.video.received);
-        received >= 30
+        received >= 15
     });
     let started = Instant::now();
     // While the fallback hangs the last frame repeats, and the output is still active.
@@ -1606,10 +1608,9 @@ fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
 }
 
 /// An output whose encoder takes the context's GPU frames can't follow a fallback, so
-/// it rides out composite errors as an output did before the fallback existed: 40 in a
-/// row (past a third of a second at the base rate, short of the second that fails)
-/// leave it `active` on the context, with no fallback, and encoding goes on after them
-/// (review B1 on #695).
+/// it rides out composite errors as an output did before the fallback existed: 20 in a
+/// row (past the fallback's 10, short of the 31st that fails) leave it `active` on the
+/// context, with no fallback, and encoding goes on after them (review B1 on #695).
 #[test]
 fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
     let _gpu = one_gpu_test_at_a_time();
@@ -1634,7 +1635,7 @@ fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
         .with_output(OutputId::new("yt"))
         .with_backends(backends)
         .with_open_timeout(GPU_OPEN_TIMEOUT)
-        .with_draw(flaky_draw(3, 42, Arc::clone(&draws)))
+        .with_draw(flaky_draw(3, 22, Arc::clone(&draws)))
         .with_publish(Box::new(RecordingPublish::new()));
     let control = connected(&engine);
     block_on(control.call(output_call("yt", true))).expect("output.start");
@@ -1642,7 +1643,7 @@ fn a_gpu_encoder_rides_out_errors_past_the_fallback_count() {
     let mut errors_done = None;
     let past = tick_until(&clock, || {
         let now = engine.output_stats().expect("still running");
-        let done = draws.load(Ordering::Relaxed) > 42;
+        let done = draws.load(Ordering::Relaxed) > 22;
         errors_done = Some(now);
         done
     });

@@ -586,6 +586,16 @@ pub enum Edit {
         /// Canvas height in pixels.
         height: u32,
     },
+    /// Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new
+    /// collection is 30. The program stage keeps the rate it opened with; a change
+    /// applies the next time the stage opens. Mixes run at this rate divided by their
+    /// `fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.
+    /// Inverse: `canvas.set_frame_rate` with the previous rate.
+    #[serde(rename = "canvas.set_frame_rate")]
+    CanvasSetFrameRate {
+        /// Frames per second: 30 or 60.
+        fps: u32,
+    },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
     /// Its stream key is removed from the credential store, so an output created later
     /// with the same ID doesn't inherit it. Hotkey bindings whose action names the output
@@ -1230,6 +1240,7 @@ impl Edit {
             Edit::SendSet { .. } => "send.set",
             Edit::SendRemove { .. } => "send.remove",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
+            Edit::CanvasSetFrameRate { .. } => "canvas.set_frame_rate",
             Edit::VideoMixCreate { .. } => "video_mix.create",
             Edit::VideoMixUpdate { .. } => "video_mix.update",
             Edit::VideoMixDelete { .. } => "video_mix.delete",

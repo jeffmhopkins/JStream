@@ -472,7 +472,7 @@ impl Rig {
     /// Waits for the output to have sent `seconds` of video by its own stats, in the run
     /// since its last [`start`](Self::start). An earlier run's last entry doesn't count:
     /// it would end the wait before a restarted output sent anything. The count is the
-    /// base rate, 60 fps, so this is for a program stream, not a slower mix.
+    /// default base rate, 30 fps.
     async fn stream_for(&self, id: &str, seconds: u64) {
         let since = self
             .starts
@@ -485,7 +485,7 @@ impl Rig {
             rig.stats(id)
                 .get(since..)
                 .and_then(<[OutputStatsInfo]>::last)
-                .is_some_and(|s| s.frames >= seconds * 60)
+                .is_some_and(|s| s.frames >= seconds * 30)
         })
         .await;
     }
@@ -535,7 +535,7 @@ fn near(rgb: [u8; 3], want: [u8; 3]) -> bool {
 // ---------------------------------------------------------------------------------------
 // The tests
 
-/// One stream on an encoder profile: the receiver gets H.264 at the canvas size, 60 fps,
+/// One stream on an encoder profile: the receiver gets H.264 at the canvas size, 30 fps,
 /// keyframes at the profile's interval, AAC stereo at 48 kHz with the microphone in it,
 /// red pixels, and as much media as the output's stats say it sent. The stats tick
 /// each second with the uptime rising, bytes and frames growing, a bitrate near the
@@ -630,8 +630,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         (p.width, p.height),
         (u64::from(CANVAS.0), u64::from(CANVAS.1))
     );
-    // FLV stamps are whole milliseconds, so a 16.7 ms frame is 16 or 17 ms.
-    assert!(close(p.measured_fps(), 60.0, 4.0), "{p:?}");
+    assert!(close(p.measured_fps(), 30.0, 1.0), "{p:?}");
     assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");
     assert_eq!(
         (p.sample_rate, p.channels),
@@ -641,15 +640,15 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     // The file is checked against the stats by its frame count, and its duration by
     // the frames' own timestamps. The pts are wall clock and a stalled tick is counted
     // in `render_ticks`, not `frames`, so a runner stall lengthens the file without
-    // adding frames: `frames / 60` is not its duration then (#1007), but the frames
+    // adding frames: `frames / 30` is not its duration then (#1007), but the frames
     // plus the ticks skipped over the run are, within a second (#1010).
     assert!(
-        close(p.video_packets.len() as f64, last.frames as f64, 60.0),
+        close(p.video_packets.len() as f64, last.frames as f64, 30.0),
         "the file holds the frames the stats counted, within a tick: {} vs {last:?}",
         p.video_packets.len()
     );
     let span = match (p.video_packets.first(), p.video_packets.last()) {
-        (Some((start, _)), Some((end, _))) => end - start + 1.0 / 60.0,
+        (Some((start, _)), Some((end, _))) => end - start + 1.0 / 30.0,
         _ => 0.0,
     };
     assert!(
@@ -662,7 +661,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
         p.video_packets.len()
     );
     assert!(
-        close(span * 60.0, ticks, 60.0),
+        close(span * 30.0, ticks, 30.0),
         "the frames and the skipped ticks fill the file's span: {span:.3} s, {} frames, \
          {skipped} skipped ticks",
         p.video_packets.len()
@@ -683,11 +682,11 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     let spacing = p.keyframe_spacing();
     assert!(spacing.len() >= 3, "{spacing:?}");
     assert!(
-        spacing.iter().all(|n| *n == 60),
-        "a keyframe every 60 frames: {spacing:?}"
+        spacing.iter().all(|n| *n == 30),
+        "a keyframe every 30 frames: {spacing:?}"
     );
     let gaps = p.keyframe_gaps();
-    let stall = skipped as f64 / 60.0;
+    let stall = skipped as f64 / 30.0;
     assert!(
         gaps[1..].iter().all(|g| *g >= 0.9 && *g <= 1.1 + stall),
         "a keyframe every second once running, or later by the {skipped} skipped ticks: \
@@ -720,10 +719,52 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     drop(receiver.finish());
 }
 
+/// Opting into 60 fps (ADR-0119) makes the program stream run at 60. FLV stamps are
+/// whole milliseconds, so a 16.7 ms frame is 16 or 17 ms and the measured rate is a
+/// few fps either side of 60. The profile's one-second keyframe is 60 frames.
+#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
+    let dir = scratch("rate60");
+    let rig = Rig::new(&dir).await;
+    rig.edit(red_scene_with_mic()).await;
+    rig.edit(json!([{"type": "canvas.set_frame_rate", "fps": 60}]))
+        .await;
+    rig.edit(json!([
+        {"type": "encoder.create", "profile_id": "low", "name": "Low",
+         "profile": {
+            "video": {"codec": "h264", "rate_control": {"type": "cbr", "kbps": 800},
+                      "keyframe_interval_s": 1, "hardware": "avoid"},
+            "audio": {"codec": "aac", "kbps": 128}}},
+    ]))
+    .await;
+    let port = free_port();
+    rig.stream_to("live", port).await;
+    rig.edit(json!([{"type": "output.set_encoder", "output_id": "live", "profile_id": "low"}]))
+        .await;
+    let receiver = Receiver::start(port, KEY, &dir.join("live.flv"));
+    rig.start("live").await;
+    rig.until("two seconds at 60 fps", |rig| {
+        rig.stats("live").last().is_some_and(|s| s.frames >= 120)
+    })
+    .await;
+    rig.stop("live").await;
+    let p = probe(&receiver.finish());
+    assert!(
+        close(p.measured_fps(), 60.0, 4.0),
+        "60 fps, within a millisecond of stamp: {p:?}"
+    );
+    let spacing = p.keyframe_spacing();
+    assert!(
+        spacing.iter().any(|n| *n == 60),
+        "a one-second keyframe is 60 frames: {spacing:?}"
+    );
+}
+
 /// Two outputs at once on one program: a wide stream, and a vertical one on a 180x320
 /// video mix at half rate with a hue-shift filter on its own video chain (FL-07). The
-/// wide receiver gets red at 320x180 and 60 fps; the vertical one gets 180x320 at
-/// 30 fps, the canvas fitted in the middle with black above and below, turned green by
+/// wide receiver gets red at 320x180 and 30 fps; the vertical one gets 180x320 at
+/// 15 fps, the canvas fitted in the middle with black above and below, turned green by
 /// its filter. Its own chain gives it a dedicated encoder session.
 #[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -776,8 +817,7 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
 
     let p = probe(&wide);
     assert_eq!((p.width, p.height), (320, 180), "{p:?}");
-    // FLV stamps are whole milliseconds, so a 16.7 ms frame is 16 or 17 ms.
-    assert!(close(p.measured_fps(), 60.0, 4.0), "{p:?}");
+    assert!(close(p.measured_fps(), 30.0, 1.0), "{p:?}");
     let rgb = pixel(&wide, 1.5, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "the wide stream is red: {rgb:?}");
 
@@ -786,7 +826,7 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
     assert_eq!(p.video_codec, "h264", "{p:?}");
     assert_eq!((p.width, p.height), (180, 320), "{p:?}");
     assert!(
-        close(p.measured_fps(), 30.0, 1.0),
+        close(p.measured_fps(), 15.0, 1.0),
         "half the base rate: {p:?}"
     );
     assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");

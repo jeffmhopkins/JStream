@@ -180,7 +180,7 @@ fn a_cut_is_instant_even_when_its_preset_stores_a_duration() {
 
 /// One base frame, in microseconds: long enough that a 300 ms blend would still be running.
 fn frame_us() -> u64 {
-    1_000_000 / 60
+    1_000_000 / 30
 }
 
 #[test]

@@ -2203,6 +2203,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::StateGet {
             rev: Rev(12),
             canvas: Canvas::DEFAULT,
+            base_fps: 30,
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {

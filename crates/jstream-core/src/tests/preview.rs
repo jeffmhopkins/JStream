@@ -986,7 +986,7 @@ fn the_program_stage_draws_an_h264_program_stream() {
         let clock = clock.clone();
         thread::spawn(move || {
             while alive.upgrade().is_some() {
-                clock.advance(16_667);
+                clock.advance(33_333);
                 thread::sleep(Duration::from_millis(5));
             }
         })

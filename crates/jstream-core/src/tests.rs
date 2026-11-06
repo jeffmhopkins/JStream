@@ -3391,7 +3391,7 @@ mod cpu_pipeline {
     use std::time::{Duration, Instant};
 
     /// One base-rate period of the pipeline on a microsecond clock (1/60 s, nearest).
-    const PERIOD_US: u64 = 16_667;
+    const PERIOD_US: u64 = 33_333;
 
     struct Fakes {
         clock: FakeClock,
@@ -5224,10 +5224,7 @@ mod cpu_pipeline {
         assert!(
             pump_until(&fakes.clock, &fakes.audio, || {
                 engine.output_stats().is_some_and(|stats| {
-                    // Two seconds at 60 fps is 120 frames; a few more so the second
-                    // keyframe is in the file.
-                    stats.video_subscriber.delivered >= 130
-                        && stats.audio_subscriber.delivered >= 10
+                    stats.video_subscriber.delivered >= 70 && stats.audio_subscriber.delivered >= 10
                 })
             }),
             "media never reached the recording"
@@ -6052,11 +6049,48 @@ mod cpu_pipeline {
         );
     }
 
+    /// Opting the collection into 60 fps opens the stage at that rate. The virtual
+    /// camera stays on its 30 fps contract (ADR-0119).
+    #[test]
+    fn a_60_fps_collection_opens_the_stage_at_60_and_the_camera_at_30() {
+        let fakes = fakes();
+        let log = Arc::new(Mutex::new(VcamLog::default()));
+        let (_engine, control, mut events) = vcam_engine(
+            &fakes,
+            solid([10, 20, 30, 255]),
+            scripted(&log),
+            (64, 36),
+            None,
+        );
+        batch(&control, edits(vec![Edit::CanvasSetFrameRate { fps: 60 }])).expect("frame rate");
+        drain(&mut events);
+        start_output(&control, &mut events, "cam");
+        let profile = query(
+            &control,
+            Query::ProfileGet {
+                seconds: None,
+                top: None,
+            },
+        )
+        .expect("profile");
+        let QueryResult::ProfileGet { profile } = profile else {
+            panic!("not a profile");
+        };
+        assert!((profile.frame_budget_ms.get() - 16.666).abs() < 0.01);
+        assert!(pump_until(&fakes.clock, &fakes.audio, || {
+            !log.lock().expect("vcam log").starts.is_empty()
+        }));
+        let log = log.lock().expect("vcam log");
+        assert_eq!(
+            log.starts[0].frame_period,
+            Timebase::new(1, 30).expect("1/30")
+        );
+    }
+
     /// `output.start` on a virtual camera starts the platform's sink at the canvas
-    /// size, as BGRA at 30 fps (the camera contract; the program ticks at 60), and
-    /// publishes each camera tick to it with no publish target, encoder or audio.
-    /// `output.stop` stops the camera, and the engine keeps the sink, so the output
-    /// starts again.
+    /// size, as BGRA at 30 fps, and publishes every program frame to it with no
+    /// publish target, encoder or audio. `output.stop` stops the camera, and the engine
+    /// keeps the sink, so the output starts again.
     #[test]
     fn a_virtual_camera_publishes_the_program_until_stopped() {
         let fakes = fakes();

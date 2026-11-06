@@ -588,6 +588,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
             Ok(QueryResult::StateGet {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
+                base_fps: 30,
                 sources: sources(),
                 scenes: vec![
                     SceneInfo {
