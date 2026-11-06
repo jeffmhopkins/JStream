@@ -862,6 +862,10 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             }),
             invalid("edits.0.width", "must be from 1 to 8192"),
         ),
+        (
+            Batch::single(Edit::CanvasSetFrameRate { fps: 24 }),
+            invalid("edits.0.fps", "must be 30 or 60"),
+        ),
         // The first edit applies inside the batch, the second fails, and the whole batch
         // is rolled back.
         (

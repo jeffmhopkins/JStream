@@ -2677,7 +2677,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. Mixes run at this rate divided by their\n`fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.\nInverse: `canvas.set_frame_rate` with the previous rate.",
+                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
                 "properties": {
                   "fps": {
                     "description": "Frames per second: 30 or 60.",
@@ -6014,7 +6014,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. Mixes run at this rate divided by their\n`fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.\nInverse: `canvas.set_frame_rate` with the previous rate.",
+                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
                 "properties": {
                   "fps": {
                     "description": "Frames per second: 30 or 60.",
@@ -9913,7 +9913,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. Mixes run at this rate divided by their\n`fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.\nInverse: `canvas.set_frame_rate` with the previous rate.",
+                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
                 "properties": {
                   "fps": {
                     "description": "Frames per second: 30 or 60.",
@@ -17366,7 +17366,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. Mixes run at this rate divided by their\n`fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.\nInverse: `canvas.set_frame_rate` with the previous rate.",
+                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
                 "properties": {
                   "fps": {
                     "description": "Frames per second: 30 or 60.",
@@ -25656,7 +25656,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. Mixes run at this rate divided by their\n`fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.\nInverse: `canvas.set_frame_rate` with the previous rate.",
+                "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
                 "properties": {
                   "fps": {
                     "description": "Frames per second: 30 or 60.",

@@ -3390,7 +3390,7 @@ mod cpu_pipeline {
     use std::thread;
     use std::time::{Duration, Instant};
 
-    /// One base-rate period of the pipeline on a microsecond clock (1/60 s, nearest).
+    /// One base-rate period of the pipeline on a microsecond clock (1/30 s, nearest).
     const PERIOD_US: u64 = 33_333;
 
     struct Fakes {

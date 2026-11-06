@@ -1701,8 +1701,8 @@ then shows the page's newest texture in place of its transparent stand-in, as a
 `Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
 sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
 anywhere else, `video.snapshot` included, it draws nothing. A page repaints on its
-own, so while a context is set a source that opens through the browser engine asks for a re-plan every program
-frame (1/30 s), painted yet or not, as an animation asks at its next frame; a texture
+own, so while a context is set a source that opens through the browser engine asks for a re-plan every
+1/30 s, painted yet or not, as an animation asks at its next frame. That is every program frame at the default rate, and every other frame when the collection runs at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
 context the page shows its stand-in, transparent. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for

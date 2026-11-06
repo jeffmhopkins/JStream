@@ -588,9 +588,11 @@ pub enum Edit {
     },
     /// Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new
     /// collection is 30. The program stage keeps the rate it opened with; a change
-    /// applies the next time the stage opens. Mixes run at this rate divided by their
-    /// `fps_divisor`, so 60 doubles every mix. Anything else is `invalid_argument`.
-    /// Inverse: `canvas.set_frame_rate` with the previous rate.
+    /// applies the next time the stage opens. A preview stream holds the stage open, so
+    /// the program keeps the old rate until every consumer stops. `profile.get`'s
+    /// `frame_budget_ms` is the rate the stage is actually running at. Mixes run at this
+    /// rate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is
+    /// `invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.
     #[serde(rename = "canvas.set_frame_rate")]
     CanvasSetFrameRate {
         /// Frames per second: 30 or 60.

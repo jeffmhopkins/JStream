@@ -756,7 +756,7 @@ async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
     );
     let spacing = p.keyframe_spacing();
     assert!(
-        spacing.iter().any(|n| *n == 60),
+        spacing.contains(&60),
         "a one-second keyframe is 60 frames: {spacing:?}"
     );
 }

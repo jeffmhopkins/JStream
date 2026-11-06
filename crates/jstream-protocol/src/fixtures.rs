@@ -145,6 +145,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             width: 3840,
             height: 2160,
         },
+        Edit::CanvasSetFrameRate { fps: 60 },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
             scene_id: None,
