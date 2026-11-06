@@ -1701,8 +1701,8 @@ then shows the page's newest texture in place of its transparent stand-in, as a
 `Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
 sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
 anywhere else, `video.snapshot` included, it draws nothing. A page repaints on its
-own, so while a context is set a source that opens through the browser engine asks for a re-plan every program
-frame (1/30 s), painted yet or not, as an animation asks at its next frame; a texture
+own, so while a context is set a source that opens through the browser engine asks for a re-plan every
+1/30 s, painted yet or not, as an animation asks at its next frame. That is every program frame at the default rate, and every other frame when the collection runs at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
 context the page shows its stand-in, transparent. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
@@ -2244,7 +2244,7 @@ A render tick that falls a whole period or more behind the clock is not drawn la
 the loop skips to the current tick, stamps the frame with it and counts the skipped
 ticks in `render_ticks`, so video stays on the clock that stamps audio
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). Both render-thread counters count base
-ticks (1/30 s), whatever the video mixes' rates: `render_ticks` counts every skipped
+ticks (1/30 s by default, 1/60 s when the collection opts into it), whatever the video mixes' rates: `render_ticks` counts every skipped
 base tick, including ones on which no mix was due, and the capture mailbox is read
 only on ticks that draw, so when every running mix has a divisor above 1,
 `capture_frames` also counts the captures between its ticks, which no mix wanted. There is no separate output queue in front of the network. Underruns, device gaps and
@@ -2533,7 +2533,7 @@ first video packet (`warn_fallback`, reading `Subscription::codec`; #965), besid
 platform's warning with the refusal.
 
 **Video mixes.** The render thread keeps one frame per video mix the running sessions
-are fed from, each at its session's size, and counts base ticks (1/30 s). On a tick it
+are fed from, each at its session's size, and counts base ticks (1/30 s by default, 1/60 s when the collection opts into it, ADR-0119). On a tick it
 composites only the mixes due on it (every `fps_divisor`th tick, counted from the last
 one it drew, so a tick an overrun skips delays a mix but can't starve it), all in one
 GPU frame, and pushes each due frame to that mix's sessions; a tick with nothing due
@@ -2710,7 +2710,8 @@ it. It starts the camera at the canvas size the collection has then, as BGRA8 at
 1/30 s (a refusal fails the start with `starting the virtual camera: <reason>`), hands
 the render thread a tap, and starts the output's camera thread, `jstream-vcam`. The
 tap and that thread share only the output's stop flag and two bounded channels, never
-a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). Each tick the tap copies the
+a lock ([R-RT-003](../../docs/RULES.md#R-RT-003)). On each camera tick (every base tick
+at 30 fps, every second base tick at 60) the tap copies the
 program frame (RGBA) into a buffer the camera thread handed back and sends it (a
 camera with its own video chain is fed a program frame of its own, drawn through that
 chain, which the render thread holds for it as it holds the shared one),
@@ -3271,7 +3272,7 @@ The output pipeline (`src/runtime/`) is the part of
 `output.start`, once the host has injected platform backends and a publish target
 (a recording output or a virtual camera needs none), starts it and emits `output.state_changed` from the
 control thread. The program is the canvas size the collection has when the stage
-opens (#433). On each 1/30 s base tick the render thread adopts the render snapshot,
+opens (#433). On each base tick (1/30 s by default, 1/60 s when the collection opts into it) the render thread adopts the render snapshot,
 reads the capture mailboxes of every display and window the program or a mix shows,
 and composites each video mix due on that tick (see
 *Video mixes* in Design) from the render snapshot (see *Snapshots* in Design) at its
@@ -3479,8 +3480,9 @@ its own that the mixer thread feeds from the output's tap. The render and mixer 
 session's inputs from a channel, never a lock, and hand a finished session's input to
 the collector rather than drop it. While the stage has no session and no virtual
 camera, or no mix is due on a tick, it draws nothing but still adopts the latest render
-snapshot. A virtual camera is fed the program at the canvas size on every tick, so that
-feed is drawn while a camera runs even if no session is on it; its video mix doesn't
+snapshot. A virtual camera is fed the program at the canvas size on every camera
+tick, which is every base tick at 30 fps and every second one at 60. The program is still drawn on every base tick
+while a camera runs, even if no session is on it; its video mix doesn't
 apply yet. Every pipeline thread starts under the
 `tracing` dispatcher of the call that starts it (`spawn`), so its events go where that
 call's do: the global subscriber in a host, a test's own in a test. Each output but a

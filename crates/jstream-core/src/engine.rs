@@ -1978,6 +1978,7 @@ impl Engine {
                 Arc::clone(&state.render),
                 state.audio.wanted(),
                 canvas_size(&state.graph),
+                state.graph.state().base_fps(),
             )
         };
         let program = launch_program(self, parts)?;
@@ -2112,6 +2113,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
+                    state.graph.state().base_fps(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);

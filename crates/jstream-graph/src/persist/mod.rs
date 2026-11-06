@@ -35,6 +35,14 @@ mod tests;
 /// loads (R-API-003).
 pub const SCHEMA_VERSION: u32 = 6;
 
+fn default_base_fps() -> u32 {
+    jstream_protocol::DEFAULT_BASE_FPS
+}
+
+fn is_default_base_fps(fps: &u32) -> bool {
+    *fps == jstream_protocol::DEFAULT_BASE_FPS
+}
+
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
 const WEBCAM: &str = "webcam";
@@ -206,6 +214,13 @@ struct File {
     schema_version: u32,
     rev: Rev,
     canvas: Canvas,
+    /// The base frame rate (ADR-0119). Omitted while it is 30, so a collection that
+    /// has not opted into 60 saves as it did before.
+    #[serde(
+        default = "default_base_fps",
+        skip_serializing_if = "is_default_base_fps"
+    )]
+    base_fps: u32,
     /// In display order.
     scenes: Vec<FileScene>,
     /// Ordered by ID.
@@ -619,6 +634,7 @@ impl Graph {
             schema_version: SCHEMA_VERSION,
             rev: self.rev,
             canvas: state.canvas,
+            base_fps: state.base_fps,
             scenes: state
                 .scenes
                 .iter()
@@ -986,6 +1002,12 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 width: file.canvas.width,
                 height: file.canvas.height,
             },
+        ));
+    }
+    if file.base_fps != graph.state.base_fps {
+        edits.push((
+            "the base frame rate".to_owned(),
+            Edit::CanvasSetFrameRate { fps: file.base_fps },
         ));
     }
     // Folders are created top level in folder order, then nested, so a parent may come

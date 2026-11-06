@@ -152,6 +152,9 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   a bitrate that matches the bytes sent between ticks and stays at most a little above
   the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
   the next one.
+- **60 fps is opt-in.** `canvas.set_frame_rate` 60 makes the program stream run at 60,
+  with a one-second keyframe every 60 frames. The measured rate allows a few fps,
+  because FLV stamps are whole milliseconds.
 - **A vertical mix with an output filter.** A wide stream and a 180x320, half-rate
   stream run together. The vertical stream has a hue shift on its own video chain
   (FL-07), which gives it a dedicated session. Its receiver gets the canvas fitted in

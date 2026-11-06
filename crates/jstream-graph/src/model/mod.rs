@@ -179,6 +179,8 @@ pub const MAX_BUSES: usize = jstream_protocol::MAX_BUSES;
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub(crate) canvas: Canvas,
+    /// The base frame rate, 30 or 60 (ADR-0119). A new collection is 30.
+    pub(crate) base_fps: u32,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -211,6 +213,7 @@ impl Default for State {
         let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
             canvas: Canvas::default(),
+            base_fps: jstream_protocol::DEFAULT_BASE_FPS,
             sources: BTreeMap::new(),
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
@@ -235,6 +238,11 @@ impl State {
     /// The canvas every scene is laid out on.
     pub fn canvas(&self) -> Canvas {
         self.canvas
+    }
+
+    /// The collection's base frame rate, 30 or 60 (ADR-0119).
+    pub fn base_fps(&self) -> u32 {
+        self.base_fps
     }
 
     /// Every source, ordered by ID. Sources have no display order of their own.

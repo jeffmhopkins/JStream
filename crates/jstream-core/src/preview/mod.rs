@@ -96,8 +96,7 @@ use crate::chain::Chains;
 use crate::lock;
 use crate::profile::DrawMeter;
 use crate::runtime::{
-    CaptureBackends, FRAME_DEN, FRAME_NUM, Program, RenderCaptures, RenderSnapshot, output_size,
-    spawn_captures,
+    CaptureBackends, Program, RenderCaptures, RenderSnapshot, output_size, spawn_captures,
 };
 use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
@@ -667,7 +666,7 @@ impl Staged {
         let H264 {
             session, packets, ..
         } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
-        let divisor = (FRAME_DEN / FRAME_NUM.max(1) / stream.settings.fps.max(1)).max(1);
+        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
         stage.attach_preview(size, divisor, session.input());
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {

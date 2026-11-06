@@ -155,8 +155,13 @@ pub(crate) struct Profiler {
     sources: Arc<SourceMeters>,
     threads: Mutex<Option<Arc<dyn ThreadCpu>>>,
     history: Mutex<VecDeque<Sample>>,
-    /// The program's frame period.
-    budget: Duration,
+    /// The program's frame period, in nanoseconds. The control thread sets it when a
+    /// stage opens; the stats thread reads it.
+    budget_ns: std::sync::atomic::AtomicU64,
+}
+
+fn budget_nanos(budget: Duration) -> u64 {
+    u64::try_from(budget.as_nanos()).unwrap_or(u64::MAX)
 }
 
 impl Profiler {
@@ -170,18 +175,28 @@ impl Profiler {
             sources,
             threads: Mutex::new(None),
             history: Mutex::new(VecDeque::new()),
-            budget,
+            budget_ns: std::sync::atomic::AtomicU64::new(budget_nanos(budget)),
         }
+    }
+
+    fn budget(&self) -> Duration {
+        Duration::from_nanos(self.budget_ns.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
+    /// The frame period the next stage's meters and `profile.get` use.
+    pub(crate) fn set_budget(&self, budget: Duration) {
+        self.budget_ns
+            .store(budget_nanos(budget), std::sync::atomic::Ordering::Relaxed);
     }
 
     /// A meter for a new run of the program stage's render thread.
     pub(crate) fn program_meter(&self) -> DrawMeter {
-        self.program.meter(self.budget)
+        self.program.meter(self.budget())
     }
 
     /// A meter for a new run of the preview hub's thread.
     pub(crate) fn preview_meter(&self) -> DrawMeter {
-        self.preview.meter(self.budget)
+        self.preview.meter(self.budget())
     }
 
     /// Reads each thread's CPU time from `threads` from now on.
@@ -236,7 +251,7 @@ impl Profiler {
             now.plan_max = now.plan_max.max(longest);
             base
         };
-        let info = window(&now, base.as_ref(), self.started, self.budget, top);
+        let info = window(&now, base.as_ref(), self.started, self.budget(), top);
         // Kept with only its own longest plan, so a later window doesn't count the
         // earlier ones twice over a base after them.
         now.plan_max = plan_max;

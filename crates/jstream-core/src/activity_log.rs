@@ -478,6 +478,7 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
             ),
         },
         Edit::CanvasSetSize { width, height } => format!("Set the canvas to {width}×{height}"),
+        Edit::CanvasSetFrameRate { fps } => format!("Set the base frame rate to {fps} fps"),
         Edit::EncoderCreate { name, .. } => format!("Created encoder profile {}", quote(name)),
         Edit::EncoderUpdate { name, .. } => format!("Changed encoder profile {}", quote(name)),
         Edit::EncoderDelete { profile_id } => format!(

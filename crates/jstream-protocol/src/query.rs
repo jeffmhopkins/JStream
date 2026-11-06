@@ -18,6 +18,7 @@ use crate::id::{
 use crate::keyframe::{ItemOverride, PlacedKeyframe};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
+use crate::mix::DEFAULT_BASE_FPS;
 use crate::mix::VideoMixInfo;
 use crate::motion::MotionModifier;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
@@ -33,6 +34,14 @@ use crate::youtube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+fn default_base_fps() -> u32 {
+    DEFAULT_BASE_FPS
+}
+
+fn is_default_base_fps(fps: &u32) -> bool {
+    *fps == DEFAULT_BASE_FPS
+}
 
 /// A read. Queries change nothing, so they need no classification as edit or action.
 ///
@@ -456,6 +465,13 @@ pub enum QueryResult {
         /// parses as 1920×1080.
         #[serde(default)]
         canvas: Canvas,
+        /// The collection's base frame rate, 30 or 60 (ADR-0119, since 0.89). Omitted
+        /// while it is 30, so a collection that has not opted in reads as it did before.
+        #[serde(
+            default = "default_base_fps",
+            skip_serializing_if = "is_default_base_fps"
+        )]
+        base_fps: u32,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.

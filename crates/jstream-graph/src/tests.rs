@@ -3462,6 +3462,29 @@ fn invalid_geometries_name_the_field() {
 }
 
 #[test]
+fn the_base_frame_rate_defaults_to_30_and_60_is_an_option() {
+    let mut graph = fixture();
+    assert_eq!(graph.state().base_fps(), 30);
+    let applied = apply_ok(&mut graph, vec![Edit::CanvasSetFrameRate { fps: 60 }]);
+    assert_eq!(graph.state().base_fps(), 60);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::CanvasSetFrameRate { fps: 30 }]
+    );
+    let (field, _) = invalid_reason(apply_err(
+        &mut graph,
+        vec![Edit::CanvasSetFrameRate { fps: 24 }],
+    ));
+    assert_eq!(field, "edits.0.fps");
+    let saved = graph.to_collection_json();
+    assert!(saved.contains("\"base_fps\": 60"), "{saved}");
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(graph.state().base_fps(), 30);
+    let saved = graph.to_collection_json();
+    assert!(!saved.contains("base_fps"), "{saved}");
+}
+
+#[test]
 fn canvas_set_size_is_checked_and_undone() {
     let mut graph = fixture();
     assert_eq!(graph.state().canvas(), Canvas::DEFAULT);

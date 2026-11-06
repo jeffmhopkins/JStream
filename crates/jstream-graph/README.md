@@ -29,7 +29,7 @@ protocol's types (`Overrides`).
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
   (`cut`, `fade`, `move`), which every graph has.
-- `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
+- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
@@ -146,12 +146,12 @@ that does not want to change the graph it has.
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
   `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
   scene's transition overrides and options, an item's transition settings), and whether the
-  scenes' order, the canvas size or the default preset was set. A send is an object of its own, so two sources'
+  scenes' order, the canvas size, the base frame rate or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
   its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
-  set the same property, both set the scenes' order, both set the canvas size, or both
+  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, or both
   set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a source kind the graph describes (a
