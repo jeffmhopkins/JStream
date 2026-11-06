@@ -1310,7 +1310,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
 }
 .modal:focus { outline: none; }
-.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--line); cursor: move; user-select: none; touch-action: none; }
+.modal-header button { cursor: pointer; }
+.modal-header button:disabled { cursor: default; }
 .modal-titles { display: flex; flex-direction: column; }
 .modal-title { margin: 0; font-size: 15px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .modal-sub { font-size: 11px; color: var(--muted); }

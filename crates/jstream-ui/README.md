@@ -114,7 +114,8 @@ Contents ([Design](#design) explains the choices):
   `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0096: a one-picture
   PNG preview stream on a tap of the canvas's channel, saved through a download link;
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
-  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
+  the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
+  place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
@@ -376,7 +377,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   group scene has filters, or the group's look, or a keyframe scene's, can't become its
   items' own (`Kept` in `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
-  backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
+  backdrop cancel, and Enter presses the button marked `data-primary`. A primary press
+  on that dialog's own header drags it, as a `translate` from the centred place, clamped
+  so the box stays inside the window (a box wider than the window keeps covering it; the
+  top never goes above the window). The offset is remembered for the dialog's label in
+  the shell's `DialogPlaces` context for the page's lifetime, not in the engine's UI
+  settings (ADR-0084); a double-click on the header, timed from the pointer event, centres
+  it, and a control in the header does not start a drag. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
