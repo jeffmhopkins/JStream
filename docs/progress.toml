@@ -1261,7 +1261,7 @@ id = "3D3"
 milestone = "M3"
 title = "3D models with materials and live textures"
 status = "planned"
-prs = [1112, 1113, 1118]
+prs = [1112, 1113, 1118, 1261]
 note = "ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
 needs = ["build"]
 
