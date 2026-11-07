@@ -488,8 +488,10 @@ PR with its base are enforced by the `governance` check instead (see
   `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
   delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
 - **Identity changes:** a doc, section or rule that existed on the base is deleted or
-  retired, whether or not it leaves a tombstone ([R-DOC-010](RULES.md#R-DOC-010)). See
-  [Lifecycle](#lifecycle).
+  retired, whether or not it leaves a tombstone; any other `<a id>` anchor or a
+  `retired_sections` tombstone is removed; or an ID is reused, as a new anchor a base
+  tombstone names or a retired rule made active again ([R-DOC-010](RULES.md#R-DOC-010)).
+  See [Lifecycle](#lifecycle) and [Governance](#governance).
 
 It also **reports**, without failing (as `warning:` lines), crates that no section covers,
 and `applies_to` globs naming a crate directory (`crates/<name>/…`, `apps/<name>/…`) that
