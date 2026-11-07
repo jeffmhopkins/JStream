@@ -5,6 +5,7 @@
 //! options come before the command. Edits are named by their protocol command names
 //! (`scene.create`), so the CLI maps one to one onto the protocol (R-ARCH-001).
 
+use crate::bench::{self, BenchOptions, Scenario};
 use crate::exit::CliError;
 use jstream_control::protocol::{
     Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
@@ -74,6 +75,20 @@ Commands:
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
+  bench --out <dir> [--scenario basic|layered|all] [--seconds <n>]
+        [--switch-every <ms>] [--preset <preset-id>] [--gates <file>]
+                                   run a standard load on the engine for <n>
+                                   seconds (default 20, 5 to 60): record the
+                                   program to <dir>, switch scenes every <ms>
+                                   (default 4000) with the transition (default
+                                   fade), then remove it all and write
+                                   report.json, summary.md and each switch's
+                                   frame sheet to <dir>. Exits 4 when a gate
+                                   fails: by default any dropped frame or packet,
+                                   a skipped render tick, a program frame over
+                                   budget or a recording under 98% of the
+                                   program's rate. <file> is JSON naming other
+                                   limits (see the README)
   mcp                              serve MCP on stdin/stdout (one JSON-RPC message
                                    per line) over this connection, until stdin ends
   help                             print this help
@@ -118,7 +133,7 @@ Edits (each is its protocol command name followed by its arguments):
   item.add fits a display, window or webcam source to the canvas, and places any
   other source at 1:1; item.set_geometry in the same batch overrides either.
 
-Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 10-20 engine errors
+Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 4 bench gate failed, 10-20 engine errors
 (see the README for the full table).
 ";
 
@@ -182,6 +197,8 @@ pub enum Command {
     },
     /// Serve MCP on stdin and stdout over the session, until stdin ends.
     Mcp,
+    /// Run the load bench and judge it against its gates.
+    Bench(BenchOptions),
 }
 
 fn usage(message: impl Into<String>) -> CliError {
@@ -348,11 +365,12 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         }),
         ["edit", rest @ ..] => Command::Edit(parse_batch(rest)?),
         ["events", rest @ ..] => parse_events(rest)?,
+        ["bench", rest @ ..] => parse_bench(rest)?,
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
                 "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp", "pair", "device",
+                "studio", "edit", "events", "mcp", "pair", "device", "bench",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -398,6 +416,48 @@ fn parse_events(mut args: &[&str]) -> Result<Command, CliError> {
         }
     }
     Ok(Command::Events { count })
+}
+
+fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
+    let mut options = BenchOptions {
+        scenarios: Scenario::ALL.to_vec(),
+        seconds: bench::DEFAULT_SECONDS,
+        switch_ms: bench::DEFAULT_SWITCH_MS,
+        preset: bench::DEFAULT_PRESET.into(),
+        out: String::new(),
+        gates: None,
+    };
+    let mut out = None;
+    while let Some((&option, rest)) = args.split_first() {
+        let [value, rest @ ..] = rest else {
+            return Err(usage(format!("unexpected `{option}` after `bench`")));
+        };
+        match option {
+            "--out" => out = Some((*value).to_owned()),
+            "--scenario" => {
+                options.scenarios = Scenario::parse(value).ok_or_else(|| {
+                    usage(format!("unknown scenario `{value}`: basic, layered or all"))
+                })?;
+            }
+            "--seconds" => {
+                options.seconds = number(value, "--seconds")?;
+                if !(bench::MIN_SECONDS..=bench::MAX_SECONDS).contains(&options.seconds) {
+                    return Err(usage(format!(
+                        "`--seconds` is {} to {}",
+                        bench::MIN_SECONDS,
+                        bench::MAX_SECONDS
+                    )));
+                }
+            }
+            "--switch-every" => options.switch_ms = number(value, "--switch-every")?,
+            "--preset" => options.preset = (*value).to_owned(),
+            "--gates" => options.gates = Some((*value).to_owned()),
+            _ => return Err(usage(format!("unexpected `{option}` after `bench`"))),
+        }
+        args = rest;
+    }
+    options.out = out.ok_or_else(|| usage("`bench` needs `--out <dir>`"))?;
+    Ok(Command::Bench(options))
 }
 
 fn parse_batch(mut args: &[&str]) -> Result<Batch, CliError> {
@@ -1483,6 +1543,58 @@ mod tests {
             ok(&["events", "--count", "3"]).command,
             Command::Events { count: Some(3) }
         );
+    }
+
+    #[test]
+    fn bench_needs_an_out_dir_and_takes_its_options() {
+        use crate::bench::{BenchOptions, Scenario};
+        assert_eq!(
+            ok(&["bench", "--out", "runs"]).command,
+            Command::Bench(BenchOptions {
+                scenarios: Scenario::ALL.to_vec(),
+                seconds: 20,
+                switch_ms: 4000,
+                preset: "fade".into(),
+                out: "runs".into(),
+                gates: None,
+            })
+        );
+        assert_eq!(
+            ok(&[
+                "bench",
+                "--scenario",
+                "layered",
+                "--seconds",
+                "30",
+                "--switch-every",
+                "2500",
+                "--preset",
+                "cut",
+                "--gates",
+                "g.json",
+                "--out",
+                "o",
+            ])
+            .command,
+            Command::Bench(BenchOptions {
+                scenarios: vec![Scenario::Layered],
+                seconds: 30,
+                switch_ms: 2500,
+                preset: "cut".into(),
+                out: "o".into(),
+                gates: Some("g.json".into()),
+            })
+        );
+        assert_eq!(err(&["bench"]), "`bench` needs `--out <dir>`");
+        assert_eq!(
+            err(&["bench", "--out", "o", "--seconds", "61"]),
+            "`--seconds` is 5 to 60"
+        );
+        assert_eq!(
+            err(&["bench", "--out", "o", "--scenario", "webcam"]),
+            "unknown scenario `webcam`: basic, layered or all"
+        );
+        assert_eq!(err(&["bench", "--out"]), "unexpected `--out` after `bench`");
     }
 
     #[test]
