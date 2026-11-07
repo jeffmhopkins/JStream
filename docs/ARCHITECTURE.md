@@ -258,7 +258,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
     which is not itself a variant. It has no items of its own: it shows the parent's
     items with per-item `overrides` of placement, crop, visibility, opacity, effects
     (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)) and
-    motion (the whole list, ADR-0099); an absent field follows the parent; everything else, including the background and its
+    motion (the whole list, ADR-0099), and its timing in switches into the keyframe
+    (delay, easing and duration, [ADR-0129](adr/0129-keyframe-timing-and-more-easings.md));
+    an absent field follows the parent; everything else, including the background and its
     scene filters, follows the parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
@@ -675,7 +677,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
-  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.84 a
+  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.99,
+  `item.set_timing` writes a keyframe's timing for an item in switches into it, and the
+  easings gain `ease_in`, `hold` and `cubic_bezier`
+  ([ADR-0129](adr/0129-keyframe-timing-and-more-easings.md)). Since 0.84 a
   modifier can be a one-shot `impulse` on the `triggered` clock, which the action
   `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
   the program scene.
@@ -1436,7 +1441,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
   (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
   settings already grant names or a bus, since loading rebuilds sources with their
-  kind's defaults. `jstream-core`
+  kind's defaults. Version 9 (ADR-0129, a placeholder number the release queue sets)
+  adds a keyframe override's `timing`, with a migration that refuses it in an older
+  file. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

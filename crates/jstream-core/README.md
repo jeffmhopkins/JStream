@@ -1138,7 +1138,12 @@ planned by item between its two sides with the group item's timing, which the pa
 that draws its layer samples at the frame's time (ADR-0049 §3), and the layers the
 two sides planned for it, with their chains and boxes, are dropped when no track reads
 them; a switch mid-Move holds them where `on_screen` finds them. Stagger delays only
-the incoming items (§3). Audio does not follow a transition
+the incoming items (§3). A switch into a keyframe scene gives `transition::plan` that
+keyframe's overrides, and an item the keyframe times
+([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) takes its delay
+and easing in place of the item's own and its duration in place of the preset's, on
+either side of the switch; a group's children still follow the group item's timing.
+Audio does not follow a transition
 yet (D29).
 
 Cameras ([ADR-0094](../../docs/adr/0094-scene-cameras.md) decision 7): each pass of a
