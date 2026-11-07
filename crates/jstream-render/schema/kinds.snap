@@ -603,7 +603,7 @@ source: crates/jstream-render/tests/kinds.rs
         "live": true
       }
     ],
-    "max_outset_px": 128
+    "max_outset_px": 129
   },
   {
     "kind_id": "chroma_key",

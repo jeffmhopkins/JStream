@@ -785,7 +785,7 @@ premultiplied linear light on the way out.
   rounded shape. An inner stroke, `width` (0 to 64 px, default 4) and `color`, runs
   inside the edge over the picture; an outer one, `outer_width` (0 to 64, default 0),
   `outer_color` and `outer_gap` (0 to 64), past it, so the kind declares a
-  `max_outset_px` of 128. `style` is `solid`, `double` (two lines of a third of the
+  `max_outset_px` of 129. `style` is `solid`, `double` (two lines of a third of the
   width), `dashed` (`dash` 1 to 400 px, `gap`) or `dotted` (round dots the stroke's
   width across, `gap` apart), measured along the edge: each straight side by its
   length and each corner by its arc, clockwise from the top-left. `fill` is the
@@ -876,8 +876,8 @@ scratch layer that size, transparent around it, then runs the pass over that. Ea
 these kinds declares the
 most it can draw past its input at any settings: drop shadow 300 (the largest offset
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
-and bloom 100 (the largest radius), and border 128 (its widest outer stroke after its
-widest gap). So on an item the glow and shadow of an opaque
+and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
+widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
 picture show around its box (#1226). That room costs layer memory and fill: a
 1920×1080 box with a drop shadow is a 2520×1680 layer.
 

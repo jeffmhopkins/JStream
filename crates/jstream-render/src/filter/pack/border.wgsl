@@ -18,7 +18,8 @@ struct Params {
     gap: f32,
     outer_width: f32,
     outer_gap: f32,
-    // How far the dashes have travelled along the edge, px.
+    // How far the inner stroke's dashes or dots have travelled along the edge, px,
+    // within one of its periods.
     along: f32,
     // How far the gradient has turned, in turns.
     turn: f32,
@@ -28,6 +29,8 @@ struct Params {
     // 0 a colour, 1 linear, 2 conic.
     fill: u32,
     clip: u32,
+    // The same for the outer stroke, whose dots repeat at its own width.
+    outer_along: f32,
 }
 
 @group(0) @binding(4) var<uniform> p: Params;
@@ -120,7 +123,7 @@ fn paint(q: vec2<f32>, half: vec2<f32>) -> vec4<f32> {
 
 // How much of a stroke `w` wide covers a point `across` into it and `s` along the
 // edge, for the style.
-fn pattern(across: f32, s: f32, w: f32) -> f32 {
+fn pattern(across: f32, s: f32, w: f32, along: f32) -> f32 {
     if (p.style == 1u) {
         // Two lines of a third each, a third apart.
         let third = w / 3.0;
@@ -128,12 +131,12 @@ fn pattern(across: f32, s: f32, w: f32) -> f32 {
     }
     if (p.style == 2u) {
         let period = max(p.dash + p.gap, 1.0);
-        let at = (s - p.along) - floor((s - p.along) / period) * period;
+        let at = (s - along) - floor((s - along) / period) * period;
         return saturate(min(at, p.dash - at) + 0.5) + saturate(at - period + 0.5);
     }
     if (p.style == 3u) {
         let period = max(w + p.gap, 1.0);
-        let at = (s - p.along) - floor((s - p.along) / period) * period;
+        let at = (s - along) - floor((s - along) / period) * period;
         let v = vec2<f32>(at - 0.5 * w, across - 0.5 * w);
         return saturate(0.5 * w - length(v) + 0.5);
     }
@@ -162,13 +165,13 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     if (p.width > 0.0) {
         // Inside the edge: from the edge (across 0) to `width` in.
         let band = saturate(0.5 - d) - saturate(0.5 - d - p.width);
-        let cover = band * pattern(-d, s, p.width);
+        let cover = band * pattern(-d, s, p.width, p.along);
         out = over(paint(q, half) * cover, out);
     }
     if (p.outer_width > 0.0) {
         let past = d - p.outer_gap;
         let band = saturate(past + 0.5) - saturate(past - p.outer_width + 0.5);
-        let cover = band * pattern(past, s, p.outer_width);
+        let cover = band * pattern(past, s, p.outer_width, p.outer_along);
         out = over(p.outer_color * cover, out);
     }
     return out;

@@ -73,7 +73,8 @@ pub(super) fn descriptor() -> KindDescriptor {
     };
     KindDescriptor {
         // The widest outer stroke after the widest gap.
-        max_outset_px: Some((MAX_WIDTH + MAX_GAP) as u32),
+        // The widest outer stroke after the widest gap, and its antialiased pixel.
+        max_outset_px: Some((MAX_WIDTH + MAX_GAP) as u32 + 1),
         ..filter(
             KIND,
             "Border",
@@ -271,13 +272,19 @@ impl Border {
         let half = [width as f32 * 0.5 - pad, height as f32 * 0.5 - pad];
         let travelled = seconds * l.speed;
         // Dashes repeat every period, so only the distance within one matters; the
-        // gradient goes once round the edge per perimeter travelled.
-        let period = match l.style {
-            3 => f64::from(l.width.max(l.outer_width) + l.gap),
-            _ => f64::from(l.dash + l.gap),
-        }
-        .max(1.0);
-        let along = travelled.rem_euclid(period) as f32;
+        // gradient goes once round the edge per perimeter travelled. Dots repeat every
+        // stroke's own width and gap, so each stroke gets its own distance (#1296
+        // review B1).
+        let wrap = |w: f32| {
+            let period = match l.style {
+                3 => f64::from(w + l.gap),
+                _ => f64::from(l.dash + l.gap),
+            }
+            .max(1.0);
+            travelled.rem_euclid(period) as f32
+        };
+        let along = wrap(l.width);
+        let outer_along = wrap(l.outer_width);
         let turn = (travelled / perimeter(half, l.radii)).rem_euclid(1.0) as f32;
         let (sin, cos) = l.angle.to_radians().sin_cos();
         Uniforms::new()
@@ -297,6 +304,7 @@ impl Border {
             .u32(l.style)
             .u32(l.fill)
             .u32(u32::from(l.clip))
+            .f32(outer_along)
             .finish()
     }
 }
@@ -358,9 +366,42 @@ mod tests {
             "each corner, the linked one ignored"
         );
         assert_eq!((l.width, l.style, l.fill, l.speed), (64.0, 3, 2, 2000.0));
-        assert_eq!(super::descriptor().max_outset_px, Some(128));
+        assert_eq!(super::descriptor().max_outset_px, Some(129));
         let b = Border::new(&settings(KIND, json!({})));
         assert_eq!(b.uniforms(0.0, 10, 10).len(), 128);
+    }
+
+    /// Dots repeat every stroke's own width and gap, so each stroke's distance wraps
+    /// by its own period: wrapping the inner stroke's by the outer's would jump its dots
+    /// half a period at each wrap (#1296 review B1).
+    #[test]
+    fn each_strokes_dots_wrap_by_their_own_period() {
+        let b = Border::new(&settings(
+            KIND,
+            json!({
+                "style": "dotted", "width": 4.0, "outer_width": 8.0, "gap": 4.0, "speed": 9.0
+            }),
+        ));
+        let bytes = b.uniforms(1.0, 100, 100);
+        let at = |offset: usize| {
+            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
+        };
+        // Travelled 9 px: the inner dots' period is 4 + 4, the outer's 8 + 4.
+        assert_eq!(at(92), 1.0, "`along`, the inner stroke's");
+        assert_eq!(at(116), 9.0, "`outer_along`");
+        // Dashes share one period, the dash and the gap, for both strokes.
+        let b = Border::new(&settings(
+            KIND,
+            json!({
+                "style": "dashed", "width": 4.0, "outer_width": 8.0, "dash": 10.0,
+                "gap": 5.0, "speed": 20.0
+            }),
+        ));
+        let bytes = b.uniforms(1.0, 100, 100);
+        let at = |offset: usize| {
+            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
+        };
+        assert_eq!((at(92), at(116)), (5.0, 5.0));
     }
 
     #[test]
