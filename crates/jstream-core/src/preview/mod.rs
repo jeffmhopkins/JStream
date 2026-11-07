@@ -196,8 +196,8 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
         let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out, meter| {
-            cache.begin_frame();
             let caught = compositor.catch_errors();
+            cache.begin_frame();
             let output = snapshot::compose_metered(
                 &mut compositor,
                 (&mut cache, &mut chains, &mut *meter),

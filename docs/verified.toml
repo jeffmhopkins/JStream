@@ -1722,7 +1722,7 @@ stamp = { hash = "b3:30d93f713b6abea8", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to preview/**, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#binary-streams, matching what it relies on" }
 
 ["CRATE-jstream-core#preview-streams"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:73f0b06bd77ba8ca", by = "agent:claude", note = "#1268: the preview hub's compositor catches its own GPU errors per pass; text added, matches preview/mod.rs gpu_draw" }
+stamp = { hash = "b3:6b904a1a07c5665e", by = "agent:claude", note = "#1350 N1: the preview pass's error catch now starts before cache.begin_frame, so the whole pass is caught; the text (catches per pass) still holds" }
 
 ["CRATE-jstream-core#privacy"."body"]
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
@@ -1854,7 +1854,7 @@ stamp = { hash = "b3:30d93f713b6abea8", by = "agent:claude", note = "Preview bul
 stamp = { hash = "b3:7416a336d0373eaf", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Preview streams/subscribe (one streams lock, MAX_PER_SESSION, >30 failed draws) match preview/mod.rs; main's D6 audio text merged unchanged; holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/preview/mod.rs"]
-stamp = { hash = "b3:73f0b06bd77ba8ca", by = "agent:claude", note = "#1268: snapshot.rs and preview/mod.rs only catch their own GPU errors; the purpose text still holds" }
+stamp = { hash = "b3:6b904a1a07c5665e", by = "agent:claude", note = "#1350 N1: the preview pass's error catch now starts before cache.begin_frame, so the whole pass is caught; the text (catches per pass) still holds" }
 
 ["CRATE-jstream-core#purpose"."file:crates/jstream-core/src/private_file.rs"]
 stamp = { hash = "b3:33fcb69cb463e192", by = "agent:claude", note = "Merged wave/m1-4 at 715154da by taking its tree and re-applying this PR's own change (b3c9e184..dd4e00a3); the ledger took the wave's side, so re-stamped. This PR (#547): the Tests bullet's private_file.rs entries (a new file never replaces one, append, directory refused, 0600 on Unix, a DACL passing check_private_file on Windows) and collection.rs's a_stale_temporary_file_is_replaced match the code; lib.rs adds mod private_file beside the wave's modules; the wave's Purpose text is unchanged by it; holds" }
