@@ -92,8 +92,10 @@ jstream-crash = { path = "crates/jstream-crash" }
 jstream-effects = { path = "crates/jstream-effects" }
 jstream-encode = { path = "crates/jstream-encode" }
 jstream-graph = { path = "crates/jstream-graph" }
+jstream-jtunnel = { path = "crates/jstream-jtunnel" }
 jstream-mcp = { path = "crates/jstream-mcp" }
 jstream-media = { path = "crates/jstream-media" }
+jstream-midi = { path = "crates/jstream-midi" }
 jstream-mux = { path = "crates/jstream-mux" }
 jstream-outputs = { path = "crates/jstream-outputs" }
 jstream-platform = { path = "crates/jstream-platform" }

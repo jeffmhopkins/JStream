@@ -1879,3 +1879,18 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .activity-log li { display: flex; flex-direction: column; gap: 2px; }
 .activity-meta { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
 .activity-log li.failed .activity-meta { color: var(--problem); }
+
+/* The custom shader editor (#1232). */
+.shader-editor { width: 760px; height: 600px; }
+.shader-body { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; padding: 12px 16px; }
+.shader-body .add-note { margin: 0; }
+.shader-code { display: flex; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--sunken, rgba(0, 0, 0, 0.25)); overflow: hidden; }
+.shader-gutter { flex: 0 0 auto; padding: 8px 6px; overflow: hidden; text-align: right; color: var(--dim); user-select: none; border-right: 1px solid var(--line); }
+.shader-line, .shader-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 18px; }
+.shader-line { min-width: 2.5em; padding: 0 4px; }
+.shader-line.bad { color: var(--problem); background: rgba(255, 80, 80, 0.15); border-radius: 3px; }
+.shader-text { flex: 1 1 auto; margin: 0; padding: 8px; border: 0; border-radius: 0; background: none; color: var(--text); resize: none; white-space: pre; overflow: auto; tab-size: 4; }
+.shader-text:focus { outline: none; }
+.shader-status { margin: 0; font-size: 12px; color: var(--muted); }
+.shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
+.shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }
