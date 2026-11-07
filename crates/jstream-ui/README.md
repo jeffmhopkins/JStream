@@ -660,7 +660,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   line before anything is sent, the engine's names its line in `shader.wgsl`, and the
   engine keeps drawing the last version that loaded. A write that loads drops the
   kind's cached descriptor and reads it and `kind.list` again (no event reports a
-  changed kind), so the form and the name follow the shader.
+  changed kind), so the form and the name follow the shader. Closing never drops a
+  change unsaid (`closing`): Done, × or Escape sends a change still waiting and closes
+  once it loads, and text that doesn't compile keeps the editor open with Close anyway.
+  It shows a quarantine (ADR-0087) with Re-enable, since a new version doesn't lift it.
+  The Filters window's Cancel fits each settings patch to the kind as described now
+  (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
+  window sent and the engine refuses a batch with one such key. Cancel doesn't reach
+  the disk: a written pack stays. The manifest is always `version = 1` with no
+  `renames`, so a renamed setting starts from its default.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the

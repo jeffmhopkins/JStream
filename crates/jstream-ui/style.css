@@ -1867,3 +1867,4 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .shader-text:focus { outline: none; }
 .shader-status { margin: 0; font-size: 12px; color: var(--muted); }
 .shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
+.shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }

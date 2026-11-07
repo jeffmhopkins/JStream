@@ -1964,6 +1964,76 @@ fn is_filter_edit(edit: &Edit) -> bool {
     )
 }
 
+/// `settings` fitted to `kind` as it is described now: a key the kind no longer
+/// declares is dropped, and a value its parameter no longer takes goes back to `null`,
+/// the default. A custom shader's kind can lose or retype a setting while the Filters
+/// window is open (#1232), and the engine refuses the whole batch for one such key.
+pub fn fit_settings(kind: &KindDescriptor, settings: &Settings) -> Settings {
+    let mut out = Settings::new();
+    for (id, value) in settings.iter() {
+        let Some(param) = kind.param(id) else {
+            continue;
+        };
+        let fits = value.is_null() || param.check(value).is_ok();
+        out.insert(
+            id.to_owned(),
+            if fits { value.clone() } else { Value::Null },
+        );
+    }
+    out
+}
+
+/// [`window_restore`]'s edits with each filter's settings fitted to its kind as
+/// described now ([`fit_settings`]): `kind_of` gives the descriptor of a kind, when one
+/// is known; a filter whose kind isn't described keeps its settings as they are. A
+/// settings edit left empty is dropped.
+pub fn fit_restore(
+    edits: Vec<Edit>,
+    kind_of: impl Fn(&str) -> Option<KindDescriptor>,
+    filter_kind: impl Fn(&FilterOwner, &FilterId) -> Option<String>,
+) -> Vec<Edit> {
+    edits
+        .into_iter()
+        .filter_map(|edit| match edit {
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                let kind = filter_kind(&owner, &filter_id).and_then(|k| kind_of(&k));
+                let patch = kind.map_or(patch.clone(), |kind| fit_settings(&kind, &patch));
+                (!patch.is_empty()).then_some(Edit::FilterSetSettings {
+                    owner,
+                    filter_id,
+                    patch,
+                })
+            }
+            Edit::FilterAdd {
+                owner,
+                chain,
+                filter_id,
+                kind,
+                settings,
+                enabled,
+                index,
+            } => {
+                let settings =
+                    kind_of(&kind).map_or(settings.clone(), |d| fit_settings(&d, &settings));
+                Some(Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    settings,
+                    enabled,
+                    index,
+                })
+            }
+            other => Some(other),
+        })
+        .collect()
+}
+
 /// The edits, one batch, that put back what the Filters window did: `opened` holds each
 /// of its scopes' chains as the window opened, `log` the filter edits it sent in order,
 /// and `now` reads a filter as the store shows it now.
@@ -2266,6 +2336,23 @@ fn WindowBody(
                     .map(|(_, f)| f)
                 })
             })
+        });
+        // A custom shader's settings may have changed while the window was open.
+        let edits = untrack(|| {
+            fit_restore(
+                edits,
+                |kind| studio.descriptors.with(|d| d.get(kind).cloned()),
+                |owner, filter_id| {
+                    filter_of(
+                        studio,
+                        &Target {
+                            owner: owner.clone(),
+                            filter_id: filter_id.clone(),
+                        },
+                    )
+                    .map(|(_, f)| f.kind)
+                },
+            )
         });
         if let (false, Some(s)) = (edits.is_empty(), session.get()) {
             studio.apply(&s, edits);
@@ -4241,6 +4328,96 @@ mod tests {
             },
         ];
         assert!(window_restore(&opened, &log, &[], |_, _| None).is_empty());
+    }
+
+    /// Cancel after the shader editor renamed or retyped a setting the window had sent
+    /// drops the setting the kind no longer has and resets one whose type changed, so
+    /// the engine takes the rest of the batch (#1289 review B1).
+    #[test]
+    fn cancel_fits_settings_to_a_kind_that_changed() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("src_bg"),
+        };
+        let mut kind = descriptor(vec![
+            param(
+                "strength",
+                "Strength",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param(
+                "steps",
+                "Steps",
+                ParamType::Int {
+                    min: Some(0),
+                    max: Some(8),
+                    step: None,
+                    unit: None,
+                },
+                json!(2),
+            ),
+        ]);
+        kind.kind_id = "custom-1/shader".into();
+        let patch: Settings = [
+            ("amount", json!(0.5)),
+            ("strength", json!(0.25)),
+            ("steps", json!(0.75)),
+        ]
+        .into_iter()
+        .collect();
+        let edits = vec![
+            Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("f"),
+                patch,
+            },
+            Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("g"),
+                patch: [("amount", json!(1.0))].into_iter().collect(),
+            },
+            Edit::FilterSetEnabled {
+                owner: owner.clone(),
+                filter_id: FilterId::new("f"),
+                enabled: true,
+            },
+        ];
+        let described = kind.clone();
+        let fitted = fit_restore(
+            edits,
+            |k| (k == "custom-1/shader").then(|| described.clone()),
+            |_, _| Some("custom-1/shader".into()),
+        );
+        let want: Settings = [("strength", json!(0.25)), ("steps", Value::Null)]
+            .into_iter()
+            .collect();
+        assert_eq!(
+            fitted,
+            vec![
+                Edit::FilterSetSettings {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f"),
+                    patch: want,
+                },
+                Edit::FilterSetEnabled {
+                    owner,
+                    filter_id: FilterId::new("f"),
+                    enabled: true,
+                },
+            ],
+            "`amount` is gone, `steps` is an int now, and g's patch is left empty"
+        );
+        // A kind that isn't described keeps its settings as sent.
+        let kept = fit_restore(
+            vec![Edit::FilterSetSettings {
+                owner: FilterOwner::Master,
+                filter_id: FilterId::new("h"),
+                patch: [("x", json!(1))].into_iter().collect(),
+            }],
+            |_| None,
+            |_, _| Some("other".into()),
+        );
+        assert_eq!(kept.len(), 1);
     }
 
     /// A filter added just before the window opened joins what it opened with, where the

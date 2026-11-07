@@ -597,6 +597,29 @@ pub enum Status {
     },
 }
 
+/// What closing the editor does first, by where its last change stands.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Closing {
+    /// Nothing is unsaved: it closes.
+    Close,
+    /// A change hasn't been sent yet, or is on its way: it is sent now, and the editor
+    /// closes once it loads, or stays open showing its problem.
+    Flush,
+    /// The text has a problem, so the pack keeps the last version that loaded: the
+    /// editor says so and closes only on Close anyway.
+    Ask,
+}
+
+/// What closing the editor does at `status` (#1289 review B2: closing never drops a
+/// change unsaid).
+pub fn closing(status: &Status) -> Closing {
+    match status {
+        Status::Opened | Status::Compiled => Closing::Close,
+        Status::Compiling => Closing::Flush,
+        Status::Problem { .. } => Closing::Ask,
+    }
+}
+
 /// The status line's text.
 pub fn status_text(status: &Status) -> String {
     match status {
@@ -629,6 +652,16 @@ pub fn ShaderEditor(
     let pack = StoredValue::new(pack);
     let area = NodeRef::<leptos::html::Textarea>::new();
     let gutter = NodeRef::<leptos::html::Div>::new();
+    // Closing waits for a change being sent; `unsaved` says the text hasn't compiled
+    // and offers Close anyway.
+    let flushing = RwSignal::new(false);
+    let unsaved = RwSignal::new(false);
+    let failed = move || {
+        if flushing.get_untracked() {
+            flushing.set(false);
+            unsaved.set(true);
+        }
+    };
     let compile = move |mine: u64| {
         if change.try_get_value() != Some(mine) {
             return;
@@ -644,6 +677,7 @@ pub fn ShaderEditor(
                     line: Some(error.line),
                     message: format!("{error}."),
                 });
+                failed();
                 return;
             }
         };
@@ -663,6 +697,9 @@ pub fn ShaderEditor(
                     studio.relist_kinds(&s).await;
                     if latest {
                         _ = status.try_set(Status::Compiled);
+                        if flushing.try_get_untracked() == Some(true) {
+                            close();
+                        }
                     }
                 }
                 Err(error) if latest => {
@@ -671,12 +708,27 @@ pub fn ShaderEditor(
                         line: error_line(&message),
                         message,
                     });
+                    if flushing.try_get_untracked().is_some() {
+                        failed();
+                    }
                 }
                 Err(_) => {}
             }
         });
     };
+    let finish = move || match closing(&status.get_untracked()) {
+        Closing::Close => close(),
+        Closing::Flush => {
+            flushing.set(true);
+            unsaved.set(false);
+            let mine = change.get_value() + 1;
+            change.set_value(mine);
+            compile(mine);
+        }
+        Closing::Ask => unsaved.set(true),
+    };
     let changed = move |next: String| {
+        unsaved.set(false);
         text.set(next);
         status.set(Status::Compiling);
         let mine = change.get_value() + 1;
@@ -719,15 +771,28 @@ pub fn ShaderEditor(
             .collect_view()
     };
     let problem = move || matches!(status.get(), Status::Problem { .. });
+    // A GPU hang quarantines the kind (ADR-0087), and a new version doesn't lift it.
+    let held = Memo::new(move |_| {
+        let kind = kind_of(&pack.get_value());
+        studio.kinds.with(|k| {
+            k.as_deref()
+                .is_some_and(|k| k.iter().any(|k| k.kind_id == kind && k.quarantined))
+        })
+    });
+    let reenable = move |_| {
+        if let Some(s) = session.get() {
+            studio.enable_effect(&s, kind_of(&pack.get_value()));
+        }
+    };
     let sub = format!("Effect pack “{}”", pack.get_value());
     view! {
-        <Modal label="Custom shader" class="shader-editor" cancel=close undimmed=true>
+        <Modal label="Custom shader" class="shader-editor" cancel=finish undimmed=true>
             <div class="modal-header">
                 <div class="modal-titles">
                     <h2 class="modal-title">"Custom shader"</h2>
                     <span class="modal-sub">{sub}</span>
                 </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| finish()>
                     "×"
                 </button>
             </div>
@@ -756,12 +821,34 @@ pub fn ShaderEditor(
                 <p class="shader-status" class:problem=problem role="status">
                     {move || status.with(status_text)}
                 </p>
+                {move || held.get().then(|| view! {
+                    <p class="shader-status problem">
+                        "A GPU hang was blamed on this shader, so its filters are bypassed until it is \
+                         re-enabled. "
+                        <button type="button" class="secondary" on:click=reenable>"Re-enable"</button>
+                    </p>
+                })}
                 <p class="add-note">
                     "The // @name line names this shader in Add filter, where any item can use it."
                 </p>
             </div>
             <div class="modal-footer">
-                <button type="button" class="primary" on:click=move |_| close()>"Done"</button>
+                {move || unsaved.get().then(|| view! {
+                    <span class="shader-unsaved">
+                        "This text hasn’t compiled, so the filter keeps the last version that did."
+                    </span>
+                    <button type="button" class="secondary" on:click=move |_| close()>
+                        "Close anyway"
+                    </button>
+                })}
+                <button
+                    type="button"
+                    class="primary"
+                    disabled=move || flushing.get()
+                    on:click=move |_| finish()
+                >
+                    {move || if flushing.get() { "Saving…" } else { "Done" }}
+                </button>
             </div>
         </Modal>
     }
@@ -1045,6 +1132,22 @@ mod tests {
         // "é" and "😀" are one and two UTF-16 units.
         assert_eq!(splice_utf16("é😀x", 3, 3, "_"), ("é😀_x".into(), 4));
         assert_eq!(splice_utf16("ab", 9, 9, "!"), ("ab!".into(), 3));
+    }
+
+    /// Closing sends a change still waiting, asks before leaving text that doesn't
+    /// compile, and otherwise just closes (#1289 review B2).
+    #[test]
+    fn closing_never_drops_a_change_unsaid() {
+        assert_eq!(closing(&Status::Opened), Closing::Close);
+        assert_eq!(closing(&Status::Compiled), Closing::Close);
+        assert_eq!(closing(&Status::Compiling), Closing::Flush);
+        assert_eq!(
+            closing(&Status::Problem {
+                line: None,
+                message: String::new()
+            }),
+            Closing::Ask
+        );
     }
 
     /// A problem keeps the picture's last good version, and says so.
