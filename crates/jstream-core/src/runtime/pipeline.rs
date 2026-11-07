@@ -3971,7 +3971,13 @@ fn mixer_loop(
                 }
                 meter.mixed(began.elapsed());
             }
-            Ok(None) => thread::sleep(Duration::from_millis(1)),
+            // Asleep until the next block is due on the media clock (ADR-0117 §9), not
+            // in 1 ms polls; before the first block, a short wait.
+            Ok(None) => thread::sleep(
+                mixer
+                    .next_due()
+                    .map_or(Duration::from_millis(1), |due| until_due(clock.now(), due)),
+            ),
             Err(err) => {
                 report(fail, format!("mixer poll failed: {err}"));
                 break;

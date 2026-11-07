@@ -447,7 +447,9 @@ state machine. Contents:
   through a `StatsHandle` that keeps no session alive, then what it sent and lost after
   it (the output's `SentCounters` and drops, the preview stream's queued and refused
   pictures); a session reopened, or an output's next run, is a new meter that counts
-  from zero. The mixer thread counts each block and how long its mix took (the poll
+  from zero. The mixer thread sleeps until its next block is due
+  (`Mixer::next_due`, at most 4 ms at a time, so a stop or a clock that jumps is seen
+  soon), not in 1 ms polls (ADR-0117 §9). It counts each block and how long its mix took (the poll
   that makes it and everything done with it after) into a `MixerMeter` of relaxed
   atomics, and the program stage registers it with its master bus's skips; the audio
   inputs' underruns and drops are the drop ledger's `AudioInputDrops`, summed with the
