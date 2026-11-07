@@ -163,9 +163,12 @@ pub fn AgentPrompt() -> impl IntoView {
     let problem = RwSignal::new(None::<String>);
     // Each call reads the session when it runs, and the event task holds only the
     // stream, so nothing here keeps the connection open after Disconnect or a
-    // reconnect (header.rs does the same).
+    // reconnect (header.rs does the same). The context is taken here, because the
+    // event task has no owner to look it up from.
+    let session = use_context::<SessionContext>();
+    let current = move || session.and_then(|s| s.get()).map(|s| s.control);
     let reread = move || {
-        let Some(control) = self::control() else {
+        let Some(control) = current() else {
             return;
         };
         spawn_local(async move {
@@ -192,7 +195,7 @@ pub fn AgentPrompt() -> impl IntoView {
         }
     });
     let decide = move |approval_id: String, decision: ApprovalDecision| {
-        let Some(control) = self::control() else {
+        let Some(control) = current() else {
             return;
         };
         spawn_local(async move {

@@ -5391,7 +5391,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: the Help paragraph now says About lists each codec codec.downloads reports installed (OpenH264 on Linux) with name, version, notice, licence link and folded full text, read each time it opens and absent with none installed or before 0.69, matching InstalledCodecs in codec_downloads.rs, about.rs and the .about-codecs styles in style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/agents.rs"]
-stamp = { hash = "b3:8d5c73fdfbee2385", by = "agent:claude-settings", note = "Agents bullet now says closing the prompt shows the next queued request and that it holds no session, so Disconnect closes the socket; style.css adds .agent-prompt max-width and .agent-name wrapping" }
+stamp = { hash = "b3:a9bdb1067755f713", by = "agent:claude-settings", note = "AgentPrompt takes SessionContext once at build so reread/decide work from the event task; internal only, the agents text (holds no session, Disconnect closes the socket) still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:cacd25f84dc0aa78", by = "agent:claude-settings", note = "Re-read; app.rs only adds AgentPrompt beside Settings and settings.rs adds two components to existing pages, nothing in the design section changes" }
@@ -5589,7 +5589,7 @@ stamp = { hash = "b3:8b72f650cbef12f9" }
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: the About contents entry now says the dialog lists each installed third-party codec through codec_downloads::InstalledCodecs, as about.rs renders it; codec_downloads.rs gained installed() and InstalledCodecs, which the Outputs entry's codec_downloads already covers" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/agents.rs"]
-stamp = { hash = "b3:8d5c73fdfbee2385", by = "agent:claude-settings", note = "agents.rs AgentPrompt now re-fetches control per call (holds no session); purpose text about the session/shell still holds" }
+stamp = { hash = "b3:a9bdb1067755f713", by = "agent:claude-settings", note = "AgentPrompt takes SessionContext once at build so reread/decide work from the event task; internal only, the agents text (holds no session, Disconnect closes the socket) still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
 stamp = { hash = "b3:cacd25f84dc0aa78", by = "agent:claude-settings", note = "Added the Agents module (AgentPrompt, AskAgentsSetting, ApprovedAgents) and where each is drawn; app.rs and settings.rs wire them as described" }
@@ -6939,7 +6939,7 @@ stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave
 stamp = { hash = "b3:47d55ffbca5604f5", by = "agent:claude-settings", note = "Agent approval bullet now says closing the dialog leaves the agent waiting and shows the next request; matches agents.rs hidden-list logic" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/agents.rs"]
-stamp = { hash = "b3:8d5c73fdfbee2385", by = "agent:claude-settings", note = "Agent approval bullet now says closing the dialog leaves the agent waiting and shows the next request; matches agents.rs hidden-list logic" }
+stamp = { hash = "b3:a9bdb1067755f713", by = "agent:claude-settings", note = "AgentPrompt takes SessionContext once at build so reread/decide work from the event task; internal only, the agents text (holds no session, Disconnect closes the socket) still holds" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read connecting and plugins against host.rs and plugins.rs: Browse is on path fields for the desktop app's own engine, hidden in a browser and disabled for another engine, and install uses a folder dialog. The other beyond bullets still hold." }
