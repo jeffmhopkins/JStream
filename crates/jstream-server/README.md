@@ -325,6 +325,11 @@ show the same workspace.
   logged at `warn` and replaced on the next change: the server still starts. A change
   that can't be written answers `action_failed` and is kept in memory until the server
   stops. Without a file, the settings last as long as the server.
+- **The host reads them.** `Server::ui_settings` hands the app that runs the server a
+  `UiSettingsView`: a key's value and a `watch` receiver that changes with every
+  change, so a setting the UI keeps can steer the host. It can't change them. The
+  desktop app reads `hotkeys.global` there to turn its global hotkeys off (ADR-0112
+  §6).
 
 ### The pairing page and the device cookie
 

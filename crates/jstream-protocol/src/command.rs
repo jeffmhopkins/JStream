@@ -835,14 +835,19 @@ pub enum Edit {
         motion: Vec<CameraMotionModifier>,
     },
     /// Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the
-    /// pointer over a display or window capture in the scene. It belongs to the scene
+    /// pointer over a display or window capture in the scene. Since 0.91 a follow camera
+    /// is a `follow_pointer` filter on the followed item's effects (ADR-0120), and this
+    /// edit is kept as a shortcut for those filter edits: with `follow`, it sets that
+    /// item's `follow_pointer` filter to its numbers and turns it on, adding one last in
+    /// the item's effects when it has none, and removes every other `follow_pointer`
+    /// filter of the scene's items; without, it removes them all. It belongs to the scene
     /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
-    /// scene or doesn't show a display or window capture, and for a number
-    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
-    /// leaves the follow in place and inert until it is set again or an undo brings the
-    /// item back. The follow camera reads the pointer only where the program is drawn
-    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
-    /// Inverse: `scene.set_camera_follow` with the previous value.
+    /// scene or doesn't show a display or window capture, for a number
+    /// `CameraFollow::check` refuses, and when the item's effects are full. The follow
+    /// camera reads the pointer only where the program is drawn live: `video.snapshot`
+    /// and a frame sheet show it at rest, on the capture's centre. Inverse: the inverse
+    /// of those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and
+    /// `filter.set_enabled`).
     #[serde(rename = "scene.set_camera_follow")]
     SceneSetCameraFollow {
         /// The scene to change.

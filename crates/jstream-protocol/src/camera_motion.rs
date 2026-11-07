@@ -7,16 +7,21 @@
 //! since a camera hears nothing. It may also hold
 //! `camera_follow`, a [`CameraFollow`], whose camera glides after the pointer over a
 //! display or window capture in the scene. Both belong to the scene family, beside the
-//! camera, and are set with `scene.set_camera_motion` and `scene.set_camera_follow`.
+//! camera. Camera motion is set with `scene.set_camera_motion`. Since 0.91 the follow
+//! camera is a filter, [`FOLLOW_POINTER_KIND`], on the followed item's effects (ADR-0120):
+//! `camera_follow` reports it, and `scene.set_camera_follow` sets that filter.
 
 use crate::finite::Finite32;
 use crate::id::ItemId;
+use crate::kind::{KindCategory, KindDescriptor, ParamDescriptor, ParamType};
 use crate::motion::{
     MAX_MOTION_MODIFIERS, MotionClock, MotionKind, MotionModifier, MotionProblem, MotionProperty,
     check_motion,
 };
+use crate::settings::Settings;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 /// The camera property a camera motion modifier changes. Every value is added to the
 /// camera as it is drawn; the field of view is then held to 1 to 170°, focus above 0 and
@@ -177,6 +182,12 @@ pub struct CameraFollow {
     /// Default 450.
     #[serde(default = "default_smooth")]
     pub smooth_ms: u32,
+    /// The safe margin, in percent of the frame's width and height on each side, from 0
+    /// to 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the
+    /// frame on every frame, whatever the smoothing, wherever the item's box lets the
+    /// frame reach it. At 0 it stays inside the frame.
+    #[serde(default = "default_margin")]
+    pub safe_margin_pct: u32,
 }
 
 fn one() -> Finite32 {
@@ -203,6 +214,18 @@ fn default_smooth() -> u32 {
     450
 }
 
+fn default_margin() -> u32 {
+    10
+}
+
+/// The filter kind that is a follow camera (ADR-0120): a `video_filter` on a display or
+/// window capture item's effects, which draws nothing itself and drives its scene's
+/// camera instead. Its settings are a [`CameraFollow`]'s numbers.
+pub const FOLLOW_POINTER_KIND: &str = "follow_pointer";
+
+/// The largest safe margin a follow camera takes, in percent of the frame on each side.
+pub const MAX_FOLLOW_MARGIN_PCT: u32 = 40;
+
 impl CameraFollow {
     /// Following `item_id` with every other field at its default.
     pub fn of(item_id: ItemId) -> Self {
@@ -213,7 +236,58 @@ impl CameraFollow {
             pitch_deg: default_pitch(),
             lean_deg: default_lean(),
             smooth_ms: default_smooth(),
+            safe_margin_pct: default_margin(),
         }
+    }
+
+    /// The follow camera a [`FOLLOW_POINTER_KIND`] filter on `item_id` with `settings`
+    /// is: each number read from its setting, a missing or mistyped one as its default,
+    /// and each held to its range.
+    pub fn from_settings(item_id: ItemId, settings: &Settings) -> Self {
+        let float = |id: &str, default: f32, (lo, hi): (f32, f32)| {
+            let value = settings
+                .get(id)
+                .and_then(Value::as_f64)
+                .map_or(default, |v| v as f32);
+            finite(value.clamp(lo, hi))
+        };
+        let int = |id: &str, default: u32, (lo, hi): (u32, u32)| {
+            settings
+                .get(id)
+                .and_then(Value::as_f64)
+                .map_or(default, |v| {
+                    v.round().clamp(0.0, f64::from(u32::MAX)) as u32
+                })
+                .clamp(lo, hi)
+        };
+        Self {
+            item_id,
+            zoom: float("zoom", 1.0, FOLLOW_ZOOM_RANGE),
+            yaw_deg: float("yaw_deg", default_yaw().get(), (-60.0, 60.0)),
+            pitch_deg: float("pitch_deg", default_pitch().get(), (-60.0, 60.0)),
+            lean_deg: float("lean_deg", default_lean().get(), (0.0, 30.0)),
+            smooth_ms: int("smooth_ms", default_smooth(), (50, 5000)),
+            safe_margin_pct: int(
+                "safe_margin_pct",
+                default_margin(),
+                (0, MAX_FOLLOW_MARGIN_PCT),
+            ),
+        }
+    }
+
+    /// Its numbers as a [`FOLLOW_POINTER_KIND`] filter's settings: every parameter of
+    /// [`follow_pointer_descriptor`].
+    pub fn settings(&self) -> Settings {
+        // An `f32` widened as it is would read 0.1 as 0.10000000149.
+        let float = |v: Finite32| Value::from((f64::from(v.get()) * 1e4).round() / 1e4);
+        let mut settings = Settings::new();
+        settings.insert("zoom", float(self.zoom));
+        settings.insert("yaw_deg", float(self.yaw_deg));
+        settings.insert("pitch_deg", float(self.pitch_deg));
+        settings.insert("lean_deg", float(self.lean_deg));
+        settings.insert("smooth_ms", Value::from(self.smooth_ms));
+        settings.insert("safe_margin_pct", Value::from(self.safe_margin_pct));
+        settings
     }
 
     /// Whether its numbers are in range. The item is checked by the edit.
@@ -241,7 +315,89 @@ impl CameraFollow {
         if !(50..=5000).contains(&self.smooth_ms) {
             return Err(problem("smooth_ms", "must be within 50..=5000"));
         }
+        if self.safe_margin_pct > MAX_FOLLOW_MARGIN_PCT {
+            return Err(problem("safe_margin_pct", "must be within 0..=40"));
+        }
         Ok(())
+    }
+}
+
+/// The descriptor of [`FOLLOW_POINTER_KIND`], as `kind.list` reports it: one parameter
+/// per number of a [`CameraFollow`], with its range and default.
+pub fn follow_pointer_descriptor() -> KindDescriptor {
+    let number =
+        |id: &str, label: &str, (min, max): (f64, f64), default: f64, unit: &str| ParamDescriptor {
+            id: id.into(),
+            ty: ParamType::Float {
+                min: Some(min),
+                max: Some(max),
+                step: None,
+                unit: (!unit.is_empty()).then(|| unit.into()),
+            },
+            default: Value::from(default),
+            label: label.into(),
+            description: None,
+            group: None,
+            advanced: false,
+            visible_if: None,
+            live: true,
+        };
+    let whole =
+        |id: &str, label: &str, (min, max): (i64, i64), default: i64, unit: &str| ParamDescriptor {
+            ty: ParamType::Int {
+                min: Some(min),
+                max: Some(max),
+                step: None,
+                unit: Some(unit.into()),
+            },
+            default: Value::from(default),
+            ..number(id, label, (0.0, 0.0), 0.0, "")
+        };
+    let describe = |param: ParamDescriptor, text: &str| ParamDescriptor {
+        description: Some(text.into()),
+        ..param
+    };
+    let (zmin, zmax) = FOLLOW_ZOOM_RANGE;
+    KindDescriptor {
+        kind_id: FOLLOW_POINTER_KIND.into(),
+        category: KindCategory::VideoFilter,
+        name: "Follow pointer".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![
+            describe(
+                number("zoom", "Zoom", (f64::from(zmin), f64::from(zmax)), 1.0, "×"),
+                "The resting zoom. At 1 the frame shows two thirds of the capture's height.",
+            ),
+            describe(
+                number("yaw_deg", "From the right", (-60.0, 60.0), 20.0, "°"),
+                "The camera's angle to the right of the capture; negative is from the left.",
+            ),
+            describe(
+                number("pitch_deg", "From below", (-60.0, 60.0), -10.0, "°"),
+                "The camera's angle below the capture; negative looks down from above.",
+            ),
+            describe(
+                number("lean_deg", "Lean", (0.0, 30.0), 9.0, "°"),
+                "How far the camera leans as the pointer moves. 0 is off.",
+            ),
+            describe(
+                whole("smooth_ms", "Smoothing", (50, 5000), 450, "ms"),
+                "How long the camera takes to catch up with the pointer.",
+            ),
+            describe(
+                whole(
+                    "safe_margin_pct",
+                    "Safe margin",
+                    (0, i64::from(MAX_FOLLOW_MARGIN_PCT)),
+                    i64::from(default_margin()),
+                    "%",
+                ),
+                "How far in from each edge of the frame the pointer always stays.",
+            ),
+        ],
     }
 }
 
@@ -361,5 +517,61 @@ mod tests {
             let problem = follow.check().expect_err(field);
             assert_eq!(problem.field, format!("follow.{field}"));
         }
+        let wide = CameraFollow {
+            safe_margin_pct: 41,
+            ..parsed
+        };
+        assert_eq!(
+            wide.check().map_err(|p| p.field),
+            Err("follow.safe_margin_pct".into())
+        );
+    }
+
+    /// ADR-0120: a follow's numbers are its filter's settings, every parameter of the
+    /// descriptor, and read back the same; a missing or out-of-range one reads as its
+    /// default or its range's end.
+    #[test]
+    fn a_follow_round_trips_through_its_filters_settings() {
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        let follow = CameraFollow {
+            zoom: f(2.5),
+            yaw_deg: f(-15.0),
+            pitch_deg: f(5.0),
+            lean_deg: f(0.0),
+            smooth_ms: 900,
+            safe_margin_pct: 25,
+            ..CameraFollow::of(ItemId::new("screen"))
+        };
+        let settings = follow.settings();
+        let descriptor = follow_pointer_descriptor();
+        let ids: Vec<&str> = settings.iter().map(|(id, _)| id).collect();
+        let mut params: Vec<&str> = descriptor.params.iter().map(|p| p.id.as_str()).collect();
+        params.sort_unstable();
+        assert_eq!(ids, params);
+        assert_eq!(
+            CameraFollow::from_settings(ItemId::new("screen"), &settings),
+            follow
+        );
+        let defaults: Settings = descriptor
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        assert_eq!(
+            CameraFollow::from_settings(ItemId::new("screen"), &defaults),
+            CameraFollow::of(ItemId::new("screen"))
+        );
+        assert_eq!(
+            CameraFollow::from_settings(ItemId::new("screen"), &Settings::new()),
+            CameraFollow::of(ItemId::new("screen"))
+        );
+        let wild: Settings = [
+            ("zoom", serde_json::json!(9.0)),
+            ("safe_margin_pct", serde_json::json!(90)),
+        ]
+        .into_iter()
+        .collect();
+        let read = CameraFollow::from_settings(ItemId::new("screen"), &wild);
+        assert_eq!((read.zoom.get(), read.safe_margin_pct), (4.0, 40));
     }
 }
