@@ -83,7 +83,7 @@ Commands:
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
-  bench --out <dir> [--scenario <name>|all] [--seconds <n>]
+  bench --out <dir> [--scenario <name>,...] [--seconds <n>]
         [--switch-every <ms>] [--preset <preset-id>] [--gates <file>]
         [--media <file>]
                                    run a standard load on the engine for <n>
@@ -473,7 +473,7 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
             "--out" => out = Some((*value).to_owned()),
             "--scenario" => {
                 options.scenarios = Scenario::parse(value).ok_or_else(|| {
-                    let names: Vec<&str> = Scenario::ALL.iter().map(|s| s.name()).collect();
+                    let names: Vec<&str> = Scenario::EVERY.iter().map(|s| s.name()).collect();
                     usage(format!(
                         "unknown scenario `{value}`: {} or all",
                         names.join(", ")

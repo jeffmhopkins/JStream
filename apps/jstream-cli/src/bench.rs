@@ -71,9 +71,8 @@ pub enum Scenario {
 }
 
 impl Scenario {
-    /// Every scenario, in the order `--scenario all` runs them. One the machine can't
-    /// build is skipped with its reason.
-    pub const ALL: [Scenario; 7] = [
+    /// Every scenario, in order.
+    pub const EVERY: [Scenario; 7] = [
         Scenario::Basic,
         Scenario::Layered,
         Scenario::Small2d,
@@ -81,6 +80,17 @@ impl Scenario {
         Scenario::Browser,
         Scenario::Display,
         Scenario::Webcam,
+    ];
+
+    /// What `--scenario all`, the default, runs: every scenario but the two that capture
+    /// the machine's screen and camera, which run only when named. One the machine can't
+    /// build is skipped with its reason.
+    pub const ALL: [Scenario; 5] = [
+        Scenario::Basic,
+        Scenario::Layered,
+        Scenario::Small2d,
+        Scenario::Media,
+        Scenario::Browser,
     ];
 
     /// Its name on the command line and in the report.
@@ -107,15 +117,26 @@ impl Scenario {
         }
     }
 
-    /// The scenario a name selects, `all` for every one.
-    pub fn parse(name: &str) -> Option<Vec<Scenario>> {
-        match name {
-            "all" => Some(Scenario::ALL.to_vec()),
-            _ => Scenario::ALL
-                .into_iter()
-                .find(|scenario| scenario.name() == name)
-                .map(|scenario| vec![scenario]),
+    /// The scenarios a comma-separated list of names selects, `all` standing for
+    /// [`Scenario::ALL`], each once, in the order given.
+    pub fn parse(names: &str) -> Option<Vec<Scenario>> {
+        let mut out: Vec<Scenario> = Vec::new();
+        for name in names.split(',') {
+            let picked = match name {
+                "all" => Scenario::ALL.to_vec(),
+                _ => vec![
+                    Scenario::EVERY
+                        .into_iter()
+                        .find(|scenario| scenario.name() == name)?,
+                ],
+            };
+            for scenario in picked {
+                if !out.contains(&scenario) {
+                    out.push(scenario);
+                }
+            }
         }
+        Some(out)
     }
 }
 
@@ -388,12 +409,12 @@ pub fn run(
     let mut runs = Vec::new();
     let mut skipped = Vec::new();
     for &scenario in &options.scenarios {
-        let missing = scenario
-            .needs_kind()
-            .filter(|kind| !kinds.is_empty() && !kinds.iter().any(|k| k == kind));
-        let plan = match missing {
-            Some(kind) => Err(format!("the engine has no `{kind}` source kind")),
-            None => Plan::new(scenario, canvas, &inputs),
+        let plan = match (scenario.needs_kind(), &kinds) {
+            (Some(_), None) => Err("the engine's source kinds couldn't be read".to_owned()),
+            (Some(kind), Some(kinds)) if !kinds.iter().any(|k| k == kind) => {
+                Err(format!("the engine has no `{kind}` source kind"))
+            }
+            _ => Plan::new(scenario, canvas, &inputs),
         };
         let plan = match plan {
             Ok(plan) => plan,
@@ -463,12 +484,14 @@ struct Inputs {
     page: PathBuf,
 }
 
-/// The built-in kinds the engine lists, or none when it lists nothing (a mock), which
-/// skips no scenario.
-fn kinds(control: &dyn Control) -> Vec<String> {
+/// The kinds the engine lists, or `None` when `kind.list` failed or listed nothing (an
+/// engine always has built-in kinds), which skips every scenario that needs one.
+fn kinds(control: &dyn Control) -> Option<Vec<String>> {
     match query(control, Query::KindList) {
-        Ok(QueryResult::KindList { kinds }) => kinds.into_iter().map(|k| k.kind_id).collect(),
-        _ => Vec::new(),
+        Ok(QueryResult::KindList { kinds }) if !kinds.is_empty() => {
+            Some(kinds.into_iter().map(|k| k.kind_id).collect())
+        }
+        _ => None,
     }
 }
 
@@ -1061,7 +1084,7 @@ fn measure(
                 options,
                 dir,
                 window,
-                switches.len(),
+                (plan.scenario, switches.len()),
             ));
             next_switch += beat;
         }
@@ -1123,14 +1146,14 @@ fn wait_for_frames(
 }
 
 /// Switches to `scene` with the run's transition, keeping its frame sheet as
-/// `switch-<n>.png` in `dir`.
+/// `<scenario>-switch-<n>.png` in `dir`.
 fn switch(
     control: &dyn Control,
     scene: &SceneId,
     options: &BenchOptions,
     dir: &Path,
     window: Instant,
-    n: usize,
+    (scenario, n): (Scenario, usize),
 ) -> Switch {
     let at_ms = u64::try_from(window.elapsed().as_millis()).unwrap_or(u64::MAX);
     let watched = action(
@@ -1142,7 +1165,7 @@ fn switch(
         },
     );
     let saved = watched.and_then(|result| match result {
-        Some(ActionResult::SceneSwitchAndWatch { sheet }) => save_sheet(&sheet, dir, n),
+        Some(ActionResult::SceneSwitchAndWatch { sheet }) => save_sheet(&sheet, dir, scenario, n),
         _ => Err(CliError::Bench("no frame sheet came back".into())),
     });
     match saved {
@@ -1161,10 +1184,15 @@ fn switch(
     }
 }
 
-fn save_sheet(sheet: &FrameSheet, dir: &Path, n: usize) -> Result<String, CliError> {
+fn save_sheet(
+    sheet: &FrameSheet,
+    dir: &Path,
+    scenario: Scenario,
+    n: usize,
+) -> Result<String, CliError> {
     let png = decode_base64(&sheet.png)
         .ok_or_else(|| CliError::Bench("the frame sheet's PNG is not base64".into()))?;
-    let file = format!("switch-{n}.png");
+    let file = format!("{}-switch-{n}.png", scenario.name());
     std::fs::write(dir.join(&file), png)?;
     Ok(file)
 }
@@ -1548,7 +1576,7 @@ mod tests {
             switches: vec![Switch {
                 scene: "a".into(),
                 at_ms: 4000,
-                sheet: Some("switch-0.png".into()),
+                sheet: Some("basic-switch-0.png".into()),
                 error: None,
             }],
             profile,
@@ -1837,12 +1865,14 @@ mod tests {
         assert!(out.contains("## basic (fail)"), "{out}");
         assert!(out.contains("## layered (fail)"), "{out}");
         assert!(out.contains("## small_2d (fail)"), "{out}");
-        // Without `--media` there is nothing to loop; the mock's sources show no picture.
+        // The mock lists no kinds, so what needs one is skipped.
         assert!(
-            out.contains("## media (skipped)\n\nno `--media <file>` to loop."),
+            out.contains("## media (skipped)\n\nthe engine's source kinds couldn't be read."),
             "{out}"
         );
-        assert!(out.contains("## webcam (skipped)"), "{out}");
+        assert!(out.contains("## browser (skipped)"), "{out}");
+        // The captures run only when named.
+        assert!(!out.contains("webcam") && !out.contains("display"), "{out}");
         assert!(out.contains("| encode_frames | 0 | <= 0 | pass |"), "{out}");
         assert!(out.contains("| failed_switches |"), "{out}");
         let report: Value = serde_json::from_str(
@@ -1850,7 +1880,7 @@ mod tests {
         )
         .expect("a JSON report");
         assert_eq!(report["runs"].as_array().map(Vec::len), Some(3));
-        assert_eq!(report["skipped"].as_array().map(Vec::len), Some(4));
+        assert_eq!(report["skipped"].as_array().map(Vec::len), Some(2));
         assert!(
             report["runs"][0]["recording"]["frames"].as_u64() > Some(0),
             "{report}"
@@ -1891,7 +1921,7 @@ mod tests {
 
     #[test]
     fn each_scenario_names_its_scenes_sources_and_items_under_its_own_prefix() {
-        for scenario in Scenario::ALL {
+        for scenario in Scenario::EVERY {
             let plan = Plan::new(scenario, (1920, 1080), &inputs()).expect("a plan");
             assert_eq!(
                 plan.scenes.len(),
@@ -1914,6 +1944,14 @@ mod tests {
             }
         }
         assert_eq!(Scenario::parse("all"), Some(Scenario::ALL.to_vec()));
+        assert!(!Scenario::ALL.contains(&Scenario::Display));
+        assert!(!Scenario::ALL.contains(&Scenario::Webcam));
+        assert_eq!(
+            Scenario::parse("webcam,all,basic").map(|s| s.len()),
+            Some(6),
+            "named captures join `all`, each once"
+        );
+        assert_eq!(Scenario::parse("basic,tv"), None);
         assert_eq!(Scenario::parse("layered"), Some(vec![Scenario::Layered]));
         assert_eq!(Scenario::parse("small_2d"), Some(vec![Scenario::Small2d]));
         assert_eq!(Scenario::parse("tv"), None);

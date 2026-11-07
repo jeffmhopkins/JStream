@@ -1365,10 +1365,10 @@ stamp = { hash = "b3:d976bc55816bc238", by = "agent:claude", note = "The collect
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4ec8dfc7a63215ba", by = "agent:claude-perf-suite", note = "still a protocol-only client: the new scenarios read kind.list and source.sizes; mock tests cover the skips" }
+stamp = { hash = "b3:00fd740a7852c588", by = "agent:claude-perf-suite", note = "still protocol-only; the mock test now shows captures aren't run by default and kind-less engines skip" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:056da4d01c89de07", by = "agent:claude-perf-suite", note = "still a protocol-only client: the new scenarios read kind.list and source.sizes; mock tests cover the skips" }
+stamp = { hash = "b3:52fec024930e84e5", by = "agent:claude-perf-suite", note = "still protocol-only; the mock test now shows captures aren't run by default and kind-less engines skip" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1395,10 +1395,10 @@ stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Conten
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps changed only the browser helper's row and the daemon's cef-on-Linux note; nothing in the CLI's purpose refers to either." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4ec8dfc7a63215ba", by = "agent:claude-perf-suite", note = "bench.rs gained scenarios and skips, args.rs --media; the Contents line still describes them" }
+stamp = { hash = "b3:00fd740a7852c588", by = "agent:claude-perf-suite", note = "bench scenarios and options are still summarised by the Contents line, including review round 1's opt-in captures and the skip when kinds can't be read" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:056da4d01c89de07", by = "agent:claude-perf-suite", note = "bench.rs gained scenarios and skips, args.rs --media; the Contents line still describes them" }
+stamp = { hash = "b3:52fec024930e84e5", by = "agent:claude-perf-suite", note = "bench scenarios and options are still summarised by the Contents line, including review round 1's opt-in captures and the skip when kinds can't be read" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1419,13 +1419,13 @@ stamp = { hash = "b3:85dc669f2feb97cf", by = "agent:wave-owner", note = "The ben
 stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:3348340ba0eef3e0", by = "agent:claude-perf-suite", note = "Bench › Scenarios lists small_2d, media, browser, display and webcam with their skip rules and --media; Gates says only views open at the window's start are gated (review N1); checked against Plan::new, run, measure, wait_for_frames and judge, and a lavapipe run (3 ran, 4 skipped with reasons)" }
+stamp = { hash = "b3:0fd7e395294c20ea", by = "agent:claude-perf-suite", note = "Bench: all runs basic..browser; display and webcam only when named (comma list); sheets are <scenario>-switch-<n>.png; kinds unreadable means skip; checked against Scenario::ALL/EVERY/parse, save_sheet and run (review B1, N1, N2)" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4ec8dfc7a63215ba", by = "agent:claude-perf-suite", note = "Bench › Scenarios lists small_2d, media, browser, display and webcam with their skip rules and --media; Gates says only views open at the window's start are gated (review N1); checked against Plan::new, run, measure, wait_for_frames and judge, and a lavapipe run (3 ran, 4 skipped with reasons)" }
+stamp = { hash = "b3:00fd740a7852c588", by = "agent:claude-perf-suite", note = "Bench: all runs basic..browser; display and webcam only when named (comma list); sheets are <scenario>-switch-<n>.png; kinds unreadable means skip; checked against Scenario::ALL/EVERY/parse, save_sheet and run (review B1, N1, N2)" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:056da4d01c89de07", by = "agent:claude-perf-suite", note = "Bench › Scenarios lists small_2d, media, browser, display and webcam with their skip rules and --media; Gates says only views open at the window's start are gated (review N1); checked against Plan::new, run, measure, wait_for_frames and judge, and a lavapipe run (3 ran, 4 skipped with reasons)" }
+stamp = { hash = "b3:52fec024930e84e5", by = "agent:claude-perf-suite", note = "Bench: all runs basic..browser; display and webcam only when named (comma list); sheets are <scenario>-switch-<n>.png; kinds unreadable means skip; checked against Scenario::ALL/EVERY/parse, save_sheet and run (review B1, N1, N2)" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:c3e2bb63c14b238a", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
@@ -6336,7 +6336,7 @@ stamp = { hash = "b3:cbc148f78a6a98ff" }
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:3348340ba0eef3e0", by = "agent:claude-perf-suite", note = "the bench gained scenarios and --media; the agents walkthrough doesn't name them" }
+stamp = { hash = "b3:0fd7e395294c20ea", by = "agent:claude-perf-suite", note = "bench's scenario list and options changed; the agents walkthrough doesn't name them" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:8c6e1fe555a69b15", by = "agent:claude", note = "The CLI usage gained collection commands only; the agent setup steps still hold." }
@@ -6510,7 +6510,7 @@ stamp = { hash = "b3:a738e7edc1dac7f2", by = "agent:claude", note = "Unchanged; 
 stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:3348340ba0eef3e0", by = "agent:claude-perf-suite", note = "the bench's new scenarios don't touch the smoke script's commands" }
+stamp = { hash = "b3:0fd7e395294c20ea", by = "agent:claude-perf-suite", note = "bench changes don't touch the smoke script's commands" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:a738e7edc1dac7f2", by = "agent:claude", note = "Unchanged; the smoke commands still parse the same." }
@@ -6522,7 +6522,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:3348340ba0eef3e0", by = "agent:claude-perf-suite", note = "the bench's new scenarios don't touch the go-live steps' commands" }
+stamp = { hash = "b3:0fd7e395294c20ea", by = "agent:claude-perf-suite", note = "bench changes don't touch the go-live steps' commands" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:a738e7edc1dac7f2", by = "agent:claude", note = "Unchanged; output set-key and start still work, keys now stored under the project's scope transparently." }

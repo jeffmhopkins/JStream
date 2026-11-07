@@ -298,18 +298,22 @@ measured the same way on every machine (#1220).
   the summary and the report, when the engine lists no such source kind, when `media`
   has no `--media`, or when its source shows no picture within 10 seconds of the
   recording's start (no display, no camera, no browser runtime). A skipped scenario
-  passes. `--scenario <name>` runs one, and `all` (the default) runs every one, in that
-  order. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
+  passes. `--scenario` takes a comma-separated list of names. `all`, the default, runs
+  every scenario except `display` and `webcam`, in that order. Those two capture the
+  machine's screen and camera into the recording and the frame sheets, so they run only
+  when named, as in `--scenario all,display,webcam`. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
 - **A run** creates its scenes and sources in one batch, puts the first scene on program
   with a cut, and starts an MP4 recording of the program to
   `<dir>/bench-<scenario>.mp4`. The measured window opens on the first `stats.tick` with
   a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
   default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
-  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`. At the
+  transition (default `fade`), saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`. At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.
+- **Kinds.** A scenario that needs a source kind is skipped when `kind.list` fails or
+  lists nothing.
 - **Gates.** Every count is over the window, except two that only make the gates
   stricter: the recording's own dropped frames and packets are its run's totals, so
   they include its start before the first recorded frame, and `profile.get` covers the
