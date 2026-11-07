@@ -5508,7 +5508,7 @@ stamp = { hash = "b3:3dacd1a44a91dc73", by = "agent:claude-settings", note = "Do
 stamp = { hash = "b3:f12bc1bc27265caf", by = "agent:claude", note = "cargo fmt reflowed two expressions in project.rs; re-read the section against it, nothing it says changed | merge: the merge brought wave/alpha5's #1287 (ADR-0124 page API checkboxes and warnings, protocol 0.93, collection schema Version 8); properties.rs and style.css gained the page API checkboxes and badge beside the project Browse folder; project.rs names 0.94" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/projector.rs"]
-stamp = { hash = "b3:bd7b2129d97749eb", by = "agent:claude-perf-suite", note = "projector pictures and the canvas report their views; the projector bullet says so; device_preview keeps an unreported tally" }
+stamp = { hash = "b3:071db4030cdc4c4f", by = "agent:claude-perf-suite", note = "review N2: a projector picture's view label now starts projector#<channel>, so two pictures of one scene report apart; nothing else in this section changes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This PR adds item lock (canvas: no handles, drag or nudge for a locked item, '· locked' readout; Sources lock button titled 'Lock on the canvas'; item menu Lock check), screenshot.rs (a one-frame png preview stream on a canvas tap at the canvas size within 1920x1080, saved as '<name> <date> <time>.png' through a Blob link whose URL is revoked a few seconds later, toasts with the engine's reason on refusal, a native stand-in), and #1042 N1/N2 (Paste filters, replacing keeps a chain the clip has nothing for; Copy transform takes the whole placement). Paste and Duplicate scene now carry the lock. filters.rs changed only in test fixtures (locked: false). style.css adds the row lock button's style and lets a context menu taller than the window scroll; crop.rs, add_source.rs and filters.rs changed only in test fixtures (locked: false); lib.rs adds the screenshot module; scenes.rs adds Screenshot (scene) to the scene menu." }
@@ -5703,7 +5703,7 @@ stamp = { hash = "b3:3dacd1a44a91dc73", by = "agent:claude-settings", note = "Co
 stamp = { hash = "b3:f12bc1bc27265caf", by = "agent:claude", note = "cargo fmt reflowed two expressions in project.rs; re-read the section against it, nothing it says changed | merge: the merge brought wave/alpha5's #1287 (ADR-0124 page API checkboxes and warnings, protocol 0.93, collection schema Version 8); properties.rs gained the page API checkboxes; project.rs names 0.94" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/projector.rs"]
-stamp = { hash = "b3:bd7b2129d97749eb", by = "agent:claude-perf-suite", note = "Contents gained Views (views.rs); Screen::new now takes a tally; lib.rs Docs line names #views" }
+stamp = { hash = "b3:071db4030cdc4c4f", by = "agent:claude-perf-suite", note = "review N2: a projector picture's view label now starts projector#<channel>, so two pictures of one scene report apart; nothing else in this section changes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This PR adds screenshot.rs to the module list (Screenshot (scene) and (source), a one-frame png preview saved as a file), lock handling in canvas, sources and item_menu, and clipboard changes (lock carried by Paste and Duplicate scene, Paste filters replacing keeps a chain the clip has nothing for); filters.rs changed only in test fixtures. The purpose holds. crop.rs and add_source.rs changed only in test fixtures; lib.rs adds the screenshot module; scenes.rs adds Screenshot (scene)." }
@@ -5733,7 +5733,7 @@ stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Contents now lists settings.rs (Settings, SettingsPage, SettingsDialog); Header names File › Settings… and Plugins…; Pairing and Plugins are pages of the Settings dialog, not under the Inspector; Updates says the launch check is on the General page" }
 
 ["CRATE-jstream-ui#views"."body"]
-stamp = { hash = "b3:2c19d2e7ba077bea", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }
+stamp = { hash = "b3:c8a34bdd85887b52", by = "agent:claude-perf-suite", note = "review N2: labels are projector#<channel>:<scene|program|source:<id>>, checked against Picture in projector.rs; the channel survives the 64-char cut" }
 
 ["CRATE-jstream-ui#views"."dep:docs/adr/0132-bench-gates-views-and-quality-probe.md"]
 stamp = { hash = "b3:13de3df12a84a9c2", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }

@@ -1228,8 +1228,9 @@ what a person saw ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-
 `views.rs` holds a view's `ViewTally`, its running `ViewCounts`, and sends them as
 `preview.report` every second (`REPORT_EVERY`) while they change; a refused report only
 leaves the view unreported. The canvas reports as `canvas`; a projector picture as
-`projector:<scene>`, `projector:program` or `projector:source:<source>`, cut to 64
-characters. The Properties dialog's device picture keeps a tally it never reports: it
+`projector#<channel>:<scene>`, `projector#<channel>:program` or
+`projector#<channel>:source:<source>`, cut to 64 characters: the channel keeps two
+pictures of one scene apart. The Properties dialog's device picture keeps a tally it never reports: it
 is not a view of the show.
 
 - `received` and `shown`: `Screen::show` counts every frame of the view's channel, and

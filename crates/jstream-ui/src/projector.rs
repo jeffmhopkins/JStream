@@ -405,10 +405,13 @@ fn Picture(
             now
         });
     }
+    // The channel comes first, so two pictures of one scene (a multiview's preview and
+    // its scene row) stay two views, even when the label is cut.
+    let kind = format!("projector#{channel}");
     let view = match (&source, &scene) {
-        (Some(source), _) => crate::views::label("projector:source", Some(source.as_str())),
-        (None, Some(scene)) => crate::views::label("projector", Some(scene.as_str())),
-        (None, None) => crate::views::label("projector", Some("program")),
+        (Some(source), _) => crate::views::label(&kind, Some(&format!("source:{source}"))),
+        (None, Some(scene)) => crate::views::label(&kind, Some(scene.as_str())),
+        (None, None) => crate::views::label(&kind, Some("program")),
     };
     let reporting = StoredValue::new_local(None::<leptos::prelude::IntervalHandle>);
     let control: Option<Weak<dyn Control>> = session.get().map(|s| Rc::downgrade(&s.control));
