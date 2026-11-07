@@ -1384,7 +1384,11 @@ platform's texture, `ResourceCache::import_opaque`; a capture is opaque on both 
 its alpha read as 255, #451), a nested scene's layer at its depth, and
 the mix's scene at the canvas size. An unchanged frame is not uploaded again, and each
 nested scene is redrawn into the layer it had (`render_into`), so a steady frame
-allocates no texture. On a render tick, a mix that isn't due claims its layers without
+allocates no texture. A source's frame that no video chain reads and no model stands on
+(`Shot::drawn_only`) goes through `ResourceCache::upload_drawn`: the program stage's and
+the preview's caches (`draw_uploads_small`) hold it at the size its items draw it, its
+first upload at what `Shot::scales` plans for it, so a 1080p still in a small box keeps
+a small texture (#1139). The snapshot thread's cache draws every upload whole. On a render tick, a mix that isn't due claims its layers without
 drawing (`snapshot::claim_layers`), so mixes at different rates keep theirs between
 the ticks they draw on. Images no frame references are retired and freed after the GPU
 has finished with them. The mix's scene is drawn at the canvas: straight to the output

@@ -1213,7 +1213,9 @@ scene's to the other's in linear light while a transition runs (`Color::over_bla
 `Color::mix`; [ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4). `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+[Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
+a source's frame that only items draw at the size those items draw it, not the frame's
+(#1139), so a 1080p still in a small box keeps a small texture. On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it

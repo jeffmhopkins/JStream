@@ -1575,6 +1575,8 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        // A still drawn small holds only the texels it is drawn with (#1139).
+        cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
         let mut readbacks = Readbacks::default();

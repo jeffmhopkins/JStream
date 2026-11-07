@@ -2958,6 +2958,14 @@ impl Shot {
         self.boxes.retain(|owner, _| owners.contains(owner));
     }
 
+    /// Whether only items draw `frame`, uploaded under `key`: no video chain reads it
+    /// (a chain's filters work in the frame's own texels) and it stands in for no model.
+    /// Such an upload can be held at the size its items are drawn
+    /// ([`ResourceCache::upload_drawn`], #1139).
+    fn drawn_only(&self, key: &GpuKey, frame: &Frame) -> bool {
+        frame.model.is_none() && !self.chains.values().any(|chain| chain.input == *key)
+    }
+
     /// How much each source whose frame a layer draws is enlarged where it is shown
     /// most, in canvas pixels per pixel of the frame's extent: what its source should
     /// draw at to stay sharp (ADR-0073). It is measured on every pass, the program's and
@@ -4381,6 +4389,7 @@ pub(crate) fn compose_metered(
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();
+    let mut planned = None;
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
@@ -4392,6 +4401,31 @@ pub(crate) fn compose_metered(
             Pixels::Gpu { frame, context } => {
                 if compositor.context() == Some(context) {
                     cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            // Held at the size its items draw it, unless something reads its texels
+            // as they are: a video chain, or a model it stands in for (#1139).
+            Pixels::Copied(_) | Pixels::Video(_) if shot.drawn_only(key, frame) => {
+                // What its placements need, for an upload the cache has not drawn yet:
+                // measured once a frame at most, and only then.
+                let planned = if cache.get(key).is_none() {
+                    let scales = planned.get_or_insert_with(|| shot.scales());
+                    scales.get(source).map_or(0.0, |scale| {
+                        scale * frame.extent[0] as f32 / frame.width.max(1) as f32
+                    })
+                } else {
+                    0.0
+                };
+                cache.upload_drawn(
+                    compositor,
+                    key,
+                    frame.version,
+                    (frame.width, frame.height),
+                    frame.rgba(),
+                    planned,
+                )?;
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
@@ -6974,6 +7008,56 @@ pub(crate) mod tests {
         let out = frame_at(&mut compositor, &mut cache, &dense, None, size);
         assert_eq!(out.pixel(4, 4), Some(RED), "inside the quarter");
         assert_ne!(out.pixel(28, 15), Some(RED), "outside it");
+    }
+
+    /// A still only items draw is held at the size they draw it, on a cache that allows
+    /// it, from its first upload, and still shows its colour (#1139). One a video chain
+    /// reads, or one standing in for a model, is not.
+    #[test]
+    fn a_still_drawn_small_is_uploaded_small() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let bytes: Vec<u8> = std::iter::repeat_n(GREEN, 1024 * 512).flatten().collect();
+        let big = Frame::new(1024, 512, &bytes, 3).expect("invariant: 1024x512 RGBA8");
+        // A 1024x512 frame in a 128x64 box: an eighth each way, held at a quarter.
+        let small = Placement::Geometry(jstream_protocol::ItemGeometry {
+            size: jstream_protocol::Size::try_new(128.0, 64.0).expect("positive"),
+            ..jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        let mut drawn = shot(vec![(
+            "program",
+            vec![
+                fill("red"),
+                placed(SourceRef::Frame(SourceId::new("big")), small),
+            ],
+        )]);
+        drawn.frames.insert(SourceId::new("big"), big);
+        drawn
+            .uploads
+            .push((GpuKey::Frame(SourceId::new("big")), SourceId::new("big")));
+        let key = GpuKey::Frame(SourceId::new("big"));
+        for _ in 0..2 {
+            let out = frame_at(&mut compositor, &mut cache, &drawn, None, size);
+            assert_eq!(out.pixel(960, 540), Some(GREEN), "the still's centre");
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(
+                (image.width(), image.height(), image.extent()),
+                (256, 128, (1024, 512))
+            );
+        }
+        let frame = drawn.frames[&SourceId::new("big")].clone();
+        assert!(drawn.drawn_only(&key, &frame));
+        drawn.chains.insert(
+            ChainOwner::Source(SourceId::new("big")),
+            Chain {
+                input: key.clone(),
+                filters: Vec::new(),
+            },
+        );
+        assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's

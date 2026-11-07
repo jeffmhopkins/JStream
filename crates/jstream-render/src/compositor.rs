@@ -141,6 +141,19 @@ impl Compositor {
         image::upload(&self.maker(), width, height, rgba)
     }
 
+    /// [`Self::upload_rgba8`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_rgba8_into(
+        &self,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        image::upload_into(&self.maker(), width, height, rgba, to)
+    }
+
     /// Samples `texture`, which must already be on this device: 2D, one sample,
     /// `Rgba8UnormSrgb` or `Bgra8UnormSrgb`, with `TEXTURE_BINDING`. `sync` is staged
     /// on each frame that draws the image.
@@ -842,6 +855,9 @@ impl Compositor {
             } else {
                 shape.minification(texels)
             };
+            // How much of its frame's resolution the image needed, for an upload drawn
+            // at the size it is shown (`ResourceCache::upload_drawn`, #1139).
+            item.image.record_draw(least);
             // A 2D item minified at least twice along both axes never samples level 0.
             let skip = u32::from(least >= 2.0);
             let mips = (most > MINIFIED).then(|| {
