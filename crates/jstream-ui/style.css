@@ -68,6 +68,7 @@
   --danger-dark: #7a1e23;
   --problem: #ff8a8f;
   --ok: #3fb27f;
+  --warn: #d9a441;
   /* Code colours, for the shader editor's highlighting. */
   --code-keyword: #c792ea;
   --code-type: #7fd1c7;
@@ -825,28 +826,48 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   .canvas { min-height: 320px; }
 }
 
-/* The outputs panel (panels/outputs.rs). */
-.outputs { display: grid; gap: 0.6rem; margin-top: 1rem; }
+/* The outputs panel (panels/outputs.rs, #1206): a header with the health, a compact
+   row per output, and the buttons that open the add-output and Encoders & mixes
+   dialogs. An output's settings are in its dialog. */
+.outputs { display: grid; gap: 8px; margin-top: 1rem; }
 .outputs h3 { margin: 0; font-size: 0.85rem; font-weight: 600; }
-.outputs .go-live { display: flex; gap: 0.5rem; }
-
 .outputs button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
-.outputs .health { margin: 0; color: var(--muted); font-size: 0.85rem; }
-.outputs .health.dropping { color: var(--problem); }
 .outputs .problem { margin: 0; }
-/* The program output and each output under it, with their FX buttons (spec-panels.md U1). */
-.output-chains { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.output-chain {
+.outputs-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.outputs-head h2 { margin: 0; }
+.outputs .health { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; cursor: default; }
+.health-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
+.outputs .health.idle .health-dot { background: var(--faint); }
+.outputs .health.dropping { color: var(--problem); }
+.outputs .health.dropping .health-dot { background: var(--problem); }
+/* The program's row and each output's (spec-panels.md U1, U2). */
+.output-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.output-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 30px;
-  padding: 0 6px 0 18px;
-  border-radius: 5px;
+  min-height: 40px;
+  padding: 4px 6px 4px 8px;
+  border: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  background: var(--raised);
 }
-.output-chain.program { padding-left: 4px; font-weight: 600; background: var(--menu); }
-.output-chain-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.output-chain-status { color: var(--muted); font-size: 12px; font-weight: 400; }
+.output-row.program { min-height: 32px; background: var(--menu); border-color: var(--menu); }
+.output-row.live { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--raised)); }
+.output-row.busy { border-left-color: var(--warn); }
+.output-row.failed { border-left-color: var(--problem); }
+.output-row-icon { display: inline-grid; place-items: center; flex: 0 0 auto; color: var(--muted); }
+.output-row-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; }
+.output-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-row-target, .output-row-note { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.output-row-note { color: var(--dim); }
+.output-row-warning { margin-left: 6px; color: var(--warn); cursor: help; }
+.output-row-status { color: var(--muted); font-size: 12px; }
+.row-action { flex: 0 0 auto; width: 28px; height: 26px; padding: 0; border-radius: 5px; font-size: 12px; line-height: 1; }
+.row-action.start { border-color: var(--accent); background: var(--selected); }
+.row-action.stop { border-color: var(--danger); background: var(--danger); color: #fff; }
+.row-action.more { border-color: transparent; background: none; color: var(--muted); font-size: 16px; }
 .outputs .fx-button {
   min-width: 44px;
   padding: 2px 8px;
@@ -858,27 +879,42 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-weight: 400;
 }
 .outputs .fx-button.on { border-color: var(--accent); background: var(--selected); }
-.outputs .output-foot { margin: 0; color: var(--dim); font-size: 11px; }
-.output-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
-.output {
-  display: grid;
-  gap: 0.4rem;
-  padding: 0.6rem;
+.outputs-foot { display: flex; justify-content: space-between; gap: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.outputs-foot button.secondary { background: none; }
+/* An output's settings dialog (OBS's Settings › Output). */
+.modal.output-dialog { width: 480px; }
+.output-dialog-body { display: grid; gap: 16px; padding: 16px; overflow: auto; }
+.output-section { display: grid; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.output-section legend { margin-bottom: 8px; padding: 0; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; }
+.output-field { display: grid; gap: 4px; }
+.output-field .label { color: var(--muted); font-size: 12px; }
+.output-field input[type="text"], .output-field input[type="password"] { min-width: 0; flex: 1; }
+.output-dialog .path-row, .output-dialog .key-row, .output-dialog .encoder-row { display: flex; align-items: center; gap: 8px; }
+.output-dialog .encoder-row select { flex: 1; min-width: 0; }
+.key-mask { flex: 1; font-family: "IBM Plex Mono", ui-monospace, monospace; letter-spacing: 2px; color: var(--text-soft); }
+.output-note { margin: 0; color: var(--dim); font-size: 11px; }
+.output-note.warning { color: var(--warn); }
+.output-dialog .vcam-status { margin: 0; }
+.output-dialog .vcam-status.unregistered { color: var(--muted); }
+.output-dialog .problem { margin: 0; }
+.modal-footer .output-delete { margin-right: auto; }
+.outputs select, .output-dialog select {
+  font: inherit;
+  padding: 0.35rem 0.4rem;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
 }
-.output-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.output .target { margin: 0; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
-.output .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
-.output .warning { margin: 0; color: var(--problem); font-size: 0.8rem; }
-.output .vcam-status { margin: 0; font-size: 0.85rem; }
-.output .vcam-status.unregistered { color: var(--muted); }
-.output .buttons { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.output .encoder, .new-output label { display: grid; gap: 0.25rem; color: var(--muted); font-size: 0.85rem; }
-.outputs form.inline { display: flex; gap: 0.4rem; }
-.outputs .profiles { display: grid; gap: 0.4rem; }
-.outputs .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
-.outputs .profiles > button { justify-self: start; }
+/* The Encoders & mixes dialog, and the delete confirmation. */
+.modal.libraries-dialog { width: 560px; max-height: min(720px, 100%); }
+.libraries-body { display: grid; gap: 16px; padding: 16px; overflow: auto; }
+.libraries-body .profiles { display: grid; gap: 8px; }
+.libraries-body .profiles + .profiles { padding-top: 16px; border-top: 1px solid var(--line); }
+.libraries-body .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
+.libraries-body .profiles > button { justify-self: start; }
+.modal.confirm-dialog { width: 360px; }
+.confirm-body { margin: 0; padding: 16px; color: var(--text-soft); }
 /* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0061). */
 .codec-downloads { display: grid; gap: 0.4rem; }
 .codec-downloads:empty { display: none; }
@@ -918,18 +954,6 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .profile-field .label { color: var(--muted); font-size: 0.85rem; }
 .profile-field input, .profile-field select { min-width: 0; }
 .profile-field.size-pair { grid-template-columns: 1fr 1fr; gap: 0.4rem; }
-.outputs form.inline input { flex: 1; min-width: 0; }
-.outputs .key { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-.outputs .key input { flex: 1 0 100%; }
-.outputs .key-status { flex: 1 0 100%; color: var(--muted); font-size: 0.85rem; }
-.outputs select {
-  font: inherit;
-  padding: 0.35rem 0.4rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-}
 .badge {
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
@@ -938,8 +962,8 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   font-size: 0.75rem;
 }
 .badge.live { background: var(--danger); color: #fff; }
-.badge.failed { background: var(--problem); color: var(--panel); }
-.new-output { display: grid; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+.badge.busy { background: var(--warn); color: var(--panel); }
+.badge.failed { background: none; border: 1px solid var(--problem); color: var(--problem); }
 
 /* The mixer (panels/mixer.rs), after the prototype's (spec-panels.md 8): the master card,
    its channels folded under it, then the buses. */
@@ -1897,4 +1921,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .hl-call { color: var(--code-call); }
 .shader-status { margin: 0; font-size: 12px; color: var(--muted); }
 .shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
+.shader-save-as { display: grid; gap: 6px; padding: 0 16px 12px; }
+.shader-save-as .add-note, .shader-save-as .shader-status { margin: 0; }
+.shader-save-as-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.shader-save-as-row input { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.shader-save-as-open { margin-right: auto; }
 .shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }

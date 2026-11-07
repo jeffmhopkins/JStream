@@ -1,9 +1,10 @@
-//! The Outputs panel's encoder profiles and video mixes: a row for each, with what it
+//! The encoder profiles and video mixes, in the Outputs panel's Encoders & mixes dialog
+//! (#1206): a row for each, with what it
 //! encodes or shows, and a form that creates or edits one (`encoder.create`,
 //! `encoder.update`, `video_mix.create`, `video_mix.update`). Delete sends
 //! `encoder.delete` or `video_mix.delete`, and is disabled while an output uses the
 //! profile or shows the mix, naming those outputs, as the engine refuses it then. An
-//! output's card picks its profile and mix ([`outputs`](super::outputs)).
+//! output's settings dialog picks its profile and mix ([`outputs`](super::outputs)).
 //!
 //! A profile has the video codec (H.264, HEVC or AV1), constant or variable bit rate
 //! with its peak, the keyframe interval, the hardware preference and the AAC bit rate. A
@@ -21,6 +22,10 @@ use jstream_control::protocol::{
     VideoCodec, VideoEncoding, VideoMix, VideoMixId, VideoMixInfo,
 };
 use leptos::prelude::*;
+
+/// The name a new encoder profile starts with: what it encodes, as the engine's default
+/// encoding is H.264.
+pub const NEW_ENCODER_NAME: &str = "Default H.264";
 
 /// What the encoder form edits.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,9 +49,10 @@ pub struct EncoderDraft {
 }
 
 impl EncoderDraft {
-    /// A new profile: the engine's default encoding.
+    /// A new profile: the engine's default encoding, named for it ("Default H.264"), so
+    /// an output's Encoder select reads as a choice, not an action (#1206).
     pub fn new() -> EncoderDraft {
-        EncoderDraft::of_profile("New encoder", &EncoderProfile::DEFAULT)
+        EncoderDraft::of_profile(NEW_ENCODER_NAME, &EncoderProfile::DEFAULT)
     }
 
     /// The profile `info` as it is.
@@ -380,7 +386,7 @@ fn number(event: &leptos::ev::Event, fallback: u32) -> u32 {
     event_target_value(event).trim().parse().unwrap_or(fallback)
 }
 
-/// The encoder profiles and video mixes, under the output cards. `send` sends one edit
+/// The encoder profiles and video mixes, in the Encoders & mixes dialog. `send` sends one edit
 /// and reports its failure in the panel.
 #[component]
 pub(crate) fn Profiles(
@@ -908,7 +914,7 @@ mod tests {
             draft.edit(None, &taken),
             Ok(Edit::EncoderCreate {
                 profile_id: EncoderProfileId::new("enc_2"),
-                name: "New encoder".into(),
+                name: "Default H.264".into(),
                 profile: EncoderProfile::DEFAULT,
             })
         );

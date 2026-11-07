@@ -127,6 +127,9 @@ enum Pixels {
         frame: GpuFrame,
         context: ContextKey,
     },
+    /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
+    /// by that frame's own version, so a new frame of the same size needs no plan.
+    Slot(Arc<crate::slot::FrameSlot>),
 }
 
 impl PartialEq for Frame {
@@ -202,6 +205,20 @@ impl Frame {
         })
     }
 
+    /// A live source's frame slot, at the size of the frame it holds now: each draw
+    /// shows the slot's latest frame ([`crate::slot`]).
+    pub(crate) fn from_slot(slot: Arc<crate::slot::FrameSlot>, version: u64) -> Self {
+        let size = slot.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Slot(slot),
+            version,
+            model: None,
+        }
+    }
+
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
@@ -251,7 +268,8 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            Pixels::Gpu { .. } => &[],
+            // Read through the slot at a draw ([`compose`]); none to borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) => &[],
         }
     }
 
@@ -264,13 +282,17 @@ impl Frame {
     /// Every pixel, tightly packed, for tests that compare what a source shows.
     #[cfg(test)]
     pub(crate) fn pixels(&self) -> Vec<u8> {
-        self.rgba().to_vec()
+        match &self.pixels {
+            // What a draw would upload now.
+            Pixels::Slot(slot) => slot.latest().rgba().to_vec(),
+            _ => self.rgba().to_vec(),
+        }
     }
 
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
-        self.rgba().get(..4)?.try_into().ok()
+        self.pixels().get(..4)?.try_into().ok()
     }
 }
 
@@ -873,6 +895,33 @@ impl Shot {
     /// Whether a transition is running in this shot, so what it draws changes with time.
     pub(crate) fn transitioning(&self) -> bool {
         self.transition.is_some()
+    }
+
+    /// What the frame slots this shot draws hold now ([`crate::slot`]): it changes when
+    /// any of them takes a new frame, so a stream that skips an unchanged picture draws
+    /// one that changed only there. Zero with no slot.
+    pub(crate) fn slot_stamp(&self) -> u64 {
+        self.frames
+            .values()
+            .filter_map(|frame| match &frame.pixels {
+                Pixels::Slot(slot) => Some(slot.latest().version()),
+                _ => None,
+            })
+            .fold(0, u64::wrapping_add)
+    }
+
+    /// What each of its frame slots holds now (ADR-0117 §3): a frame sheet draws its
+    /// pictures later, and each must show the frames it was taken with.
+    pub(crate) fn pin(&self) -> Pinned {
+        Pinned(
+            self.frames
+                .iter()
+                .filter_map(|(source, frame)| match &frame.pixels {
+                    Pixels::Slot(slot) => Some((source.clone(), slot.latest())),
+                    _ => None,
+                })
+                .collect(),
+        )
     }
 
     /// Whether what this shot draws may change with time alone: a transition runs, a
@@ -2802,6 +2851,10 @@ enum ChainStep {
     Run(ChainOwner),
 }
 
+/// What a shot's frame slots held at one moment, by source ([`Shot::pin`]).
+#[derive(Debug, Default)]
+pub(crate) struct Pinned(BTreeMap<SourceId, Arc<crate::slot::Latest>>);
+
 /// What [`compose`] draws: which mix, and whether as an output gets it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct View<'a> {
@@ -2814,6 +2867,9 @@ pub(crate) struct View<'a> {
     /// The output whose own video chain the frame runs through, for a frame drawn for
     /// that output alone.
     pub(crate) owner: Option<&'a OutputId>,
+    /// What the shot's frame slots held when a frame sheet's picture was taken, drawn in
+    /// place of what they hold now ([`Shot::pin`]). `None` draws what they hold now.
+    pub(crate) pinned: Option<&'a Pinned>,
 }
 
 impl<'a> View<'a> {
@@ -2823,6 +2879,7 @@ impl<'a> View<'a> {
             mix,
             stage: true,
             owner,
+            pinned: None,
         }
     }
 
@@ -3994,7 +4051,7 @@ fn draw(
     compositor: &mut Compositor,
     caches: (&mut ResourceCache<GpuKey>, &mut Chains),
 ) -> Result<QueryResult, ProtocolError> {
-    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches)?;
+    let (full_w, full_h, rgba) = render((shot, None), live, at, compositor, caches)?;
     let (width, height) = fit(full_w, full_h);
     let rgba = scale_down(full_w, full_h, &rgba, width, height);
     let png =
@@ -4018,7 +4075,7 @@ fn draw_sheet(
     let mut tiles = Vec::with_capacity(sheet.samples.len());
     for sample in &sheet.samples {
         let (width, height, rgba) = render(
-            sample.snapshot.shot(),
+            (sample.snapshot.shot(), Some(&sample.pinned)),
             &sample.live,
             sample.at,
             compositor,
@@ -4046,7 +4103,7 @@ fn draw_sheet(
 /// height and tightly packed RGBA8. The images and filters `cache` no longer needs are
 /// dropped here, on the snapshot thread.
 fn render(
-    shot: &Shot,
+    (shot, pinned): (&Shot, Option<&Pinned>),
     live: &LiveParams,
     at: MediaTime,
     compositor: &mut Compositor,
@@ -4057,7 +4114,10 @@ fn render(
         compositor,
         (&mut *cache, &mut *chains),
         (shot, at),
-        View::default(),
+        View {
+            pinned,
+            ..View::default()
+        },
         live,
         &NoCaptures,
         DrawAt::read(shot.canvas().map_err(from_render)?),
@@ -4407,6 +4467,30 @@ pub(crate) fn compose_metered(
             Pixels::Gpu { frame, context } => {
                 if compositor.context() == Some(context) {
                     cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            Pixels::Slot(slot) => {
+                // Read without a lock, and let go of here without freeing the frame:
+                // the slot's writers free what they replace (R-RT-003).
+                let latest = view
+                    .pinned
+                    .and_then(|pinned| pinned.0.get(source))
+                    .map_or_else(|| slot.latest(), Arc::clone);
+                let size = latest.frame().info().size;
+                // Only a frame of the planned size is placed as planned; one of another
+                // size waits for the plan its producer asked for.
+                if [size.width(), size.height()] == [frame.width, frame.height] {
+                    cache.upload(
+                        compositor,
+                        key,
+                        latest.version(),
+                        size.width(),
+                        size.height(),
+                        latest.rgba(),
+                    )?;
+                    if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                        cache.set_extent(key, extent);
+                    }
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
