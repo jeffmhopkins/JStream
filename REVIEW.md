@@ -179,10 +179,13 @@ you reviewed, leaving the PR's own diff unchanged
 - post **exactly one** verdict per round, and never run two reviews of the same head at once;
 - a re-review of the same head (for example after a maintainer decision) uses the next round number.
 
-The marker must be on its own line, exactly in this format.
+The marker must be on its own line, exactly in this format. `review-gate` re-reads the PR on
+PR events and on a comment that carries a marker (posted, edited or deleted), and on no other
+comment, so a verdict that isn't in a marker changes nothing.
 
 A `success` on the head SHA also makes `review-gate` dispatch the Windows, macOS and
-end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). The PR
+end-to-end CI jobs for that SHA ([ADR-0054](docs/adr/0054-platform-ci-after-review.md)). A push
+cancels those runs for the PR's earlier heads. The PR
 merges once the required Windows checks pass. A PR into a `wave/*` branch gets no such run; the
 wave's PR into `main` does ([ADR-0055](docs/adr/0055-wave-branches.md)).
 

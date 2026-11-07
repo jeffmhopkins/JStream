@@ -23,13 +23,25 @@ permissions:
   actions: write   # dispatch after-review.yml (ADR-0054)
   checks: read     # see whether they already ran for the head SHA
 
+# Only PR events and comments that carry, or carried, a verdict marker evaluate the PR. Every
+# other comment's run gets a group of its own and skips its job, so it neither waits for a
+# runner nor replaces a pending evaluation in the PR's group. An evaluation reads the PR's
+# whole state, so the newest one in the PR's group is enough.
 concurrency:
-  group: review-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: >-
+    ${{ (github.event_name == 'pull_request_target' || (github.event.issue.pull_request &&
+    (contains(github.event.comment.body, '<!-- jstream-review v1 ') ||
+    contains(github.event.changes.body.from, '<!-- jstream-review v1 '))))
+    && format('review-gate-{0}', github.event.pull_request.number || github.event.issue.number)
+    || format('review-gate-skip-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   gate:
-    if: github.event_name == 'pull_request_target' || github.event.issue.pull_request
+    if: >-
+      github.event_name == 'pull_request_target' || (github.event.issue.pull_request &&
+      (contains(github.event.comment.body, '<!-- jstream-review v1 ') ||
+      contains(github.event.changes.body.from, '<!-- jstream-review v1 ')))
     runs-on: ubuntu-latest
     steps:
       - name: Evaluate reviewer verdict
@@ -72,6 +84,26 @@ jobs:
                 core.warning(`could not dispatch after-review.yml on ${pr.head.ref}: ${e.message}`);
               }
             };
+
+            // A push makes the after-review runs for the PR's earlier heads moot: cancel them so
+            // their Windows and macOS jobs free their runners. The new head's run is dispatched
+            // once its own review passes.
+            if (context.payload.action === 'synchronize') {
+              try {
+                for (const status of ['queued', 'in_progress']) {
+                  const { data } = await github.rest.actions.listWorkflowRuns({
+                    owner, repo, workflow_id: 'after-review.yml', branch: pr.head.ref, status, per_page: 20,
+                  });
+                  for (const run of data.workflow_runs) {
+                    if (run.head_sha === head || run.event !== 'workflow_dispatch') continue;
+                    await github.rest.actions.cancelWorkflowRun({ owner, repo, run_id: run.id });
+                    core.info(`cancelled after-review run ${run.id} for the earlier head ${run.head_sha.slice(0, 7)}`);
+                  }
+                }
+              } catch (e) {
+                core.warning(`could not cancel earlier after-review runs: ${e.message}`);
+              }
+            }
 
             // Session ids, normalized so URLs and bare ids compare equal.
             const norm = (s) => (s.match(/session_[A-Za-z0-9]+/) || [s.trim()])[0];
