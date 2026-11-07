@@ -1501,7 +1501,7 @@ note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
 id = "PA4"
 milestone = "M3"
 title = "Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124)"
-status = "planned"
+status = "done"
 release = "alpha.5"
 prs = [1287]
 
