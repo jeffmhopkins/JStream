@@ -24,6 +24,8 @@ pub struct PageApi {
     pub scenes: bool,
     /// `jstream.values`: the shared values the engine sends it.
     pub values: bool,
+    /// `jstream.levels()`: one bus's levels and bands, sent each page frame.
+    pub levels: bool,
 }
 
 /// One update to a page's `window.jstream`: each field the engine sends is the latest of
@@ -39,6 +41,9 @@ pub struct PageData {
     pub source: Option<String>,
     /// The program and preview scenes, as a JSON object (`program`, `preview`).
     pub scenes: Option<String>,
+    /// The granted bus's latest reading, as a JSON object (`peak`, `rms`, `bands`), or
+    /// `null` while there is none.
+    pub levels: Option<String>,
     /// Shared values by name: each value's JSON text, or `None` for one removed.
     pub values: Vec<(String, Option<String>)>,
 }
@@ -49,6 +54,7 @@ impl PageData {
         self.clock.is_none()
             && self.source.is_none()
             && self.scenes.is_none()
+            && self.levels.is_none()
             && self.values.is_empty()
     }
 
@@ -56,6 +62,7 @@ impl PageData {
     pub fn bytes(&self) -> usize {
         16 + self.source.as_ref().map_or(0, String::len)
             + self.scenes.as_ref().map_or(0, String::len)
+            + self.levels.as_ref().map_or(0, String::len)
             + self
                 .values
                 .iter()
@@ -64,7 +71,7 @@ impl PageData {
     }
 
     /// The update as one or more, each within [`MAX_PAGE_DATA_BYTES`]: the clock,
-    /// visibility and scenes in the first, and the values in order, each whole in one of
+    /// visibility, scenes and levels in the first, and the values in order, each whole in one of
     /// them. Sent in order, they leave the page as the one update would.
     pub fn split(self) -> Vec<PageData> {
         if self.bytes() <= MAX_PAGE_DATA_BYTES {
@@ -101,15 +108,15 @@ pub(crate) enum ApiHome {
     Web(String),
     /// A `file:` document at or below this folder URL, which ends in `/`.
     File(String),
-    /// A `data:` document: a page given as HTML.
-    Data,
 }
 
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 impl ApiHome {
     /// Where a page at `location` gets the API: never for a blank page, nor for a file
-    /// whose folder can't be resolved.
-    pub(crate) fn of(location: &PageLocation) -> Option<Self> {
+    /// whose folder can't be resolved. A page given as HTML gets it on `html_url`'s
+    /// origin, the one its policy gave it
+    /// ([`RequestPolicy::html_url`](crate::RequestPolicy::html_url)).
+    pub(crate) fn of(location: &PageLocation, html_url: Option<&str>) -> Option<Self> {
         match location {
             PageLocation::Blank => None,
             PageLocation::Web(url) => Some(Self::Web(url.clone())),
@@ -121,7 +128,8 @@ impl ApiHome {
                 }
                 Some(Self::File(url))
             }
-            PageLocation::Html(_) => Some(Self::Data),
+            // Its own origin, which the helper serves it from (#1035).
+            PageLocation::Html(_) => Some(Self::Web(html_url?.to_owned())),
         }
     }
 
@@ -145,7 +153,6 @@ impl ApiHome {
                         }
                     })
             }
-            Self::Data => scheme.as_deref() == Some("data"),
         }
     }
 
@@ -154,7 +161,6 @@ impl ApiHome {
         match self {
             Self::Web(url) => ("web", url),
             Self::File(folder) => ("file", folder),
-            Self::Data => ("data", ""),
         }
     }
 
@@ -163,7 +169,6 @@ impl ApiHome {
         match kind {
             "web" => Some(Self::Web(value.to_owned())),
             "file" if value.ends_with('/') => Some(Self::File(value.to_owned())),
-            "data" => Some(Self::Data),
             _ => None,
         }
     }
@@ -173,7 +178,10 @@ impl ApiHome {
 /// returns the function that takes each update as JSON text ([`update_json`]).
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 pub(crate) fn shim(api: PageApi) -> String {
-    let grant = format!("{{scenes:{},values:{}}}", api.scenes, api.values);
+    let grant = format!(
+        "{{scenes:{},values:{},levels:{}}}",
+        api.scenes, api.values, api.levels
+    );
     include_str!("page_api.js").replace("__GRANT__", &grant)
 }
 
@@ -187,6 +195,7 @@ pub(crate) struct PageCache {
     clock: Option<(f64, f64, std::time::Instant)>,
     source: Option<String>,
     scenes: Option<String>,
+    levels: Option<String>,
     values: std::collections::BTreeMap<String, String>,
 }
 
@@ -202,6 +211,9 @@ impl PageCache {
         }
         if let Some(scenes) = &data.scenes {
             self.scenes = Some(scenes.clone());
+        }
+        if let Some(levels) = &data.levels {
+            self.levels = Some(levels.clone());
         }
         for (name, value) in &data.values {
             match value {
@@ -220,6 +232,7 @@ impl PageCache {
                 .map(|(t, lead, at)| (t + at.elapsed().as_secs_f64(), lead)),
             source: self.source.clone(),
             scenes: self.scenes.clone(),
+            levels: self.levels.clone(),
             values: self
                 .values
                 .iter()
@@ -245,6 +258,9 @@ pub(crate) fn update_json(data: &PageData) -> String {
     }
     if let Some(scenes) = &data.scenes {
         fields.push(format!("\"scenes\":{scenes}"));
+    }
+    if let Some(levels) = &data.levels {
+        fields.push(format!("\"levels\":{levels}"));
     }
     if !data.values.is_empty() {
         let values: Vec<String> = data
@@ -274,7 +290,11 @@ mod tests {
 
     #[test]
     fn a_web_page_gets_the_api_on_its_own_origin_only() {
-        let home = ApiHome::of(&PageLocation::Web("https://example.com/overlay/".into())).unwrap();
+        let home = ApiHome::of(
+            &PageLocation::Web("https://example.com/overlay/".into()),
+            None,
+        )
+        .unwrap();
         assert!(home.covers("https://example.com/other/page.html?x#y"));
         assert!(home.covers("https://EXAMPLE.com:443/"));
         assert!(!home.covers("http://example.com/"));
@@ -285,10 +305,10 @@ mod tests {
     }
 
     #[test]
-    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_data() {
+    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_its_own_origin() {
         let dir = std::env::temp_dir().join(format!("jstream-page-api-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
-        let home = ApiHome::of(&PageLocation::File(dir.join("index.html"))).unwrap();
+        let home = ApiHome::of(&PageLocation::File(dir.join("index.html")), None).unwrap();
         let ApiHome::File(folder) = &home else {
             panic!("a file rule");
         };
@@ -299,10 +319,17 @@ mod tests {
         assert!(!home.covers("https://example.com/"));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let html = ApiHome::of(&PageLocation::Html("<p>hi</p>".into())).unwrap();
-        assert!(html.covers("data:text/html;base64,PHA+"));
+        let url = "https://p7.html.jstream.invalid/";
+        let html = ApiHome::of(&PageLocation::Html("<p>hi</p>".into()), Some(url)).unwrap();
+        assert!(html.covers(url));
+        assert!(!html.covers("https://p8.html.jstream.invalid/"));
+        assert_eq!(
+            ApiHome::of(&PageLocation::Html("<p>hi</p>".into()), None),
+            None
+        );
+        assert!(!html.covers("data:text/html;base64,PHA+"));
         assert!(!html.covers("https://example.com/"));
-        assert_eq!(ApiHome::of(&PageLocation::Blank), None);
+        assert_eq!(ApiHome::of(&PageLocation::Blank, None), None);
     }
 
     #[test]
@@ -310,7 +337,6 @@ mod tests {
         for home in [
             ApiHome::Web("https://a.b/".into()),
             ApiHome::File("file:///x/".into()),
-            ApiHome::Data,
         ] {
             let (kind, value) = home.to_parts();
             assert_eq!(ApiHome::from_parts(kind, value), Some(home.clone()));
@@ -325,6 +351,7 @@ mod tests {
             clock: Some((10.5, 0.25)),
             source: Some(r#"{"shown":true}"#.into()),
             scenes: None,
+            levels: Some(r#"{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]}"#.into()),
             values: vec![
                 ("status.text".into(), Some(r#""On air""#.into())),
                 ("counter.a".into(), None),
@@ -332,7 +359,7 @@ mod tests {
         };
         assert_eq!(
             update_json(&data),
-            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"values":{"status.text":"On air","counter.a":null}}"#
+            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"values":{"status.text":"On air","counter.a":null}}"#
         );
         assert_eq!(update_json(&PageData::default()), "{}");
         // A name that isn't a value's is never written.
@@ -357,6 +384,7 @@ mod tests {
         });
         cache.merge(&PageData {
             scenes: Some("2".into()),
+            levels: Some("null".into()),
             values: vec![("a".into(), None), ("b".into(), Some("3".into()))],
             ..PageData::default()
         });
@@ -367,6 +395,7 @@ mod tests {
         assert_eq!(lead, 0.1);
         assert_eq!(full.source.as_deref(), Some("1"));
         assert_eq!(full.scenes.as_deref(), Some("2"));
+        assert_eq!(full.levels.as_deref(), Some("null"));
         assert_eq!(full.values, [("b".to_owned(), Some("3".to_owned()))]);
     }
 
@@ -393,8 +422,9 @@ mod tests {
         let shim = shim(PageApi {
             scenes: true,
             values: false,
+            levels: true,
         });
-        assert!(shim.ends_with("})({scenes:true,values:false})\n"));
+        assert!(shim.ends_with("})({scenes:true,values:false,levels:true})\n"));
         assert!(!shim.contains("__GRANT__"));
     }
 }

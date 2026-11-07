@@ -151,6 +151,9 @@ a stolen token, local denial of service.
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
   no one else more than reading its descriptor or attributes (`check_private_file`).
+  App package and capability SIDs (`S-1-15-2-…`, `S-1-15-3-…`, which a packaged app's
+  redirected `%APPDATA%` puts on every file) don't count as anyone else: Windows grants
+  an app container only what its user's SIDs are granted too (#1189).
   The UI settings file holds no secret (layouts), so an existing one is read without
   that check; it is still rewritten user-only (`0600` on Unix).
   The daemon's log files and the crash reports are always new files, and the desktop
@@ -260,11 +263,11 @@ private, link-local and local-name targets, redirects to them included, unless i
 the source's own origin and the source sets `local_network`. It is decided per request
 by the origin that makes it, so for a web page the opt-in never covers a third-party
 frame, and a file or blank page whose main frame navigates to the web loses its own
-access. A page given as HTML (the `html` setting, loaded as a `data:` URL with an opaque
-origin) loads no local files, and reaches no local targets unless its source sets
-`local_network`, and then only while its main frame stays on a `data:` document. Its
-opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
-opaque frame inside the page (see Gaps). CEF on Linux names the opaque origin `null`, not none, as
+access. A page given as HTML (the `html` setting) loads from an `https` origin of its
+own, a host under a reserved domain that the helper answers itself (#1035), so no two
+sources share storage. It loads no local files, and reaches no local targets unless its
+source sets `local_network`; its opt-in then covers that origin exactly, as a web page's
+covers its own, and only its main frame loads from the reserved names. CEF on Linux names the opaque origin `null`, not none, as
 the initiator of a web source's own first load (#1069), so a main-frame load the helper
 itself started, to the source's own origin with a `null` initiator while the main frame
 hasn't left that origin, is judged as the browser's own. The helper marks the URL it
@@ -276,26 +279,36 @@ that a third-party frame made navigating the top to a path on a local source's s
 stays opaque and is refused. The rule holds on every platform, though only Linux is known
 to need it.
 
+**Controls (#347):** Chromium's Local Network Access checks refuse, at the network
+layer, a request from a public origin to a more private address, and every such request
+from a page that isn't a secure context. They see what the request policy can't: a
+public name that resolves to a local address, whether fixed (`*.nip.io`) or by DNS
+rebinding, and requests the resource handler never sees. In the pinned CEF's windowless
+pages they refuse without asking the permission handler, so for a source that opted in
+the helper allows them for the source's own origin, as the top-level origin, in a
+request context of the page's own. A third-party frame inside it and every other source
+stay refused. The Linux helper's end-to-end tests check, on the real helper with
+Chromium's test switches mapping public names to `127.0.0.1`
+(`crates/jstream-browser/tests/linux_page/local_network.rs`): a public page refused a
+public name that resolves locally; an opted-in `https` page reaching `127.0.0.1` while a
+third-party frame inside it is refused the same kind of name, both by Chromium alone;
+and an HTML page on an origin of its own. Service workers and `ws://` handshakes are
+covered by the same network-layer check but not tested. An opted-in page has a request
+context of its own, so it shares no cookies or storage with other sources from its
+origin; profiles are in memory, so nothing is lost.
+
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
 Chromium's local network access one, which it grants only to a requesting origin its
 request policy already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
-The local-network refusal reads only the URL's host: a public name that resolves to a
-local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
-request the helper's request handler doesn't see, such as a service worker's. CEF
-names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
-inside a local file page creates counts as the file page's (#721). The same holds inside
-a page given as HTML whose source sets `local_network`: such a frame, made by a
-third-party frame the HTML embeds, gets the page's local-network access. It can't be
-narrowed by origin, since the HTML document's own origin is opaque too; serving the
-HTML from a reserved origin would close it (#1035). Chromium's
-Local Network Access checks see both at the network layer and ask that permission
-handler first, so for an origin the policy refuses they are refused there; that Chromium
-enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
-(#347). ADR-0021's per-source
-"allow page to control JStream" opt-in must not hand the page the control token (#347).
+CEF names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
+inside a local file page creates counts as the file page's (#721). Chromium's network
+layer checks are confirmed on the Linux helper; the Windows helper runs the same CEF,
+and its first hardware run (#341) is still to confirm them there (#347). ADR-0021's
+per-source "allow page to control JStream" opt-in must not hand the page the control
+token (#347).
 
 **Accepted:** a Linux tester install, where the kernel restricts unprivileged user
 namespaces, makes `chrome-sandbox` setuid root inside a folder the user owns
@@ -307,21 +320,21 @@ user, accepted for tester builds. Revisit it when Linux gets a package
 ([ADR-0060](../adr/0060-linux-platform-support.md) decision 9): a root-owned install
 location removes it.
 
-**Built, in part** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source
-may opt its page in to a read-only `window.jstream` with the engine animation clock and
-the page's own visibility, and, per further setting, the program and preview scenes and
-named shared values. One bus's levels and bands are decided, not built. The renderer
+**Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
+its page in to a read-only `window.jstream` with the engine animation clock and the
+page's own visibility, and, per further setting, the program and preview scenes, named
+shared values, and one bus's levels and bands (never its samples). The renderer
 defines the API only in the main frame, and only while it shows the source's own
-document: the source's web origin exactly, its file's folder or below, or the `data:`
-document of a page given as HTML. Data flows one way: the engine filters it to the
+document: the source's web origin exactly, its file's folder or below, or the origin of
+its own a page given as HTML loads from. Data flows one way: the engine filters it to the
 grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
 updates in the renderer only from the browser process, and its client drops every
 process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A
 page has no path to the engine. A compromised renderer holds only what the sources
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
-granted, a web page can send off the machine: preview scene names matter most, and once
-built, a microphone bus's bands. The engine has no studio mode to leave, so a page
+granted, a web page can send off the machine: preview scene names matter most, and a
+microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
@@ -595,7 +608,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #344 | Server, pairing | Windows devices file, crash reports and the desktop app's log file (#780) not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
 | #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
-| #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
+| #347 | Browser | Permissions Chromium grants without a prompt; Chromium's local network checks not yet confirmed on Windows hardware | Low |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
 | #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |

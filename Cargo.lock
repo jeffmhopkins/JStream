@@ -2817,6 +2817,8 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "libc",
+ "rcgen",
+ "rustls",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",

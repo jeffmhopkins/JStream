@@ -2194,7 +2194,8 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   undone by the same edit with the old list. Addressed to a keyframe scene, it writes
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
   field `motion` removes. An empty override list stops the item's motion in that
-  keyframe. A list that breaks the rules above is `invalid_argument` naming the field,
+  keyframe. A list that breaks the rules above is `invalid_argument` naming the field
+  (one over 8 suggests a group around the item, whose motion moves its children),
   and `check_motion` is the check every implementation shares. Plugins need the `edit`
   class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
   previews as it drags): each change is one undo step. `depth` is a property beyond

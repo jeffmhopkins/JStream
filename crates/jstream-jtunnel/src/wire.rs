@@ -504,8 +504,11 @@ pub struct FrameOut<'a> {
 }
 
 /// Writes an audio packet: `frames` newest first, the first with `header.seq`. Gives its
-/// length, or `None` if `out` is too small or a frame or event isn't one [`parse`] would
-/// take. JStream receives JTunnel and doesn't send it; this is for tests and fuzzing.
+/// length, or `None` if `out` is too small, or there are no frames or too many, or a frame
+/// has too many events or an event that isn't a whole event. It doesn't check what the bytes
+/// mean (an event's offset against the frame's length, or the audio's length against the
+/// codec), so a test can write packets [`parse`] refuses. JStream receives JTunnel and
+/// doesn't send it; this is for tests and fuzzing.
 #[must_use]
 pub fn write_audio(out: &mut [u8], header: &AudioHeader, frames: &[FrameOut<'_>]) -> Option<usize> {
     if !(1..=MAX_FRAMES_PER_PACKET).contains(&frames.len()) {
