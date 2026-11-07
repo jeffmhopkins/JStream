@@ -129,6 +129,10 @@ impl PluginHosts for WindowsPluginHosts {
         search_paths(|k| std::env::var_os(k))
     }
 
+    fn folders(&self) -> Vec<PathBuf> {
+        folders(|k| std::env::var_os(k))
+    }
+
     fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
         let mut child = self.spawn(&["scan".as_ref(), file.as_os_str()], Stdio::null())?;
         let Some(stdout) = child.stdout.take() else {
@@ -306,9 +310,9 @@ fn assign(job: &Handle, child: &Child) -> Result<(), PlatformError> {
 }
 
 /// CLAP's search directories on Windows, in CLAP's order: each directory in
-/// `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and `%LOCALAPPDATA%\Programs\Common\CLAP`.
-/// Only the ones that exist.
-fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+/// `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and `%LOCALAPPDATA%\Programs\Common\CLAP`,
+/// whether they exist or not, without repeats.
+fn folders(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = var("CLAP_PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
@@ -320,12 +324,19 @@ fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf
     }
     let mut seen = Vec::new();
     paths.retain(|p| {
-        let new = p.is_dir() && !seen.contains(p);
+        let new = !p.as_os_str().is_empty() && !seen.contains(p);
         if new {
             seen.push(p.clone());
         }
         new
     });
+    paths
+}
+
+/// The [`folders`] that exist.
+fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let mut paths = folders(var);
+    paths.retain(|p| p.is_dir());
     paths
 }
 
@@ -348,6 +359,13 @@ mod tests {
             _ => None,
         });
         assert_eq!(paths, vec![a.clone(), common.join("CLAP")]);
+        // `folders` keeps the missing ones too, so a person can be told where to install.
+        let all = folders(|k| match k {
+            "CLAP_PATH" => Some(clap_path.clone()),
+            "COMMONPROGRAMFILES" => Some(common.clone().into_os_string()),
+            _ => None,
+        });
+        assert_eq!(all, vec![a.clone(), missing.clone(), common.join("CLAP")]);
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

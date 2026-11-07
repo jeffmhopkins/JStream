@@ -403,11 +403,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   starts, or for the capture and video-device backends, when a preview shows a display,
   window or webcam (a webcam's one open is shared with the output's). A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
-  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  audio-filter kinds once found, and the engine logs each file it couldn't scan; the
+  daemon serves meanwhile. The engine keeps the hosts, rescans with them on
+  `plugin.clap_rescan`, and from then on starts a
   `jstream-plugin-host.exe` for each CLAP filter in an audio chain (a source's, the
   master's or an output's). Without
   `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
+  When the hosts can't be set up, the daemon tells the engine why
+  (`Engine::set_clap_unavailable`), and `plugin.clap_scan` reports it. On macOS and
+  Linux the daemon tells the engine CLAP plugins are hosted on Windows only so far.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,

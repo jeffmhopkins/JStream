@@ -10,6 +10,7 @@
 mod activity;
 mod audio;
 mod camera_motion;
+mod clap;
 mod command;
 mod encoder;
 mod envelope;
@@ -54,6 +55,7 @@ pub use camera_motion::{
     CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
     check_camera_motion,
 };
+pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
     MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,

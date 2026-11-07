@@ -1150,11 +1150,13 @@ impl State {
             // As the engine: the server in front answers the pairing calls (ADR-0044) and
             // keeps the UI settings (ADR-0084).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
-            // module, and none is ever installed to grant or enable.
+            // module, and none is ever installed to grant or enable. It hosts no CLAP
+            // plugins either, so it has nothing to rescan.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
-            | Action::PluginInstall { .. }) => {
+            | Action::PluginInstall { .. }
+            | Action::PluginClapRescan) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
@@ -1440,6 +1442,13 @@ impl State {
             },
             Query::CodecDownloads => QueryResult::CodecDownloads {
                 downloads: self.codec_downloads.clone(),
+            },
+            // The mock hosts no CLAP plugins (ADR-0035), as the engine on a platform
+            // without a plugin host.
+            Query::PluginClapScan => QueryResult::PluginClapScan {
+                scan: jstream_protocol::ClapScanInfo::unavailable(Some(
+                    "the mock engine hosts no CLAP plugins".into(),
+                )),
             },
             // The mock keeps no activity log (ADR-0083), so it lists none.
             Query::ActivityList { .. } => QueryResult::ActivityList {

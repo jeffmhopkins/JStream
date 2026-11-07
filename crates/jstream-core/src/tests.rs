@@ -557,6 +557,116 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
     assert_eq!(filter.settings.get("1"), Some(&serde_json::json!(1.0)));
 }
 
+/// `plugin.clap_scan` reports the folders, what the last scan found and what failed, and
+/// `plugin.clap_rescan` finds a plugin installed since, without a restart (0.94).
+#[test]
+fn clap_rescan_finds_a_plugin_installed_since_and_the_scan_reports_it() {
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+
+    struct Dirs(PathBuf, PathBuf, FakePluginHosts);
+    impl PluginHosts for Dirs {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn folders(&self) -> Vec<PathBuf> {
+            vec![self.0.clone(), self.1.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.2.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.2.start(request)
+        }
+    }
+    let desc = |id: &str, name: &str| PluginDesc {
+        id: id.into(),
+        name: name.into(),
+        vendor: String::new(),
+        version: String::new(),
+        description: String::new(),
+        params: vec![fake_param()],
+    };
+    let scan_of = |control: &dyn Control| match query(control, Query::PluginClapScan) {
+        Ok(QueryResult::PluginClapScan { scan }) => scan,
+        other => panic!("plugin.clap_scan: {other:?}"),
+    };
+    let rescan = |control: &dyn Control| {
+        block_on(control.call(Call::Action {
+            action: Action::PluginClapRescan,
+        }))
+    };
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // No hosts: unavailable, with the host's reason, and a rescan is unsupported.
+    engine.set_clap_unavailable("no plugin host on this platform");
+    let scan = scan_of(&control);
+    assert!(!scan.available);
+    assert_eq!(
+        scan.reason.as_deref(),
+        Some("no plugin host on this platform")
+    );
+    let error = rescan(&control).expect_err("no hosts");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::Unsupported { call }) if call == "plugin.clap_rescan"),
+        "{error:?}"
+    );
+
+    let dir =
+        std::env::temp_dir().join(format!("jstream-engine-clap-rescan-{}", std::process::id()));
+    let missing = dir.join("not-there");
+    std::fs::create_dir_all(&dir).unwrap();
+    let gain = dir.join("gain.clap");
+    let broken = dir.join("broken.clap");
+    let verb = dir.join("verb.clap");
+    std::fs::write(&gain, b"").unwrap();
+    std::fs::write(&broken, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(&gain, vec![desc("org.example.gain", "Gain")]);
+    fake.add_file(&verb, vec![desc("org.example.verb", "Verb")]);
+    engine.scan_clap_plugins(std::sync::Arc::new(Dirs(
+        dir.clone(),
+        missing.clone(),
+        fake,
+    )));
+
+    let scan = scan_of(&control);
+    assert!(scan.available && scan.scanned && !scan.scanning);
+    assert_eq!(scan.reason, None);
+    assert_eq!(
+        scan.folders,
+        vec![
+            jstream_protocol::ClapFolder::new(dir.display().to_string(), true),
+            jstream_protocol::ClapFolder::new(missing.display().to_string(), false),
+        ]
+    );
+    assert_eq!(
+        scan.found,
+        vec![jstream_protocol::ClapFound::new(
+            "clap/org.example.gain",
+            "Gain",
+            gain.display().to_string()
+        )]
+    );
+    assert_eq!(scan.failed.len(), 1);
+    assert_eq!(scan.failed[0].file, broken.display().to_string());
+
+    // A plugin installed since is found by a rescan, and becomes a kind.
+    std::fs::write(&verb, b"").unwrap();
+    rescan(&control).expect("rescan");
+    let scan = scan_of(&control);
+    std::fs::remove_dir_all(&dir).unwrap();
+    let found: Vec<_> = scan.found.iter().map(|f| f.kind_id.as_str()).collect();
+    assert_eq!(found, ["clap/org.example.gain", "clap/org.example.verb"]);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    assert!(kinds.iter().any(|k| k.kind_id == "clap/org.example.verb"));
+}
+
 /// The engine takes scene filters and item effects (ADR-0065), which run on the scene's
 /// composite and the item's box, reports them, and refuses a missing owner as the graph
 /// does.

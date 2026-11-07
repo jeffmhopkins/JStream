@@ -24,6 +24,7 @@ use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
+use crate::settings::{SettingsDialog, SettingsPage};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
@@ -251,6 +252,30 @@ fn chain_of(category: KindCategory) -> Option<FilterChain> {
     }
 }
 
+/// The audio group CLAP plugins are offered under.
+const PLUGINS_GROUP: &str = "Plugins";
+
+/// The Plugins group when an audio chain has no CLAP plugin to offer: where to look, and
+/// a link to the Settings dialog's Audio plugins page (#1212).
+fn no_clap_plugins(settings: Option<SettingsDialog>) -> AnyView {
+    view! {
+        <div class="add-filter-group">{PLUGINS_GROUP}</div>
+        <p class="add-filter-clap">
+            "No CLAP audio plugins found. "
+            {settings.map(|settings| view! {
+                <button
+                    type="button"
+                    class="link"
+                    on:click=move |_| settings.open(SettingsPage::AudioPlugins)
+                >
+                    "Where to install them…"
+                </button>
+            })}
+        </p>
+    }
+    .into_any()
+}
+
 /// The prefix of a CLAP plugin's kind, `clap/<plugin id>` (ADR-0035): one kind per
 /// audio effect the engine's scan found.
 const CLAP_PREFIX: &str = "clap/";
@@ -272,7 +297,7 @@ fn filter_type(kind_id: &str, chain: FilterChain, engine_name: Option<&str>) -> 
         None if chain == FilterChain::Audio && kind_id.starts_with(CLAP_PREFIX) => FilterType {
             kind: kind_id.to_owned(),
             chain,
-            group: "Plugins",
+            group: PLUGINS_GROUP,
             name: fallback,
             hint: "A CLAP audio effect",
         },
@@ -2536,6 +2561,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             .with(|k| catalogue(k.as_deref().unwrap_or_default(), video, audio))
     });
     let search = RwSignal::new(String::new());
+    let settings = use_context::<SettingsDialog>();
     let shown = Memo::new(move |_| {
         let search = search.get();
         types.with(|t| {
@@ -2712,7 +2738,19 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         }
         let mut out = Vec::new();
         let mut last: Option<(FilterChain, &'static str)> = None;
+        // An audio chain with no CLAP plugin to offer still shows Plugins, saying where
+        // to look, unless a search narrowed the list.
+        let mut clap_hint = search.with(String::is_empty)
+            && list.iter().any(|t| t.chain == FilterChain::Audio)
+            && !list
+                .iter()
+                .any(|t| t.chain == FilterChain::Audio && t.group == PLUGINS_GROUP);
         for t in list {
+            let in_audio = last.is_some_and(|(c, _)| c == FilterChain::Audio);
+            if clap_hint && in_audio && (t.chain != FilterChain::Audio || t.group == "Other") {
+                out.push(no_clap_plugins(settings));
+                clap_hint = false;
+            }
             if last.map(|(c, _)| c) != Some(t.chain) {
                 let (title, icon) = match t.chain {
                     FilterChain::Video => ("Video", "monitor"),
@@ -2768,6 +2806,9 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                 }
                 .into_any(),
             );
+        }
+        if clap_hint && last.is_some_and(|(c, _)| c == FilterChain::Audio) {
+            out.push(no_clap_plugins(settings));
         }
         out.collect_view().into_any()
     };

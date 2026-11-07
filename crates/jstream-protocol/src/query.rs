@@ -3,6 +3,7 @@
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
+use crate::clap::ClapScanInfo;
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
@@ -286,6 +287,14 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
+    /// Reads the CLAP audio plugin scan (0.94, ADR-0035): whether this engine hosts CLAP
+    /// plugins, the folders it searches (with whether each exists), the effects its last
+    /// scan found and the files it couldn't scan, with why. A client shows it so a person
+    /// can see where to install a plugin and why one is missing. For a person only, like
+    /// `plugin.clap_rescan`: no plugin is granted it and no MCP tool carries it, since it
+    /// names files on the machine. Runtime state, so no `rev`.
+    #[serde(rename = "plugin.clap_scan")]
+    PluginClapScan,
     /// Lists the codec libraries the engine can download on a person's request (0.69,
     /// ADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's
     /// patent licence covers only when Cisco's own binary is downloaded to the machine.
@@ -385,6 +394,7 @@ impl Query {
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
+            Query::PluginClapScan => "plugin.clap_scan",
             Query::CodecDownloads => "codec.downloads",
             Query::ProfileGet { .. } => "profile.get",
         }
@@ -739,6 +749,12 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
+    /// The result of `plugin.clap_scan` (0.94). Runtime state, so it carries no `rev`.
+    #[serde(rename = "plugin.clap_scan")]
+    PluginClapScan {
+        /// The scan.
+        scan: ClapScanInfo,
+    },
     /// The result of `codec.downloads` (0.69). Runtime state, so it carries no `rev`.
     #[serde(rename = "codec.downloads")]
     CodecDownloads {
@@ -789,6 +805,7 @@ impl QueryResult {
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
+            QueryResult::PluginClapScan { .. } => "plugin.clap_scan",
             QueryResult::CodecDownloads { .. } => "codec.downloads",
             QueryResult::ProfileGet { .. } => "profile.get",
         }

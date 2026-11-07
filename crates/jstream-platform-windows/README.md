@@ -563,7 +563,7 @@ The code is ported from spikes S1 to S3. This first cut has:
     host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
     `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
     `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without
-    repeats.
+    repeats; `folders` is the same list with the missing ones kept.
   - **Not yet:** a test that starts a real host process (CI's Windows job builds the
     launcher and tests `search_paths` only), and keeping the plugin from inheriting handles other threads make
     inheritable while it starts.

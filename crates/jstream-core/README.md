@@ -40,7 +40,8 @@ state machine. Contents:
   program stage's render and mixer threads take as they start, on Windows their MMCSS
   tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
-  `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
+  `scan_clap_plugins` adds the CLAP filter kinds, and `set_clap_unavailable` says why
+  there are none; `watch_effect_packs` loads and
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
@@ -135,6 +136,16 @@ state machine. Contents:
     the engine ends. It is slow, so a host calls it on a worker thread; the engine's
     lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
     hosts, and each kind's file and plugin id, added to earlier scans').
+  - The engine keeps the hosts and the last scan (`plugins/scan.rs`, `ClapScans`, on
+    locks of its own, never taken with the collection lock held) for
+    `plugin.clap_scan`, which reports the folders the hosts search
+    (`PluginHosts::folders`, with whether each exists), the effects found and the files
+    that failed, and `plugin.clap_rescan` (protocol 0.94), which scans again with the
+    same hosts and answers once it ends. One scan runs at a time; a rescan during the
+    start-up scan waits for it, and the query says `scanning` meanwhile. Without hosts
+    the query says CLAP is unavailable, with the reason a host gave
+    `Engine::set_clap_unavailable`, and the rescan is `unsupported`. The scan logs each
+    file that failed and how many effects it found.
   - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
     control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
     `Ready` (with its block and latency) once its block says so. One that exits, isn't
@@ -793,7 +804,9 @@ happened. Placeholder output actions do too: they only step the state machine.
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
 (see *Frame sheets*), and a scene sheet follows its audio modifiers under that lock
-before the picture is handed off.
+before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.94) run
+outside it: a rescan runs plugin host processes for seconds and takes the collection
+lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -3037,7 +3050,10 @@ drop ledger is its own mutex, and so is the audit sink's handle, which is only c
 under it (see *Audit log*). The audio sources' wanted set is a leaf mutex the control
 side takes under the collection lock; the program stage's `jstream-audio-sources`
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
-drop ledger's, never the collection lock (see *Audio sources*).
+drop ledger's, never the collection lock (see *Audio sources*). The CLAP scan's locks
+(`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
+its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
+collection lock under its scan lock only to add the kinds it found.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
@@ -3114,7 +3130,9 @@ everything else (the new `rev`, or the error code). A refused `hello`, with the 
 name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
-log nothing: `timeline.cue_fired` reports each, with its error.
+log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
+or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
+the host's error) and an `info` with how many effects it found.
 
 <a id="audit-log"></a>
 ## Audit log
