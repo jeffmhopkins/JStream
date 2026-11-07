@@ -670,8 +670,9 @@ tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerpri
    self-signed certificate made on the host and pinned by its fingerprint
    ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md), see *The network
    listener*). The host's own listener stays plain `ws://` on loopback. The host UI's
-   pairing panel and `jstream pair` show the addresses and the fingerprint. Still to
-   come: the desktop app's network setting.
+   pairing panel and `jstream pair` show the addresses and the fingerprint, and the
+   desktop app turns the listener on with "Allow devices on my network"
+   ([jstream-desktop › Design](../../apps/jstream-desktop/README.md#design)).
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers
