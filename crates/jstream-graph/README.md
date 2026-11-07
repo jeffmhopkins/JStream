@@ -38,7 +38,8 @@ protocol's types (`Overrides`).
   and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
+  §3), with the labels each binding carries beside them (`hotkey_labels`,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and the `transitions`: the presets, keyed by ID, and the default. A binding
   always names objects that exist. A new state holds one preset, `cut`, as its default.
   Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
   carries audio.
@@ -422,9 +423,11 @@ that does not want to change the graph it has.
   checked, and no delete edits a timeline: a cue naming a deleted object stays, inert. A
   deleted scene's inverse restores its timelines (`timeline::restore`).
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
-  folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
-  listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
-  parent, or takes the label off those sources and scenes. Every
+  folder, and `label.delete` while a source, a scene, a hotkey binding or a timeline
+  (`labels`, in that order) carries the label, listing them as `blockers`; their
+  `delete.plan` moves what the folder holds up to its parent, or takes the label off
+  each of those. `timeline.set` checks a timeline's labels as `source.set_meta` checks a
+  source's, at `timeline.labels`, and stores them ordered by ID (ADR-0133). Every
   edit is undone by the previous value; a delete by the create, then a reorder back
   unless it was last. `scene.delete` and `source.delete` undo the folder and metadata
   too. None of it is a dependency edge.
@@ -437,18 +440,24 @@ that does not want to change the graph it has.
   `values.set` whose name or value the call would refuse, at `action.name` or
   `action.value`), and the objects the action names
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
-  `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
+  `hotkey.set` in one batch. `hotkey.set_labels` (ADR-0133) sets a binding's labels,
+  whole: the binding must exist, then each label, each once (`checked_labels`); an
+  empty list removes them, and the inverse sets the old ones. Clearing or removing a
+  binding takes its labels with it, and its inverse is `hotkey.set` then
+  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile or
   transition preset (a `scene.switch` may name one) removes the bindings that name it, and
   any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md),
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), so none dangles: the result's `removed_hotkeys` lists them,
-  and the edit's inverse ends with a `hotkey.set` for each, after the object is back.
+  and the edit's inverse ends with a `hotkey.set` for each, with its labels, after the
+  object is back.
   `delete.plan` lists the bindings by applying its plan to a copy.
   `State::visible_in` reads a placement's visibility as `item.set_visible` with that
   `scene_id` would change it, for `item.toggle`.
-  The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
+  The touched set names the hotkey, and the objects a `hotkey.set` action names as used;
+  `hotkey.set_labels` and `timeline.set` use the labels they name.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its
@@ -468,10 +477,11 @@ collection (`state.get`, with the folders and labels in their orders, `scene.lis
 `bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind), and `delete.plan` (`plan.rs`,
+unknown kind), `label.members` (`Graph::label_members`, ADR-0133: everything that
+carries a label, in the orders the protocol gives), and `delete.plan` (`plan.rs`,
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status`, `video.snapshot` and `video.frames` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
-target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+`not_found` for an `item.list` of a missing scene, a `delete.plan` of a missing
+target or a `label.members` of a missing label. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source, one `transition.update` per transition
@@ -497,7 +507,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 8), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 9), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -515,8 +525,8 @@ there are none, `buses` (omitted while the master is the only one and at its def
 each bus's `monitor` omitted for none)
 and `sends`, written whenever there is a send or a source with a channel of its own (so
 an empty list means every master send was removed) and omitted otherwise, the `master`
-with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, omitted
-when there are none, and `transitions` (each preset with its `kind_version`, and the
+with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, each with its
+`labels` (omitted for none), omitted when there are none, and `transitions` (each preset with its `kind_version`, and the
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default, `locked` when locked
@@ -535,7 +545,8 @@ an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), ordered
 by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
 `camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
-(ADR-0124) gives a `browser` source's page API a checkbox per kind of data. Loading creates the folders top level first, then
+(ADR-0124) gives a `browser` source's page API a checkbox per kind of data. Version 9
+(ADR-0133) adds a hotkey binding's and a timeline's `labels`. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -553,7 +564,8 @@ the engine's; this crate does no I/O.
   scene or whose effects are full, and 7 to 8 turns on a `browser` source's
   `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
   `page_api_bus` already grant something, so rebuilding it with its kind's defaults
-  takes nothing away),
+  takes nothing away, and 8 to 9 refuses a binding's `labels`, as version 8 did, and
+  drops a timeline's, as version 8 ignored them),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.

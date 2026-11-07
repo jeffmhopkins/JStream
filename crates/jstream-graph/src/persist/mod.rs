@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -58,7 +58,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -246,6 +246,31 @@ fn v7_to_v8(value: &mut Value) -> Result<(), String> {
         for (checkbox, granted) in [("page_api_shared_values", names), ("page_api_audio", bus)] {
             if granted && !settings.contains_key(checkbox) {
                 settings.insert(checkbox.to_owned(), Value::Bool(true));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Version 9 adds the labels a hotkey binding and a timeline carry (`hotkeys[].labels`
+/// and `scenes[].timelines[].labels`, ADR-0133). A version 8 file has none, so it
+/// upgrades unchanged. A binding's labels there are refused, as version 8 refused them;
+/// a timeline's are dropped, as version 8 ignored them, so nothing loads that didn't.
+fn v8_to_v9(value: &mut Value) -> Result<(), String> {
+    let hotkeys = value.get("hotkeys").and_then(Value::as_array);
+    if hotkeys
+        .into_iter()
+        .flatten()
+        .any(|h| h.get("labels").is_some())
+    {
+        return Err("a version 8 hotkey has no `labels`".into());
+    }
+    let scenes = value.get_mut("scenes").and_then(Value::as_array_mut);
+    for scene in scenes.into_iter().flatten() {
+        let timelines = scene.get_mut("timelines").and_then(Value::as_array_mut);
+        for timeline in timelines.into_iter().flatten() {
+            if let Some(timeline) = timeline.as_object_mut() {
+                timeline.remove("labels");
             }
         }
     }
@@ -675,6 +700,10 @@ struct FileHotkey {
     /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
     /// none is saved.
     action: Action,
+    /// The labels it carries, ordered by ID (ADR-0133, schema_version 9); omitted for
+    /// none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    labels: Vec<LabelId>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -900,6 +929,7 @@ impl Graph {
                 .map(|(chord, action)| FileHotkey {
                     chord: chord.clone(),
                     action: action.clone(),
+                    labels: state.hotkey_labels(chord),
                 })
                 .collect(),
         };
@@ -1083,7 +1113,7 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// filters; then the master's filters; then the sends (the sources made their default
 /// master sends, so when the file lists sends a source without one has it removed), and
 /// each source's audio settings; and last the hotkey bindings, whose actions name
-/// scenes, outputs and presets.
+/// scenes, outputs and presets, each with its labels.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -1479,6 +1509,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 action: hotkey.action.clone(),
             },
         ));
+        if !hotkey.labels.is_empty() {
+            edits.push((
+                format!("hotkey `{}`", hotkey.chord),
+                Edit::HotkeySetLabels {
+                    chord: hotkey.chord.clone(),
+                    labels: hotkey.labels.clone(),
+                },
+            ));
+        }
     }
     Ok(edits)
 }

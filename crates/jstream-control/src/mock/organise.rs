@@ -9,8 +9,9 @@ use super::{
     Collection, already_exists, check_id, check_index, check_name, invalid, not_found, wire_index,
 };
 use jstream_protocol::{
-    Blocker, Edit, EntityKind, FolderId, FolderInfo, LabelId, LabelInfo, ProtocolError, SceneId,
-    SceneMeta, SourceId, SourceMeta, check_color, check_icon,
+    Blocker, Edit, EntityKind, FolderId, FolderInfo, LabelId, LabelInfo, LabelMembers,
+    LabelledScene, ProtocolError, SceneId, SceneMeta, SourceId, SourceMeta, check_color,
+    check_icon,
 };
 use std::collections::BTreeSet;
 
@@ -126,8 +127,9 @@ impl Collection {
         scenes.chain(folders).collect()
     }
 
-    /// Everything that stops deleting label `id`: the sources carrying it, by ID, then
-    /// the scenes carrying it, in display order.
+    /// Everything that stops deleting label `id`: the sources carrying it, by ID, the
+    /// scenes carrying it, in display order, then the hotkey bindings carrying it, by
+    /// chord (ADR-0133). The mock has no timelines.
     fn label_blockers(&self, id: &LabelId) -> Vec<Blocker> {
         let sources = self
             .sources
@@ -139,12 +141,49 @@ impl Collection {
             .iter()
             .filter(|s| s.meta.labels.contains(id))
             .map(|s| blocker(EntityKind::Scene, s.id.as_str(), "labels"));
-        sources.chain(scenes).collect()
+        let hotkeys = self
+            .hotkey_labels
+            .iter()
+            .filter(|(_, labels)| labels.contains(id))
+            .map(|(chord, _)| blocker(EntityKind::Hotkey, chord.as_str(), "labels"));
+        sources.chain(scenes).chain(hotkeys).collect()
+    }
+
+    /// What `label.members` lists for label `id`, as the graph lists it: its scenes in
+    /// display order, its sources by ID and its bindings by chord. The mock has no
+    /// timelines. `not_found` for a label that doesn't exist.
+    pub(super) fn label_members(&self, id: &LabelId) -> Result<LabelMembers, ProtocolError> {
+        let label = self.labels[self.label_index(id)?].clone();
+        Ok(LabelMembers {
+            label,
+            scenes: self
+                .scenes
+                .iter()
+                .filter(|s| s.meta.labels.contains(id))
+                .map(|s| LabelledScene {
+                    scene_id: s.id.clone(),
+                    name: s.name.clone(),
+                    variant_of: s.variant_of.clone(),
+                })
+                .collect(),
+            sources: self
+                .sources
+                .iter()
+                .filter(|(_, s)| s.meta.labels.contains(id))
+                .map(|(source_id, _)| source_id.clone())
+                .collect(),
+            hotkeys: self.bindings(|labels| labels.contains(id)),
+            timelines: Vec::new(),
+        })
     }
 
     /// `labels` ordered by ID, as the engine stores them: `not_found` for a label that
     /// doesn't exist, `invalid_argument` for one listed twice.
-    fn checked_labels(&self, labels: &[LabelId], at: usize) -> Result<Vec<LabelId>, ProtocolError> {
+    pub(super) fn checked_labels(
+        &self,
+        labels: &[LabelId],
+        at: usize,
+    ) -> Result<Vec<LabelId>, ProtocolError> {
         let mut set = BTreeSet::new();
         for label in labels {
             self.label_index(label)?;

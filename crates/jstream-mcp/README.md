@@ -216,7 +216,10 @@ modifier for something that follows a bus or a beat, which hears only while an o
 runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
-([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), and checking
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an
+effect's keyframe scenes, hotkeys and timelines, read back with `label.members` and
+changed together in one batch
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

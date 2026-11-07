@@ -176,8 +176,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
     `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
     exists), in that order, and
-    `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
-    profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
+    `hotkey.clear` of an unbound chord; `hotkey.set_labels` of an unbound chord, then a
+    missing or repeated label (ADR-0133). Deleting a scene, source, output or encoder
+    profile removes the bindings naming it, with their labels, and lists them in the
+    batch result's `removed_hotkeys`; undo restores both.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -195,8 +197,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
   background): a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
-  source or scene carries (with the graph's `blockers`; scenes carry labels since
-  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and
+  source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)). `label.members`
+  lists a label's scenes, sources and bindings as the graph does; the mock has no
+  timelines, so it lists none. Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
 - scene cameras (`scene.set_camera`, in `mock/organise.rs`,
@@ -244,7 +249,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
-  the hotkey bindings (in `state.get`, ordered by chord).
+  the hotkey bindings with their labels (in `state.get`, ordered by chord).
   `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
   `scene.switch_and_watch`): the mock has no compositor and answers them with
   `internal`, as it does for any protocol variant it does not implement;

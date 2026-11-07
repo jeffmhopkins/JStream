@@ -942,6 +942,20 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
+    /// Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,
+    /// so it shows in each label's action group beside the keyframes and timelines that
+    /// carry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't
+    /// bound, `not_found` for a label that doesn't exist, and `invalid_argument` on
+    /// `labels` for one listed twice. `hotkey.clear` drops the labels with the binding,
+    /// and its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)
+    /// starts with none. Inverse: `hotkey.set_labels` with the old set.
+    #[serde(rename = "hotkey.set_labels")]
+    HotkeySetLabels {
+        /// The bound chord.
+        chord: Chord,
+        /// Its labels; empty for none.
+        labels: Vec<LabelId>,
+    },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
@@ -1270,6 +1284,7 @@ impl Edit {
             Edit::LabelDelete { .. } => "label.delete",
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
+            Edit::HotkeySetLabels { .. } => "hotkey.set_labels",
             Edit::HotkeyClear { .. } => "hotkey.clear",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",

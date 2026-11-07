@@ -133,8 +133,10 @@ Contents ([Design](#design) explains the choices):
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
   favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
-  and the `LabelManager` context that opens it in the Scenes or Sources panel,
-  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
+  and the `LabelManager` context that opens it in the Scenes or Sources panel, and each
+  label's Actions view (ADR-0133: its keyframes with a one-batch preset change, and every
+  hotkey and timeline with a check for the label),
+  with the edits they send to a scene, a source, a hotkey or a timeline tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
   properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
@@ -306,8 +308,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; each
   filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
   the label manager over that panel's rows, which renames, recolours, gives icons to,
-  adds (`label.create`) and deletes labels; a delete takes the label off every source
-  and scene that carries it in the same batch;
+  adds (`label.create`) and deletes labels; a delete takes the label off every source,
+  scene, hotkey and timeline that carries it in the same batch; and opens each label's
+  Actions view, which lists the keyframes carrying it and sets the move preset of the
+  ticked ones in one batch (`scene.set_transitions`, one undo step), and puts the label on
+  any hotkey (`hotkey.set_labels`) or timeline (`timeline.set`) or takes it off
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md));
   rows drag before or after each other (`scene.reorder`, `folder.reorder`,
   `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
   pointer events, but not while a filter is on, and a drop on a folder row's middle half

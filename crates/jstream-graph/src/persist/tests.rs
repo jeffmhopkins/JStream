@@ -42,10 +42,14 @@ const V6: &str = include_str!("fixtures/v6.json");
 /// 1 must.
 const V7: &str = include_str!("fixtures/v7.json");
 
-/// A collection file at schema version 8, the current one: version 7, whose `browser`
-/// sources (it has none) would carry a checkbox per kind of page data (ADR-0124). The
-/// same rule applies once version 9 exists.
+/// A collection file at schema version 8: version 7, whose `browser` sources (it has
+/// none) would carry a checkbox per kind of page data (ADR-0124). It must keep loading
+/// as version 1 must.
 const V8: &str = include_str!("fixtures/v8.json");
+
+/// A collection file at schema version 9, the current one: version 8 with a label on
+/// its hotkey and its timeline (ADR-0133). The same rule applies once version 10 exists.
+const V9: &str = include_str!("fixtures/v9.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -339,6 +343,7 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t_intro"),
                     name: "Intro".into(),
                     duration_ms: 3000,
@@ -369,6 +374,40 @@ fn v6_graph() -> Graph {
                 action: Action::TimelinePlay {
                     timeline_id: TimelineId::new("t_intro"),
                 },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// The v8 fixture's collection, plus label `l_show` on hotkey `F6` and timeline
+/// `t_intro` (ADR-0133), in one more batch: rev 8.
+fn v9_graph() -> Graph {
+    use jstream_protocol::{Chord, LabelId, TimelineId};
+    let mut graph = v6_graph();
+    let mut timeline = graph
+        .state()
+        .timeline(&TimelineId::new("t_intro"))
+        .map(|(_, t)| t.clone())
+        .expect("v6 has t_intro");
+    timeline.labels = vec![LabelId::new("l_show")];
+    let applied = graph.apply(
+        &[
+            Edit::LabelCreate {
+                label_id: LabelId::new("l_show"),
+                name: "Show".into(),
+                color: "#3366ff".into(),
+                icon: None,
+            },
+            Edit::HotkeySetLabels {
+                chord: Chord::new("F6"),
+                labels: vec![LabelId::new("l_show")],
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline,
             },
         ],
         None,
@@ -440,7 +479,32 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V8);
+    assert_eq!(v9_graph().to_collection_json(), V9);
+}
+
+#[test]
+fn the_v9_fixture_loads_exactly() {
+    let expected = v9_graph();
+    let loaded = load(V9);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 9 adds hotkey and timeline labels (ADR-0133). A version 8 hotkey's labels
+/// are refused, as version 8 refused them; a version 8 timeline's are dropped, as
+/// version 8 ignored them.
+#[test]
+fn a_version_8_hotkey_label_is_refused_and_a_timeline_label_dropped() {
+    let mut value: Value = serde_json::from_str(V8).unwrap_or_default();
+    value["hotkeys"][0]["labels"] = json!(["l_show"]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 8, .. })
+    ));
+    let mut value: Value = serde_json::from_str(V8).unwrap_or_default();
+    value["scenes"][1]["timelines"][0]["labels"] = json!(["l_missing"]);
+    let loaded = load(&value.to_string());
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(v6_graph().state()));
 }
 
 #[test]
@@ -469,7 +533,7 @@ fn the_v7_migration_keeps_a_page_api_grant() {
         ],
     });
     assert_eq!(super::migrate(&mut file), Ok(()));
-    assert_eq!(file["schema_version"], json!(8));
+    assert_eq!(file["schema_version"], json!(SCHEMA_VERSION));
     let settings = |n: usize| file["sources"][n]["settings"].clone();
     assert_eq!(settings(0)["page_api_shared_values"], json!(true));
     assert_eq!(settings(0)["page_api_audio"], json!(true));

@@ -252,6 +252,7 @@ mod tests {
 
     fn info(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
         TimelineInfo {
+            labels: Vec::new(),
             timeline_id: TimelineId::new("t"),
             name: String::new(),
             duration_ms,

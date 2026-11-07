@@ -135,4 +135,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
 | [ADR-0120](0120-follow-pointer-is-a-filter.md) | Follow pointer is a filter on a capture, with a safe margin | accepted | agent |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0133](0133-labels-on-hotkeys-and-timelines.md) | Labels on hotkeys and timelines, and a label's members | accepted | agent |  |
 <!-- @generated end adr-index -->

@@ -535,6 +535,9 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::HotkeySet { chord, action } => {
             format!("Bound {} to {}", chord.as_str(), humanize(action.name()))
         }
+        Edit::HotkeySetLabels { chord, .. } => {
+            format!("Changed the labels of the hotkey {}", chord.as_str())
+        }
         Edit::HotkeyClear { chord } => format!("Cleared the hotkey {}", chord.as_str()),
         Edit::TimelineSet {
             scene_id,

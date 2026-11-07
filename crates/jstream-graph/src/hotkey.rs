@@ -1,5 +1,5 @@
-//! Hotkey bindings (ADR-0024 §5): the `hotkey.*` edits, and the removal of the bindings
-//! that name a deleted object (ADR-0040 §3).
+//! Hotkey bindings (ADR-0024 §5): the `hotkey.*` edits, the labels a binding carries
+//! (ADR-0133), and the removal of the bindings that name a deleted object (ADR-0040 §3).
 //!
 //! A binding names an object when its action does ([`Action::named_objects`]). Every
 //! object a binding names exists: `hotkey.set` checks it, and the delete edits remove
@@ -8,9 +8,9 @@
 
 use crate::apply::{already_exists, invalid, not_found};
 use crate::model::State;
-use jstream_protocol::{Action, Chord, Edit, EntityKind, HotkeyBinding, ProtocolError};
+use jstream_protocol::{Action, Chord, Edit, EntityKind, HotkeyBinding, LabelId, ProtocolError};
 
-/// Applies `hotkey.set` and `hotkey.clear`, and returns the edits that undo it. `None`
+/// Applies `hotkey.set`, `hotkey.set_labels` and `hotkey.clear`, and returns the edits that undo it. `None`
 /// for any other edit.
 pub(crate) fn apply(
     state: &mut State,
@@ -19,6 +19,7 @@ pub(crate) fn apply(
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
     Some(match edit {
         Edit::HotkeySet { chord, action } => set(state, chord, action, at),
+        Edit::HotkeySetLabels { chord, labels } => set_labels(state, chord, labels, at),
         Edit::HotkeyClear { chord } => clear(state, chord),
         _ => return None,
     })
@@ -50,15 +51,65 @@ fn set(
     }])
 }
 
-fn clear(state: &mut State, chord: &Chord) -> Result<Vec<Edit>, ProtocolError> {
-    let action = state
-        .hotkeys
-        .remove(chord)
-        .ok_or_else(|| not_found(EntityKind::Hotkey, chord.as_str()))?;
-    Ok(vec![Edit::HotkeySet {
+/// Sets the labels of the binding of `chord`, whole: `not_found` for a chord with no
+/// binding or a label that doesn't exist, `invalid_argument` for a label listed twice.
+/// An empty list removes them. The inverse sets the old ones back.
+fn set_labels(
+    state: &mut State,
+    chord: &Chord,
+    labels: &[LabelId],
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    if !state.hotkeys.contains_key(chord) {
+        return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+    }
+    let labels = crate::organise::checked_labels(state, labels, at)?;
+    let old = state.hotkey_labels(chord);
+    if labels.is_empty() {
+        state.hotkey_labels.remove(chord);
+    } else {
+        state.hotkey_labels.insert(chord.clone(), labels);
+    }
+    Ok(vec![Edit::HotkeySetLabels {
         chord: chord.clone(),
-        action,
+        labels: old,
     }])
+}
+
+fn clear(state: &mut State, chord: &Chord) -> Result<Vec<Edit>, ProtocolError> {
+    let removed =
+        take(state, chord).ok_or_else(|| not_found(EntityKind::Hotkey, chord.as_str()))?;
+    Ok(restore(removed))
+}
+
+/// Removes the binding of `chord` and its labels, and returns it.
+fn take(state: &mut State, chord: &Chord) -> Option<HotkeyBinding> {
+    let action = state.hotkeys.remove(chord)?;
+    let labels = state
+        .hotkey_labels
+        .remove(chord)
+        .map(|labels| labels.into_iter().collect())
+        .unwrap_or_default();
+    Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
+}
+
+/// The edits that put back a removed binding: its `hotkey.set`, then its
+/// `hotkey.set_labels` when it carried any.
+fn restore(binding: HotkeyBinding) -> Vec<Edit> {
+    let Some(action) = binding.action() else {
+        return Vec::new();
+    };
+    let mut edits = vec![Edit::HotkeySet {
+        chord: binding.chord.clone(),
+        action,
+    }];
+    if !binding.labels.is_empty() {
+        edits.push(Edit::HotkeySetLabels {
+            chord: binding.chord,
+            labels: binding.labels,
+        });
+    }
+    edits
 }
 
 /// Whether the object an action names exists. An action naming a kind of object that
@@ -108,17 +159,17 @@ pub(crate) fn remove_missing_items(
         .collect();
     chords
         .into_iter()
-        .filter_map(|chord| {
-            let action = state.hotkeys.remove(&chord)?;
-            removed.push(HotkeyBinding::new(chord.clone(), &action));
-            Some(Edit::HotkeySet { chord, action })
+        .filter_map(|chord| take(state, &chord))
+        .flat_map(|binding| {
+            removed.push(binding.clone());
+            restore(binding)
         })
         .collect()
 }
 
 /// Removes every binding whose action names the object `entity` `id`, which its delete
-/// edit has just removed. Returns the edits that restore them (`hotkey.set`, ordered by
-/// chord), to run after the object is re-created, and records each removed binding in
+/// edit has just removed. Returns the edits that restore them (`hotkey.set`, then
+/// `hotkey.set_labels` for one that carried labels, ordered by chord), to run after the object is re-created, and records each removed binding in
 /// `removed`.
 pub(crate) fn remove_naming(
     state: &mut State,
@@ -134,10 +185,10 @@ pub(crate) fn remove_naming(
         .collect();
     chords
         .into_iter()
-        .filter_map(|chord| {
-            let action = state.hotkeys.remove(&chord)?;
-            removed.push(HotkeyBinding::new(chord.clone(), &action));
-            Some(Edit::HotkeySet { chord, action })
+        .filter_map(|chord| take(state, &chord))
+        .flat_map(|binding| {
+            removed.push(binding.clone());
+            restore(binding)
         })
         .collect()
 }

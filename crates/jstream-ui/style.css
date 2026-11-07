@@ -1856,3 +1856,6 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .activity-log li { display: flex; flex-direction: column; gap: 2px; }
 .activity-meta { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
 .activity-log li.failed .activity-meta { color: var(--problem); }
+.label-actions { display: flex; flex-direction: column; gap: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+.label-actions-preset { display: flex; gap: 6px; align-items: center; }
+.label-actions-preset select { flex: 1 1 auto; min-width: 0; }

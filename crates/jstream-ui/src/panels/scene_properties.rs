@@ -210,24 +210,28 @@ pub fn scene_edits(
                 hotkeys::label(chord)
             ));
         }
-        // A rebind keeps the preset the old binding switched with.
-        let preset_id = collection
-            .scene_hotkey(scene_id)
-            .and_then(|b| match b.action() {
-                Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
-                _ => None,
-            });
+        // A rebind keeps the preset the old binding switched with, and its labels
+        // (ADR-0133).
+        let old = collection.scene_hotkey(scene_id);
+        let preset_id = old.and_then(|b| match b.action() {
+            Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
+            _ => None,
+        });
+        let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
-                chord,
+                chord: chord.clone(),
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
                 },
             });
+            if !labels.is_empty() {
+                edits.push(Edit::HotkeySetLabels { chord, labels });
+            }
         }
     }
     Ok(edits)

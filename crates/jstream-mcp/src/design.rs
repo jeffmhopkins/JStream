@@ -217,6 +217,11 @@ each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+Group the parts of one effect (its keyframe scenes, the hotkeys that switch to them, \
+its timelines) under one label: `scene.set_meta` labels a keyframe scene, \
+`hotkey.set_labels` a hotkey and a timeline's own `labels` the timeline, and \
+`label.members` lists everything carrying the label in one call, so later you change \
+them together, such as every keyframe's `scene.set_transitions` in one batch. \
 Changing `html` \
 reloads the page, which replays the entrance and blanks it for a moment, so put text \
 that changes during a show in a `text` source over it. If creating the source fails \

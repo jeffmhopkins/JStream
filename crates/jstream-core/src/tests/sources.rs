@@ -962,6 +962,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t"),
                     name: String::new(),
                     duration_ms: 2_000,
@@ -977,6 +978,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("kicker"),
                     name: String::new(),
                     duration_ms: 2_000,

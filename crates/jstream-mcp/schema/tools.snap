@@ -3456,6 +3456,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+                "properties": {
+                  "chord": {
+                    "$ref": "#/$defs/Chord",
+                    "description": "The bound chord."
+                  },
+                  "labels": {
+                    "description": "Its labels; empty for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "hotkey.set_labels",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "chord",
+                  "labels"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
@@ -5433,6 +5459,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "minimum": 0,
                 "type": "integer"
               },
+              "labels": {
+                "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/LabelId"
+                },
+                "type": "array"
+              },
               "loop": {
                 "$ref": "#/$defs/TimelineLoop",
                 "default": "once",
@@ -7343,7 +7376,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `hotkey` operation: set `op.type` to one of `hotkey.set` (edit), `hotkey.clear` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `hotkey` operation: set `op.type` to one of `hotkey.set` (edit), `hotkey.clear` (edit), `hotkey.set_labels` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "Action": {
@@ -10699,6 +10732,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+                "properties": {
+                  "chord": {
+                    "$ref": "#/$defs/Chord",
+                    "description": "The bound chord."
+                  },
+                  "labels": {
+                    "description": "Its labels; empty for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "hotkey.set_labels",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "chord",
+                  "labels"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
@@ -12676,6 +12735,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "minimum": 0,
                 "type": "integer"
               },
+              "labels": {
+                "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/LabelId"
+                },
+                "type": "array"
+              },
               "loop": {
                 "$ref": "#/$defs/TimelineLoop",
                 "default": "once",
@@ -12962,6 +13028,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "chord"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+                "properties": {
+                  "chord": {
+                    "$ref": "#/$defs/Chord",
+                    "description": "The bound chord."
+                  },
+                  "labels": {
+                    "description": "Its labels; empty for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "hotkey.set_labels",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "chord",
+                  "labels"
                 ],
                 "type": "object"
               }
@@ -14628,7 +14720,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `label` operation: set `op.type` to one of `label.create` (edit), `label.update` (edit), `label.reorder` (edit), `label.delete` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `label` operation: set `op.type` to one of `label.create` (edit), `label.update` (edit), `label.reorder` (edit), `label.delete` (edit), `label.members` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "IdempotencyKey": {
@@ -14777,6 +14869,24 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "label.delete",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "label_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists everything that carries a label (ADR-0133, since 0.100): its scenes,\nkeyframe scenes among them, its sources, its hotkey bindings with their actions,\nand its timelines, so a client or an agent sees a label's action group in one\ncall. `not_found` for a label that doesn't exist.",
+                "properties": {
+                  "label_id": {
+                    "$ref": "#/$defs/LabelId",
+                    "description": "The label."
+                  },
+                  "type": {
+                    "const": "label.members",
                     "type": "string"
                   }
                 },
@@ -18159,6 +18269,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+                "properties": {
+                  "chord": {
+                    "$ref": "#/$defs/Chord",
+                    "description": "The bound chord."
+                  },
+                  "labels": {
+                    "description": "Its labels; empty for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "hotkey.set_labels",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "chord",
+                  "labels"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
@@ -20125,6 +20261,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "format": "uint32",
                 "minimum": 0,
                 "type": "integer"
+              },
+              "labels": {
+                "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/LabelId"
+                },
+                "type": "array"
               },
               "loop": {
                 "$ref": "#/$defs/TimelineLoop",
@@ -26463,6 +26606,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+                "properties": {
+                  "chord": {
+                    "$ref": "#/$defs/Chord",
+                    "description": "The bound chord."
+                  },
+                  "labels": {
+                    "description": "Its labels; empty for none.",
+                    "items": {
+                      "$ref": "#/$defs/LabelId"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "hotkey.set_labels",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "chord",
+                  "labels"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
                 "properties": {
                   "scene_id": {
@@ -28439,6 +28608,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "format": "uint32",
                 "minimum": 0,
                 "type": "integer"
+              },
+              "labels": {
+                "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
+                "items": {
+                  "$ref": "#/$defs/LabelId"
+                },
+                "type": "array"
               },
               "loop": {
                 "$ref": "#/$defs/TimelineLoop",
