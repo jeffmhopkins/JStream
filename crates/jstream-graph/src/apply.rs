@@ -731,6 +731,10 @@ fn apply_edit(
             let old = std::mem::replace(&mut state.base_fps, *fps);
             Ok(vec![Edit::CanvasSetFrameRate { fps: old }])
         }
+        Edit::CanvasSetBlending { blending } => {
+            let old = std::mem::replace(&mut state.blending, *blending);
+            Ok(vec![Edit::CanvasSetBlending { blending: old }])
+        }
         Edit::ItemSetSource { item_id, source_id } => {
             let (si, ii) = find_item(state, item_id)?;
             if state.source(source_id).is_none() {

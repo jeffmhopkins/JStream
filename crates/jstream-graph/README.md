@@ -29,7 +29,8 @@ protocol's types (`Overrides`).
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
   (`cut`, `fade`, `move`), which every graph has.
-- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
+- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the
+  `blending` space (`srgb`, or `linear`, ADR-0126), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
@@ -146,13 +147,13 @@ that does not want to change the graph it has.
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
   `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
   scene's transition overrides and options, an item's transition settings), and whether the
-  scenes' order, the canvas size, the base frame rate or the default preset was set. A send is an object of its own, so two sources'
+  scenes' order, the canvas size, the base frame rate, the blending space or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
   its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
-  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, or both
-  set the default preset.
+  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, both set the
+  blending space, or both set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a source kind the graph describes (a
   filter or transition kind, such as a scanned CLAP plugin's, is `invalid_argument` on
@@ -196,9 +197,10 @@ that does not want to change the graph it has.
   `item.add`'s `opacity` accept 0 to `MAX_OPACITY` (4; above 1 a gain on the item's
   light, #1101), as do keyframe overrides; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
-  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
-  [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by
-  the previous value, and removing an item restores both.
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
+  the previous value, and removing an item restores both. `canvas.set_blending` sets the
+  collection's blending space, `srgb` in a new one, undone by the previous space
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)).
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as a `scene` owner (`invalid_argument`
   on `owner`: it shows its parent's filters). The `keyframe` owner, an item's effects as
@@ -490,7 +492,8 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 6), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 7), `rev`, the `canvas`, the `blending` space (ADR-0126,
+`schema_version` 7, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -539,14 +542,17 @@ the engine's; this crate does no I/O.
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
   changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
   keyframe override's `effects` the same way, 3 to 4 an item's and an override's
-  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, and 5 to 6 a scene's
-  `timelines`),
+  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, 5 to 6 a scene's
+  `timelines`, and 6 to 7 the `blending` space: it refuses a `blending` in a version 6
+  file, turns its items' `normal_srgb` and `additive_srgb` into `normal` and `additive`,
+  and sets `linear` when any item used another mode, the default `normal` included, so
+  only a file of `_srgb` items, or of none, loads as `srgb`),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, folders and labels, scenes with their
+  graph with the caller's kinds: the canvas size, the base frame rate and the blending space, folders and labels, scenes with their
   roles, folders and metadata (keyframe scenes after every other, then `scene.reorder`s
   to the file's order if that moved one, so a variant may come before its parent), then
   the buses (the master renamed or faded as saved) and their monitors,

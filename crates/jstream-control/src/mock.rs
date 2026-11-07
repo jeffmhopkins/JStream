@@ -547,6 +547,8 @@ struct Collection {
     rev: Rev,
     canvas: Canvas,
     base_fps: u32,
+    /// The space blend modes mix in (ADR-0126). The mock draws nothing, so it only keeps it.
+    blending: jstream_protocol::Blending,
     /// In display order.
     scenes: Vec<Scene>,
     items: BTreeMap<ItemId, Item>,
@@ -589,6 +591,7 @@ impl Default for Collection {
             rev: Rev::default(),
             canvas: Canvas::default(),
             base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+            blending: jstream_protocol::Blending::Srgb,
             scenes: Vec::new(),
             items: BTreeMap::new(),
             sources: BTreeMap::new(),
@@ -1302,6 +1305,7 @@ impl State {
                 rev: self.collection.rev,
                 canvas: self.collection.canvas,
                 base_fps: self.collection.base_fps,
+                blending: self.collection.blending,
                 sources: self.collection.source_infos(),
                 scenes: self
                     .collection
@@ -1933,6 +1937,10 @@ impl Collection {
                 }
                 let old = std::mem::replace(&mut self.base_fps, fps);
                 vec![Edit::CanvasSetFrameRate { fps: old }]
+            }
+            Edit::CanvasSetBlending { blending } => {
+                let old = std::mem::replace(&mut self.blending, blending);
+                vec![Edit::CanvasSetBlending { blending: old }]
             }
             Edit::ItemSetCrop {
                 item_id,
@@ -4020,6 +4028,7 @@ mod tests {
             QueryResult::StateGet {
                 canvas,
                 base_fps,
+                blending,
                 sources,
                 scenes,
                 outputs,
@@ -4037,6 +4046,7 @@ mod tests {
                 rev: Rev(0),
                 canvas,
                 base_fps,
+                blending,
                 sources,
                 scenes,
                 outputs,
@@ -4253,6 +4263,7 @@ mod tests {
                 rev: Rev(0),
                 canvas: Canvas::DEFAULT,
                 base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+                blending: jstream_protocol::Blending::Srgb,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],

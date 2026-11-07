@@ -52,7 +52,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
-  `canvas.set_size`, `canvas.set_frame_rate`, `source.create`, `source.rename`, `source.set_settings`,
+  `canvas.set_size`, `canvas.set_frame_rate`, `canvas.set_blending`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
   `output.set_target`, `output.set_path`, `output.set_encoder`, `output.set_video_mix`,
@@ -68,7 +68,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
-  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
+  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
   `scene.zoom_camera`, `item.show`,
@@ -151,7 +151,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
-  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
+  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas` and the `Blending` (since 0.98), and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
@@ -301,7 +301,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.89 because a collection can set its base frame rate with
+`PROTOCOL_VERSION` is 0.98 (a placeholder number the release queue sets) because a
+collection has one blending space, `canvas.set_blending` and `state.get`'s `blending`,
+and `BlendMode` is back to nine modes, the two `_srgb` names still read as `normal`
+and `additive` ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md));
+0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -888,15 +892,16 @@ All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha
 0.83 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
 `additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
-sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
-`normal_srgb` and `additive_srgb` (0.75) are `normal` and `additive` mixed in
-sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
-same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
+sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). From 0.98
+the collection's blending space picks where every mode mixes: `srgb`, the default, as a
+browser composites, or `linear`, ADR-0082's ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). 0.75 to 0.97 had
+`normal_srgb` and `additive_srgb` (ADR-0105);
+they still parse, as `normal` and `additive`, and are never sent.
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain
@@ -1275,7 +1280,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 `rev` they read, so a client can send its next batch with that `expected_rev`:
 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
-  pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
+  pre-0.11 server, it parses as 1920×1080), the `blending` space (always sent from
+  0.98; missing from an older server, it parses as `linear`, ADR-0126), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
@@ -2128,12 +2134,14 @@ after 1.0:
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
   (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
-  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
-  `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
-  0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
-  whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
-  `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
-  break counts as a minor bump, are part of open question 8.
+  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
+  `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.98
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
+  sends them, and still reads them, so an older client that sends one keeps working,
+  and its look then follows the collection's `blending`. `state.get`'s `blending` is
+  always sent; missing, from an older server, it parses as `linear`, the only space
+  that server drew. `BlendMode` still has no `Unknown` fallback; whether it gets one,
+  and whether such a break counts as a minor bump, are part of open question 8.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -2384,7 +2392,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   with, and a change applies the next time it opens. A mix's `fps_divisor` is relative
   to that rate, so 60 doubles every mix. Anything else is `invalid_argument` on
   `edits.N.fps`. `state.get` reports `base_fps`, omitted while it is 30. Inverse:
-  `canvas.set_frame_rate` with the previous rate.
+  `canvas.set_frame_rate` with the previous rate. `canvas.set_blending { blending }`
+  (0.98, [ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) sets the space every blend mode mixes in: `srgb`, browser-style
+  and a new collection's, or `linear`. It applies to every scene from the next frame,
+  and `state.get` reports it as `blending`. Inverse: `canvas.set_blending` with the
+  previous space.
 - **Two placement forms.** An item stores either a geometry or a legacy 0.3 transform,
   and only an edit changes which. `item.add` takes an optional `geometry` beside the
   deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and

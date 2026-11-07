@@ -118,7 +118,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
 | [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 | [ADR-0104](0104-network-listener-over-tls.md) | Devices on the network reach JStream over TLS, with a self-signed certificate they pin | accepted | maintainer |  |
-| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
+| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | superseded | agent | [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) |
 | [ADR-0106](0106-item-effects-in-canvas-space.md) | An item's effects can run over the canvas, after it is placed | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
 | [ADR-0108](0108-camera-depth-of-field.md) | Depth of field for scene cameras | accepted | agent |  |
@@ -133,4 +133,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
 | [ADR-0118](0118-placed-keyframes-on-the-graph.md) | Placed keyframes live on the engine's graph, not on a copy rebuilt each batch | accepted | agent |  |
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
+| [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) | One set of blend modes, and a project setting for the space they mix in | accepted | agent |  |
 <!-- @generated end adr-index -->

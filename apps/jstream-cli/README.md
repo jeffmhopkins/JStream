@@ -129,7 +129,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
   the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas, and
-  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119). Groups
+  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119), and
+  `canvas.set_blending <srgb|linear>` the space every blend mode mixes in (ADR-0126). Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
@@ -149,8 +150,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
   item's opacity (above 1 a gain on its light, protocol 0.83) and blend mode; the engine
-  draws every mode (protocol 0.47), and `normal_srgb` and `additive_srgb` (0.75) blend
-  as a browser does.
+  draws every mode (protocol 0.47), in the collection's blending space.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.

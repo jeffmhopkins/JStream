@@ -1,10 +1,10 @@
 //! File › Video settings…: the collection's base resolution (the canvas every scene is
-//! laid out on) and its base frame rate, as OBS's Video settings set them
-//! (docs/UI-FEATURES.md#header).
+//! laid out on) and its base frame rate, as OBS's Video settings set them, and the space
+//! its blend modes mix in (docs/UI-FEATURES.md#header).
 //!
-//! Both are collection state, so the dialog reads them from `state.get` and applies
-//! what changed as one batch: one undo step, `canvas.set_size` and
-//! `canvas.set_frame_rate` (ADR-0119). Encoders scale after this picture: an output's
+//! All three are collection state, so the dialog reads them from `state.get` and
+//! applies what changed as one batch: one undo step, `canvas.set_size`,
+//! `canvas.set_frame_rate` (ADR-0119) and `canvas.set_blending` (ADR-0126). Encoders scale after this picture: an output's
 //! video mix has its own resolution and divides the base rate. A program stage that is
 //! running keeps the rate it opened with, so the dialog says the new rate applies once
 //! every output has stopped.
@@ -14,7 +14,9 @@
 use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::store::Studio;
-use jstream_control::protocol::{Batch, Call, Canvas, DEFAULT_BASE_FPS, Edit, FAST_BASE_FPS};
+use jstream_control::protocol::{
+    Batch, Blending, Call, Canvas, DEFAULT_BASE_FPS, Edit, FAST_BASE_FPS,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -42,15 +44,52 @@ pub fn side(text: &str) -> Result<u32, String> {
     }
 }
 
-/// The edits that take the collection from `canvas` at `fps` to `width` × `height` at
-/// `wanted_fps`: only what changed, so applying the same values sends nothing.
-pub fn edits(canvas: Canvas, fps: u32, width: u32, height: u32, wanted_fps: u32) -> Vec<Edit> {
-    let mut edits = Vec::new();
-    if (canvas.width, canvas.height) != (width, height) {
-        edits.push(Edit::CanvasSetSize { width, height });
+/// What the dialog sets: the base resolution, the base rate and the blending space.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Video {
+    /// The canvas.
+    pub canvas: Canvas,
+    /// Frames per second.
+    pub fps: u32,
+    /// The space blend modes mix in.
+    pub blending: Blending,
+}
+
+impl Default for Video {
+    fn default() -> Self {
+        Self {
+            canvas: Canvas::DEFAULT,
+            fps: DEFAULT_BASE_FPS,
+            blending: Blending::default(),
+        }
     }
-    if fps != wanted_fps {
-        edits.push(Edit::CanvasSetFrameRate { fps: wanted_fps });
+}
+
+/// How each blending space reads in the picker.
+pub fn blending_label(blending: Blending) -> &'static str {
+    match blending {
+        Blending::Linear => "Linear light",
+        _ => "Browser-style (sRGB)",
+    }
+}
+
+/// The edits that take the collection from `now` to `wanted`: only what changed, so
+/// applying the same values sends nothing.
+pub fn edits(now: Video, wanted: Video) -> Vec<Edit> {
+    let mut edits = Vec::new();
+    if now.canvas != wanted.canvas {
+        edits.push(Edit::CanvasSetSize {
+            width: wanted.canvas.width,
+            height: wanted.canvas.height,
+        });
+    }
+    if now.fps != wanted.fps {
+        edits.push(Edit::CanvasSetFrameRate { fps: wanted.fps });
+    }
+    if now.blending != wanted.blending {
+        edits.push(Edit::CanvasSetBlending {
+            blending: wanted.blending,
+        });
     }
     edits
 }
@@ -73,14 +112,20 @@ pub fn VideoSettingsDialog(
 ) -> impl IntoView {
     let session = expect_context::<SessionContext>();
     let studio = expect_context::<Studio>();
-    let (canvas, fps) = studio.collection.with_untracked(|c| {
-        c.as_ref().map_or((Canvas::DEFAULT, DEFAULT_BASE_FPS), |c| {
-            (c.canvas, c.base_fps)
+    let read = move || {
+        studio.collection.with_untracked(|c| {
+            c.as_ref().map_or_else(Video::default, |c| Video {
+                canvas: c.canvas,
+                fps: c.base_fps,
+                blending: c.blending,
+            })
         })
-    });
-    let width = RwSignal::new(canvas.width.to_string());
-    let height = RwSignal::new(canvas.height.to_string());
-    let rate = RwSignal::new(fps);
+    };
+    let now = read();
+    let width = RwSignal::new(now.canvas.width.to_string());
+    let height = RwSignal::new(now.canvas.height.to_string());
+    let rate = RwSignal::new(now.fps);
+    let blending = RwSignal::new(now.blending);
     let error = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
     let preset = move || {
@@ -98,12 +143,15 @@ pub fn VideoSettingsDialog(
                 return;
             }
         };
-        let (canvas, fps) = studio.collection.with_untracked(|c| {
-            c.as_ref().map_or((Canvas::DEFAULT, DEFAULT_BASE_FPS), |c| {
-                (c.canvas, c.base_fps)
-            })
-        });
-        let edits = edits(canvas, fps, w, h, rate.get_untracked());
+        let wanted = Video {
+            canvas: Canvas {
+                width: w,
+                height: h,
+            },
+            fps: rate.get_untracked(),
+            blending: blending.get_untracked(),
+        };
+        let edits = edits(read(), wanted);
         if edits.is_empty() {
             close();
             return;
@@ -207,6 +255,25 @@ pub fn VideoSettingsDialog(
                 <p class="settings-check-note">
                     "Outputs run at this rate, or at a share of it set by their video mix. 60 fps doubles every mix's rate and the work per second. While an output is live, a new rate applies once every output has stopped."
                 </p>
+                <label class="settings-field">
+                    <span class="settings-check-label">"Blending"</span>
+                    <select
+                        aria-label="Blending"
+                        prop:value=move || blending.get().as_str()
+                        on:change=move |event| {
+                            if let Some(space) = Blending::from_name(&event_target_value(&event)) {
+                                blending.set(space);
+                            }
+                        }
+                    >
+                        {Blending::ALL.iter().map(|space| view! {
+                            <option value=space.as_str()>{blending_label(*space)}</option>
+                        }).collect_view()}
+                    </select>
+                </label>
+                <p class="settings-check-note">
+                    "How every blend mode mixes colours, in every scene. Browser-style matches CSS and design tools, so a design made there keeps its look. Linear light mixes light as it adds, for even glows and fades, but makes a faint veil brighter than a browser draws it."
+                </p>
                 {move || error.get().map(|why| view! { <p class="settings-error" role="alert">{why}</p> })}
             </div>
             <div class="modal-footer">
@@ -231,20 +298,38 @@ mod tests {
 
     #[test]
     fn only_what_changed_is_sent() {
-        let hd = Canvas::DEFAULT;
-        assert_eq!(edits(hd, 30, 1920, 1080, 30), Vec::<Edit>::new());
+        let now = Video::default();
+        let with = |width, height, fps, blending| Video {
+            canvas: Canvas { width, height },
+            fps,
+            blending,
+        };
+        assert_eq!(edits(now, now), Vec::<Edit>::new());
         assert_eq!(
-            edits(hd, 30, 1920, 1080, 60),
+            edits(now, with(1920, 1080, 60, Blending::Srgb)),
             vec![Edit::CanvasSetFrameRate { fps: 60 }]
         );
         assert_eq!(
-            edits(hd, 30, 1280, 720, 30),
+            edits(now, with(1280, 720, 30, Blending::Srgb)),
             vec![Edit::CanvasSetSize {
                 width: 1280,
                 height: 720
             }]
         );
-        assert_eq!(edits(hd, 60, 3840, 2160, 30).len(), 2);
+        assert_eq!(
+            edits(now, with(1920, 1080, 30, Blending::Linear)),
+            vec![Edit::CanvasSetBlending {
+                blending: Blending::Linear
+            }]
+        );
+        assert_eq!(
+            edits(
+                with(1920, 1080, 60, Blending::Linear),
+                with(3840, 2160, 30, Blending::Srgb)
+            )
+            .len(),
+            3
+        );
     }
 
     #[test]

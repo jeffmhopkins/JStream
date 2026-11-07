@@ -146,6 +146,9 @@ pub(crate) fn edits() -> Vec<Edit> {
             height: 2160,
         },
         Edit::CanvasSetFrameRate { fps: 60 },
+        Edit::CanvasSetBlending {
+            blending: crate::Blending::Linear,
+        },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
             scene_id: None,
@@ -2205,6 +2208,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             canvas: Canvas::DEFAULT,
             base_fps: 30,
+            blending: crate::Blending::Srgb,
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {

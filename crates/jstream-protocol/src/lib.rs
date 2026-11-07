@@ -55,8 +55,8 @@ pub use camera_motion::{
     check_camera_motion,
 };
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, Edit, EffectsSpace,
+    ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,

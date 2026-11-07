@@ -3,10 +3,10 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole,
-    SourceId, SourceKind, SourceMeta, parity,
+    Action, BlendMode, Blending, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain,
+    FilterId, FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions,
+    SceneRole, SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -33,10 +33,14 @@ const V4: &str = include_str!("fixtures/v4.json");
 /// loading as version 1 must.
 const V5: &str = include_str!("fixtures/v5.json");
 
-/// A collection file at schema version 6, the current one: version 5 with a timeline in
-/// scene `a` and a hotkey that plays it (ADR-0115). The same rule applies once version 7
-/// exists.
+/// A collection file at schema version 6: version 5 with a timeline in scene `a` and a
+/// hotkey that plays it (ADR-0115). It must keep loading as version 1 must.
 const V6: &str = include_str!("fixtures/v6.json");
+
+/// A collection file at schema version 7, the current one: version 6 with the project's
+/// blending space, `linear` because its items use the linear modes (ADR-0126). The same
+/// rule applies once version 8 exists.
+const V7: &str = include_str!("fixtures/v7.json");
 
 /// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
 /// another source.
@@ -380,7 +384,9 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 /// deletes the virtual camera `vcam`, clears the hotkeys and moves output `rec` back to
 /// the master bus, which the parity collection gained after the fixture was written;
 /// `a_virtual_camera_round_trips`, `hotkeys_round_trip` and
-/// `an_outputs_audio_bus_round_trips` cover them.
+/// `an_outputs_audio_bus_round_trips` cover them. The batch also sets the blending space
+/// to `linear`, which every older fixture loads as, since their items use the linear
+/// modes (ADR-0126).
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -406,6 +412,9 @@ fn fixture_graph() -> Graph {
             Edit::HotkeyClear {
                 chord: Chord::new("Ctrl+Digit1"),
             },
+            Edit::CanvasSetBlending {
+                blending: Blending::Linear,
+            },
         ],
         None,
     );
@@ -425,7 +434,84 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V6);
+    assert_eq!(v6_graph().to_collection_json(), V7);
+}
+
+#[test]
+fn the_v7_fixture_loads_exactly() {
+    let expected = v6_graph();
+    let loaded = load(V7);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 6 upgrades to the `linear` space, since its items use the linear modes, and a
+/// `blending` there is refused.
+#[test]
+fn the_v6_fixture_loads_as_linear_and_refuses_blending() {
+    let mut value: Value = serde_json::from_str(V6).unwrap_or_default();
+    value["blending"] = json!("srgb");
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 6, .. })
+    ));
+}
+
+/// A version 6 file whose items all used the `_srgb` modes loads as `srgb`, with those
+/// items `normal` and `additive`, so it keeps its browser look (ADR-0126 §5).
+#[test]
+fn a_v6_file_of_srgb_modes_only_loads_browser_style() {
+    let mut value: Value = serde_json::from_str(V6).unwrap_or_default();
+    let mut modes = ["normal_srgb", "additive_srgb"].into_iter().cycle();
+    for scene in value["scenes"].as_array_mut().into_iter().flatten() {
+        for item in scene["items"].as_array_mut().into_iter().flatten() {
+            item["blend"] = json!(modes.next());
+        }
+    }
+    let loaded = load(&value.to_string());
+    assert_eq!(
+        loaded.as_ref().map(|g| g.state().blending()),
+        Ok(Blending::Srgb)
+    );
+    let blends: Vec<BlendMode> = loaded
+        .as_ref()
+        .map(|g| {
+            g.state()
+                .scenes()
+                .iter()
+                .flat_map(|s| s.items().iter().map(|i| i.blend))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(blends.contains(&BlendMode::Normal), "{blends:?}");
+    assert!(blends.contains(&BlendMode::Additive), "{blends:?}");
+    assert!(
+        blends
+            .iter()
+            .all(|b| matches!(b, BlendMode::Normal | BlendMode::Additive)),
+        "{blends:?}"
+    );
+}
+
+/// A version 6 file that mixed `_srgb` and linear modes keeps the linear look: the
+/// project is `linear` and the `_srgb` items are plain.
+#[test]
+fn a_v6_file_that_mixed_both_loads_linear() {
+    let mut value: Value = serde_json::from_str(V6).unwrap_or_default();
+    value["scenes"][0]["items"][0]["blend"] = json!("additive_srgb");
+    let loaded = load(&value.to_string());
+    assert_eq!(
+        loaded.as_ref().map(|g| g.state().blending()),
+        Ok(Blending::Linear)
+    );
+    let first = loaded.as_ref().ok().and_then(|g| {
+        g.state()
+            .scenes()
+            .first()
+            .and_then(|s| s.items().first())
+            .map(|i| i.blend)
+    });
+    assert_eq!(first, Some(BlendMode::Additive));
 }
 
 #[test]

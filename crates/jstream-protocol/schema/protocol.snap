@@ -1349,7 +1349,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "BlendMode": {
-      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.97, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
       "oneOf": [
         {
           "const": "normal",
@@ -1395,15 +1395,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "exclusion",
           "description": "Like difference, with lower contrast.",
           "type": "string"
-        },
+        }
+      ]
+    },
+    "Blending": {
+      "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.98).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+      "oneOf": [
         {
-          "const": "normal_srgb",
-          "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+          "const": "srgb",
+          "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
           "type": "string"
         },
         {
-          "const": "additive_srgb",
-          "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+          "const": "linear",
+          "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
           "type": "string"
         }
       ]
@@ -3949,6 +3954,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "fps"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets the space every blend mode of the project mixes in (since 0.98, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+          "properties": {
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "description": "The space."
+            },
+            "type": {
+              "const": "canvas.set_blending",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "blending"
           ],
           "type": "object"
         },
@@ -10161,6 +10184,11 @@ source: crates/jstream-protocol/src/fixtures.rs
               "minimum": 0,
               "type": "integer"
             },
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "default": "linear",
+              "description": "The space every blend mode mixes in (ADR-0126, since 0.98). Missing, from an\nolder server, parses as `linear`, the only space it drew."
+            },
             "buses": {
               "default": [],
               "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.19) parses as empty.",
@@ -13001,5 +13029,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.89"
+  "title": "JStream protocol 0.98"
 }

@@ -30,9 +30,9 @@ use jstream_graph::{
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    BlendMode, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
-    ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
-    SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
+    BlendMode, Blending, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain,
+    Glide, ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult,
+    Rev, SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
@@ -524,6 +524,8 @@ struct ItemBox {
 pub(crate) struct Shot {
     /// The collection's canvas: the size every scene, nested ones included, is drawn at.
     canvas: Canvas,
+    /// The space every scene of the collection mixes in (ADR-0126).
+    blending: Blending,
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
@@ -687,6 +689,7 @@ impl Default for Shot {
     fn default() -> Self {
         Self {
             canvas: Canvas::default(),
+            blending: Blending::default(),
             program: None,
             scenes: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
@@ -1126,6 +1129,7 @@ impl Shot {
 impl PartialEq for Shot {
     fn eq(&self, other: &Self) -> bool {
         self.canvas == other.canvas
+            && self.blending == other.blending
             && self.program == other.program
             && self.mixes == other.mixes
             && self.scenes == other.scenes
@@ -1348,6 +1352,7 @@ fn plan_inner(
     let program = program.cloned();
     let mut shot = Shot {
         canvas: state.canvas(),
+        blending: state.blending(),
         program: program.clone(),
         ..Shot::default()
     };
@@ -4174,6 +4179,7 @@ pub(crate) fn compose_metered(
         readback,
     } = to;
     let canvas = shot.canvas()?;
+    compositor.set_blending(shot.blending);
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();
@@ -6159,11 +6165,12 @@ pub(crate) mod tests {
         assert!(b.abs_diff(188) <= 1, "{b}");
     }
 
-    /// An item's opacity multiplies its alpha, and the result blends in linear light: half
-    /// green over red is 0.5 of each in linear light, sRGB 188. A nested scene's opacity
+    /// An item's opacity multiplies its alpha, and the result blends in the collection's
+    /// space (ADR-0126): half green over red is 0.5 of each in linear light, sRGB 188,
+    /// and 0.5 of each encoded value browser-style, sRGB 128. A nested scene's opacity
     /// applies to the scene as a whole, and an item at 0 draws nothing.
     #[test]
-    fn opacity_blends_items_and_nested_scenes_in_linear_light() {
+    fn opacity_blends_items_and_nested_scenes_in_the_blending_space() {
         let faded = |placed: Placed, opacity: f32| Placed { opacity, ..placed };
         // The 16x9 frames are scaled to the canvas; a nested scene's layer is canvas-sized.
         let left = Placement::Legacy(LegacyTransform {
@@ -6175,7 +6182,7 @@ pub(crate) mod tests {
             scale: [0.5, 1.0],
             rotation_deg: 0.0,
         });
-        let shot = shot(vec![
+        let mut shot = shot(vec![
             (
                 "program",
                 vec![
@@ -6187,12 +6194,20 @@ pub(crate) mod tests {
             ),
             ("a", vec![fill("green")]),
         ]);
-        let Some(rgba) = snap(&shot) else { return };
-        let half = [188, 188, 0, 255];
-        for (x, y) in [(100, 360), (1100, 360)] {
-            let pixel = at(&rgba, x, y);
-            for (got, want) in pixel.iter().zip(half) {
-                assert!(got.abs_diff(want) <= 1, "({x}, {y}): {pixel:?}");
+        for (blending, half) in [
+            (jstream_protocol::Blending::Linear, [188, 188, 0, 255]),
+            (jstream_protocol::Blending::Srgb, [128, 128, 0, 255]),
+        ] {
+            shot.blending = blending;
+            let Some(rgba) = snap(&shot) else { return };
+            for (x, y) in [(100, 360), (1100, 360)] {
+                let pixel = at(&rgba, x, y);
+                for (got, want) in pixel.iter().zip(half) {
+                    assert!(
+                        got.abs_diff(want) <= 1,
+                        "{blending:?} ({x}, {y}): {pixel:?}"
+                    );
+                }
             }
         }
     }
@@ -6992,6 +7007,7 @@ pub(crate) mod tests {
             Arc::new(Ready),
         );
         let mut page_shot = shot(vec![("program", vec![fill("green"), fill("page")])]);
+        page_shot.blending = jstream_protocol::Blending::Linear;
         let page_id = SourceId::new("page");
         page_shot
             .frames

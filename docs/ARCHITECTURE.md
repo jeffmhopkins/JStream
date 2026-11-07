@@ -173,7 +173,7 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-place
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60)
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60, blending: srgb | linear)
 ├── sources        Source { id, kind, settings, filters { video[], audio[] }, duplicated_from?, labels, favourite, audio? }   video and/or audio
 │                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
@@ -317,8 +317,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   source or bus reference yet; from 0.79 they may name a file (an asset), so a LUT
   grades the program or one output. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1], and above 1, up to 4, a gain on its light, #1101) and `blend` (default `normal`; every mode is drawn,
-  [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
-  browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
+  [ADR-0082](adr/0082-blend-modes-drawn.md), in the collection's `blending` space, `srgb` as a
+  browser mixes or `linear`, [ADR-0126](adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -685,7 +685,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
-  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89)
+  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89),
+  and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.98)
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
   0.32). `encoder.create`, `encoder.update` and `encoder.delete`
@@ -1117,7 +1118,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   countdown and grouping recipes, fitting boxes to text, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
+  `item.trigger_motion` fires, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1190,10 +1191,13 @@ jitter, and the GPU's own near clip is ADR-0050's near plane.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
-src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
-target under the item, and overlay, difference, exclusion, `normal_srgb` and
-`additive_srgb` mix sRGB-encoded values, the last two to match a browser
-([ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). The composite pass writes premultiplied linear light into `Rgba16Float`; a
+src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
+target under the item. The collection's blending space picks where they mix
+([ADR-0126](adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). In `linear` the target holds premultiplied linear light, and
+overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
+collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
+so every mode mixes as a browser does with the same blend states, and one decode pass
+after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
@@ -1429,7 +1433,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
-  migration that refuses the new field in an older file. `jstream-core`
+  migration that refuses the new field in an older file. The collection's `blending`
+  (version 7, ADR-0126) also migrates what an older file means: its `normal_srgb` and
+  `additive_srgb` items become `normal` and `additive`, and it is `srgb` only when no
+  item used another mode, else `linear`, so its scenes keep their look. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

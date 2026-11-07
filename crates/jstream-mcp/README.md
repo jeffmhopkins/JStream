@@ -189,8 +189,9 @@ keyframe variants and blend modes (`item.set_blend`), layering by role
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
 surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
-canvas space by an unflipped group around it and added at a low opacity because
-blending is linear, 3D sets through
+canvas space by an unflipped group around it and added at a low opacity, the blending
+space (`canvas.set_blending`: `srgb` to match a browser or design tool, `linear` for
+light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field

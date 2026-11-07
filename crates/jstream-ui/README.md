@@ -43,8 +43,10 @@ Contents ([Design](#design) explains the choices):
   workspace's `repository`. Tested natively.
 - **Video settings** (`video_settings.rs`): File › Video settings… sets the
   collection's base resolution (the canvas, from presets or typed) and its base frame
-  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
-  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
+  (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
+  `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
+  undo step. Each
   output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
@@ -447,9 +449,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows the prototype's 1200 px while the item has none, and the first change that puts
   the item in 3D sets it, since without one the engine draws 3D orthographically, where
   Depth has no effect), Crop
-  (`item.set_crop`, in source pixels), Blending (the eleven modes, `item.set_blend`, each drawn by
-  the engine since 0.47, with `normal_srgb` and `additive_srgb` since 0.75 shown as
-  "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`) and
+  (`item.set_crop`, in source pixels), Blending (the nine modes, `item.set_blend`, each drawn by
+  the engine since 0.47 in the project's blending space, which File › Video settings…
+  sets, and Opacity, `item.set_opacity`) and
   Scene switches (folded: the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
