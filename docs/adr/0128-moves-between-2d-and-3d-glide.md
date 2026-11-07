@@ -36,12 +36,13 @@ scenes, and each pair moves in that moving space. When the Move ends on the 2D s
 scene draws as 2D again, which looks the same as the framing camera's last frame.
 
 **2. Where it still fades.** The framing camera draws a 2D item the same only when the
-item is flat (no tilt, turn or depth) or has its own perspective at the framing camera's
-focal length (within half a pixel). A 2D item with other angles is drawn with its own
-perspective in 2D, and the camera would change it. So a Move whose 2D side has such an
-item runs as a Fade of the same duration, as decision 7 said for every 2D-to-3D Move.
-The engine decides this when it plans the transition, from the visible items on that
-side. A Fade and a stinger are unchanged.
+item is flat: no tilt, turn or depth. A tilted 2D item is drawn with its own perspective,
+which projects about the item's own centre, while a camera projects about the canvas's
+centre. Even with its perspective at the framing camera's focal length, an item off the
+centre would jump. So a Move whose 2D side has a tilted, turned or pushed item runs as a
+Fade of the same duration, as decision 7 said for every 2D-to-3D Move, and draws each
+side whole as a Fade would. The engine decides this when it plans the transition, from
+the visible items on that side. A Fade and a stinger are unchanged.
 
 **3. A keyframe of a 2D scene may have a camera.** `scene.set_camera` on a keyframe scene
 whose parent has none is accepted: the keyframe is 3D through its own camera, and its
@@ -51,14 +52,16 @@ its keyframes' overrides, but only when the parent had a camera to remove. A rem
 camera makes its keyframes 2D while it lasts, as committing it would. A 3D parent still
 can't have a 2D keyframe: a keyframe's `camera: null` removes its override.
 
-**4. Compatibility.** No protocol change. An edit that was `invalid_argument` is accepted
-now, and a Move that faded may glide now. The schema and the collection file are
-unchanged.
+**4. Compatibility.** A protocol minor bump: an edit that was `invalid_argument` is
+accepted now, which a client built for the older minor would not expect, so a client can
+tell from the version whether a server takes a keyframe camera on a 2D scene. A Move that
+faded may glide now. The schema's shapes and the collection file are unchanged; only doc
+comments change.
 
 <a id="consequences"></a>
 ## Consequences
 - A 2D scene can push in, tilt or flip a card into 3D on one keyframe and come back with a
   Move, without making the whole family 3D.
 - The UI's Own camera switch on a 2D scene's keyframe starts from the framing camera.
-- A 2D side with tilted items still fades. Giving those items the framing camera's focal
-  length as their own perspective makes them glide.
+- A 2D side with tilted items still fades. Making them glide would need the 2D draw
+  to project them about the canvas's centre, which would change how 2D scenes look.

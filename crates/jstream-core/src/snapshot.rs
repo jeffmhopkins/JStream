@@ -1909,27 +1909,20 @@ impl<'a> Planner<'a, '_> {
     }
 
     /// Whether every one of `visuals`, the 2D side of a Move into or out of 3D, draws the
-    /// same through the framing camera as in 2D (ADR-0128): flat (no tilt, turn or
-    /// depth), or with its own perspective at the framing camera's focal length.
-    fn framed_alike(&self, visuals: &[Visual]) -> bool {
-        let canvas = self.state.canvas();
-        let focal = SceneCamera::framing(canvas)
-            .view(canvas)
-            .map(|view| view.focal_px());
+    /// same through the framing camera as in 2D (ADR-0128): flat, with no tilt, turn or
+    /// depth. A tilted item's own perspective projects about its own centre, the camera
+    /// about the canvas's, so even at the framing camera's focal length an item off the
+    /// centre would jump.
+    fn framed_alike(visuals: &[Visual]) -> bool {
         visuals.iter().all(|visual| {
             let g = &visual.at.geometry;
-            let flat =
-                g.tilt_deg.get() == 0.0 && g.turn_deg.get() == 0.0 && g.depth_px.get() == 0.0;
-            flat || match (g.perspective_px, &focal) {
-                (Some(p), Ok(focal)) => (p.get() - focal).abs() < 0.5,
-                _ => false,
-            }
+            g.tilt_deg.get() == 0.0 && g.turn_deg.get() == 0.0 && g.depth_px.get() == 0.0
         })
     }
 
     fn transition(&mut self, running: &Running, out: &mut Shot) -> (Planned, bool) {
         let flatten = running.run.pairs;
-        let from: Vec<Visual> = match &running.from {
+        let mut from: Vec<Visual> = match &running.from {
             From::Scene(scene) => self.endpoint(scene, flatten, out),
             // A group whose children were moving is drawn once its track is known.
             From::OnScreen(items) => items
@@ -1938,7 +1931,7 @@ impl<'a> Planner<'a, '_> {
                 .cloned()
                 .collect(),
         };
-        let to = self.endpoint(&running.to, flatten, out);
+        let mut to = self.endpoint(&running.to, flatten, out);
         // A Move between 2D and 3D sees the 2D side through the framing camera
         // (ADR-0128); where that side can't be drawn the same through it, it fades.
         let mut pairs = running.run.pairs;
@@ -1950,8 +1943,14 @@ impl<'a> Planner<'a, '_> {
                 (Some(_), None) => Some(&to),
                 _ => None,
             };
-            if two_d.is_some_and(|side| !self.framed_alike(side)) {
+            if two_d.is_some_and(|side| !Self::framed_alike(side)) {
                 pairs = false;
+                // A fade draws each side whole, as a Fade preset would: nested scenes
+                // stay one picture.
+                if let From::Scene(scene) = &running.from {
+                    from = self.endpoint(scene, false, out);
+                }
+                to = self.endpoint(&running.to, false, out);
                 faded = transition::Run {
                     pairs: false,
                     ..running.run.clone()

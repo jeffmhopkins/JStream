@@ -1588,3 +1588,45 @@ fn a_move_from_2d_with_a_tilted_item_into_3d_fades() {
         "it fades: {tracks:?}"
     );
 }
+
+/// An item off the canvas's centre with its own perspective at the framing camera's focal
+/// length still fades (ADR-0128 §2): its perspective projects about its own centre, the
+/// camera's about the canvas's, so gliding would make it jump on the first frame.
+#[test]
+fn a_move_from_2d_with_an_off_centre_item_at_the_framing_focal_length_fades() {
+    use jstream_protocol::{Canvas, SceneCamera};
+    let engine = family();
+    let control = connected(&engine);
+    let focal = SceneCamera::framing(Canvas::DEFAULT)
+        .view(Canvas::DEFAULT)
+        .expect("the framing camera has a view")
+        .focal_px();
+    let mut off_centre = at(100.0);
+    off_centre.tilt_deg = Finite32::new(30.0).expect("finite");
+    off_centre.perspective_px = Some(Finite32::new(focal).expect("finite"));
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: off_centre,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
