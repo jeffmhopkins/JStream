@@ -202,7 +202,7 @@ jobs:
             echo "## Not swept yet"
             echo
             echo "Link checks of \`docs/external.toml\`, externals and \`ext\` facts that are due, fact drift,"
-            echo "verify-to-edit ratios, pending enforcement past its milestone, and the Tier-1 ADR decision audit."
+            echo "verify-to-edit ratios, pending enforcement past its milestone, and the maintainer-tier ADR decision audit."
           } > "$RUNNER_TEMP/body.md"
           # GitHub caps an issue body at 65536 characters.
           if [ "$(wc -c < "$RUNNER_TEMP/body.md")" -gt 65000 ]; then
