@@ -488,6 +488,12 @@ pub(crate) struct Chains {
     /// that nests the same scene at the same depth reads instead of drawing it again
     /// (#1070).
     drawn: BTreeSet<GpuKey>,
+    /// The 3D models this compositor draws (ADR-0107), uploaded once per version, by
+    /// the source that shows them.
+    models: BTreeMap<SourceId, (u64, jstream_render::GpuModel)>,
+    /// The models drawn since the chains last began a frame: one no frame drew is let
+    /// go when the next begins.
+    models_used: BTreeSet<SourceId>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -524,6 +530,8 @@ impl Chains {
         self.failed.clear();
         self.staged.clear();
         self.drawn.clear();
+        let used = std::mem::take(&mut self.models_used);
+        self.models.retain(|source, _| used.contains(source));
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -738,7 +746,46 @@ impl Chains {
 
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
-        matches!(key, GpuKey::Filtered(owner) if self.failed.contains(owner))
+        match key {
+            GpuKey::Filtered(owner) => self.failed.contains(owner),
+            // A model's layer, shown as drawn when it has no effects (ADR-0107).
+            GpuKey::ItemBox(scene, item) => self
+                .failed
+                .contains(&ChainOwner::Item(scene.clone(), item.clone())),
+            _ => false,
+        }
+    }
+
+    /// Uploads the model `source` shows, unless the upload kept for it is of the same
+    /// version (ADR-0107): drawing it again then allocates nothing.
+    ///
+    /// # Errors
+    /// What the compositor reports for the upload.
+    pub(crate) fn upload_model(
+        &mut self,
+        compositor: &Compositor,
+        source: &SourceId,
+        model: &jstream_media::model::Model,
+    ) -> Result<(), RenderError> {
+        self.models_used.insert(source.clone());
+        if self
+            .models
+            .get(source)
+            .is_some_and(|(version, _)| *version == model.version())
+        {
+            return Ok(());
+        }
+        // The old upload goes first, so two versions are never held at once.
+        self.models.remove(source);
+        let uploaded = compositor.upload_model(model)?;
+        self.models
+            .insert(source.clone(), (model.version(), uploaded));
+        Ok(())
+    }
+
+    /// The upload kept for the model `source` shows.
+    pub(crate) fn model(&self, source: &SourceId) -> Option<&jstream_render::GpuModel> {
+        self.models.get(source).map(|(_, model)| model)
     }
 
     /// How many filters run, for tests.
@@ -2344,6 +2391,210 @@ mod tests {
             .flat_map(|line| line.chars().chain(['\n']))
             .collect();
         assert_eq!(actual, expected, "{what}\nactual:\n{actual}");
+    }
+
+    /// [`shot`], with `cam` showing an unlit white model of `shape` (ADR-0107) in place
+    /// of its frame, a transparent stand-in.
+    fn model_shot(graph: &Graph, shape: &str) -> Shot {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!(shape));
+        settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let source = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let shown = source.model().expect("a shape is a model");
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(Some(shown));
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    if id.as_str() == "cam" {
+                        stand_in.clone()
+                    } else {
+                        frame.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// A model item draws its model where its box is, posed by its geometry and moved by
+    /// its motion (ADR-0107 decision 6), with or without effects over its layer.
+    #[test]
+    fn golden_a_model_draws_in_its_box_and_moves_with_its_motion() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            ",
+            "the plane fills its box",
+        );
+        // An oscillator a quarter through its period is at its amplitude: 32 px right.
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetMotion {
+                item_id: ItemId::new("cam"),
+                scene_id: None,
+                motion: vec![
+                    serde_json::from_value(serde_json::json!({
+                        "modifier_id": "slide",
+                        "property": "x",
+                        "kind": "oscillate",
+                        "amplitude": 32,
+                        "period_ms": 3600000,
+                        "phase": 0.25,
+                    }))
+                    .expect("a modifier"),
+                ],
+            }],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ",
+            "its motion moves the model",
+        );
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Item {
+                item_id: ItemId::new("cam"),
+            })],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWBB
+            ........WWWWWWWB
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWB
+            ........WWWWWBBB
+            ",
+            "effects run over the model's layer: the canvas's ellipse, cut to the model",
+        );
+    }
+
+    /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a
+    /// plane turned 60° about its vertical axis is half as wide, about its own centre.
+    #[test]
+    fn golden_a_model_is_seen_through_the_scene_camera() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+        geometry.turn_deg = jstream_protocol::Finite32::new(60.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let expected = "
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWW........
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            expected,
+            "turned 60°, the plane is about half as wide, its near edge the longer",
+        );
+        // A flat item in the same pose covers the same pixels.
+        apply(
+            &mut graph,
+            vec![
+                hide("cam"),
+                Edit::ItemSetVisible {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    visible: true,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+            ],
+        );
+        // The flat item's edge is antialiased where the model's isn't: a cell between
+        // the two (`?`) counts as either.
+        if let Some(flat) = golden(&shot(&graph)) {
+            let model: String = expected
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .flat_map(|line| line.chars().chain(['\n']))
+                .collect();
+            assert!(
+                flat.chars()
+                    .zip(model.chars())
+                    .all(|(f, m)| f == m || f == '?')
+                    && flat.len() == model.len(),
+                "a flat item in the same pose covers the same cells\nflat:\n{flat}"
+            );
+        }
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.
