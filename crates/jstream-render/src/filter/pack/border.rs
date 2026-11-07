@@ -12,13 +12,23 @@
 //! is the frame and the outer stroke past it is cut (ADR-0065 §5). A shadow or glow
 //! after a clipping border follows its rounded shape, since they follow the alpha.
 //!
+//! With a frame image (#1294), the inner stroke is drawn from it as a 9-slice frame
+//! instead of in its style and fill: the image's corners, `frame_slice` image pixels
+//! square, fill the stroke's corners, `width` px square, unstretched, and its edges
+//! stretch or tile along the sides between them. The image is a decoded asset the
+//! chain runtime hands over ([`super::super::VideoFilter::set_reference`]), as an
+//! image mask's is; until it is there the stroke draws as without one.
+//!
 //! Time is worked out on the CPU in `f64` and handed in as distances, so the movement
 //! stays exact however long the clock runs.
+
+use std::sync::Arc;
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings, VisibleIf};
 use serde_json::Value;
 
 use crate::error::RenderError;
+use crate::filter::assets::{IMAGE_TYPES, Reference, asset_param};
 use crate::filter::params::{Read, Uniforms, boolean, choice, color, filter, float};
 use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
 use crate::image::Image;
@@ -41,6 +51,8 @@ const MAX_RADIUS: f64 = 2000.0;
 const MAX_DASH: f64 = 400.0;
 /// The fastest the pattern travels, px/s.
 const MAX_SPEED: f64 = 2000.0;
+/// The largest frame image corner, image px.
+const MAX_SLICE: f64 = 1024.0;
 
 fn shown_if(param: &str, equals: &str, p: ParamDescriptor) -> ParamDescriptor {
     ParamDescriptor {
@@ -160,6 +172,23 @@ pub(super) fn descriptor() -> KindDescriptor {
                 ),
                 color("outer_color", "Outer color", true, "#000000ff"),
                 float("outer_gap", "Outer gap", 0.0, MAX_GAP, 0.0, "px"),
+                described(
+                    "Draw the inner stroke from an image as a 9-slice frame: its corners \
+                     stay as they are and its edges run along the sides. Width sets how \
+                     wide it draws.",
+                    asset_param("frame", "Frame image", &IMAGE_TYPES),
+                ),
+                described(
+                    "How far in from the image's edge its corners reach, in the image's \
+                     own pixels.",
+                    float("frame_slice", "Frame corner", 1.0, MAX_SLICE, 16.0, "px"),
+                ),
+                choice(
+                    "frame_edges",
+                    "Frame edges",
+                    &[("stretch", "Stretch"), ("tile", "Tile")],
+                    "stretch",
+                ),
             ],
         )
     }
@@ -185,6 +214,10 @@ struct Look {
     style: u32,
     fill: u32,
     clip: bool,
+    /// The frame image's corner, image px.
+    slice: f32,
+    /// The frame's edges tile rather than stretch.
+    tile: bool,
 }
 
 fn within(v: f32, lo: f64, hi: f64, fallback: f32) -> f32 {
@@ -237,6 +270,8 @@ fn read(settings: &Settings) -> Look {
             _ => 0,
         },
         clip: read.bool("clip", true),
+        slice: within(read.f32("frame_slice", 16.0), 1.0, MAX_SLICE, 16.0),
+        tile: read.choice("frame_edges", "stretch") == "tile",
     }
 }
 
@@ -256,17 +291,22 @@ fn perimeter(half: [f32; 2], radii: [f32; 4]) -> f64 {
 pub(super) struct Border {
     look: Look,
     pad: u32,
+    /// The frame image, setting `frame`.
+    frame: Reference,
 }
 
 impl Border {
     pub(super) fn new(settings: &Settings) -> Self {
+        let mut frame = Reference::default();
+        frame.update(settings, "frame");
         Self {
             look: read(settings),
             pad: 0,
+            frame,
         }
     }
 
-    fn uniforms(&self, seconds: f64, width: u32, height: u32) -> Vec<u8> {
+    fn uniforms(&self, seconds: f64, width: u32, height: u32, framed: bool) -> Vec<u8> {
         let l = self.look;
         let pad = self.pad as f32;
         let half = [width as f32 * 0.5 - pad, height as f32 * 0.5 - pad];
@@ -305,6 +345,9 @@ impl Border {
             .u32(l.fill)
             .u32(u32::from(l.clip))
             .f32(outer_along)
+            .f32(l.slice)
+            .u32(u32::from(framed))
+            .u32(u32::from(l.tile))
             .finish()
     }
 }
@@ -312,6 +355,11 @@ impl Border {
 impl Pass for Border {
     fn update(&mut self, settings: &Settings) {
         self.look = read(settings);
+        self.frame.update(settings, "frame");
+    }
+
+    fn set_reference(&mut self, image: Option<Arc<Image>>) {
+        self.frame.image = image;
     }
 
     fn set_pad(&mut self, pad: u32) {
@@ -324,11 +372,17 @@ impl Pass for Border {
         input: &Image,
         output: &Image,
     ) -> Result<(), RenderError> {
-        let params = self.uniforms(ctx.clock().seconds, output.width(), output.height());
+        let aux = self.frame.get(ctx)?;
+        let params = self.uniforms(
+            ctx.clock().seconds,
+            output.width(),
+            output.height(),
+            aux.is_some(),
+        );
         ctx.draw(&Draw {
             shader: SHADER,
             input,
-            aux: None,
+            aux,
             params: &params,
             target: output,
         })
@@ -337,6 +391,8 @@ impl Pass for Border {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{Border, KIND, perimeter, read};
     use crate::filter::testing::{filter, run, settings};
     use crate::tests::{near, open, solid};
@@ -368,7 +424,7 @@ mod tests {
         assert_eq!((l.width, l.style, l.fill, l.speed), (64.0, 3, 2, 2000.0));
         assert_eq!(super::descriptor().max_outset_px, Some(129));
         let b = Border::new(&settings(KIND, json!({})));
-        assert_eq!(b.uniforms(0.0, 10, 10).len(), 128);
+        assert_eq!(b.uniforms(0.0, 10, 10, false).len(), 144);
     }
 
     /// Dots repeat every stroke's own width and gap, so each stroke's distance wraps
@@ -382,7 +438,7 @@ mod tests {
                 "style": "dotted", "width": 4.0, "outer_width": 8.0, "gap": 4.0, "speed": 9.0
             }),
         ));
-        let bytes = b.uniforms(1.0, 100, 100);
+        let bytes = b.uniforms(1.0, 100, 100, false);
         let at = |offset: usize| {
             f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
         };
@@ -397,7 +453,7 @@ mod tests {
                 "gap": 5.0, "speed": 20.0
             }),
         ));
-        let bytes = b.uniforms(1.0, 100, 100);
+        let bytes = b.uniforms(1.0, 100, 100, false);
         let at = |offset: usize| {
             f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
         };
@@ -554,5 +610,57 @@ mod tests {
         near(&s, 4, 12, W, 1);
         near(&s, 7, 12, R, 1);
         near(&s, 10, 12, W, 1);
+    }
+
+    /// A 6x6 frame image, every row alike: two red corner columns each side and, between
+    /// them, a blue column and a yellow one, so samples at texel centres read exactly.
+    fn frame_image(opened: &crate::tests::Opened) -> crate::Image {
+        const Y: [u8; 4] = [255, 255, 0, 255];
+        let row = [R, R, B, Y, R, R];
+        crate::filter::testing::image(opened, 6, &[row; 6].concat())
+    }
+
+    /// A 9-slice frame (#1294): the image's 2 px corners fill the stroke's 2 px corners
+    /// unstretched, and its middle stretches along the side, or tiles at the corners'
+    /// scale; inside the band the picture shows.
+    #[test]
+    fn a_frame_image_draws_the_stroke_as_nine_slices() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        const Y: [u8; 4] = [255, 255, 0, 255];
+        let input = solid(&opened.compositor, 22, 22, W);
+        let asset = json!({"type": "asset", "root": "app", "path": "frame.png"});
+        for (edges, expected) in [
+            // Stretched, the 2 middle image px span the 18 px between the corners.
+            ("stretch", [(0, R), (6, B), (15, Y), (21, R)]),
+            // Tiled 1:1, they repeat every 2 px.
+            ("tile", [(0, R), (2, B), (3, Y), (4, B)]),
+        ] {
+            let mut f = filter(
+                KIND,
+                json!({
+                    "width": 2.0, "frame": asset, "frame_slice": 2.0,
+                    "frame_edges": edges, "color": "#00ff00"
+                }),
+            );
+            f.set_reference(Some(Arc::new(frame_image(&opened))));
+            let s = run(&mut opened, &mut f, &input, 0.0);
+            for (x, colour) in expected {
+                near(&s, x, 0, colour, 2);
+            }
+            // The left side's band is the image's left corner columns; the middle is
+            // the picture.
+            near(&s, 0, 11, R, 2);
+            near(&s, 11, 11, W, 1);
+            near(&s, 2, 11, W, 1);
+        }
+        // Named but not handed over yet, the stroke draws in its colour.
+        let mut f = filter(
+            KIND,
+            json!({"width": 2.0, "frame": asset, "color": "#00ff00"}),
+        );
+        let s = run(&mut opened, &mut f, &input, 0.0);
+        near(&s, 11, 0, [0, 255, 0, 255], 1);
     }
 }

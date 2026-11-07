@@ -110,7 +110,10 @@ Borders: one `border` item effect frames an item: `radius` (or `corners` `each` 
 round. Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
 `radius` 24, `fill` `conic` #00e5ff to #ff2bd6, `speed` 120, `outer_width` 2, \
 `outer_gap` 4, `outer_color` #00e5ff66) and broadcast frame (`width` 9, `style` \
-`double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). Stack effects in \
+`double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). An ornate frame \
+from an image: `frame` (an image asset) draws the inner stroke as a 9-slice, its \
+corners `frame_slice` image px square kept whole at `width` px and its edges \
+`frame_edges` `stretch` or `tile`. Stack effects in \
 order: the border (or `rounded_corners`, a vignette, a mask) first, then \
 `drop_shadow` or `glow`, which follow the rounded shape; a neon look is a conic \
 border with a `glow` of the same hue after it. \
