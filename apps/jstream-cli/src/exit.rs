@@ -18,6 +18,11 @@ pub const IO: u8 = 1;
 pub const USAGE: u8 = 2;
 /// No connection to the engine, or it was lost before an answer (`Disconnected`).
 pub const DISCONNECTED: u8 = 3;
+/// `bench` ran, and at least one of its gates failed.
+pub const GATES_FAILED: u8 = 4;
+/// `bench` couldn't finish its run: the recording sent no frame, or the engine answered
+/// with something the bench can't read.
+pub const BENCH_FAILED: u8 = 5;
 
 /// The exit code for an error the engine answered with: 10 plus a fixed number per
 /// protocol error code. A code this CLI doesn't know yet (from a newer engine) is 20.
@@ -48,6 +53,11 @@ pub enum CliError {
     Io(io::Error),
     /// Reading the input failed (only `mcp` and `output set-key` read it).
     Read(io::Error),
+    /// `bench` ran to the end, and at least one of its gates failed. Its summary says
+    /// which.
+    GatesFailed,
+    /// `bench` couldn't finish a run. The message says why.
+    Bench(String),
 }
 
 impl CliError {
@@ -55,6 +65,8 @@ impl CliError {
     pub fn exit_code(&self) -> u8 {
         match self {
             CliError::Usage(_) => USAGE,
+            CliError::GatesFailed => GATES_FAILED,
+            CliError::Bench(_) => BENCH_FAILED,
             CliError::Io(_) | CliError::Read(_) => IO,
             CliError::Control(ControlError::Protocol(wire)) => for_protocol(&wire.error),
             CliError::Control(_) => DISCONNECTED,
@@ -75,6 +87,8 @@ impl fmt::Display for CliError {
             CliError::Control(other) => other.fmt(f),
             CliError::Io(error) => write!(f, "could not write the output: {error}"),
             CliError::Read(error) => write!(f, "could not read the input: {error}"),
+            CliError::GatesFailed => f.write_str("the bench failed at least one gate"),
+            CliError::Bench(message) => write!(f, "the bench couldn't run: {message}"),
         }
     }
 }
@@ -93,7 +107,7 @@ impl From<io::Error> for CliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliError, DISCONNECTED, IO, USAGE, for_protocol};
+    use super::{BENCH_FAILED, CliError, DISCONNECTED, GATES_FAILED, IO, USAGE, for_protocol};
     use jstream_control::ControlError;
     use jstream_control::protocol::{EntityKind, ProtocolError, ProtocolVersion, Rev};
     use std::collections::BTreeSet;
@@ -151,7 +165,7 @@ mod tests {
             ]
         );
         let mut all: BTreeSet<u8> = codes.iter().map(|(_, c)| *c).collect();
-        for fixed in [0, IO, USAGE, DISCONNECTED] {
+        for fixed in [0, IO, USAGE, DISCONNECTED, GATES_FAILED, BENCH_FAILED] {
             assert!(all.insert(fixed), "exit code {fixed} is reused");
         }
     }
