@@ -79,6 +79,10 @@ second and ease them; a cut beats a slow move. A variant that overrides an item'
 geometry stores the whole geometry, so nudging x there also fixes its size and angles \
 against later edits to the item in the parent scene; finish an item's size and angles \
 in the parent first, and override geometry only on the items that move. \
+A variant can override an item's effects too (`item.set_effects`): keep the same \
+effects in the same order and change only their numbers or colours (a blur radius, a \
+colour grade), and a `move` blends them with the item; another list, or another mask \
+scene or image, cross-fades it instead. \
 Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
 interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
 and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \

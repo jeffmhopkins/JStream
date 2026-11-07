@@ -235,8 +235,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
-  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
-  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
+  `Source::model` hands the engine the model, which an item draws in the stand-in's
+  place (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -438,7 +439,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
   it. The **Page API** group (ADR-0102 and ADR-0124, none of it live, all off by
   default, each kind of data its own checkbox shown under `page_api`, and each with a
   `warning` the Properties dialog shows beside it):

@@ -241,7 +241,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 131072,
         "default": "",
         "label": "HTML",
-        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts and images from the web, but no local files, and reaches this computer and the local network only when allowed below.",
+        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts, images and scripts from the web over https, but no local files, and reaches this computer and the local network only when allowed below.",
         "live": false
       },
       {
@@ -301,7 +301,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Allow local network",
-        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. It covers the page's own origin only, and only a page loaded over https. A local file or a page on the local network may always.",
         "advanced": true,
         "live": false
       },
@@ -639,6 +639,119 @@ source: crates/jstream-sources/tests/kinds.rs
         "default": true,
         "label": "Restart when shown",
         "description": "Plays from the start each time the program shows it again.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "model",
+    "category": "source",
+    "name": "3D model",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "shape",
+        "type": "enum",
+        "options": [
+          {
+            "value": "file",
+            "label": "From a file"
+          },
+          {
+            "value": "plane",
+            "label": "Plane"
+          },
+          {
+            "value": "cube",
+            "label": "Cube"
+          },
+          {
+            "value": "sphere",
+            "label": "Sphere"
+          },
+          {
+            "value": "cylinder",
+            "label": "Cylinder"
+          },
+          {
+            "value": "cone",
+            "label": "Cone"
+          }
+        ],
+        "default": "file",
+        "label": "Shape",
+        "description": "A glTF file, or a built-in shape one unit across.",
+        "live": false
+      },
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "glb",
+          "gltf"
+        ],
+        "default": null,
+        "label": "Model file",
+        "description": "A glTF 2.0 file (.glb, or .gltf with its files beside it), for the shape `file`.",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "description": "A shape's base colour; multiplies a file's own.",
+        "live": true
+      },
+      {
+        "id": "metallic",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Metallic",
+        "description": "How metallic a shape is. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "roughness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Roughness",
+        "description": "How rough a shape is, 0 a mirror. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "lighting",
+        "type": "enum",
+        "options": [
+          {
+            "value": "studio",
+            "label": "Studio"
+          },
+          {
+            "value": "unlit",
+            "label": "Unlit"
+          }
+        ],
+        "default": "studio",
+        "label": "Lighting",
+        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+        "live": true
+      },
+      {
+        "id": "double_sided",
+        "type": "bool",
+        "default": false,
+        "label": "Double-sided",
+        "description": "Draw a shape's back faces too. A file's materials keep their own.",
         "live": true
       }
     ]

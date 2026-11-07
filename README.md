@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `░░░░░░░░░░` 5% | 1 | 0 | 20 | 0 |
+| `█░░░░░░░░░` 10% | 2 | 0 | 19 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -197,14 +197,14 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 |  |
 
 <details open>
-<summary><b>Roadmap items in 0.1.0-alpha.5</b>: 1 of 2 merged</summary>
+<summary><b>Roadmap items in 0.1.0-alpha.5</b>: 2 of 2 merged</summary>
 
 A gate item (🚧) is one the release waits for.
 
 | ID | Item | Gate | Milestone | Status | PRs |
 |---|---|---|---|---|---|
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) |  | M3 | ⏳ planned | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) |  | M3 | 🧪 merged, Windows run pending: Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
+| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) |  | M3 | ✅ merged | #1287 |
 
 </details>
 
@@ -220,12 +220,12 @@ Every roadmap item, by milestone.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 77% | 34 | 0 | 10 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 80% | 35 | 0 | 9 |
 
-146 of 158 items are merged; 22 of those still wait on a run on Windows hardware.
+147 of 158 items are merged; 22 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 34 items, by next step: 🔨 build 12, 🧪 Windows run 20, 👤 maintainer 1, ❔ not set 1</summary>
+<summary><b>What's left</b>: 33 items, by next step: 🔨 build 12, 🧪 Windows run 20, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -245,7 +245,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | T1 | Studio mode and transitions | M2 | 🧪 Windows run | #260 landed with wave/m1-3 (#754); the transition node's per-tick cost is still to measure on S1 hardware (#357, ADR-0029) | #260 |
 | C9 | Media file source | M2 | 🧪 Windows run | the media file run passed on main (#382) except an MP3's loop seam, a 56 ms gap at each wrap (#445): #875 cuts it from the LAME tag; a rerun checks it, and the ~12 ms dropout 0.42 s into each pass | #245, #322, #875 |
 | U6 | Desktop UI as a 1:1 match of the UI prototype | M2 | 🔨 build | #748; docs/UI-FEATURES.md tracks it row by row. Theme and header (#495), docking (#496), the canvas (#615, #637), the Inspector (#659) and the Transform panel (#664) landed with wave/m1-3 (#754); menus, dialogs and live drag (#766, #747), the Scenes and Scene objects panels (#770), the Filters panel and its dialogs (#785, #788) and the mixer master card (#792) landed with wave/m1-4 (#810); vertical mixer strips (#809) landed with wave/m1-5 (#877); crop on the canvas and source sizes (#869), scene folders, groups and reference ↔ clone (#871), the program output and output chains (#864), the keyframe rows, menus and banner with scene hotkeys (#865), the privacy screen's button, overlay, mic label and Pause key (#866, since removed with the privacy screen, ADR-0080), the polish batch of labels, toasts, fold memory, 3D fields and the eleven panels (#867), mixer monitoring with the Hear button (#863, MX-05), which completes the mixer rows, and studio mode, the scene transitions and the scene Properties dialog (#868) landed with wave/m1-6 (#887); copy and paste (KB-05), Duplicate scene and the canvas's live picture of any scene (CV-03) and the scene-input filter rows (OB-05) are #911; the Agent activity panel and the engine's activity log over the protocol (AG-01, D38, ADR-0083) are #938. Rows that wait on the engine follow B12, V4, D9, K1, X1 and Y4; the IBM Plex fonts are bundled under the SIL OFL 1.1 (WS-02, ADR-0077, #886, landed with wave/m1-6); every blend mode drawn (CV-15, ADR-0082, #918); fps and CPU in the header from stats.tick's load (HD-04, protocol 0.48, #930); Pop out of a source alone on an object's menu (DL-07, CM-02, CM-04, protocol 0.56, #969); the Stream stats panel's own-output half from stats.tick's per-output stats (ST-01 in part, D39, protocol 0.57, #972); video filters on the program output and each output (FL-07, protocol 0.60, #973); encoder profiles and video mixes edited in the Outputs panel, with a Video select on each output card (#992); the Stream stats chart's hover readout (ST-01, #996); the scene Properties dialog's background colour, Show in multiview and Include its audio when nested (DL-03, ADR-0089, protocol 0.65, #986) | #495, #496, #615, #637, #659, #664, #766, #770, #785, #788, #792, #809, #863, #864, #865, #866, #867, #868, #869, #871, #886, #911, #918, #930, #938, #969, #972, #973, #986, #992, #996 |
-| 3D3 | 3D models with materials and live textures | M3 | 🔨 build | ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds | #1112, #1113, #1118 |
+| 3D3 | 3D models with materials and live textures | M3 | 🔨 build | ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds | #1112, #1113, #1118, #1261 |
 | Y4 | YouTube chat, metadata, health and audience stats | M3 | 🔨 build, then 👤 maintainer | chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, landed with wave/m1-4, #810); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | M3 | 🔨 build, then 🧪 Windows run | parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), and the IPC hardening (#573, for #351) landed with wave/m3-4 (#827); CLAP filters on the master's and outputs' chains and in the UI's filter picker (FL-08) built in #913; then the live-audio Windows run (#912) | #272, #281, #407, #488, #573, #913 |
 | WA1 | WASM automation plugins | M3 | 🔨 build | WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the plugin.list query and the UI's Plugins section with its grant dialog landed (#974, protocol 0.58); removing a plugin and a private data folder wait, the folder for its own design with the file imports it needs | #486, #623, #642, #722, #725, #839, #843, #974 |
@@ -261,7 +261,6 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🧪 Windows run | Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🧪 Windows run | Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🧪 Windows run | Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | M3 | ❔ not set |  | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | M3 | 🧪 Windows run | Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🧪 Windows run | Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🧪 Windows run | Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
@@ -355,7 +354,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F2b | Record output kind | ✅ merged | #170 |
 | F3 | Encoder profiles and sharing | ✅ merged | #208 |
 | I2 | Live values | ✅ merged | #244 |
-| V4 | Scene filter chains and item effects | ✅ merged: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968) | #802, #813, #815, #823, #824, #897, #921, #944, #968 |
+| V4 | Scene filter chains and item effects | ✅ merged: ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968) | #802, #815, #823, #824, #897, #921, #944, #968 |
 | D9 | Audio monitoring: a bus's monitor device and tap point | 🧪 merged, Windows run pending: ADR-0028 gives a bus a monitor, a device and a tap point before or after its filters (decision register D22). #801 is the mixer's monitor taps and player, #816 the protocol's bus monitor and bus.set_monitor (0.42), and #822 the engine playing it on its device, all landed with wave/m1-5 (#877); the mixer's Hear: before or after FX row (MX-05) can then be built. #822 ran only against the simulated player and the fake device, so a run on a real output device (WASAPI, Core Audio, PipeWire) is still owed: playback, drift steering and an unplug mid-stream | #801, #816, #822 |
 
 </details>
@@ -431,7 +430,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 34 of 44 merged</summary>
+<summary><b>M3</b> Depth and reach: 35 of 44 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -442,7 +441,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | X1 | Full 3D transforms and WGSL effect packs | ✅ merged: effect packs #368 landed with wave/m1-2 (#545); 3D transforms part 1, the drawn polygon and unplace (#611), part 2, the compositor draw (#622), part 2b, mips and anisotropic sampling (#624), part 2c, mips rebuilt once per source and frame (#643), the mip chains built from the crop and rebuilt once per change (#687), and part 3, accepting 3D at protocol 0.34 (#629), landed with wave/m3-3 (#786) | #359, #368, #611, #622, #624, #643, #687, #629 |
 | 3D1 | 3D transforms: rendering ADR and spike | ✅ merged | #360 |
 | 3D2 | 3D scenes with a camera | ✅ merged: ADR-0094 (#1038): items placed in one 3D space per scene and seen through the scene's camera; the engine half, scene.set_camera, the camera drawn through and sorted far to near, and a Move moving the camera (#1044, protocol 0.70); the UI's camera fields, depth-plane drag, orbit and dolly (#1053); review follow-ups (#1110); depth of field, a focus distance and blur on the camera (ADR-0108, protocol 0.77, #1122) | #1038, #1044, #1053, #1110, #1122 |
-| 3D3 | 3D models with materials and live textures | ⏳ planned: ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds | #1112, #1113, #1118 |
+| 3D3 | 3D models with materials and live textures | ⏳ planned: ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds | #1112, #1113, #1118, #1261 |
 | Y4 | YouTube chat, metadata, health and audience stats | ⏳ planned: chat reading and the featured message (#363, landed with wave/m1-2, #545); chat preset of the browser source (#375, landed with wave/m1); audience stats in jstream-youtube (#594, landed with wave/m3-2, #663); the engine's stats polling, the youtube.stats event and query, and the quota estimate (#696, protocol 0.38, landed with wave/m1-4, #810); the chat rate waits on the engine polling chat; signed-in features need the OAuth client (ADR-0058) | #363, #375, #594, #696 |
 | CL1 | CLAP plugin host | ⏳ planned: parts 1 to 3 merged (wave/m3 landed in #477): the shared-memory contract, the CLAP wrapper, host app, launcher, supervisor and CLAP filter kinds; the host's Windows run passed in #342; CLAP filters in a source's audio chain, part 4 (#488), and the IPC hardening (#573, for #351) landed with wave/m3-4 (#827); CLAP filters on the master's and outputs' chains and in the UI's filter picker (FL-08) built in #913; then the live-audio Windows run (#912) | #272, #281, #407, #488, #573, #913 |
 | WA1 | WASM automation plugins | ⏳ planned: WASM host #486 landed with wave/m3-2 (#663); its wall-time deadlines #623, the cap of 50 commands a second #722, the 1,000-event queue #725 and the wire half #642 (protocol 0.35) landed with wave/m3-3 (#786); the engine side part 1, installing, granting, events, forbidden and disabling (#839, ADR-0075), and part 2, saving installed plugins, grants held to the manifest's classes and hosts, needs_grant, memory_limit and the MCP state-text line (#843, ADR-0076), landed with wave/m3-5 (#854); the plugin.list query and the UI's Plugins section with its grant dialog landed (#974, protocol 0.58); removing a plugin and a private data folder wait, the folder for its own design with the file imports it needs | #486, #623, #642, #722, #725, #839, #843, #974 |
@@ -468,7 +467,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🧪 merged, Windows run pending: Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA1 | Page API part 1: ADR-0102 and shared values (values.set, values.list) | ✅ merged | #1077, #1127 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🧪 merged, Windows run pending: Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | ⏳ planned | #1287 |
+| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | ✅ merged | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | 🧪 merged, Windows run pending: Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | ✅ merged | #1100 |

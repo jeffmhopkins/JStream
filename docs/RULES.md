@@ -780,7 +780,7 @@ Module-level `Docs:` lines are optional, but every reference on them must resolv
 ### R-DOC-009: Accepted ADRs are immutable
 <!-- @rule
 status = "active"
-enforced_by = ["ci:docs"]
+enforced_by = ["ci:governance"]
 applies_to = ["docs/adr/**"]
 -->
 After acceptance, only `status` and `superseded_by` may change. A changed decision is
@@ -799,7 +799,7 @@ recorded in a new ADR. **Two exceptions:**
 ### R-DOC-010: IDs are permanent
 <!-- @rule
 status = "active"
-enforced_by = ["ci:docs"]
+enforced_by = ["ci:governance"]
 applies_to = ["**/*.md"]
 -->
 From the first merge to `main`, anchors and rule IDs are never deleted or reused.
