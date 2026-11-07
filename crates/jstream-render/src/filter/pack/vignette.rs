@@ -4,10 +4,11 @@
 //! chain (ADR-0065) it frames what that level shows. Coverage is kept, so a transparent
 //! pixel stays transparent.
 //!
-//! The sliders step evenly as the picture looks: `radius` and `softness` are fractions
-//! of the half-diagonal (the centre to a corner), and `strength` is how much of the
-//! edge's perceived lightness goes, so 0.5 makes the edge look about half as bright.
-//! In linear light that is `1 - (1 - strength)^2.2` of the colour.
+//! `radius` and `softness` are fractions of the half-diagonal (the centre to a corner),
+//! and `strength` is the share of the colour the edge takes, in linear light. The
+//! settings a saved vignette has keep their meaning (ADR-0025 › Versioning a kind): the
+//! new `shape`, `blend` and centre default to what it drew before, an ellipse that
+//! follows the frame, mixed towards the colour, around the middle.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
@@ -22,9 +23,6 @@ pub(super) const SHADER: Shader = Shader {
     blend: Blend::Replace,
 };
 
-/// The exponent that maps a perceptual step to linear light, near sRGB's.
-const GAMMA: f32 = 2.2;
-
 pub(super) fn descriptor() -> KindDescriptor {
     filter(
         KIND,
@@ -32,8 +30,8 @@ pub(super) fn descriptor() -> KindDescriptor {
         vec![
             ParamDescriptor {
                 description: Some(
-                    "How much the edges take the color, in even steps as it looks: 0 is \
-                     none, 0.5 makes a dark vignette's edge look about half as bright."
+                    "How much of the color the edges take, in linear light: 0 is none. A \
+                     dark vignette looks half as bright at the edge near 0.8."
                         .into(),
                 ),
                 ..float("strength", "Strength", 0.0, 1.0, 0.5, "")
@@ -44,7 +42,7 @@ pub(super) fn descriptor() -> KindDescriptor {
                      corner."
                         .into(),
                 ),
-                ..float("radius", "Radius", 0.0, 1.0, 0.4, "")
+                ..float("radius", "Radius", 0.0, 1.0, 0.5, "")
             },
             ParamDescriptor {
                 description: Some(
@@ -52,7 +50,7 @@ pub(super) fn descriptor() -> KindDescriptor {
                      hard edge."
                         .into(),
                 ),
-                ..float("softness", "Softness", 0.0, 1.0, 0.6, "")
+                ..float("softness", "Softness", 0.0, 1.0, 0.5, "")
             },
             color("color", "Color", true, "#000000ff"),
             ParamDescriptor {
@@ -71,8 +69,8 @@ pub(super) fn descriptor() -> KindDescriptor {
                 ..choice(
                     "blend",
                     "Blend",
-                    &[("multiply", "Multiply"), ("normal", "Normal")],
-                    "multiply",
+                    &[("normal", "Normal"), ("multiply", "Multiply")],
+                    "normal",
                 )
             },
             ParamDescriptor {
@@ -93,7 +91,7 @@ struct Values {
     /// Straight linear colour.
     color: [f32; 4],
     center: [f32; 2],
-    /// The strength in linear light.
+    /// The strength, in linear light.
     amount: f32,
     radius: f32,
     softness: f32,
@@ -110,12 +108,6 @@ fn unit(v: f32, fallback: f32) -> f32 {
     }
 }
 
-/// A perceptual strength as linear light: the share of the colour that leaves the
-/// edge `1 - strength` as bright as it looks.
-fn linear_amount(strength: f32) -> f32 {
-    1.0 - (1.0 - strength).powf(GAMMA)
-}
-
 fn values(settings: &Settings) -> Values {
     let read = Read(settings);
     Values {
@@ -124,11 +116,11 @@ fn values(settings: &Settings) -> Values {
             unit(read.f32("center_x", 0.5), 0.5),
             unit(read.f32("center_y", 0.5), 0.5),
         ],
-        amount: linear_amount(unit(read.f32("strength", 0.5), 0.5)),
-        radius: unit(read.f32("radius", 0.4), 0.4),
-        softness: unit(read.f32("softness", 0.6), 0.6),
+        amount: unit(read.f32("strength", 0.5), 0.5),
+        radius: unit(read.f32("radius", 0.5), 0.5),
+        softness: unit(read.f32("softness", 0.5), 0.5),
         round: read.choice("shape", "frame") == "round",
-        multiply: read.choice("blend", "multiply") != "normal",
+        multiply: read.choice("blend", "normal") == "multiply",
     }
 }
 
@@ -147,7 +139,7 @@ pub(super) fn uniforms(settings: &Settings) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use super::{KIND, Values, linear_amount};
+    use super::{KIND, Values};
     use crate::filter::testing::{filter, run, settings};
     use crate::tests::{near, open, solid};
     use serde_json::json;
@@ -160,11 +152,11 @@ mod tests {
             Values {
                 color: [0.0, 0.0, 0.0, 1.0],
                 center: [0.5, 0.5],
-                amount: linear_amount(0.5),
-                radius: 0.4,
-                softness: 0.6,
+                amount: 0.5,
+                radius: 0.5,
+                softness: 0.5,
                 round: false,
-                multiply: true,
+                multiply: false,
             }
         );
         let v = super::values(&settings(
@@ -181,17 +173,18 @@ mod tests {
         assert_eq!(super::uniforms(&settings(KIND, json!({}))).len(), 48);
     }
 
-    /// Even steps as the picture looks: each tenth of strength takes about a tenth of
-    /// the edge's encoded brightness, where a linear mix took very little until near 1.
+    /// A vignette saved before `shape`, `blend` and the centre existed draws as it did:
+    /// their defaults are the old ellipse, mix and middle, and `strength` is still the
+    /// linear share of the colour (ADR-0025 › Versioning a kind; #1281 review B1).
     #[test]
-    fn strength_steps_evenly_in_perceived_lightness() {
-        assert_eq!(linear_amount(0.0), 0.0);
-        assert_eq!(linear_amount(1.0), 1.0);
-        let looks = |s: f32| (1.0 - linear_amount(s)).powf(1.0 / 2.2);
-        for step in 0..=10 {
-            let s = step as f32 / 10.0;
-            assert!((looks(s) - (1.0 - s)).abs() < 1e-5, "{s}");
-        }
+    fn a_saved_vignette_keeps_its_look() {
+        let saved = json!({
+            "strength": 0.5, "radius": 0.5, "softness": 0.5, "color": "#ffffff"
+        });
+        let v = super::values(&settings(KIND, saved));
+        assert_eq!((v.amount, v.radius, v.softness), (0.5, 0.5, 0.5));
+        assert_eq!(v.center, [0.5, 0.5]);
+        assert!(!v.round && !v.multiply, "a white tint still tints");
     }
 
     const W: [u8; 4] = [255, 255, 255, 255];
@@ -214,15 +207,15 @@ mod tests {
         };
         near(&s, 7, 7, W, 1);
         near(&s, 8, 8, W, 1);
-        // Pixel (0, 0)'s centre is 0.9375 of the way to the corner: smoothstep(0.4, 1.0)
-        // is 0.970, so it keeps 1 - 0.970 * (1 - 0.5^2.2) = 0.241 of its linear light,
-        // sRGB 135.
+        // Pixel (0, 0)'s centre is 0.9375 of the way to the corner: smoothstep(0.5, 1.0)
+        // is 0.957, so it keeps 1 - 0.5 * 0.957 = 0.52 of its linear light, sRGB 191:
+        // what it drew before #1226.
         for (x, y) in [(0, 0), (15, 0), (0, 15), (15, 15)] {
-            near(&s, x, y, [135, 135, 135, 255], 2);
+            near(&s, x, y, [191, 191, 191, 255], 2);
         }
         // The middle of an edge (0.66 out) is darkened less than a corner.
         let edge = s.pixel(0, 8).expect("inside")[0];
-        assert!(edge > 135 && edge < 255, "{edge}");
+        assert!(edge > 191 && edge < 255, "{edge}");
     }
 
     #[test]

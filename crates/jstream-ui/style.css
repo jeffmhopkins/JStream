@@ -1166,6 +1166,11 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .settings-check { display: flex; gap: 10px; align-items: flex-start; }
 .settings-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
 .settings-check-label { display: block; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.video-settings .settings-field + .settings-check-note, .video-settings .settings-size + .settings-check-note { margin-bottom: 14px; }
+.settings-size { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.settings-size input { width: 96px; }
+.settings-error { margin: 8px 0 0; color: var(--danger, #e5484d); font-size: 12px; }
 .update-notice {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 6px 12px; background: var(--menu); border-bottom: 1px solid var(--border);

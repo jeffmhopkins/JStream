@@ -36,16 +36,16 @@ pub fn presets(kind_id: &str) -> Vec<Preset> {
         "vignette" => vec![
             preset(
                 "Subtle",
-                json!({"strength": 0.3, "radius": 0.5, "softness": 0.7}),
+                json!({"strength": 0.55, "radius": 0.5, "softness": 0.7}),
             ),
             preset(
                 "Cinematic",
-                json!({"strength": 0.6, "radius": 0.3, "softness": 0.7}),
+                json!({"strength": 0.85, "radius": 0.3, "softness": 0.7}),
             ),
             preset(
                 "Spotlight",
                 json!({
-                    "strength": 0.9, "radius": 0.15, "softness": 0.45, "shape": "round"
+                    "strength": 1.0, "radius": 0.15, "softness": 0.45, "shape": "round"
                 }),
             ),
         ],
@@ -153,7 +153,7 @@ mod tests {
             .expect("a spotlight");
         let patch = preset_patch(&kind, &spotlight);
         let expected: Settings = [
-            ("strength".to_owned(), json!(0.9)),
+            ("strength".to_owned(), json!(1.0)),
             ("center_x".to_owned(), Value::Null),
             ("shape".to_owned(), json!("round")),
         ]
