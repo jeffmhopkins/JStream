@@ -32,7 +32,7 @@ use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
     ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
-    SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
+    SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
@@ -598,7 +598,79 @@ struct Transitioning {
     /// What moves the cameras of the scene it leaves and the one it shows (ADR-0113 §3):
     /// a Move into or out of a follow camera moves with it.
     moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
+    /// The item chains whose settings a Move blends between two looks (ADR-0127).
+    blends: Vec<EffectBlend>,
     end_ms: f32,
+}
+
+/// One item's effects as a Move blends their settings (ADR-0127): from the leaving
+/// side's to the arriving chain's, with the item's own progress.
+#[derive(Debug, PartialEq)]
+struct EffectBlend {
+    /// The arriving item's chain, which draws the pair.
+    owner: ChainOwner,
+    /// The settings it blends from, one per filter of the chain.
+    from: Arc<[Settings]>,
+    /// The settings it blends to: the chain's own, one per filter.
+    to: Vec<Settings>,
+    /// The item's timing, whose eased progress the blend follows.
+    timing: Timing,
+}
+
+impl Transitioning {
+    /// Each blended chain's settings `at`, one per filter (ADR-0127).
+    fn blended(&self, at: MediaTime) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blended_ms(transition::elapsed_ms(self.start, at))
+    }
+
+    /// [`Self::blended`], `elapsed_ms` after its start.
+    fn blended_ms(&self, elapsed_ms: f32) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blends
+            .iter()
+            .map(|blend| {
+                let k = blend.timing.progress(elapsed_ms);
+                let settings = blend
+                    .from
+                    .iter()
+                    .zip(&blend.to)
+                    .map(|(from, to)| jstream_render::transition::blend_settings(from, to, k))
+                    .collect();
+                (&blend.owner, settings)
+            })
+            .collect()
+    }
+}
+
+/// The blends of `tracks` and of the children moving inside each group among them
+/// (ADR-0127), for the chains `chains` holds.
+fn effect_blends(
+    tracks: &[(Visual, Track)],
+    chains: &BTreeMap<ChainOwner, Chain>,
+    blends: &mut Vec<EffectBlend>,
+) {
+    for (visual, track) in tracks {
+        if let Some(inside) = &visual.inside {
+            effect_blends(&inside.planned.tracks, chains, blends);
+        }
+        let (Some(from), SourceRef::Boxed(scene, item), Track::Pair { timing, .. }) =
+            (&visual.blend_from, &visual.image, track)
+        else {
+            continue;
+        };
+        let owner = ChainOwner::Item(scene.clone(), item.clone());
+        let Some(chain) = chains.get(&owner) else {
+            continue;
+        };
+        if chain.filters.len() != from.len() {
+            continue;
+        }
+        blends.push(EffectBlend {
+            to: chain.filters.iter().map(|f| f.settings.clone()).collect(),
+            owner,
+            from: Arc::clone(from),
+            timing: *timing,
+        });
+    }
 }
 
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
@@ -996,6 +1068,23 @@ impl Shot {
         })
     }
 
+    /// The settings each chain a running Move blends draws with `elapsed_ms` after its
+    /// start (ADR-0127), or `None` without a transition.
+    #[cfg(test)]
+    pub(crate) fn blended_effects(
+        &self,
+        elapsed_ms: f32,
+    ) -> Option<Vec<(ChainOwner, Vec<Settings>)>> {
+        let transition = self.transition.as_ref()?;
+        Some(
+            transition
+                .blended_ms(elapsed_ms)
+                .into_iter()
+                .map(|(owner, settings)| (owner.clone(), settings))
+                .collect(),
+        )
+    }
+
     /// The depth run each of the running transition's tracks sorts in, in drawing order,
     /// or `None` without one, for tests.
     #[cfg(test)]
@@ -1368,6 +1457,8 @@ fn plan_inner(
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
+            let mut blends = Vec::new();
+            effect_blends(&planned.tracks, &shot.chains, &mut blends);
             let tracks = planned
                 .tracks
                 .into_iter()
@@ -1397,6 +1488,7 @@ fn plan_inner(
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: planner.track_cameras(running),
                 moves,
+                blends,
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -2140,6 +2232,7 @@ impl<'a> Planner<'a, '_> {
                 ..ItemTransition::default()
             },
             effects: Vec::new(),
+            blend_from: None,
             inside: None,
             seen: Seen::AsPlanned,
             motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
@@ -2436,6 +2529,7 @@ impl<'a> Planner<'a, '_> {
                 size,
                 settings,
                 effects,
+                blend_from: None,
                 inside: None,
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
@@ -4536,7 +4630,14 @@ fn run_chains(
     (live, captures): (&LiveParams, &dyn Captures),
     at: MediaTime,
 ) -> Result<(), RenderError> {
-    if !chains.begin(compositor, cache, &shot.chains, &shot.stages) {
+    // A Move blending an item's effects gives its chain this frame's settings (ADR-0127).
+    let blended = shot
+        .transition
+        .as_ref()
+        .filter(|transition| !transition.blends.is_empty())
+        .map(|transition| transition.blended(at))
+        .unwrap_or_default();
+    if !chains.begin(compositor, cache, &shot.chains, &shot.stages, &blended) {
         return Ok(());
     }
     let canvas = shot.canvas()?;
@@ -5777,6 +5878,7 @@ pub(crate) mod tests {
                 overlay_run: 1,
             },
             moves: (None, None),
+            blends: Vec::new(),
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));

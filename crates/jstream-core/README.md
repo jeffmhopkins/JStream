@@ -1566,8 +1566,15 @@ it. A legacy transform has the box its quad covers, so
 over a capture, whose size isn't known when planning, its effects are bypassed. A
 source's own chain still runs once, wherever it is placed. In a transition an item
 with effects is its effects' layer over its grown box, uncropped, and two items pair
-only when their effects are the same kinds with the same settings in order
-([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)). Goldens in `chain.rs`
+only when their effects are the same kinds in order
+([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)) with settings a Move can
+blend (`transition::effects_pair`, [ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+equal, or plain values on both sides, not a scene, source or file reference that differs.
+A pair whose settings differ carries the leaving side's (`Visual::blend_from`); the shot
+keeps one `EffectBlend` per such chain, with the item's timing, and the render thread
+hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
+numbers and colours linearly, every other value switching halfway, the eased progress
+clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
