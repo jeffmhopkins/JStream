@@ -122,9 +122,10 @@ opens no window of its own (#1186).
 - `page_api.rs`: the page API's shared parts
   ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)). `PageApi` is what a
   spec grants (`page_api: None` grants nothing, and the page never has
-  `window.jstream`): the clock and the page's own visibility always, the scenes and
-  the shared values if granted. `PageData` is one update: a clock anchor (time and
-  lead), the visibility and scenes as JSON text, and each changed value's JSON text
+  `window.jstream`): the clock and the page's own visibility always, the scenes, the
+  shared values and a bus's levels (`jstream.levels()` and a `levels` event) if
+  granted. `PageData` is one update: a clock anchor (time and
+  lead), the visibility, scenes and levels as JSON text, and each changed value's JSON text
   (`None` for one removed); `split` cuts one larger than `MAX_PAGE_DATA_BYTES` (192 KiB)
   into several, each value whole in one of them. For the helper: `ApiHome`, the
   documents the API is defined in, which is the source's own web origin (scheme, host
