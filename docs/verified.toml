@@ -6156,7 +6156,7 @@ stamp = { hash = "b3:0b930991b44ef71c", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:3f8bcd38814b7e54", by = "agent:wave-owner", note = "main into wave/m3-2 (#521, one merge of main through #527): lint_deps.rs gains main's CLAP allowlist and the plugin-clap reach rule (#477) beside the wave's ADR-0061 entries (jstream-aac, Linux loader); the section's text covers both; holds" }
 
 ["DOCS#governance"."body"]
-stamp = { hash = "b3:4f0484964f84470e", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared; matches identity() in governance.rs and its two new tests" }
+stamp = { hash = "b3:797e4656587876ea", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared, per doc; matches identity() in governance.rs and its two new tests" }
 
 ["DOCS#governance"."dep:docs/adr/0019-review-gate-v2.md"]
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
