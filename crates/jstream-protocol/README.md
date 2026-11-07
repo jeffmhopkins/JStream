@@ -316,7 +316,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `binding.clear`, `Trigger`, `Binding`, `state.get`'s `bindings`, `delete.plan`'s
 `bindings`, the batch result's `removed_bindings` and the `binding` entity kind
 ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md), a
-placeholder number the release queue sets); 0.94 because of projects: the actions `collection.open`,
+number the release queue set); 0.94 because of projects: the actions `collection.open`,
 `collection.new` and `collection.save_as`, the query `collection.info`, the event
 `collection.file_changed` and the `file` entity kind
 ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
