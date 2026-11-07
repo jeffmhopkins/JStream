@@ -85,6 +85,7 @@ mod tests {
             advanced: false,
             visible_if: None,
             live: true,
+            warning: None,
         }
     }
 
