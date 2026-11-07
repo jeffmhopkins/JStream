@@ -2013,6 +2013,22 @@ fn a_snapshot_draws_a_display_capture() {
     )
     .expect("a scene showing the display");
     block_on(control.call(switch_call("main"))).expect("scene.switch");
+    // The display source opens on the sources thread, and the published shot names its
+    // capture only from the plan after that: a snapshot before then draws without it,
+    // as it would any source not open yet.
+    assert!(
+        super::audio::eventually(|| {
+            let screen = SourceId::new("screen");
+            engine
+                .render_hub()
+                .load()
+                .shot()
+                .captures()
+                .iter()
+                .any(|key| key.source.as_ref() == Some(&screen))
+        }),
+        "the published shot never named the display's capture"
+    );
 
     let green = || {
         let result = super::query(&control, Query::VideoSnapshot).expect("video.snapshot");
