@@ -248,7 +248,7 @@ fn subscriptions_are_checked() {
         }) => field,
         other => panic!("expected invalid_argument, got {other:?}"),
     };
-    let too_fast = act(&control, subscribe(1, Some(31), Vec::new())).expect_err("fps");
+    let too_fast = act(&control, subscribe(1, Some(61), Vec::new())).expect_err("fps");
     assert_eq!(field(too_fast), "fps");
     // No H.264 encoder without backends, and the client takes nothing else.
     let h264_only = act(&control, subscribe(1, None, vec![PreviewCodec::H264])).expect_err("codec");

@@ -590,14 +590,32 @@ pub fn Projector(
     });
     on_cleanup(move || escape.remove());
 
+    // A single picture runs at the collection's base rate, full quality as the canvas
+    // is, and opens again when the rate changes (ADR-0119).
+    let live_fps = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            crate::canvas::preview::live_fps(
+                c.as_ref()
+                    .map_or(crate::canvas::preview::FPS, |c| c.base_fps),
+            )
+        })
+    });
     let content = match request.target {
-        Target::Program => view! { <Picture scene=None max=screen_pixels() fps=30 /> }.into_any(),
-        Target::Scene(id) => {
-            view! { <Picture scene=Some(id) max=screen_pixels() fps=30 /> }.into_any()
-        }
-        Target::Source(id) => {
-            view! { <Picture scene=None source=id max=screen_pixels() fps=30 /> }.into_any()
-        }
+        Target::Program => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=None max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
+        Target::Scene(id) => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=Some(id.clone()) max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
+        Target::Source(id) => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=None source=id.clone() max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
         Target::Multiview => view! { <Multiview /> }.into_any(),
     };
     view! {
@@ -776,13 +794,14 @@ mod tests {
             codecs,
             scene_id,
             ..
-        } = subscribe(3, (Some(SceneId::new("s")), None), (3840, 2160), 60, true)
+        } = subscribe(3, (Some(SceneId::new("s")), None), (3840, 2160), 120, true)
         else {
             panic!("a subscribe");
         };
         assert_eq!(channel, 3);
         assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
-        assert_eq!(fps, Some(30));
+        // Up to a 60 fps base rate (protocol 0.90), and no faster.
+        assert_eq!(fps, Some(60));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);
         assert_eq!(scene_id, Some(SceneId::new("s")));
         let Action::PreviewSubscribe {
