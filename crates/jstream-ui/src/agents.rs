@@ -161,19 +161,22 @@ pub fn AgentPrompt() -> impl IntoView {
     };
     let pending = RwSignal::new(Vec::<AgentApproval>::new());
     let problem = RwSignal::new(None::<String>);
-    let reread = {
-        let control = Rc::clone(&control);
-        move || {
-            let control = Rc::clone(&control);
-            spawn_local(async move {
-                if let Ok(Some(read)) = read(&*control).await {
-                    pending.try_set(read.pending);
-                }
-            });
-        }
+    // Each call reads the session when it runs, and the event task holds only the
+    // stream, so nothing here keeps the connection open after Disconnect or a
+    // reconnect (header.rs does the same).
+    let reread = move || {
+        let Some(control) = self::control() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Ok(Some(read)) = read(&*control).await {
+                pending.try_set(read.pending);
+            }
+        });
     };
     reread();
     let mut events = control.events();
+    drop(control);
     spawn_local(async move {
         while let Some(event) = events.next().await {
             if matches!(event, Event::EventsDropped { .. }) {
@@ -188,9 +191,10 @@ pub fn AgentPrompt() -> impl IntoView {
             }
         }
     });
-    let control = StoredValue::new_local(control);
     let decide = move |approval_id: String, decision: ApprovalDecision| {
-        let control = control.get_value();
+        let Some(control) = self::control() else {
+            return;
+        };
         spawn_local(async move {
             if let Err(error) = answer(&*control, approval_id, decision).await {
                 problem.try_set(Some(error));
