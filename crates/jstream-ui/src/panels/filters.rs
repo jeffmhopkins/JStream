@@ -77,7 +77,7 @@ const AUDIO_GROUPS: [&str; 7] = [
 /// The kinds the prototype's catalogue has, by the engine's kind ID, in its order. The
 /// engine's kinds the prototype lacks (pixelate, aspect ratio, image mask) join the
 /// group they fit, and its wishes the engine lacks are left out.
-const KNOWN: [(&str, Known); 24] = {
+const KNOWN: [(&str, Known); 25] = {
     use FilterChain::{Audio, Video};
     const fn k(
         chain: FilterChain,
@@ -145,6 +145,15 @@ const KNOWN: [(&str, Known); 24] = {
                 "Style",
                 "Rounded corners",
                 "Round the corners, optional border",
+            ),
+        ),
+        (
+            "border",
+            k(
+                Video,
+                "Style",
+                "Border",
+                "Rounded, dashed, gradient or double edges",
             ),
         ),
         (

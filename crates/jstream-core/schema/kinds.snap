@@ -547,6 +547,267 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "border",
+    "category": "video_filter",
+    "name": "Border",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 4.0,
+        "label": "Width",
+        "description": "Inside the edge, over the picture. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "style",
+        "type": "enum",
+        "options": [
+          {
+            "value": "solid",
+            "label": "Solid"
+          },
+          {
+            "value": "double",
+            "label": "Double"
+          },
+          {
+            "value": "dashed",
+            "label": "Dashed"
+          },
+          {
+            "value": "dotted",
+            "label": "Dotted"
+          }
+        ],
+        "default": "solid",
+        "label": "Style",
+        "live": true
+      },
+      {
+        "id": "dash",
+        "type": "float",
+        "min": 1.0,
+        "max": 400.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Dash length",
+        "visible_if": {
+          "param": "style",
+          "equals": "dashed"
+        },
+        "live": true
+      },
+      {
+        "id": "gap",
+        "type": "float",
+        "min": 0.0,
+        "max": 400.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Gap",
+        "description": "Between dashes or dots.",
+        "live": true
+      },
+      {
+        "id": "corners",
+        "type": "enum",
+        "options": [
+          {
+            "value": "same",
+            "label": "All the same"
+          },
+          {
+            "value": "each",
+            "label": "Each its own"
+          }
+        ],
+        "default": "same",
+        "label": "Corners",
+        "description": "Round all four corners alike, or each its own.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Corner radius",
+        "description": "Past half the shorter side it stays at half (a pill).",
+        "visible_if": {
+          "param": "corners",
+          "equals": "same"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_top_left",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Top left",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_top_right",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Top right",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_bottom_right",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Bottom right",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_bottom_left",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Bottom left",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "clip",
+        "type": "bool",
+        "default": true,
+        "label": "Clip to the shape",
+        "description": "Cut the picture to the rounded shape, so it and the border round together, and a shadow or glow after it follows the shape.",
+        "live": true
+      },
+      {
+        "id": "fill",
+        "type": "enum",
+        "options": [
+          {
+            "value": "color",
+            "label": "Color"
+          },
+          {
+            "value": "linear",
+            "label": "Linear gradient"
+          },
+          {
+            "value": "conic",
+            "label": "Conic gradient"
+          }
+        ],
+        "default": "color",
+        "label": "Fill",
+        "description": "The stroke's color, or a gradient from Color to Color 2.",
+        "live": true
+      },
+      {
+        "id": "color2",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Color 2",
+        "live": true
+      },
+      {
+        "id": "angle",
+        "type": "float",
+        "min": 0.0,
+        "max": 360.0,
+        "unit": "°",
+        "default": 90.0,
+        "label": "Gradient angle",
+        "visible_if": {
+          "param": "fill",
+          "equals": "linear"
+        },
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Speed",
+        "description": "Moves the dashes and the gradient around the edge. Positive is clockwise. 0 holds still.",
+        "live": true
+      },
+      {
+        "id": "outer_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Outer width",
+        "description": "A second stroke past the edge, after the outer gap. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "outer_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outer color",
+        "live": true
+      },
+      {
+        "id": "outer_gap",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Outer gap",
+        "live": true
+      }
+    ],
+    "max_outset_px": 128
+  },
+  {
     "kind_id": "browser",
     "category": "source",
     "name": "Browser",

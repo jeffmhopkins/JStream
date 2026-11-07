@@ -1562,7 +1562,8 @@ crate's geometry goldens do: on a cropped item, against the same vignette on its
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
 item turned 90°, whose ellipse stands with its box. Another draws a glow and a drop shadow
 on an opaque item, which show past its box in the outset (#1226), and a vignette
-before a glow, which still frames the box. Each `stats.tick` reports what
+before a glow, which still frames the box, and a rounded `border` whose outer stroke
+rings an opaque item's box (#1227). Each `stats.tick` reports what
 they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
 steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
 plus one layer and pass per filter, and each item's effects as its box layer and pass

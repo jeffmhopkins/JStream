@@ -1,4 +1,4 @@
-//! Filter presets (#1226): named sets of settings for a built-in filter kind, which the
+//! Filter presets (#1226, #1227): named sets of settings for a built-in filter kind, which the
 //! Filters window offers above the kind's form. Choosing one sets every setting at once
 //! in one `filter.set_settings`: the preset's values, and every other setting (but the
 //! scene a scene-input filter uses) back to its default, so a preset looks the same
@@ -46,6 +46,27 @@ pub fn presets(kind_id: &str) -> Vec<Preset> {
                 "Spotlight",
                 json!({
                     "strength": 0.9, "radius": 0.15, "softness": 0.45, "shape": "round"
+                }),
+            ),
+        ],
+        "border" => vec![
+            preset(
+                "Card",
+                json!({"width": 1.0, "color": "#ffffff33", "radius": 16.0}),
+            ),
+            preset(
+                "Neon",
+                json!({
+                    "width": 3.0, "radius": 24.0, "fill": "conic", "color": "#00e5ff",
+                    "color2": "#ff2bd6", "speed": 120.0, "outer_width": 2.0,
+                    "outer_gap": 4.0, "outer_color": "#00e5ff66"
+                }),
+            ),
+            preset(
+                "Broadcast frame",
+                json!({
+                    "width": 9.0, "style": "double", "color": "#f4f4f2",
+                    "outer_width": 2.0, "outer_color": "#0b2545"
                 }),
             ),
         ],
@@ -102,9 +123,11 @@ mod tests {
     }
 
     #[test]
-    fn the_vignette_has_its_three_looks_and_other_kinds_none() {
+    fn the_vignette_and_the_border_have_their_looks_and_other_kinds_none() {
         let names: Vec<_> = presets("vignette").iter().map(|p| p.name).collect();
         assert_eq!(names, ["Subtle", "Cinematic", "Spotlight"]);
+        let names: Vec<_> = presets("border").iter().map(|p| p.name).collect();
+        assert_eq!(names, ["Card", "Neon", "Broadcast frame"]);
         assert!(presets("blur").is_empty());
     }
 
