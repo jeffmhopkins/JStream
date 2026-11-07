@@ -870,7 +870,7 @@ pub struct CaptureFormatInfo {
     /// Frames per second, to two decimal places (`29.97`).
     pub fps: f64,
     /// How the device encodes its frames, as a `pixel_format` setting names it:
-    /// `mjpeg`, `yuy2`, `nv12`, `i420`, `bgra` or `rgba`.
+    /// `mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.
     pub pixel_format: String,
 }
 

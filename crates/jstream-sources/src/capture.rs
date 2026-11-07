@@ -237,7 +237,7 @@ fn format_params(target: &str) -> Vec<jstream_protocol::ParamDescriptor> {
             CaptureFormatPart::PixelFormat,
             json!(""),
             "How the device sends its frames: `mjpeg` (compressed, decoded by the \
-             engine), `yuy2`, `nv12`, `i420`, `bgra` or `rgba`. Empty lets the engine \
+             engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine \
              choose: uncompressed when it can.",
         ),
     ]

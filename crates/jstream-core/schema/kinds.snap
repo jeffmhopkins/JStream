@@ -2769,7 +2769,7 @@ source: crates/jstream-core/src/kinds.rs
         "target": "device",
         "default": "",
         "label": "Video format",
-        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `i420`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
+        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
         "group": "Format",
         "live": false
       }

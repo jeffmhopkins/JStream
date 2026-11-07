@@ -2316,7 +2316,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "integer"
         },
         "pixel_format": {
-          "description": "How the device encodes its frames, as a `pixel_format` setting names it:\n`mjpeg`, `yuy2`, `nv12`, `i420`, `bgra` or `rgba`.",
+          "description": "How the device encodes its frames, as a `pixel_format` setting names it:\n`mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.",
           "type": "string"
         },
         "width": {

@@ -102,7 +102,9 @@ impl VideoDevices for SharedVideoDevices {
             }
             if state.lost.is_none() {
                 if shared.format != *format {
-                    tracing::debug!(
+                    // A source whose format changed, or a second source asking another
+                    // format, gets the open one until every reader drops (#1265).
+                    tracing::warn!(
                         %device,
                         open = ?shared.format,
                         asked = ?format,

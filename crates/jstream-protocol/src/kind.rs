@@ -287,7 +287,7 @@ pub enum CaptureFormatPart {
 
 /// The `pixel_format` values a [`CaptureFormatPart::PixelFormat`] parameter takes
 /// besides `""`, as a `capture.targets` format names them.
-pub const PIXEL_FORMATS: [&str; 6] = ["mjpeg", "yuy2", "nv12", "i420", "bgra", "rgba"];
+pub const PIXEL_FORMATS: [&str; 5] = ["mjpeg", "yuy2", "nv12", "bgra", "rgba"];
 
 /// The highest frame rate a [`CaptureFormatPart::Fps`] parameter takes.
 pub const MAX_CAPTURE_FPS: f64 = 1000.0;
@@ -506,6 +506,8 @@ impl ParamDescriptor {
                 "required": ["type", "bus_id"],
             })),
             ParamType::CaptureFormat { part, .. } => match part {
+                // A hint: the check (`parse_resolution`, sides to `MAX_CAPTURE_SIDE`) is
+                // what holds.
                 CaptureFormatPart::Resolution => json!({
                     "type": "string",
                     "pattern": "^([1-9][0-9]{0,4}x[1-9][0-9]{0,4})?$",

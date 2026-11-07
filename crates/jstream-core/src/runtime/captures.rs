@@ -378,7 +378,6 @@ pub(crate) fn pixel_format_name(encoding: CaptureEncoding) -> Option<&'static st
         CaptureEncoding::Mjpeg => Some("mjpeg"),
         CaptureEncoding::Yuy2 => Some("yuy2"),
         CaptureEncoding::Raw(PixelFormat::Nv12) => Some("nv12"),
-        CaptureEncoding::Raw(PixelFormat::I420) => Some("i420"),
         CaptureEncoding::Raw(PixelFormat::Bgra8) => Some("bgra"),
         CaptureEncoding::Raw(PixelFormat::Rgba8) => Some("rgba"),
         _ => None,

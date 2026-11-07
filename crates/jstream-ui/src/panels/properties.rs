@@ -817,7 +817,6 @@ pub fn pixel_format_label(value: &str) -> String {
         "mjpeg" => "MJPEG".into(),
         "yuy2" => "YUY2".into(),
         "nv12" => "NV12".into(),
-        "i420" => "I420".into(),
         "bgra" => "BGRA".into(),
         "rgba" => "RGBA".into(),
         other => other.to_uppercase(),
