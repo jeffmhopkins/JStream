@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 mod activity;
+mod agent;
 mod audio;
 mod camera_motion;
 mod command;
@@ -53,6 +54,9 @@ pub use audio::{
 pub use camera_motion::{
     CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_POINTER_KIND, FOLLOW_ZOOM_RANGE,
     FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
+};
+pub use agent::{
+    AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent,
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,

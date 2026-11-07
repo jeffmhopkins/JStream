@@ -794,6 +794,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Agent approval** (protocol 0.107, [ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)):
+  where the host asks (the desktop app with `--mcp`), `jstream-server` holds a control-
+  token session at `hello` until the person approves its client, telling every client
+  with `agent.approval_requested` and `agent.approval_resolved`; `agent.approve`,
+  `agent.forget` and `agent.approved` are answered by the server too, and a denied or
+  unanswered `hello` fails with `not_allowed`. A notice with a veto, not a control.
 - **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
   the actions `collection.open`, `collection.new` and `collection.save_as` switch the
   collection file the engine saves to, the query `collection.info` reports it and the
@@ -1048,7 +1054,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
   `gpu.device_lost` event that reports it reaches agents. And for the `codec.*` ops:
   Cisco's OpenH264 downloads only when a person asks, after seeing Cisco's licence
-  ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). The `pack.*` ops are not
+  ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). And for the `agent.*`
+  ops and events: the person, not another agent, lets a new agent in
+  ([ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)). The `pack.*` ops are not
   held back: an agent may write, read and delete an effect pack's WGSL
   ([ADR-0097](adr/0097-agents-write-effect-packs.md)), and `pack.list` shows a person
   which client last wrote each.

@@ -3604,3 +3604,272 @@ fn a_browser_pairs_into_a_cookie_that_admits_it_until_revoked() {
     assert!(!token.is_empty() && !logged.contains(&token), "{logged}");
     assert!(!logged.contains(TOKEN), "{logged}");
 }
+
+// ---- Agent approval (ADR-0131) ----
+
+/// The host UI's own token in the approval tests.
+const UI_TOKEN: &str = "ui-token-4567";
+
+/// A server that asks before a new agent connects, with the host UI's token set and
+/// `timeout` to answer in.
+fn asking(timeout: Duration) -> impl FnOnce(&mut ServerConfig) {
+    move |config| {
+        config.ask_agents = true;
+        config.approval_timeout = timeout;
+        config.ui_token = match Token::new(UI_TOKEN) {
+            Ok(token) => Some(token),
+            Err(error) => panic!("ui token: {error}"),
+        };
+    }
+}
+
+impl Harness {
+    /// A client connected with `token`, not yet greeted.
+    fn connect_as(&self, token: &str) -> WsControl {
+        match self.run(WsControl::connect(WsConfig::new(self.url.clone(), token))) {
+            Ok(control) => control,
+            Err(error) => panic!("connect: {error}"),
+        }
+    }
+
+    /// The host UI: connected with its own token and greeted, which is never held, with
+    /// its events.
+    fn ui(&self) -> (WsControl, EventStream) {
+        let ui = self.connect_as(UI_TOKEN);
+        ok(self.run(ui.hello(named("jstream-ui"))));
+        let events = ui.events();
+        (ui, events)
+    }
+}
+
+fn named(client_name: &str) -> Hello {
+    Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: client_name.into(),
+    }
+}
+
+/// The next approval event on `events`, skipping the engine's.
+async fn approval_event(events: &mut EventStream) -> Event {
+    loop {
+        match events.next().await {
+            Some(
+                event
+                @ (Event::AgentApprovalRequested { .. } | Event::AgentApprovalResolved { .. }),
+            ) => return event,
+            Some(_) => continue,
+            None => panic!("the events ended"),
+        }
+    }
+}
+
+/// The ID of the next request on `events`, checking its client.
+async fn requested(events: &mut EventStream, client_name: &str) -> String {
+    match approval_event(events).await {
+        Event::AgentApprovalRequested { approval } => {
+            assert_eq!(approval.client_name, client_name);
+            assert_eq!(
+                approval.transport,
+                jstream_control::protocol::AgentTransport::Websocket
+            );
+            approval.approval_id
+        }
+        other => panic!("expected a request, got {other:?}"),
+    }
+}
+
+/// How the next request on `events` ended.
+async fn resolved(
+    events: &mut EventStream,
+) -> (String, jstream_control::protocol::ApprovalOutcome) {
+    match approval_event(events).await {
+        Event::AgentApprovalResolved {
+            approval_id,
+            outcome,
+        } => (approval_id, outcome),
+        other => panic!("expected an outcome, got {other:?}"),
+    }
+}
+
+fn approve(id: &str, decision: jstream_control::protocol::ApprovalDecision) -> Call {
+    Call::Action {
+        action: Action::AgentApprove {
+            approval_id: id.into(),
+            decision,
+        },
+    }
+}
+
+/// A new agent's `hello` waits until the person allows it once; the next connection of
+/// the same client asks again, and a denied one fails with `not_allowed` and is closed.
+/// The host UI's own token is never held.
+#[test]
+fn a_new_agent_waits_until_the_person_answers() {
+    use jstream_control::protocol::{ApprovalDecision, ApprovalOutcome};
+    let harness = start_with(&MockEngine::new(), asking(Duration::from_secs(60)));
+    let (ui, mut events) = harness.ui();
+
+    let agent = harness.connect_as(TOKEN);
+    harness.run(async {
+        let held = agent.hello(named("claude-code"));
+        tokio::pin!(held);
+        let id = tokio::select! {
+            id = requested(&mut events, "claude-code") => id,
+            answer = &mut held => panic!("the hello wasn't held: {answer:?}"),
+        };
+        // The held client is asked about while the rest of the server carries on.
+        ok(ui.call(create_scene("main")).await);
+        ok(ui.call(approve(&id, ApprovalDecision::AllowOnce)).await);
+        ok(held.await);
+        assert_eq!(
+            resolved(&mut events).await,
+            (id, ApprovalOutcome::AllowedOnce)
+        );
+    });
+    ok(harness.run(agent.call(create_scene("second"))));
+
+    // Allowed once: the next connection asks again, and this time is denied.
+    let again = harness.connect_as(TOKEN);
+    harness.run(async {
+        let held = again.hello(named("claude-code"));
+        tokio::pin!(held);
+        let id = tokio::select! {
+            id = requested(&mut events, "claude-code") => id,
+            answer = &mut held => panic!("the hello wasn't held: {answer:?}"),
+        };
+        ok(ui.call(approve(&id, ApprovalDecision::Deny)).await);
+        assert_eq!(protocol_code(held.await), "not_allowed");
+        assert_eq!(resolved(&mut events).await, (id, ApprovalOutcome::Denied));
+    });
+    let reason = expect_disconnected(harness.run(again.call(create_scene("third"))));
+    assert!(reason.contains("not allowed"), "{reason}");
+}
+
+/// Always allow keeps the client on the approved list, so its next connection isn't
+/// held; `agent.forget` takes it off again. `agent.approved` lists the open requests too.
+#[test]
+fn an_always_allowed_agent_is_let_in_until_it_is_forgotten() {
+    use jstream_control::protocol::{AgentTransport, ApprovalDecision, ApprovedAgent};
+    let harness = start_with(&MockEngine::new(), asking(Duration::from_secs(60)));
+    let (ui, mut events) = harness.ui();
+    let approved = |ui: &WsControl| match ok(harness.run(ui.call(Call::Query {
+        query: Query::AgentApproved,
+    })))
+    .result
+    {
+        CallResult::Query {
+            result:
+                QueryResult::AgentApproved {
+                    asking,
+                    approved,
+                    pending,
+                },
+        } => (asking, approved, pending),
+        other => panic!("agent.approved: {other:?}"),
+    };
+
+    let agent = harness.connect_as(TOKEN);
+    harness.run(async {
+        let held = agent.hello(named("cursor"));
+        tokio::pin!(held);
+        let id = tokio::select! {
+            id = requested(&mut events, "cursor") => id,
+            answer = &mut held => panic!("the hello wasn't held: {answer:?}"),
+        };
+        let open = match ui
+            .call(Call::Query {
+                query: Query::AgentApproved,
+            })
+            .await
+            .map(|r| r.result)
+        {
+            Ok(CallResult::Query {
+                result: QueryResult::AgentApproved { pending, .. },
+            }) => pending,
+            other => panic!("agent.approved: {other:?}"),
+        };
+        assert_eq!(open.len(), 1);
+        assert_eq!(open[0].approval_id, id);
+        ok(ui.call(approve(&id, ApprovalDecision::AlwaysAllow)).await);
+        ok(held.await);
+    });
+    let row = ApprovedAgent::new("cursor", AgentTransport::Websocket);
+    assert_eq!(approved(&ui), (true, vec![row.clone()], vec![]));
+
+    // Approved: let straight in.
+    let next = harness.connect_as(TOKEN);
+    ok(harness.run(next.hello(named("cursor"))));
+
+    ok(harness.run(ui.call(Call::Action {
+        action: Action::AgentForget {
+            client_name: "cursor".into(),
+            transport: AgentTransport::Websocket,
+        },
+    })));
+    assert_eq!(approved(&ui).1, vec![]);
+    assert_eq!(
+        protocol_code(harness.run(ui.call(Call::Action {
+            action: Action::AgentForget {
+                client_name: "cursor".into(),
+                transport: AgentTransport::Websocket,
+            },
+        }))),
+        "not_found"
+    );
+}
+
+/// No answer in time turns the client away with `not_allowed`, and a client that goes
+/// away while held ends its request as `closed`.
+#[test]
+fn an_unanswered_agent_times_out_and_one_that_leaves_is_closed() {
+    use jstream_control::protocol::ApprovalOutcome;
+    let harness = start_with(&MockEngine::new(), asking(Duration::from_millis(300)));
+    let (_ui, mut events) = harness.ui();
+
+    let agent = harness.connect_as(TOKEN);
+    harness.run(async {
+        let held = agent.hello(named("slow"));
+        tokio::pin!(held);
+        let id = tokio::select! {
+            id = requested(&mut events, "slow") => id,
+            answer = &mut held => panic!("the hello wasn't held: {answer:?}"),
+        };
+        assert_eq!(protocol_code(held.await), "not_allowed");
+        assert_eq!(resolved(&mut events).await, (id, ApprovalOutcome::TimedOut));
+    });
+
+    let leaving = harness.connect_as(TOKEN);
+    let id = harness.run(async {
+        let held = leaving.hello(named("leaving"));
+        tokio::pin!(held);
+        tokio::select! {
+            id = requested(&mut events, "leaving") => id,
+            answer = &mut held => panic!("the hello wasn't held: {answer:?}"),
+        }
+    });
+    drop(leaving);
+    assert_eq!(
+        harness.run(resolved(&mut events)),
+        (id, ApprovalOutcome::Closed)
+    );
+}
+
+/// With the UI setting `agents.ask` off, or without the host asking at all, no one is
+/// held.
+#[test]
+fn no_agent_is_held_when_asking_is_off() {
+    let harness = start_with(&MockEngine::new(), asking(Duration::from_secs(60)));
+    let (ui, _events) = harness.ui();
+    ok(harness.run(ui.call(Call::Action {
+        action: Action::UiSettingsSet {
+            key: crate::ASK_SETTING.into(),
+            value: Some(serde_json::Value::Bool(false)),
+        },
+    })));
+    let agent = harness.connect_as(TOKEN);
+    ok(harness.run(agent.hello(named("claude-code"))));
+
+    let plain = start(&MockEngine::new());
+    let agent = plain.connect_as(TOKEN);
+    ok(plain.run(agent.hello(named("claude-code"))));
+}

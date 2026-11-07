@@ -24,6 +24,7 @@
 #![forbid(unsafe_code)]
 
 mod admitted;
+mod approvals;
 mod config;
 mod devices;
 mod envelope;
@@ -41,6 +42,7 @@ pub mod token_file;
 mod ui;
 mod ui_settings;
 
+pub use approvals::ASK_SETTING;
 pub use config::{ServerConfig, Token};
 pub use error::ServerError;
 pub use jstream_control::WS_PATH;
@@ -59,6 +61,7 @@ use axum::routing::{any, get};
 use devices::Devices;
 use gate::{Credential, Gate, Refusal};
 use jstream_control::{Control, WS_PROTOCOL};
+use jstream_protocol::AgentTransport;
 use listener::{Accepted, Limited};
 use mcp::Mcp;
 use std::future::Future;
@@ -124,19 +127,36 @@ struct App {
     pairing: bool,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
+    /// The agent approvals (ADR-0131).
+    approvals: Arc<approvals::Approvals>,
 }
 
 impl App {
     /// A new session from the connector, admitted by `credential`.
-    fn open(&self, credential: Credential) -> Box<dyn Control> {
+    fn open(&self, credential: Credential, transport: AgentTransport) -> Box<dyn Control> {
         Box::new(Admitted::new(
             (self.connector)(),
             credential,
-            Arc::clone(&self.devices),
-            self.pairing_offered,
-            self.pairing,
-            Arc::clone(&self.ui_settings),
+            transport,
+            admitted::Served {
+                devices: Arc::clone(&self.devices),
+                pairing_offered: self.pairing_offered,
+                serves_devices: self.pairing,
+                ui_settings: Arc::clone(&self.ui_settings),
+                approvals: Arc::clone(&self.approvals),
+            },
         ))
+    }
+
+    /// How long a connection admitted by `credential` has to complete its handshake: the
+    /// handshake timeout, and for one the person may be asked about (ADR-0131), the
+    /// approval timeout too.
+    fn handshake_time(&self, credential: &Credential) -> Duration {
+        if matches!(credential, Credential::Control) && self.approvals.enabled() {
+            self.handshake_timeout + self.approvals.timeout()
+        } else {
+            self.handshake_timeout
+        }
     }
 }
 
@@ -153,6 +173,12 @@ impl Server {
         let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
         let devices = Arc::new(Devices::load(config.device_file.clone())?);
         let ui_settings = Arc::new(UiSettings::load(config.ui_settings_file.clone()));
+        let approvals = Arc::new(approvals::Approvals::load(
+            config.ask_agents,
+            config.approvals_file.clone(),
+            config.approval_timeout,
+            Arc::clone(&ui_settings),
+        )?);
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,
@@ -181,6 +207,7 @@ impl Server {
             tls: config.tls,
             pairing: config.pairing,
             ui_settings,
+            approvals,
         });
         Ok(Server {
             listener,
@@ -341,7 +368,7 @@ async fn upgrade(
     // The request is accepted: the header-read deadline no longer applies, the
     // handshake deadline does.
     accepted.request_read();
-    let hello_by = accepted.at + app.handshake_timeout;
+    let hello_by = accepted.at + app.handshake_time(&credential);
     let number = app.connections.fetch_add(1, Ordering::Relaxed) + 1;
     let span = tracing::info_span!("connection", id = number, peer = %peer);
     // Opened inside the span, so a session span the connector creates nests under it.
@@ -351,7 +378,7 @@ async fn upgrade(
             Some(device_id) => tracing::info!(device_id = %device_id, "connection accepted"),
             None => tracing::info!("connection accepted"),
         }
-        app.open(credential)
+        app.open(credential, AgentTransport::Websocket)
     });
     let shutdown = app.shutdown.clone();
     let liveness = app.liveness;

@@ -181,6 +181,8 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::YoutubeTransitionBroadcast { .. } => "Moved a YouTube broadcast on".to_owned(),
         Action::PairingStart => "Started pairing a device".to_owned(),
         Action::DeviceRevoke { .. } => "Revoked a paired device".to_owned(),
+        Action::AgentApprove { .. } => "Answered an agent's request to connect".to_owned(),
+        Action::AgentForget { .. } => "Removed an approved agent".to_owned(),
         Action::PluginInstall { plugin_id, .. } => {
             format!("Installed plugin {}", quote(plugin_id.as_str()))
         }

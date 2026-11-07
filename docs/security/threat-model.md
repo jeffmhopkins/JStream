@@ -119,7 +119,9 @@ a stolen token, local denial of service.
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
   device's, accepted only on loopback or a TLS listener, and there is no TLS listener
-  yet. `POST /api/v1/pair` is the one request answered without one, only while a
+  yet, or the host UI's own token (`ServerConfig::ui_token`, ADR-0131), which the
+  desktop app makes at launch and keeps only in memory; it grants what the control
+  token does. `POST /api/v1/pair` is the one request answered without one, only while a
   pairing code is open (see [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
@@ -445,7 +447,7 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0131-ask-before-a-new-agent-connects.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -473,6 +475,15 @@ output, sets or clears its key, goes live or stops, steps through its undo histo
 revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
 deletes of scenes, sources and items included, are undoable and unannounced
 ([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
+
+**Notice, not a control:** in the desktop app with `--mcp`, the person is asked before
+a new agent's first connection, and can allow it once, always, or deny it
+([ADR-0131](../adr/0131-ask-before-a-new-agent-connects.md)). It is a notice with a
+veto, and nothing may rely on it as a control: approval is keyed by the name a client
+gives itself, so a client can pass by naming itself after an approved one, and any
+process of the user can read the token file and write the approved list. Approved
+clients are trusted no differently from any other token holder. Agents get no tool to
+answer a request.
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through

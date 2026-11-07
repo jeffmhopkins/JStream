@@ -156,6 +156,14 @@ pub enum ProtocolError {
         /// The server's request limit in bytes.
         limit_bytes: u64,
     },
+    /// The person declined this connection, or didn't answer in time (0.107,
+    /// ADR-0131): only a `hello` fails with it, and the server then closes the
+    /// connection. An agent reports it; connecting again asks again.
+    #[error("not allowed: {reason}")]
+    NotAllowed {
+        /// Why: declined, or not answered in time.
+        reason: String,
+    },
     /// The engine hit a bug or an unexpected condition. The request may be retried.
     #[error("internal error: {reason}")]
     Internal {
@@ -208,6 +216,7 @@ impl ProtocolError {
             ProtocolError::Forbidden { .. } => "forbidden",
             ProtocolError::HardwareSessionLimit { .. } => "hardware_session_limit",
             ProtocolError::TooLarge { .. } => "too_large",
+            ProtocolError::NotAllowed { .. } => "not_allowed",
             ProtocolError::Internal { .. } => "internal",
             ProtocolError::Unknown => "unknown",
         }
@@ -262,6 +271,9 @@ pub enum EntityKind {
     /// error answering `collection.new` or `collection.save_as` names it, so a client
     /// that sends neither never reads it.
     File,
+    /// An agent's request to connect, or a row of the approved list (0.107, ADR-0131).
+    /// Only an error answering `agent.approve` or `agent.forget` names it.
+    Approval,
 }
 
 impl fmt::Display for EntityKind {
@@ -284,6 +296,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Pack => "pack",
             EntityKind::Timeline => "timeline",
             EntityKind::File => "file",
+            EntityKind::Approval => "approval",
         })
     }
 }

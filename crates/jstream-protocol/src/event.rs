@@ -342,6 +342,23 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
+    /// A client asked to connect and is held until the person answers (0.107,
+    /// ADR-0131). A UI shows a prompt and answers with `agent.approve`. Runtime state,
+    /// so no `rev`; `agent.approved` lists the requests still open.
+    #[serde(rename = "agent.approval_requested")]
+    AgentApprovalRequested {
+        /// The request.
+        approval: crate::AgentApproval,
+    },
+    /// A held client's request ended (0.107, ADR-0131): answered, timed out, or the
+    /// client went away. A UI closes its prompt.
+    #[serde(rename = "agent.approval_resolved")]
+    AgentApprovalResolved {
+        /// The request, as `agent.approval_requested` named it.
+        approval_id: String,
+        /// How it ended.
+        outcome: crate::ApprovalOutcome,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -373,6 +390,8 @@ impl Event {
             Event::TimelineChanged { .. } => Some("timeline.changed"),
             Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
             Event::CollectionFileChanged { .. } => Some("collection.file_changed"),
+            Event::AgentApprovalRequested { .. } => Some("agent.approval_requested"),
+            Event::AgentApprovalResolved { .. } => Some("agent.approval_resolved"),
             Event::Unknown => None,
         }
     }

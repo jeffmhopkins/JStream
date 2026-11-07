@@ -169,6 +169,9 @@ pub(crate) enum Refusal {
 pub(crate) enum Credential {
     /// The control token (ADR-0006).
     Control,
+    /// The host UI's own token (`ServerConfig::ui_token`, ADR-0131 §2): the control
+    /// token's access, never held for approval.
+    Ui,
     /// A device token (ADR-0044).
     Device {
         /// The device.
@@ -186,7 +189,7 @@ impl Credential {
     /// The device, for a device token.
     pub(crate) fn device(&self) -> Option<&DeviceId> {
         match self {
-            Credential::Control => None,
+            Credential::Control | Credential::Ui => None,
             Credential::Device { id, .. } => Some(id),
         }
     }
@@ -258,6 +261,8 @@ impl IntoResponse for Refusal {
 /// paired devices.
 pub(crate) struct Gate {
     token: Token,
+    /// `ServerConfig::ui_token`.
+    ui_token: Option<Token>,
     devices: Arc<Devices>,
     /// Whether device tokens are accepted: only while the server listens on loopback or
     /// on a TLS listener.
@@ -299,6 +304,7 @@ impl Gate {
             .collect();
         Gate {
             token: config.token.clone(),
+            ui_token: config.ui_token.clone(),
             devices,
             devices_allowed: config.pairing && (local.ip().is_loopback() || config.tls),
             tls: config.tls,
@@ -386,6 +392,9 @@ impl Gate {
         .ok_or(Refusal::Token)?;
         if self.token.matches(&token) {
             return Ok(Credential::Control);
+        }
+        if self.ui_token.as_ref().is_some_and(|ui| ui.matches(&token)) {
+            return Ok(Credential::Ui);
         }
         if !self.devices_allowed {
             return Err(Refusal::Token);

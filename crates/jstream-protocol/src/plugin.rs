@@ -98,6 +98,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.list_streams", N),
     ("youtube.stats", N),
     ("device.list", N),
+    ("agent.approved", N),
     // What other clients did, by name, is the user's to read, not a plugin's (ADR-0083).
     ("activity.list", N),
     // The server answers it, and a UI's settings are the person's.
@@ -212,6 +213,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.transition_broadcast", N),
     ("pairing.start", N),
     ("device.revoke", N),
+    ("agent.approve", N),
+    ("agent.forget", N),
     ("ui_settings.set", N),
     // Needs a filesystem grant, like `video.snapshot`.
     ("preview.subscribe", N),

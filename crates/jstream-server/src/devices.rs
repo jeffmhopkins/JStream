@@ -427,9 +427,18 @@ pub(crate) fn check_name(name: &str) -> Result<&str, &'static str> {
 /// is refused, as the token file is: on Unix one group or others have any permission on,
 /// on Windows one `jstream_platform_windows::check_private_file` refuses.
 fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
+    match read_private(path)? {
+        Some(text) => parse_file(&text),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+/// Reads a user-only file whole: `None` when it is missing. A file other users may
+/// access is refused, as the token file is.
+pub(crate) fn read_private(path: &Path) -> Result<Option<String>, String> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
     if !metadata.is_file() {
@@ -452,7 +461,7 @@ fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
         .map_err(|why| format!("it may be accessible to other users: {why}; make it user-only"))?;
     let mut text = String::new();
     io::Read::read_to_string(&mut file, &mut text).map_err(|error| error.to_string())?;
-    parse_file(&text)
+    Ok(Some(text))
 }
 
 fn parse_file(text: &str) -> Result<BTreeMap<DeviceId, Device>, String> {
@@ -507,6 +516,12 @@ fn render_file(devices: &BTreeMap<DeviceId, Device>) -> String {
 /// Writes the device file whole: to `<path>.tmp`, created user-only, synced, then
 /// renamed over `path`, so a crash leaves the old file or the new one.
 fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<()> {
+    write_private(path, &render_file(devices))
+}
+
+/// Writes a user-only file whole: to `<path>.tmp`, created user-only, synced, then
+/// renamed over `path`, so a crash leaves the old file or the new one.
+pub(crate) fn write_private(path: &Path, text: &str) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
@@ -516,7 +531,7 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
         _ => {}
     }
     let written = create_private(&tmp).and_then(|mut file| {
-        file.write_all(render_file(devices).as_bytes())?;
+        file.write_all(text.as_bytes())?;
         file.sync_all()
     });
     let renamed = written.and_then(|()| fs::rename(&tmp, path));

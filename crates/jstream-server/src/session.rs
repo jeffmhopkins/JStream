@@ -67,18 +67,17 @@ use crate::envelope::{Envelope, Id};
 use crate::preview::{self, Frames};
 use axum::extract::ws::{CloseFrame, Message, WebSocket, close_code};
 use futures_util::future::BoxFuture as SendFuture;
-use futures_util::stream::{FuturesUnordered, SplitSink};
+use futures_util::stream::{FuturesOrdered, FuturesUnordered, SplitSink};
 use futures_util::{SinkExt, StreamExt};
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
-    ClientId, ClientMessage, ErrorResponse, Event, EventMessage, Hello, ProtocolError, RequestId,
+    ClientId, ClientMessage, ErrorResponse, Event, EventMessage, ProtocolError, RequestId,
     Response, ServerMessage, Welcome, WireError,
 };
 use std::collections::VecDeque;
-use std::pin::Pin;
 use std::time::Duration;
 use tokio::sync::watch;
-use tokio::time::{Instant, MissedTickBehavior, Sleep};
+use tokio::time::{Instant, MissedTickBehavior};
 
 /// How many session-to-wire request ID pairs a connection remembers. A `state.changed`
 /// event normally arrives within a few calls of its answer.
@@ -123,24 +122,6 @@ struct Closed;
 /// The answer to one forwarded request, with the client's ID for it.
 type Answer = (RequestId, Result<Response, ControlError>);
 
-/// Forwards `hello` to the engine. Before the first handshake succeeds (`pending`), the
-/// engine's answer races `deadline`: `None` if the deadline passed first, so an engine
-/// that never answers doesn't hold the connection past the handshake timeout (#273).
-async fn handshake(
-    control: &dyn Control,
-    hello: Hello,
-    pending: bool,
-    deadline: &mut Pin<&mut Sleep>,
-) -> Option<Result<Welcome, ControlError>> {
-    if !pending {
-        return Some(control.hello(hello).await);
-    }
-    tokio::select! {
-        answer = control.hello(hello) => Some(answer),
-        () = deadline.as_mut() => None,
-    }
-}
-
 /// How often a connection is pinged and how long it may stay silent
 /// (`ServerConfig::ping_interval` and `ServerConfig::liveness_timeout`).
 #[derive(Clone, Copy, Debug)]
@@ -167,6 +148,12 @@ pub(crate) async fn run(
     let mut outbox = Outbox::default();
     let control: &dyn Control = &*control;
     let mut calls: FuturesUnordered<BoxFuture<'_, Answer>> = FuturesUnordered::new();
+    // The `hello`s waiting for their answer, answered in the order they came. One may
+    // wait minutes while the person is asked about the client (ADR-0131), so the loop
+    // keeps reading, pinging and answering meanwhile; the handshake deadline still
+    // closes a connection whose first handshake hasn't succeeded in time (#273).
+    let mut hellos: FuturesOrdered<BoxFuture<'_, Result<Welcome, ControlError>>> =
+        FuturesOrdered::new();
     let mut events: Option<EventStream> = None;
     let mut binary: Option<BinaryStream> = None;
     let mut frames = Frames::default();
@@ -246,18 +233,19 @@ pub(crate) async fn run(
                             error: error.into(),
                         }));
                     }
-                    Ok(ClientMessage::Hello(hello)) => match handshake(
-                        control,
-                        hello,
-                        ids.client_id.is_none(),
-                        &mut handshake_deadline,
-                    )
-                    .await
-                    {
-                        // The engine hasn't answered by the deadline: the same close as a
-                        // client that never said hello.
-                        None => break Ok(Some(close(close_code::POLICY, "no handshake in time"))),
-                        Some(Ok(welcome)) => {
+                    Ok(ClientMessage::Hello(hello)) => hellos.push_back(control.hello(hello)),
+                    Ok(ClientMessage::Request(request)) => {
+                        calls.push(Box::pin(async move {
+                            (request.id, control.call(request.call).await)
+                        }));
+                    }
+                    Ok(_) => {
+                        outbox.push(malformed(None, "a message type this server doesn't handle"));
+                    }
+                }
+            }
+            Some(answer) = hellos.next(), if !hellos.is_empty() => match answer {
+                        Ok(welcome) => {
                             tracing::info!(client_id = %welcome.client_id, "handshake done");
                             ids.client_id = Some(welcome.client_id.clone());
                             let welcome = Welcome {
@@ -270,27 +258,27 @@ pub(crate) async fn run(
                             }
                             outbox.push(ServerMessage::Welcome(welcome));
                         }
-                        Some(Err(ControlError::Protocol(error))) => {
+                        Err(ControlError::Protocol(error)) => {
                             tracing::info!(code = error.error.code(), "handshake refused");
-                            let refused = matches!(error.error, ProtocolError::UnsupportedVersion { .. });
+                            // The envelope closes the connection after a refused handshake:
+                            // an unsupported version, or a client the person didn't allow
+                            // (ADR-0131).
+                            let refused = match error.error {
+                                ProtocolError::UnsupportedVersion { .. } => {
+                                    Some("unsupported protocol version")
+                                }
+                                ProtocolError::NotAllowed { .. } => {
+                                    Some("the connection was not allowed")
+                                }
+                                _ => None,
+                            };
                             outbox.push(ServerMessage::Error(ErrorResponse { id: None, error }));
-                            // The envelope closes the connection after a refused handshake.
-                            if refused && ids.client_id.is_none() {
-                                break Ok(Some(close(close_code::POLICY, "unsupported protocol version")));
+                            if let Some(reason) = refused.filter(|_| ids.client_id.is_none()) {
+                                break Ok(Some(close(close_code::POLICY, reason)));
                             }
                         }
-                        Some(Err(error)) => break Ok(Some(engine_gone(&error))),
+                        Err(error) => break Ok(Some(engine_gone(&error))),
                     },
-                    Ok(ClientMessage::Request(request)) => {
-                        calls.push(Box::pin(async move {
-                            (request.id, control.call(request.call).await)
-                        }));
-                    }
-                    Ok(_) => {
-                        outbox.push(malformed(None, "a message type this server doesn't handle"));
-                    }
-                }
-            }
             Some((wire_id, result)) = calls.next(), if !calls.is_empty() => {
                 let reply = match result {
                     Ok(response) => {

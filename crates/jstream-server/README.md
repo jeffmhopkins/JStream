@@ -34,8 +34,21 @@ Contents (a first cut; [Design](#design) explains the choices):
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
   origins, connection limits, the ping interval and liveness timeout, the MCP switch and its limits, the UI directory, the
-  device file, the UI settings file, the `tls` flag, the `pairing` switch) and `Token`,
-  the control token.
+  device file, the UI settings file, the `tls` flag, the `pairing` switch, and the agent
+  approval settings: `ui_token`, `ask_agents`, `approvals_file` and `approval_timeout`)
+  and `Token`, the control token.
+- **Agent approval** (`approvals.rs`,
+  [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)): with
+  `ServerConfig::ask_agents` on and the UI setting `agents.ask` (`ASK_SETTING`) not
+  `false`, a session the control token admits is held at `hello` until the person
+  approves its client: allow once, always allow (kept in the user-only approved agents
+  file), deny, or no answer in `approval_timeout` (2 minutes). Every session hears
+  `agent.approval_requested` and `agent.approval_resolved`, and `Admitted` answers
+  `agent.approve`, `agent.forget` and `agent.approved`. The request belongs to the
+  session, so a `hello` sent again (an MCP client's retry) waits on the same one. At
+  most 8 are open at once; one more is turned away. Sessions the UI's own token
+  (`ui_token`) or a device token admits are never held. It is a notice with a veto, not
+  a control: a client can pass by naming itself after an approved one.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
@@ -49,7 +62,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
-  unless `ServerConfig::pairing` is off
+  unless `ServerConfig::pairing` is off, and the agent approval calls, and holds a
+  `hello` for approval
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
 - **Listener** (`listener.rs`): accepts TCP connections, closes one accepted while
   `max_tcp_connections` are open, and drops one that hasn't sent an accepted upgrade
@@ -60,14 +74,18 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events, the cap on calls in flight, and the pings that close a connection that
-  went silent.
+  went silent. A `hello` waits beside the rest of the loop, answered in order, so one
+  held for approval keeps the connection pinged; a control-token connection's
+  handshake deadline is the handshake timeout plus the approval timeout while
+  `ask_agents` is on, and a `not_allowed` `hello` closes the connection (1008).
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
   connection and sent as WebSocket binary messages, dropping up to the next keyframe
   when the client reads slowly.
 - **Token file** (`token_file.rs`): the control token file the hosts that let outside
   clients in keep (the daemon, and the desktop app with `--mcp`): `load_or_create`
   reuses a user-only file's token or creates the file, user-only, with a new random one,
-  and `device_file` names the devices file beside it (ADR-0006).
+  `device_file` names the devices file beside it (ADR-0006), and `approvals_file` the
+  approved agents file (ADR-0131).
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
 Not here yet: a TLS listener ([Open questions](#design)). `ServerConfig::tls` says

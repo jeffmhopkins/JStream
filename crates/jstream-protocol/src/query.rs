@@ -251,6 +251,10 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
+    /// The approved list and the requests still open (0.107, ADR-0131). Runtime state,
+    /// so no `rev`. Answered by the server that admits clients, like `device.list`.
+    #[serde(rename = "agent.approved")]
+    AgentApproved,
     /// Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,
     /// undos, redos and actions did, newest first. The engine keeps the last 100
     /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted
@@ -387,6 +391,7 @@ impl Query {
             Query::PackRead { .. } => "pack.read",
             Query::ValuesList { .. } => "values.list",
             Query::DeviceList => "device.list",
+            Query::AgentApproved => "agent.approved",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
@@ -718,6 +723,18 @@ pub enum QueryResult {
         /// The paired devices, ordered by ID.
         devices: Vec<DeviceInfo>,
     },
+    /// The result of `agent.approved` (0.107).
+    #[serde(rename = "agent.approved")]
+    AgentApproved {
+        /// Whether this server asks before a new agent connects: the desktop app with
+        /// MCP on and its setting on. Off, nothing is held, and the list is kept for when
+        /// it is on again.
+        asking: bool,
+        /// The approved list, ordered by client name, then transport.
+        approved: Vec<crate::ApprovedAgent>,
+        /// The requests still open, oldest first.
+        pending: Vec<crate::AgentApproval>,
+    },
     /// The result of `activity.list` (0.51).
     #[serde(rename = "activity.list")]
     ActivityList {
@@ -803,6 +820,7 @@ impl QueryResult {
             QueryResult::PackRead { .. } => "pack.read",
             QueryResult::ValuesList { .. } => "values.list",
             QueryResult::DeviceList { .. } => "device.list",
+            QueryResult::AgentApproved { .. } => "agent.approved",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",

@@ -145,7 +145,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `video.snapshot`, `video.frames`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
+  `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
@@ -229,7 +229,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
-  `collection.file_changed` (with `CollectionCause`, 0.94).
+  `collection.file_changed` (with `CollectionCause`, 0.94), and
+  `agent.approval_requested` and `agent.approval_resolved` (0.107).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -307,7 +308,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.94 because of projects: the actions `collection.open`,
+`PROTOCOL_VERSION` is 0.107 because the person is asked before a new agent connects:
+the events `agent.approval_requested` and `agent.approval_resolved`, the actions
+`agent.approve` and `agent.forget`, the query `agent.approved`, the error `not_allowed`
+and the entity kind `approval`
+([Agent approval](#agent-approval), [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md),
+a placeholder number the release queue sets); 0.94 because of projects: the actions `collection.open`,
 `collection.new` and `collection.save_as`, the query `collection.info`, the event
 `collection.file_changed` and the `file` entity kind
 ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
@@ -1426,6 +1432,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
+- `agent.approved`: whether the server asks before a new agent connects (`asking`), the
+  approved list (`approved`, each `{client_name, transport}`) and the requests still
+  open (`pending`, each `{approval_id, client_name, transport}`). Runtime state, so no
+  `rev`. Added in 0.107 (see [Agent approval](#agent-approval)).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
@@ -1999,6 +2009,40 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
 
+<a id="agent-approval"></a>
+## Agent approval
+<!-- @section
+covers = ["crates/jstream-protocol/src/agent.rs"]
+-->
+
+Since 0.107 the desktop app with MCP on asks the person before a new agent's first
+connection ([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). The
+server, not the engine, answers all of this; a `Control` with no server in front
+answers `unsupported`.
+- A connection that presents the control token from the token file, and whose `hello`
+  names a client the person hasn't approved over that `AgentTransport` (`websocket`,
+  which `jstream-cli mcp` uses too, or `mcp_http`), is held: no `welcome` yet. Every
+  admitted client gets **`agent.approval_requested {approval}`**, an `AgentApproval`
+  `{approval_id, client_name, transport}`. `client_name` is the client's own text.
+- **`agent.approve {approval_id, decision}`** answers it: `allow_once`, `always_allow`
+  (which adds `{client_name, transport}` to the approved list) or `deny`. Any admitted
+  client may answer; MCP agents get no tool for it. A request that isn't open is
+  `not_found` (entity `approval`).
+- With no answer in 2 minutes the `hello` fails as a denied one does: **`not_allowed`**,
+  with a `reason`, and the server closes the connection. A client that connects again
+  asks again. A `hello` sent again on a held connection waits on the same request.
+- **`agent.approval_resolved {approval_id, outcome}`** tells every client how it ended:
+  `allowed_once`, `always_allowed`, `denied`, `timed_out` or `closed` (the client went
+  away first).
+- **`agent.approved`** lists the approved list and the open requests, and
+  **`agent.forget {client_name, transport}`** removes a row (`not_found` when the list
+  doesn't hold it); the client's next connection asks again.
+- None of these can be bound to a hotkey or granted to a WASM plugin.
+
+It is a notice with a veto, not a control: a client can pass by naming itself after an
+approved one, and an approved client is trusted no differently from any other token
+holder.
+
 <a id="quarantine"></a>
 ## Effect quarantine
 <!-- @section
@@ -2125,6 +2169,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
 | `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
+| `not_allowed` | Only for a `hello`: the person declined the connection, or didn't answer in time; the server then closes it (0.107, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). A client that doesn't know the code still gets its `message`, so it can report it | `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
