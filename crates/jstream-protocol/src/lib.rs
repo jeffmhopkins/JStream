@@ -51,8 +51,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use camera_motion::{
-    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
-    check_camera_motion,
+    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_POINTER_KIND, FOLLOW_ZOOM_RANGE,
+    FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
 };
 pub use command::{
     Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,

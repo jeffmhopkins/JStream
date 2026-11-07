@@ -1011,7 +1011,9 @@ pub struct SceneInfo {
     pub camera_motion: Vec<CameraMotionModifier>,
     /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
     /// belongs to the family, so a keyframe scene reports none and draws its parent's.
-    /// Omitted for none.
+    /// Since 0.91 it is read from its items' effects (ADR-0120): the first enabled
+    /// `follow_pointer` filter in stacking order, as a follow of that item. Omitted for
+    /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_follow: Option<CameraFollow>,
     /// Its timelines (ADR-0115, since 0.87), ordered by ID: timed cues that

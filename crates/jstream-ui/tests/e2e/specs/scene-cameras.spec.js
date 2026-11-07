@@ -96,7 +96,7 @@ test('scene properties give a scene a camera, and Alt-drag orbits it', async ({ 
   await expect.poll(async () => JSON.stringify(await corners(page))).toBe(JSON.stringify(before));
 });
 
-// A window capture so Follow pointer can be turned on. The mock describes no kinds.
+// A window capture so Follow pointer can be added. The mock describes no kinds.
 const WINDOW = [
   {
     kind_id: 'window', category: 'source', name: 'Window capture', version: 1, video: true, audio: false,
@@ -123,10 +123,8 @@ test('the 3D camera section fits the settings column', async ({ page, daemon }) 
   const dialog = await sceneProperties(page);
   await dialog.getByRole('checkbox', { name: '3D camera' }).check();
   await dialog.getByRole('checkbox', { name: 'Depth of field' }).check();
-  const follow = dialog.getByRole('checkbox', { name: 'Follow pointer' });
-  await expect(follow).toBeEnabled();
-  await follow.check();
-  await expect(dialog.getByRole('textbox', { name: 'From the right' })).toBeVisible();
+  // Follow pointer is a filter on the capture (ADR-0120): the section offers to add it.
+  await expect(dialog.getByRole('button', { name: 'Add Follow pointer…' })).toBeVisible();
   await dialog.getByRole('button', { name: '+ Add camera motion' }).click();
 
   // Default 860-wide dialog, then the dialog clamped to a shorter viewport.
@@ -143,6 +141,6 @@ test('the 3D camera section fits the settings column', async ({ page, daemon }) 
   expect(aligned).toBe(true);
 
   // The angle stepper keeps room for the number, not only the degree mark.
-  const yawWidth = await dialog.getByRole('textbox', { name: 'From the right' }).evaluate((el) => el.clientWidth);
-  expect(yawWidth).toBeGreaterThan(28);
+  const rollWidth = await dialog.locator('input[aria-label="Roll"]').evaluate((el) => el.clientWidth);
+  expect(rollWidth).toBeGreaterThan(28);
 });

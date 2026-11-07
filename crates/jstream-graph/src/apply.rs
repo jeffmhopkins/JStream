@@ -441,7 +441,7 @@ fn apply_edit(
     if let Some(applied) = crate::organise::apply(state, edit, at) {
         return applied;
     }
-    if let Some(applied) = crate::camera::apply(state, edit, at) {
+    if let Some(applied) = crate::camera::apply(state, kinds, edit, at) {
         return applied;
     }
     if let Some(applied) = crate::timeline::apply(state, edit, at) {
@@ -469,7 +469,6 @@ fn apply_edit(
                 options: SceneOptions::default(),
                 camera: None,
                 camera_motion: Vec::new(),
-                camera_follow: None,
                 timelines: BTreeMap::new(),
                 items: Vec::new(),
                 variant_of: None,
@@ -574,7 +573,6 @@ fn apply_edit(
             for (item_id, o) in scene.overrides.iter() {
                 inverse.extend(keyframe::write_edits(&scene.id, item_id, o));
             }
-            // After its items, which a follow camera names.
             inverse.extend(crate::camera::restore(&scene));
             inverse.extend(crate::timeline::restore(&scene));
             Ok(inverse)
