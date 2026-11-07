@@ -235,7 +235,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   time, kept when its names are out of date, with a warning in the log, never renewed
   silently), `device_file` beside the token file, and pairing on, so the loopback
   listener (which the window uses) opens codes and `pairing.start` names the network
-  listener's addresses and fingerprint (protocol 0.101). A certificate that can't be
+  listener's addresses and fingerprint (protocol 0.97). A certificate that can't be
   used is logged and the app starts without network access. Any other failed start with
   the listener (most likely its port in use) is logged and retried without it; a cause
   that isn't the listener's fails the retry too, with its own error. The page is told
