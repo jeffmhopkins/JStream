@@ -77,9 +77,10 @@ export async function disconnect(page) {
  * tab of its group is shown. A click on a shown lone panel would collapse it, so a shown
  * one is left alone. */
 export async function showPanel(page, name) {
-  const tab = page.getByRole('tab', { name, exact: true });
+  // The dock's own tabs: the Inspector has a Transform tab of its own.
+  const tab = page.locator('.dock-strip').getByRole('tab', { name, exact: true });
   if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
-  await expect(page.getByRole('tabpanel', { name, exact: true })).toBeVisible();
+  await expect(page.locator('.dock-panel').and(page.getByRole('tabpanel', { name, exact: true }))).toBeVisible();
 }
 
 /** The revision the header last heard of, as a number. */
