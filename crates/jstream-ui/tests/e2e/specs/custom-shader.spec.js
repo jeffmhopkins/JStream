@@ -4,7 +4,8 @@
 // engine names. Save as pack… writes it under a chosen ID and moves the filter there,
 // and an `@renamed` line raises the manifest's version with its `renames`. The mock engine loads no packs and describes no kinds, so the page's
 // socket answers `kind.list`, `kind.describe`, `pack.list`, `pack.read` and `pack.write`
-// here, from the packs the test writes; every other message goes on to the mock daemon.
+// here, from the packs the test writes, and refuses a filter of a written pack with a
+// setting its kind doesn't declare; every other message goes on to the mock daemon.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 const SHARPEN = {
@@ -12,19 +13,17 @@ const SHARPEN = {
   params: [{ id: 'amount', type: 'float', min: 0, max: 1, step: 0.05, default: 0.2, label: 'Amount', live: true }],
 };
 
-/** The kind a written custom shader pack has: its manifest's name and version, and the
- * template's two settings. */
+/** The kind a written custom shader pack has: its manifest's name and version, and a
+ * setting per `// @param` line of its shader (a colour or a float). */
 function shaderKind(pack, files) {
   const manifest = files.find((f) => f.path === 'effect.toml')?.text ?? '';
+  const shader = files.find((f) => f.path === 'shader.wgsl')?.text ?? '';
   const name = /^name = "(.*)"$/m.exec(manifest)?.[1] ?? 'Custom shader';
   const version = Number(/^version = (\d+)$/m.exec(manifest)?.[1] ?? 1);
-  return {
-    kind_id: `${pack}/shader`, category: 'video_filter', name, version, video: true, audio: false,
-    params: [
-      { id: 'amount', type: 'float', min: 0, max: 1, default: 0.5, label: 'Amount', live: true },
-      { id: 'tint', type: 'color', alpha: true, default: '#ff9a3cff', label: 'Tint', live: true },
-    ],
-  };
+  const params = [...shader.matchAll(/^\/\/ @param (\S+) (\S+)/gm)].map(([, id, type]) => (type === 'color'
+    ? { id, type: 'color', alpha: true, default: '#ff9a3cff', label: id, live: true }
+    : { id, type: 'float', min: 0, max: 1, default: 0.5, label: id, live: true }));
+  return { kind_id: `${pack}/shader`, category: 'video_filter', name, version, video: true, audio: false, params };
 }
 
 /** Adds a Custom shader to the Backdrop from Add filter, and returns its editor. */
@@ -40,10 +39,13 @@ async function addCustomShader(page) {
 }
 
 /** Answers the kind and pack calls from the packs written so far. A shader holding
- * `BROKEN` fails to compile, as the engine reports it, on the line that holds it. */
+ * `BROKEN` fails to compile, as the engine reports it, on the line that holds it. A
+ * batch adding a filter of a written pack with a setting its kind doesn't declare is
+ * refused, as the engine refuses it; the others go on to the mock daemon. */
 async function fakePacks(page) {
   const packs = new Map();
   const writes = [];
+  const adds = [];
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result });
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
@@ -59,7 +61,17 @@ async function fakePacks(page) {
       const action = call?.kind === 'action' ? call.action : null;
       const kinds = [SHARPEN, ...[...packs].map(([pack, files]) => shaderKind(pack, files))];
       const info = (id) => ({ id, folder: id, kinds: [`${id}/shader`], loaded: true });
-      if (query?.type === 'kind.list') {
+      const added = call?.kind === 'batch' ? call.edits.filter((e) => e.type === 'filter.add') : [];
+      const stale = added.flatMap((edit) => {
+        const kind = kinds.find((k) => k.kind_id === edit.kind && packs.has(edit.kind.split('/')[0]));
+        return kind ? Object.keys(edit.settings ?? {}).filter((id) => !kind.params.some((p) => p.id === id)) : [];
+      });
+      adds.push(...added);
+      if (stale.length > 0) {
+        const reason = `\`${stale[0]}\` is not a parameter of kind`;
+        const error = { code: 'invalid_argument', field: 'settings', reason, message: `invalid \`settings\`: ${reason}` };
+        ws.send(JSON.stringify({ type: 'error', id: parsed.id, error }));
+      } else if (query?.type === 'kind.list') {
         const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
         ws.send(answer(parsed.id, { kind: 'query', result: { type: 'kind.list', kinds: list } }));
       } else if (query?.type === 'kind.describe' && kinds.some((k) => k.kind_id === query.kind_id)) {
@@ -88,7 +100,7 @@ async function fakePacks(page) {
     });
     server.onMessage((message) => ws.send(message));
   });
-  return { writes };
+  return { writes, adds };
 }
 
 test('Custom shader writes a pack and opens an editor that colours, indents and compiles it', async ({ page, daemon }) => {
@@ -145,9 +157,18 @@ test('Custom shader writes a pack and opens an editor that colours, indents and 
 });
 
 test('Save as pack… writes the shader under a new ID and moves the filter to it', async ({ page, daemon }) => {
-  const { writes } = await fakePacks(page);
+  const { writes, adds } = await fakePacks(page);
   await connect(page, daemon);
   let editor = await addCustomShader(page);
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
+  // A value for `amount`, set in the Filters window, for the move to carry.
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toBeHidden();
+  const window = page.getByRole('dialog', { name: 'Filters', exact: true });
+  const amount = window.getByRole('spinbutton').first();
+  await amount.fill('0.25');
+  await amount.press('Tab');
+  await window.getByRole('button', { name: 'Edit shader…' }).click();
   await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
   const code = editor.getByRole('textbox', { name: 'Shader (WGSL)' });
 
@@ -189,4 +210,7 @@ test('Save as pack… writes the shader under a new ID and moves the filter to i
   // The Backdrop's chain holds one filter of the new kind in the old one's place.
   const rows = page.locator('.filters-panel').getByRole('list', { name: 'Video filters' }).getByRole('listitem');
   await expect(rows.locator('.filter-name')).toHaveText(['Sharpen', 'Blur', 'Warm look']);
+  // The new filter took the value under its new ID, and nothing the kind doesn't declare.
+  expect(adds.at(-1).kind).toBe('warm-look/shader');
+  expect(adds.at(-1).settings).toEqual({ mix_amount: 0.25 });
 });

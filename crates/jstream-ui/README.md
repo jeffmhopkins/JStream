@@ -678,11 +678,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
   the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
-  manifest's version by one and adds the pair to `renames` (`Declared::version`), so a
-  filter saved before the rename loads with its value under the new ID (ADR-0025).
+  manifest's version by one and adds the pair to `renames` (`Declared::version`,
+  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
+  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
+  new one at its default; the template says so, and asks that no `@renamed` line be
+  deleted, since each is a version.
   Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
   checks it against `pack.list`) and moves only the filter being edited to the new
-  kind (`move_to_kind`: a remove and an add in its place, one batch); the old pack
+  kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
+  carried through the renames and fitted to the new kind's descriptor, since the engine
+  refuses a key the kind doesn't declare); the old pack
   stays for any other filter of it, and the window opens the editor on the new one.
   The coloured copy is sized to the textarea's box inside its scrollbars, through
   CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.

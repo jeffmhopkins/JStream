@@ -62,8 +62,9 @@ pub const TEMPLATE: &str = r#"// @name Custom shader
 //   // @param <id> bool = true "Label"            (a u32: 1 is on)
 //   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
 //   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
-// A setting given a new ID keeps its saved values with a `// @renamed <old> <new>`
-// line; keep the line for as long as filters saved before the rename may load.
+// Give a setting a new ID with a `// @renamed <old> <new>` line: Save as pack… carries
+// the value over, and the pack records the rename (the engine doesn't move saved
+// values yet). Never delete the line: each one is a version.
 //
 // Built in: src(uv) is the input at uv (premultiplied linear light), texel(px) one of
 // its pixels, frame.in_size and frame.out_size the sizes in pixels, frame.time the
@@ -944,9 +945,10 @@ pub fn ShaderEditor(
     opened: Opened,
     /// Closes the editor.
     close: impl Fn() + Copy + Send + Sync + 'static,
-    /// Moves the filter being edited to the custom shader in the pack named, once
-    /// Save as pack… has written and loaded it (#1295).
-    save_as: impl Fn(String) + Copy + Send + Sync + 'static,
+    /// Moves the filter being edited to the custom shader in the pack named, carrying
+    /// its settings through the shader's renames, once Save as pack… has written and
+    /// loaded it (#1295).
+    save_as: impl Fn(String, Vec<(String, String)>) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
@@ -1129,8 +1131,10 @@ pub fn ShaderEditor(
             return;
         };
         let id = new_id.get_untracked().trim().to_owned();
-        let files = match pack_files(&id, &text.get_untracked()) {
-            Ok(files) => files,
+        let wgsl = text.get_untracked();
+        let found = pack_files(&id, &wgsl).and_then(|files| Ok((files, declared(&wgsl)?.renames)));
+        let (files, renames) = match found {
+            Ok(found) => found,
             Err(error) => {
                 save_problem.set(Some(format!("The shader’s {error}.")));
                 return;
@@ -1157,13 +1161,13 @@ pub fn ShaderEditor(
                     .await
                     .map_err(|error| error.to_string())?;
                 studio.relist_kinds(&s).await;
-                Ok(())
+                Ok(renames)
             }
             .await;
             _ = saving.try_set(false);
             match result {
-                Ok(()) => {
-                    save_as(id);
+                Ok(renames) => {
+                    save_as(id, renames);
                     close();
                 }
                 Err(error) => _ = save_problem.try_set(Some(error)),

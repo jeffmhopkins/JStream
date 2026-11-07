@@ -77,7 +77,8 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`, reads the input with \
 `src(in.uv)` (premultiplied linear) and each setting as `p.<id>`. To rename a \
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
-add `renames = { <old> = \"<new>\" }`, so saved filters keep their values. \
+add `renames = { <old> = \"<new>\" }`. The engine doesn't move saved values through \
+renames yet, so set the new ID on existing filters with `filter.set_settings`. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \

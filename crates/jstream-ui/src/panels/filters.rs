@@ -1042,17 +1042,29 @@ fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo
     })
 }
 
-/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to kind
-/// `kind`: it goes, and a filter `new_id` of that kind takes its place with its
-/// settings and on or off. Save as pack… sends them for a custom shader (#1295).
+/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to `kind`: it
+/// goes, and a filter `new_id` of that kind takes its place, on or off as it was, with
+/// its settings carried through `renames` (each old ID's value moves to its new ID,
+/// unless that ID has one) and fitted to `kind` ([`fit_settings`]). The engine refuses
+/// a key the new kind doesn't declare, and doesn't apply an effect's renames itself
+/// yet. Save as pack… sends them for a custom shader (#1295).
 pub fn move_to_kind(
     owner: &FilterOwner,
     chain: FilterChain,
     index: usize,
     filter: &FilterInfo,
     new_id: FilterId,
-    kind: String,
+    kind: &KindDescriptor,
+    renames: &[(String, String)],
 ) -> Vec<Edit> {
+    let mut carried = filter.settings.clone();
+    for (old, new) in renames {
+        if !carried.0.contains_key(new)
+            && let Some(value) = carried.0.remove(old)
+        {
+            carried.0.insert(new.clone(), value);
+        }
+    }
     vec![
         Edit::FilterRemove {
             owner: owner.clone(),
@@ -1062,8 +1074,8 @@ pub fn move_to_kind(
             owner: owner.clone(),
             chain,
             filter_id: new_id,
-            kind,
-            settings: filter.settings.clone(),
+            kind: kind.kind_id.clone(),
+            settings: fit_settings(kind, &carried),
             enabled: (!filter.enabled).then_some(false),
             index: u32::try_from(index).ok(),
         },
@@ -2598,7 +2610,7 @@ fn FilterPane(target: Target) -> impl IntoView {
     // its place, which the window then shows with the editor open on it.
     let save_as = {
         let target = target.clone();
-        move |new: String| {
+        move |new: String, renames: Vec<(String, String)>| {
             let Some(s) = session.get() else {
                 return;
             };
@@ -2615,6 +2627,15 @@ fn FilterPane(target: Target) -> impl IntoView {
             };
             let owner = target.owner.clone();
             spawn_local(async move {
+                let kind = match studio.descriptor(&s, &custom_shader::kind_of(&new)).await {
+                    Ok(kind) => kind,
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                        return;
+                    }
+                };
                 let new_id = FilterId::new(studio.fresh_id(&s, "filter"));
                 let edits = move_to_kind(
                     &owner,
@@ -2622,7 +2643,8 @@ fn FilterPane(target: Target) -> impl IntoView {
                     index,
                     &filter,
                     new_id.clone(),
-                    custom_shader::kind_of(&new),
+                    &kind,
+                    &renames,
                 );
                 dialogs.sent(&edits);
                 match apply(&s, edits, None).await {
@@ -2640,7 +2662,9 @@ fn FilterPane(target: Target) -> impl IntoView {
         }
     };
     let save_as = StoredValue::new(save_as);
-    let save_as = move |new: String| save_as.with_value(|f| f(new));
+    let save_as = move |new: String, renames: Vec<(String, String)>| {
+        save_as.with_value(|f| f(new, renames));
+    };
     let shader_editor = move || {
         let opened = shader.get()?;
         let pack = shader_pack.get_value()?;
@@ -3192,21 +3216,39 @@ mod tests {
             source_id: SourceId::new("cam"),
         };
         let mut settings = Settings::new();
-        settings.insert("amount", serde_json::json!(0.25));
+        settings.insert("amount", json!(0.25));
+        settings.insert("tint", json!("#ff0000ff"));
+        settings.insert("gone", json!(3));
         let filter = FilterInfo {
             filter_id: FilterId::new("f1"),
             kind: "custom-1/shader".into(),
             enabled: false,
-            settings: settings.clone(),
+            settings,
         };
+        // The new kind renamed `amount` and retyped `tint`, and has no `gone`.
+        let mut kind = descriptor(vec![
+            param(
+                "mix_amount",
+                "Amount",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param("tint", "Tint", float(0.0, 1.0, None, None), json!(0.5)),
+        ]);
+        kind.kind_id = "warm/shader".into();
+        let renames = [("amount".to_owned(), "mix_amount".to_owned())];
         let edits = move_to_kind(
             &owner,
             FilterChain::Video,
             2,
             &filter,
             FilterId::new("f9"),
-            "warm/shader".into(),
+            &kind,
+            &renames,
         );
+        let mut fitted = Settings::new();
+        fitted.insert("mix_amount", json!(0.25));
+        fitted.insert("tint", Value::Null);
         assert_eq!(
             edits,
             vec![
@@ -3219,7 +3261,7 @@ mod tests {
                     chain: FilterChain::Video,
                     filter_id: FilterId::new("f9"),
                     kind: "warm/shader".into(),
-                    settings,
+                    settings: fitted,
                     enabled: Some(false),
                     index: Some(2),
                 },
