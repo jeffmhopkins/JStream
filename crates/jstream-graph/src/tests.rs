@@ -4974,6 +4974,85 @@ mod hotkeys {
         assert_eq!(chords(&graph), ["F5", "F6"]);
         assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
     }
+
+    fn pad(note: u8) -> jstream_protocol::Trigger {
+        jstream_protocol::Trigger::MidiNote {
+            note,
+            channel: Some(10),
+            input: None,
+        }
+    }
+
+    fn bind(trigger: jstream_protocol::Trigger, action: Action) -> Edit {
+        Edit::BindingSet { trigger, action }
+    }
+
+    /// Controller bindings (ADR-0122) follow the hotkeys' rules: one binding per trigger,
+    /// set and clear are inverses, and a delete takes the bindings naming its target with
+    /// it, both kinds in the same edit, and undo restores them after the target.
+    #[test]
+    fn controller_bindings_follow_the_hotkeys_rules() {
+        let mut graph = bound();
+        let applied = apply_ok(&mut graph, vec![bind(pad(36), switch("a"))]);
+        assert_eq!(
+            applied.inverse.edits,
+            vec![Edit::BindingClear { trigger: pad(36) }]
+        );
+        assert_eq!(
+            apply_err(&mut graph, vec![bind(pad(36), switch("b"))]),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Binding,
+                id: "MIDI note 36 on channel 10".into(),
+            }
+        );
+        // Any channel is another trigger.
+        let any = jstream_protocol::Trigger::MidiNote {
+            note: 36,
+            channel: None,
+            input: None,
+        };
+        apply_ok(
+            &mut graph,
+            vec![bind(any, switch("b")), bind(pad(37), start("yt"))],
+        );
+        assert_eq!(graph.state().bindings().len(), 3);
+
+        let applied = apply_ok(&mut graph, delete_scene("a"));
+        assert_eq!(
+            applied.removed_bindings,
+            vec![jstream_protocol::Binding::new(pad(36), &switch("a"))]
+        );
+        assert_eq!(applied.removed_hotkeys.len(), 2);
+        let names: Vec<_> = applied.inverse.edits.iter().map(Edit::name).collect();
+        assert_eq!(
+            names,
+            [
+                "scene.create",
+                "scene.reorder",
+                "hotkey.set",
+                "hotkey.set",
+                "binding.set",
+                "source.create"
+            ]
+        );
+        apply_ok(&mut graph, applied.inverse.edits);
+        assert_eq!(graph.state().bindings().len(), 3);
+
+        // delete.plan lists them beside the hotkeys.
+        let Some(Ok(jstream_protocol::QueryResult::DeletePlan { bindings, .. })) =
+            graph.query(&jstream_protocol::Query::DeletePlan {
+                target: DeleteTarget::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            })
+        else {
+            panic!("a plan");
+        };
+        assert_eq!(
+            bindings,
+            vec![jstream_protocol::Binding::new(pad(36), &switch("a"))]
+        );
+    }
 }
 
 /// A stinger preset's scene holds the scene like any other reference (ADR-0025, ADR-0037

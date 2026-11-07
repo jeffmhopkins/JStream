@@ -108,7 +108,7 @@ its own, and is used with default features off.
 
 `MockEngine` (feature `mock`, off by default; clients enable it in
 `dev-dependencies`) keeps scenes, items, sources, outputs, encoder profiles, video
-mixes, buses, sends, hotkey bindings, folders and labels in memory, with an
+mixes, buses, sends, hotkey and controller bindings, folders and labels in memory, with an
 in-memory stand-in for the stream-key store, and follows the protocol's rules for them:
 - the version check in `hello`;
 - atomic batches that bump `rev` by exactly one, and per-client idempotency keys,
@@ -178,6 +178,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     exists), in that order, and
     `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
     profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
+  - controller bindings (ADR-0122): `binding.set`'s `Trigger::problem`, an
+    already-bound trigger, then the hotkeys' action checks (`check_bindable`, shared),
+    and `binding.clear` of an unbound trigger. The same deletes remove the controller
+    bindings naming what they delete, listed in `removed_bindings`.
 
   Error messages may differ; clients match on codes and fields. The mock describes no
   kinds, so it accepts any non-empty builtin kind and any filter kind;
@@ -244,7 +248,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
-  the hotkey bindings (in `state.get`, ordered by chord).
+  the hotkey bindings (in `state.get`, ordered by chord), and the controller bindings
+  (ordered by trigger, omitted while there are none).
   `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
   `scene.switch_and_watch`): the mock has no compositor and answers them with
   `internal`, as it does for any protocol variant it does not implement;
@@ -308,7 +313,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   it replaced; a placement, crop or
   visibility edit undoes with the `scene_id` it was sent with, a deleted output comes
   back with its encoder profile, video mix and filters and the hotkeys its delete
-  removed, hotkey edits undo to the binding as it was, encoder profile and video mix
+  removed, hotkey and controller binding edits undo to the binding as it was, encoder profile and video mix
   edits undo to the profile or mix as it was,
   and `canvas.set_size` undoes to the previous size, and `canvas.set_frame_rate` to the previous rate. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears

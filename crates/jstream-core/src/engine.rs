@@ -3491,6 +3491,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            removed_bindings: applied.removed_bindings,
             dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {

@@ -37,10 +37,14 @@ const V5: &str = include_str!("fixtures/v5.json");
 /// hotkey that plays it (ADR-0115). It must keep loading as version 1 must.
 const V6: &str = include_str!("fixtures/v6.json");
 
-/// A collection file at schema version 7, the current one: version 6 with its follow
-/// camera saved as a `follow_pointer` effect on the screen item (ADR-0120). The same rule
-/// applies once version 8 exists.
+/// A collection file at schema version 7: version 6 with its follow camera saved as a
+/// `follow_pointer` effect on the screen item (ADR-0120). It must keep loading as
+/// version 1 must.
 const V7: &str = include_str!("fixtures/v7.json");
+
+/// A collection file at schema version 8, the current one: version 7 with two controller
+/// bindings (ADR-0122). The same rule applies once version 9 exists.
+const V8: &str = include_str!("fixtures/v8.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -368,6 +372,41 @@ fn v6_graph() -> Graph {
     graph
 }
 
+/// The v6 collection plus two controller bindings (ADR-0122): what version 8 saves.
+fn v8_graph() -> Graph {
+    use jstream_protocol::{Action, Trigger};
+    let mut graph = v6_graph();
+    let applied = graph.apply(
+        &[
+            Edit::BindingSet {
+                trigger: Trigger::MidiNote {
+                    note: 36,
+                    channel: Some(10),
+                    input: Some("Pads".into()),
+                },
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("b"),
+                    preset_id: None,
+                },
+            },
+            Edit::BindingSet {
+                trigger: Trigger::MidiCc {
+                    controller: 64,
+                    channel: None,
+                    input: None,
+                },
+                action: Action::ItemToggle {
+                    item_id: ItemId::new("i_screen"),
+                    scene_id: None,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -383,7 +422,8 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, clears the hotkeys and moves output `rec` back to
+/// deletes the virtual camera `vcam`, clears the hotkeys and the controller bindings
+/// (ADR-0122) and moves output `rec` back to
 /// the master bus, which the parity collection gained after the fixture was written;
 /// `a_virtual_camera_round_trips`, `hotkeys_round_trip` and
 /// `an_outputs_audio_bus_round_trips` cover them.
@@ -412,7 +452,14 @@ fn fixture_graph() -> Graph {
             Edit::HotkeyClear {
                 chord: Chord::new("Ctrl+Digit1"),
             },
-        ],
+        ]
+        .into_iter()
+        .chain(
+            parity::bindings()
+                .into_iter()
+                .map(|b| Edit::BindingClear { trigger: b.trigger }),
+        )
+        .collect::<Vec<_>>(),
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
@@ -431,7 +478,30 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V7);
+    assert_eq!(v8_graph().to_collection_json(), V8);
+}
+
+#[test]
+fn the_v8_fixture_loads_exactly() {
+    let expected = v8_graph();
+    let loaded = load(V8);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 7 upgrades unchanged: it has no controller bindings, and one there is
+/// refused.
+#[test]
+fn the_v7_fixture_loads_with_no_bindings() {
+    let mut file: Value = serde_json::from_str(V7).unwrap_or_default();
+    file["bindings"] = json!([]);
+    assert_eq!(
+        load(&file.to_string()).map(|_| ()),
+        Err(LoadError::Migration {
+            from: 7,
+            reason: "a version 7 file has no `bindings`".into(),
+        })
+    );
 }
 
 #[test]

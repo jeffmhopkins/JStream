@@ -61,7 +61,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
   `send.remove`, `hotkey.set`,
-  `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
@@ -110,6 +110,11 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
   every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
+- **Controller bindings** (`binding.rs`, since 0.96,
+  [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
+  `Trigger`, a MIDI note, control change or program change, on one channel or any, from
+  one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
+  a trigger and its action as reads report it. See [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -305,8 +310,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.91 because a follow camera is a `follow_pointer` filter on a
-capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
+`PROTOCOL_VERSION` is 0.96 because of controller bindings: `binding.set`,
+`binding.clear`, `Trigger`, `Binding`, `state.get`'s `bindings`, `delete.plan`'s
+`bindings`, the batch result's `removed_bindings` and the `binding` entity kind
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md), a
+placeholder number the release queue sets); 0.91 because a follow camera is a
+`follow_pointer` filter on a capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
 release queue sets); 0.89 because a collection can set its base frame rate with
@@ -490,9 +499,9 @@ covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
   canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
-  encoder profiles, two video mixes and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
+  encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path, encoder profile, video mix and hotkey checks, and `item.set_source` and
+  URL, recording path, encoder profile, video mix, hotkey and binding checks, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
   `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
@@ -1107,6 +1116,43 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+<a id="bindings"></a>
+## Controller bindings
+<!-- @section
+covers = ["crates/jstream-protocol/src/binding.rs"]
+depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
+-->
+
+Controller bindings (0.96) are collection state beside the hotkeys
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
+decision 1): a `Trigger` bound to an `Action`. A key chord stays a hotkey, so
+`state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
+expects; every other trigger is a binding, in `bindings`. Where a client listens for a
+chord and sends its action, a controller's messages come from an input the engine reads,
+so the engine runs the action itself, on the first frame at or after the message's time.
+No input feeds bindings yet; the MIDI and JTunnel inputs add them.
+- **Triggers** are tagged by `kind`: `midi_note {note}`, `midi_cc {controller}` and
+  `midi_program {program}`, each 0 to 127, with an optional `channel` (1 to 16, as a
+  device's panel shows it; missing for any channel) and an optional `input` (the name of
+  a MIDI port or JTunnel sender, at most 64 bytes; missing for any). A note fires on
+  note-on, a control change when its value crosses from 63 or below to 64 or above (so a
+  button sending 127 then 0 fires once), a program change each time. Two triggers are
+  the same exactly when they are equal, so channel 1 and any channel are two bindings,
+  and a message matching both fires both. Anything else is `invalid_argument` on
+  `trigger.<field>`, with `Trigger::problem`'s reason.
+- **`binding.set {trigger, action}`** binds a trigger; its inverse is `binding.clear`.
+  It is refused with `already_exists` (entity `binding`, the trigger as `Display`
+  writes it, such as `MIDI note 36 on channel 10`, as `id`) for a trigger that is
+  bound. The action is checked as `hotkey.set` checks it: the same actions can't be
+  bound, and an object it names must exist.
+- **`binding.clear {trigger}`** removes a binding, or is `not_found` (entity
+  `binding`); its inverse is `binding.set` with the action.
+- **Deletes remove bindings** as they remove hotkeys, in the same edit, and their
+  inverses restore them after the hotkeys. A batch's result lists them in
+  `removed_bindings`, and `delete.plan` in `bindings`, ordered by trigger.
+- Reads report a binding as a `Binding {trigger, action}` whose `action` is plain JSON,
+  as `HotkeyBinding`'s is. `Binding::action` parses it.
+
 <a id="organisation"></a>
 ## Folders, labels and scene options
 <!-- @section
@@ -1270,7 +1316,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
   produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
-  omitted when there are none) and `dropped_overrides` when it dropped keyframe
+  omitted when there are none), `removed_bindings` likewise for controller bindings
+  (0.96) and `dropped_overrides` when it dropped keyframe
   overrides (0.39; omitted when there are none). Queries that read collection state report the `rev` they read.
 
 <a id="queries"></a>
@@ -1290,7 +1337,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ordered by ID; missing from a pre-0.28 server, it parses as empty), the `buses` and
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
-  parses as empty), the master stage (`master`, with its filter chains; omitted while
+  parses as empty), every controller binding (`bindings`, ordered by trigger; omitted
+  when there are none, so missing, also from a pre-0.96 server, parses as empty), the
+  master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
   it parses as the one initial `cut`), and the `folders` and `labels` in their orders
@@ -1425,7 +1474,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   and by the outputs that carry it, which the plan moves; its `bus.delete` takes its
   sends. A target nothing refers to plans just its own
   delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
-  by chord (0.25; omitted when there are none); they need no edit of their own. The client
+  by chord (0.25; omitted when there are none), and `bindings` the controller bindings,
+  ordered by trigger (0.96; omitted when there are none); they need no edit of their
+  own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG, never a video mix (there is no
@@ -1869,7 +1920,7 @@ a scoped `Control`, which checks every call against the plugin's grant before it
 the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 - **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
-  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding and studio
   edits, among them a scene's folder, metadata and transitions, a source's metadata, an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
   a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
@@ -1888,7 +1939,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   command can't reach plugins unreviewed.
 - **Checking a call.** `plugin_classes` collects the class of every command a call
   carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
-  the class of the action it binds, since a person's key press runs it: with `edit`
+  and `binding.set` the class of the action it binds, since a person's key press or
+  pad runs it: with `edit`
   alone a plugin can't bind `output.start`. A call needing a class outside the grant,
   naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
   the call's first command as `call`.
@@ -2126,7 +2178,8 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
   answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
-  0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
+  0.96 adds `binding` the same way, named only by an error answering a `binding.*`
+  edit. 0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
