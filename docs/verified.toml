@@ -6536,6 +6536,15 @@ stamp = { hash = "b3:1f6e2ff586d5963f", by = "agent:release-thread", note = "Gat
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
 stamp = { hash = "b3:bc5ef3676199eab8", by = "agent:release-thread", note = "Gate paragraph adds ADR-0109: with no marker for the head, a pass from the latest round carries if the head only merges the base branch into the reviewed head with the PR diff unchanged; matches review-gate.yml (carryCandidate; onlyBaseMerges skips the base's own commits a merge brought in and requires each of the PR's own later commits to be a merge with a parent in the base or a ledger-only restamp; sameChange: same files and +/- lines, ledger ignored; fails closed on missing files, a missing patch, 300 files, over 100 commits or an API error)" }
 
+["ROADMAP#beta"."body"]
+stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
+
+["ROADMAP#beta"."dep:docs/runbooks/release.md#version"]
+stamp = { hash = "b3:ef078d22b4977c46", by = "agent:beta-bar", note = "New section: re-read against Jeff's three scope decisions (Windows only, unsigned, no compatibility promise) and against the beta.1 release and targets added to docs/progress.toml; its links resolve to release.md#version and windows-hardware-pass.md#setup" }
+
+["ROADMAP#beta"."dep:docs/runbooks/windows-hardware-pass.md#setup"]
+stamp = { hash = "b3:334612f11ae5b106", by = "agent:beta-bar", note = "New section: re-read against Jeff's three scope decisions (Windows only, unsigned, no compatibility promise) and against the beta.1 release and targets added to docs/progress.toml; its links resolve to release.md#version and windows-hardware-pass.md#setup" }
+
 ["ROADMAP#endgame"."body"]
 stamp = { hash = "b3:51a30f126bdeee93", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section, whole text re-read: done means every M0-M3 item in docs/progress.toml is done, merged on main with its Windows run passed where it needs one, and an item leaves M3 only when the maintainer moves it to Later; it links README#progress's What's left table generated from needs. Five steps, side by side, ordered by what lands first: 1 land the open waves in milestone order (RUNBOOK-WAVES#landing), build items finishing into their wave; 2 Windows runs by the maintainer, re-run after a later build changes an item; 3 the maintainer's ADR-0058 OAuth client, until which daemon sign-in and signed-in YouTube features stay hidden, and which platforms are supported (Linux first, macOS stays or moves to Later); 4 Linux after its codec-path ADR and macOS after its own ADR, as M3 plans; 5 release check running the M1-M3 demos from a clean checkout, 1.0 being the maintainer's call since it removes the deprecated forms (ADR-0022). All hold against the rows and those docs." }
 
