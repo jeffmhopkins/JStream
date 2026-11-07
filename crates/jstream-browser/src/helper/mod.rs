@@ -370,10 +370,13 @@ impl Host {
     }
 
     fn open(self: &Arc<Self>, id: u32, spec: &PageSpec) {
+        let policy = RequestPolicy::for_page(spec);
+        // A page given as HTML loads from a host of its own (#1035).
+        let html_url = policy.html_url();
         // A grant on a page with no document of its own (a blank page) gets nothing.
         let page_api = spec
             .page_api
-            .and_then(|api| Some((api, ApiHome::of(&spec.location)?)));
+            .and_then(|api| Some((api, ApiHome::of(&spec.location, html_url.as_deref())?)));
         let page = Arc::new(PageShared {
             id,
             size: (spec.size.width(), spec.size.height()),
@@ -387,7 +390,7 @@ impl Host {
             reloading: Mutex::new(ReloadHold::opening()),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
-            policy: RequestPolicy::for_page(spec),
+            policy,
             page_api: page_api.as_ref().map(|_| Mutex::new(PageCache::default())),
             html: match &spec.location {
                 crate::PageLocation::Html(html) => Some(Arc::from(html.as_bytes())),
@@ -407,7 +410,8 @@ impl Host {
             ..Default::default()
         };
         let mut client = handlers::client(&page);
-        let url: CefString = spec.location.to_url().as_str().into();
+        let url = html_url.unwrap_or_else(|| spec.location.to_url());
+        let url: CefString = url.as_str().into();
         // A granted page's grant and rule cross to its renderer here, and it gets a
         // request context of its own, so its renderer process is never shared with
         // another source's page (ADR-0102 decision 3). In memory, as every page's is.
@@ -536,7 +540,7 @@ pub(crate) struct PageShared {
     /// What the page may request; the request handler cancels the rest.
     pub(crate) policy: RequestPolicy,
     /// The HTML of a page given as its HTML, which the request handler answers its URL
-    /// with ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL), #1035); `None` for other pages.
+    /// with ([`RequestPolicy::html_url`], #1035); `None` for other pages.
     pub(crate) html: Option<Arc<[u8]>>,
 }
 

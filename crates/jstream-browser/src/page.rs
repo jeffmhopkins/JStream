@@ -20,13 +20,16 @@ pub const DEFAULT_CSS: &str =
 /// The longest HTML a page given as text takes ([`PageLocation::Html`]), in bytes.
 pub const MAX_HTML_BYTES: usize = 128 * 1024;
 
-/// Where a page given as its HTML ([`PageLocation::Html`]) loads from (#1035): a fixed
-/// `https` URL on a reserved name (`.invalid` never resolves, RFC 6761) that the helper
-/// answers itself with the page's HTML, so the page has an origin of its own, not the
-/// opaque one of a `data:` URL. Its `local_network` opt-in then covers that origin
-/// exactly, as a web page's covers its own, and never a frame inside it. No request for
-/// it reaches the network: the request policy refuses every other request to the name.
-pub const HTML_PAGE_URL: &str = "https://html.jstream.invalid/";
+/// The reserved name pages given as their HTML ([`PageLocation::Html`]) load under
+/// (#1035; `.invalid` never resolves, RFC 6761). Each such page loads from an `https`
+/// URL on a host of its own below it, `https://p<n>.html.jstream.invalid/`
+/// ([`RequestPolicy::html_url`](crate::RequestPolicy::html_url)), which the helper
+/// answers itself with the page's HTML. So the page has an origin of its own, not the
+/// opaque one of a `data:` URL, and shares neither storage nor its opt-in with another
+/// source. Its `local_network` opt-in covers that origin exactly, as a web page's covers
+/// its own, and never a frame inside it. No request for it reaches the network: the
+/// request policy refuses every other request to a name under this one.
+pub const HTML_PAGE_DOMAIN: &str = "html.jstream.invalid";
 
 /// The longest URL a page takes, in bytes.
 const MAX_URL_BYTES: usize = 8 * 1024;
@@ -48,8 +51,8 @@ pub struct PageSpec {
     /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, for a page from a URL it
     /// covers only the origin of the source's own URL: a third-party frame inside it, or
     /// a page it navigates or redirects to, is refused all the same (#721). An inline
-    /// [`PageLocation::Html`] page's opt-in covers its own origin ([`HTML_PAGE_URL`]) the
-    /// same way (#1035).
+    /// [`PageLocation::Html`] page's opt-in covers its own origin (under
+    /// [`HTML_PAGE_DOMAIN`]) the same way (#1035).
     pub local_network: bool,
     /// The page API it is granted (ADR-0102): `window.jstream` in its main frame while
     /// that shows the source's own document, with these members. `None`, the default
@@ -66,10 +69,11 @@ pub enum PageLocation {
     Web(String),
     /// A local HTML file, by its absolute host path.
     File(PathBuf),
-    /// A page given as its HTML, at most [`MAX_HTML_BYTES`]: loaded from
-    /// [`HTML_PAGE_URL`], which the helper answers with it (#1035), so it has that origin,
-    /// no folder to load files from, and no access to this computer or the local network
-    /// unless its spec opts in ([`RequestPolicy`](crate::RequestPolicy)). Being `https`,
+    /// A page given as its HTML, at most [`MAX_HTML_BYTES`]: loaded from a host of its own
+    /// under [`HTML_PAGE_DOMAIN`], which the helper answers with it (#1035), so it has that
+    /// origin, no folder to load files from, and no access to this computer or the local
+    /// network unless its spec opts in ([`RequestPolicy`](crate::RequestPolicy)). Being
+    /// `https`,
     /// it is a secure context, and Chromium refuses its plain `http` scripts and frames as
     /// mixed content (an `http` image or media file is upgraded to `https`).
     Html(String),
@@ -141,7 +145,9 @@ impl PageLocation {
             Self::Blank => "about:blank".to_owned(),
             Self::Web(url) => url.clone(),
             Self::File(path) => file_url(path),
-            Self::Html(_) => HTML_PAGE_URL.to_owned(),
+            // The reserved name; the helper loads each page from a host of its own
+            // below it (`RequestPolicy::html_url`).
+            Self::Html(_) => format!("https://{HTML_PAGE_DOMAIN}/"),
         }
     }
 }
@@ -236,7 +242,7 @@ mod tests {
         assert_eq!(PageLocation::html(" \n "), Ok(PageLocation::Blank));
         let page = PageLocation::html("<b>é</b>").expect("short HTML");
         assert_eq!(page, PageLocation::Html("<b>é</b>".into()));
-        assert_eq!(page.to_url(), HTML_PAGE_URL);
+        assert_eq!(page.to_url(), "https://html.jstream.invalid/");
         assert!(PageLocation::html(&"a".repeat(MAX_HTML_BYTES)).is_ok());
         assert!(matches!(
             PageLocation::html(&"a".repeat(MAX_HTML_BYTES + 1)),

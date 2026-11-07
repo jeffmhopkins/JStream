@@ -263,11 +263,11 @@ private, link-local and local-name targets, redirects to them included, unless i
 the source's own origin and the source sets `local_network`. It is decided per request
 by the origin that makes it, so for a web page the opt-in never covers a third-party
 frame, and a file or blank page whose main frame navigates to the web loses its own
-access. A page given as HTML (the `html` setting) loads from a reserved `https` origin
-that the helper answers itself (#1035), loads no local files, and reaches no local
-targets unless its source sets `local_network`; its opt-in then covers that origin
-exactly, as a web page's covers its own, and only its main frame loads from the reserved
-name. CEF on Linux names the opaque origin `null`, not none, as
+access. A page given as HTML (the `html` setting) loads from an `https` origin of its
+own, a host under a reserved domain that the helper answers itself (#1035), so no two
+sources share storage. It loads no local files, and reaches no local targets unless its
+source sets `local_network`; its opt-in then covers that origin exactly, as a web page's
+covers its own, and only its main frame loads from the reserved names. CEF on Linux names the opaque origin `null`, not none, as
 the initiator of a web source's own first load (#1069), so a main-frame load the helper
 itself started, to the source's own origin with a `null` initiator while the main frame
 hasn't left that origin, is judged as the browser's own. The helper marks the URL it

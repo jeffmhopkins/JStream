@@ -32,11 +32,12 @@
 //!     page: once the main frame navigates to the web
 //!     ([`main_frame_to`](RequestPolicy::main_frame_to)), an opaque frame inside it is
 //!     the web's;
-//!   - an inline HTML source loads from a reserved origin of its own
-//!     ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL), #1035), which its opt-in covers as a web
-//!     page's covers its own. Nothing else loads from that name: only the page's own main
-//!     frame may load its URL, which the helper answers with the HTML, and every other
-//!     request to the name is refused;
+//!   - an inline HTML source loads from an origin of its own, a host under the reserved
+//!     [`HTML_PAGE_DOMAIN`](crate::HTML_PAGE_DOMAIN) ([`html_url`](RequestPolicy::html_url),
+//!     #1035), which its opt-in covers as a web page's covers its own. Nothing else loads
+//!     from those names: only the page's own main frame may load its URL, which the helper
+//!     answers with the HTML, and every other request to a name under the domain is
+//!     refused;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own. CEF on Linux names
 //!     `null` instead for the source's own first load (#1069), so a main-frame load the
@@ -105,9 +106,9 @@ enum Home {
     File,
     /// A blank page.
     Blank,
-    /// A page given as its HTML, served from the reserved origin of
-    /// [`HTML_PAGE_URL`](crate::HTML_PAGE_URL) (#1035).
-    Html,
+    /// A page given as its HTML, served from this origin, a host of its own under
+    /// [`HTML_PAGE_DOMAIN`](crate::HTML_PAGE_DOMAIN) (#1035).
+    Html(Origin),
 }
 
 /// A web origin, as [`Origin::parse`] reads it.
@@ -154,7 +155,15 @@ impl RequestPolicy {
             PageLocation::Web(url) => Home::Web(Origin::parse(url)),
             PageLocation::File(_) => Home::File,
             PageLocation::Blank => Home::Blank,
-            PageLocation::Html(_) => Home::Html,
+            PageLocation::Html(_) => Home::Html(Origin {
+                scheme: "https".to_owned(),
+                host: format!(
+                    "p{}.{}",
+                    NEXT_HTML_PAGE.fetch_add(1, Ordering::Relaxed),
+                    crate::HTML_PAGE_DOMAIN
+                ),
+                port: None,
+            }),
         };
         let home_local = match &home {
             // A page whose host can't be read counts as one from the internet.
@@ -162,7 +171,7 @@ impl RequestPolicy {
             Home::File | Home::Blank => true,
             // Given as text, by whoever edits the source: like a page from the internet,
             // it reaches the local network only when its spec opts in.
-            Home::Html => false,
+            Home::Html(_) => false,
         };
         let folder = match location {
             PageLocation::File(file) => file.parent().and_then(|dir| {
@@ -173,16 +182,28 @@ impl RequestPolicy {
             }),
             PageLocation::Blank | PageLocation::Web(_) | PageLocation::Html(_) => None,
         };
+        let own_load = match (location, &home) {
+            (_, Home::Html(origin)) => Some(html_url(origin)),
+            (PageLocation::Web(url), _) => Some(url.clone()),
+            _ => None,
+        };
         Self {
             folder,
             home,
             home_local,
             left_home: AtomicBool::new(false),
-            own_load: Mutex::new(match location {
-                PageLocation::Web(_) | PageLocation::Html(_) => Some(location.to_url()),
-                PageLocation::Blank | PageLocation::File(_) => None,
-            }),
+            own_load: Mutex::new(own_load),
             denied: AtomicU64::new(0),
+        }
+    }
+
+    /// The URL a page given as HTML loads from, on its own host under
+    /// [`HTML_PAGE_DOMAIN`](crate::HTML_PAGE_DOMAIN) (#1035): the helper loads it and
+    /// answers it with the page's HTML. `None` for every other page.
+    pub fn html_url(&self) -> Option<String> {
+        match &self.home {
+            Home::Html(origin) => Some(html_url(origin)),
+            Home::Web(_) | Home::File | Home::Blank => None,
         }
     }
 
@@ -258,11 +279,12 @@ impl RequestPolicy {
     }
 
     /// Whether `url` is the page given as HTML, for a main-frame request: the helper
-    /// answers it with the page's HTML ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL)), its
-    /// query and fragment ignored. Refused for every other page, and for every other path
-    /// on the reserved name.
+    /// answers it with the page's HTML ([`html_url`](Self::html_url)), its query and
+    /// fragment ignored. Refused for every other page, and for every other URL under the
+    /// reserved domain.
     pub fn html_page(&self, url: &str) -> Verdict {
-        if self.home == Home::Html && same_load(&strip_query(url), crate::HTML_PAGE_URL) {
+        let own = self.html_url();
+        if own.is_some_and(|own| same_load(&strip_query(url), &own)) {
             Verdict::Allow
         } else {
             Verdict::Deny("nothing loads from the name reserved for pages given as HTML")
@@ -275,7 +297,7 @@ impl RequestPolicy {
     fn own_origin(&self) -> Option<Origin> {
         match &self.home {
             Home::Web(Some(origin)) => Some(origin.clone()),
-            Home::Html => Origin::parse(crate::HTML_PAGE_URL),
+            Home::Html(origin) => Some(origin.clone()),
             Home::Web(None) | Home::File | Home::Blank => None,
         }
     }
@@ -338,7 +360,7 @@ impl RequestPolicy {
         let home = match &self.home {
             Home::File => scheme.as_deref() == Some("file"),
             Home::Blank => scheme.as_deref() == Some("about"),
-            Home::Html | Home::Web(_) => {
+            Home::Html(_) | Home::Web(_) => {
                 self.own_origin().is_some() && Origin::parse(url) == self.own_origin()
             }
         };
@@ -403,16 +425,26 @@ impl RequestPolicy {
     }
 }
 
-/// Whether `url` is on the name reserved for pages given as HTML
-/// ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL)), in any scheme or port.
+/// The counter that gives each page given as HTML a host of its own.
+static NEXT_HTML_PAGE: AtomicU64 = AtomicU64::new(1);
+
+/// The URL of the page given as HTML whose origin is `origin`.
+fn html_url(origin: &Origin) -> String {
+    format!("https://{}/", origin.host)
+}
+
+/// Whether `url` is on the name reserved for pages given as HTML, or a name under it
+/// ([`HTML_PAGE_DOMAIN`](crate::HTML_PAGE_DOMAIN)), in any scheme or port.
 fn is_html_host(url: &str) -> bool {
-    let reserved = url_host(
-        crate::HTML_PAGE_URL
-            .split_once(':')
-            .map_or("", |(_, rest)| rest),
-    );
+    let domain = crate::HTML_PAGE_DOMAIN;
     url.split_once(':')
-        .is_some_and(|(_, rest)| reserved.is_some() && url_host(rest) == reserved)
+        .and_then(|(_, rest)| url_host(rest))
+        .is_some_and(|host| {
+            host == domain
+                || host
+                    .strip_suffix(domain)
+                    .is_some_and(|head| head.ends_with('.'))
+        })
 }
 
 /// `url` without its query, its fragment kept.
@@ -800,7 +832,7 @@ mod tests {
     }
 
     /// A page given as HTML reaches the local network only when its source opts in, and
-    /// only while its main frame stays on its own `data:` document.
+    /// only from its own origin.
     #[test]
     fn an_html_page_reaches_the_local_network_only_when_opted_in() {
         let spec = PageSpec {
@@ -829,8 +861,16 @@ mod tests {
             page_api: None,
             ..spec
         });
-        // Its own origin is the reserved one it loads from (#1035).
-        let own = "https://html.jstream.invalid";
+        // Its own origin is the one it loads from, its own host under the reserved
+        // domain (#1035).
+        let url = opted.html_url().expect("an HTML page's URL");
+        let own = url.trim_end_matches('/');
+        assert!(own.starts_with("https://p") && own.ends_with(".html.jstream.invalid"));
+        assert_ne!(
+            page.html_url(),
+            opted.html_url(),
+            "each page has its own host"
+        );
         assert!(opted.local_allowed_from(None));
         assert!(opted.local_allowed_from(Some(own)));
         assert_eq!(
@@ -864,11 +904,26 @@ mod tests {
         )));
         assert!(deny(opted.check_from("http://192.168.1.1/", Some("null"))));
         assert!(!opted.local_allowed_from(Some("null")));
-        // Another port or scheme on the reserved name is another origin.
-        assert!(!opted.local_allowed_from(Some("https://html.jstream.invalid:8443")));
-        assert!(!opted.local_allowed_from(Some("http://html.jstream.invalid")));
+        let url = opted.html_url().expect("an HTML page's URL");
+        let own = url.trim_end_matches('/');
+        let host = own.trim_start_matches("https://");
+        // Another port or scheme on its name is another origin, and so is another HTML
+        // page's.
+        assert!(!opted.local_allowed_from(Some(&format!("{own}:8443"))));
+        assert!(!opted.local_allowed_from(Some(&format!("http://{host}"))));
+        assert!(!opted.local_allowed_from(Some("https://html.jstream.invalid")));
+        let other = RequestPolicy::for_page(&PageSpec {
+            location: PageLocation::Html("<p>other</p>".into()),
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: true,
+            page_api: None,
+        });
+        let other_url = other.html_url().expect("its URL");
+        assert!(!opted.local_allowed_from(Some(other_url.trim_end_matches('/'))));
         assert_eq!(
-            opted.check_from("http://192.168.1.1/", Some("https://html.jstream.invalid")),
+            opted.check_from("http://192.168.1.1/", Some(own)),
             Verdict::Allow
         );
     }
@@ -886,7 +941,10 @@ mod tests {
             page_api: None,
         };
         let html = RequestPolicy::for_page(&spec(PageLocation::Html("<p>hi</p>".into())));
-        let url = crate::HTML_PAGE_URL;
+        let own_url = html.html_url().expect("its URL");
+        let url = own_url.as_str();
+        let own = url.trim_end_matches('/');
+        let host = own.trim_start_matches("https://");
         // Its first load, which the helper starts.
         assert!(html.take_own_load(url, true));
         assert_eq!(html.check_main_frame_from(url, None, true), Verdict::Allow);
@@ -896,32 +954,38 @@ mod tests {
         );
         // A reload, a link to it, with a query or a fragment.
         for again in [
-            url,
-            "https://html.jstream.invalid/?x=1",
-            "https://HTML.jstream.invalid/#top",
+            url.to_owned(),
+            format!("{own}/?x=1"),
+            format!("https://{}/#top", host.to_ascii_uppercase()),
         ] {
             assert_eq!(
-                html.check_main_frame_from(again, Some("https://html.jstream.invalid"), false),
+                html.check_main_frame_from(&again, Some(own), false),
                 Verdict::Allow,
                 "{again}"
             );
         }
-        // Anything else on the name: another path, scheme or port, or a subresource.
+        // Anything else under the domain: another path, scheme or port, another page's
+        // host or the domain itself, or a subresource.
         for other in [
-            "https://html.jstream.invalid/a.js",
-            "http://html.jstream.invalid/",
-            "https://html.jstream.invalid:444/",
-            "wss://html.jstream.invalid/",
+            format!("{own}/a.js"),
+            format!("http://{host}/"),
+            format!("{own}:444/"),
+            format!("wss://{host}/"),
+            "https://html.jstream.invalid/".to_owned(),
+            "https://p999999.html.jstream.invalid/".to_owned(),
         ] {
             assert!(
-                deny(html.check_main_frame_from(other, None, false)),
+                deny(html.check_main_frame_from(&other, None, false)),
                 "{other}"
             );
         }
         assert!(deny(html.check(url)));
-        assert!(deny(
-            html.check_from(url, Some("https://html.jstream.invalid"))
-        ));
+        assert!(deny(html.check_from(url, Some(own))));
+        // A name that only ends the same way is not under the domain.
+        assert_eq!(
+            html.check("https://xhtml.jstream.invalid.example.com/"),
+            Verdict::Allow
+        );
         // Other pages load nothing from it, not even as their main frame.
         for location in [
             PageLocation::Web("https://example.com/".into()),

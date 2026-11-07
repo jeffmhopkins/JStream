@@ -56,9 +56,10 @@ opens no window of its own (#1186).
   empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
   including UNC and `\\?\` paths. A page can also be given as its HTML
   (`PageLocation::html`, at most 128 KiB, `MAX_HTML_BYTES`; blank text is a blank
-  page), which loads from `HTML_PAGE_URL` (`https://html.jstream.invalid/`), a reserved
-  name the helper answers itself with the HTML, so the page has an origin of its own
-  (#1035). Being `https`, it is a secure context, and Chromium refuses its plain `http`
+  page), which loads from a host of its own under the reserved `HTML_PAGE_DOMAIN`
+  (`https://p<n>.html.jstream.invalid/`, `RequestPolicy::html_url`) that the helper
+  answers itself with the HTML. So the page has an origin of its own, and shares neither
+  storage nor its opt-in with another source (#1035). Being `https`, it is a secure context, and Chromium refuses its plain `http`
   scripts and frames as mixed content. The custom CSS (at most 64 KiB) goes into the page as
   one `<style id="jstream-custom-css">` that every change replaces, through a script
   that quotes it as a JavaScript string (`css_script`). The default CSS makes the page's
@@ -92,9 +93,10 @@ opens no window of its own (#1186).
   file or blank page: a main-frame navigation the policy allows tells it where the
   frame now is (`main_frame_to`), before the new document exists, so a file or blank
   page that navigates to the web loses the access. A page given as HTML loads no files.
-  Its own origin is the reserved one it loads from, which may when its spec sets
+  Its own origin is the one it loads from, which may when its spec sets
   `local_network`, exactly as a web page's own origin may (#1035); only its main frame
-  may load its URL, and every other request to the reserved name is refused
+  may load its URL, and every other request to a name under the reserved domain is
+  refused
   (`html_page`), so none reaches the network. CEF can't tell opaque origins apart, so a
   sandboxed or `data:` frame made by a third-party frame inside a file page counts as
   the file page's. A request with no initiator is one the browser started (the
@@ -137,7 +139,7 @@ opens no window of its own (#1186).
   into several, each value whole in one of them. For the helper: `ApiHome`, the
   documents the API is defined in, which is the source's own web origin (scheme, host
   and port, `same_web_origin` in `request.rs`), its local file's folder and below, or
-  the reserved origin of a page given as HTML; `PageCache`, the updates merged, which
+  the origin of its own a page given as HTML loads from; `PageCache`, the updates merged, which
   a new document is fed whole, its clock moved on by the time since its anchor; and
   `shim`, the JavaScript (`page_api.js`) that defines a frozen `window.jstream` with
   only the granted members and returns the one function updates go in through.

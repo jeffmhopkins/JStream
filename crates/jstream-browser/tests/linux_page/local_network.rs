@@ -20,9 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
-use jstream_browser::{
-    BrowserBackend, CefBackend, CefConfig, DEFAULT_CSS, HTML_PAGE_URL, PageLocation, PageSpec,
-};
+use jstream_browser::{BrowserBackend, CefBackend, CefConfig, DEFAULT_CSS, PageLocation, PageSpec};
 use jstream_media::{FrameSize, Timebase};
 use jstream_platform::fake::FakeClock;
 
@@ -309,18 +307,19 @@ fetch("http://127.0.0.1:{target_port}/from-frame").then(
     assert!(!was_asked(&target, "/from-frame"));
 }
 
-/// #1035: a page given as HTML loads from its own origin, the reserved one the helper
-/// answers itself, and reaches this computer only when its source opts in.
+/// #1035: a page given as HTML loads from an origin of its own, a host under the
+/// reserved domain that the helper answers itself, and reaches this computer only when
+/// its source opts in.
 #[test]
 #[ignore = "needs the helper (JSTREAM_BROWSER_HELPER) and CEF's runtime beside it"]
 fn an_html_page_has_its_own_origin_and_reaches_this_computer_only_when_opted_in() {
     let (target, target_port) = listen();
     let target = serve(target, "pong".into(), None);
-    let origin = HTML_PAGE_URL.trim_end_matches('/');
-    // Paints the verdict only on its own origin; anywhere else it stays green.
+    // Paints the verdict only on an origin of its own under the reserved domain;
+    // anywhere else it stays green.
     let html = fetching_page(&format!("http://127.0.0.1:{target_port}/ping"), "").replace(
         "<script>",
-        &format!("<script>if (location.origin === '{origin}')"),
+        r"<script>if (/^https:\/\/p[0-9]+\.html\.jstream\.invalid$/.test(location.origin))",
     );
     for (opted, expected) in [(false, REFUSED), (true, REACHED)] {
         let dir = temp_dir(&format!("html-{opted}"));
