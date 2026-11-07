@@ -23,7 +23,6 @@ use jstream_protocol::BlendMode;
 /// field with the shape's largest blur), tightly packed. wgpu only needs the stride and attribute offsets to be
 /// multiples of 4.
 pub(crate) const VERTEX_STRIDE: u64 = 116;
-/// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 /// How many texels a 2D item's canvas pixel spans, along its more minified axis, past
 /// which it samples a mip chain (#1217, ADR-0050 decision 5's note on 2D items). One
 /// bilinear tap reads a 2×2 texel footprint, so drawn smaller it skips texels and fine
@@ -33,6 +32,7 @@ pub(crate) const VERTEX_STRIDE: u64 = 116;
 /// on the one level, which costs no chain.
 const MINIFIED: f32 = 1.15;
 
+/// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
 struct Draw {
