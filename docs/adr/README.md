@@ -135,5 +135,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
 | [ADR-0122](0122-controller-input-midi-and-one-binding-system.md) | Controller input: MIDI and JTunnel, one binding system for every trigger | accepted | agent |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0125](0125-item-effects-layer-grows-where-it-is-needed.md) | An item's effects layer grows at the first effect that draws past the box | accepted | agent |  |
 | [ADR-0127](0127-moves-interpolate-effect-settings.md) | A Move blends the settings of effects that differ only in their settings | accepted | agent |  |
 <!-- @generated end adr-index -->
