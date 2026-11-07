@@ -2700,7 +2700,7 @@ stamp = { hash = "b3:3f73e066c99b1fda", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/wire.rs"]
-stamp = { hash = "b3:8c1f1d921e665398", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and wire::decode: SenderClock (lowest offset per 1 s, 32-point fit, drift after 15 s), Playout (64 slots, push/pop verdicts, concealment, 0.5% slew, 50 ms snap, skip-ahead) and the new tests/link.rs match the code" }
+stamp = { hash = "b3:a70f3482a73f74d9", by = "agent:r9bzj2", note = "Re-read after narrowing write_audio's doc to what it checks (frame and event counts, whole events); the section's 'writes what a sender would, for tests and fuzzing' still holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
 stamp = { hash = "b3:53a80f8dd2976320", by = "agent:grok", note = "Re-read the revisions paragraph: modern results still carry serverInfo, and its version is the workspace release version; build.rs is now covered." }
@@ -2835,7 +2835,7 @@ stamp = { hash = "b3:23fb8f96e0665a49", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:19e71c2225cc4610", by = "agent:claude", note = "New crate: re-read against src (Message parse/to_bytes, note-on velocity 0 as note-off, refused SysEx/running status/undefined statuses, message_len, Channel 1-16 display, Tempo per the MIDI clock rules with media-clock times, time_of_beat/next_bar_at) and tests/no_alloc.rs" }
 
 ["CRATE-jstream-midi#purpose"."file:crates/jstream-midi/src/tempo.rs"]
-stamp = { hash = "b3:3443f14fe7568a0b", by = "agent:claude", note = "New crate: re-read against src (Message parse/to_bytes, note-on velocity 0 as note-off, refused SysEx/running status/undefined statuses, message_len, Channel 1-16 display, Tempo per the MIDI clock rules with media-clock times, time_of_beat/next_bar_at) and tests/no_alloc.rs" }
+stamp = { hash = "b3:c69287ef170e0374", by = "agent:r9bzj2", note = "Re-read after time_of_beat became total (None for a beat too far ahead, checked add); the extrapolation description still holds" }
 
 ["CRATE-jstream-mux#purpose"."body"]
 stamp = { hash = "b3:7e36816e2f28eaf7", by = "agent:claude@session_011FozW2QGjNvGYbWYwTrPiL", note = "ADR-0061 superseded ADR-0031 and restates its source list, decoding scope, Windows baseline, image/font crate rule, MJPEG rule, hardware-first order and Windows N gap; re-read this section's ADR-0031 citations, now moved to ADR-0061, and each still holds there" }
