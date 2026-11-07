@@ -6300,16 +6300,16 @@ stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:2ca955e403694763", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/assets.rs"]
-stamp = { hash = "b3:c71fe44b7f05248e", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/client.rs"]
 stamp = { hash = "b3:4b28a45ac91e63ee", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/mod.rs"]
-stamp = { hash = "b3:6295ffa08b284546", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+stamp = { hash = "b3:3a376b2729e4e737", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/scene.rs"]
-stamp = { hash = "b3:c0237a4aa2736572", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+stamp = { hash = "b3:30a9997dd377dd46", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
 
 ["PERF-SUITE#scenes"."body"]
 stamp = { hash = "b3:52eeebe164331963", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
