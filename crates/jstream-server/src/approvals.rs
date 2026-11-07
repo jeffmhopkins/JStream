@@ -90,6 +90,9 @@ pub(crate) struct Ticket {
     approvals: Arc<Approvals>,
     id: String,
     answer: watch::Receiver<Option<Answer>>,
+    /// The task that times the request out, stopped when the ticket goes, so a
+    /// connect-and-close loop leaves no sleeping tasks behind.
+    timer: Option<tokio::task::AbortHandle>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -196,6 +199,7 @@ impl Approvals {
                     approvals: Arc::clone(self),
                     id,
                     answer: rx,
+                    timer: None,
                 });
             }
             let approval = AgentApproval::new(id.clone(), client_name, transport);
@@ -210,14 +214,16 @@ impl Approvals {
         let weak = Arc::downgrade(self);
         let timed = id.clone();
         let deadline = Instant::now() + self.timeout;
-        tokio::spawn(async move {
+        let timer = tokio::spawn(async move {
             tokio::time::sleep_until(deadline).await;
             time_out(&weak, &timed);
-        });
+        })
+        .abort_handle();
         Some(Ticket {
             approvals: Arc::clone(self),
             id,
             answer,
+            timer: Some(timer),
         })
     }
 
@@ -379,6 +385,9 @@ impl Ticket {
 
 impl Drop for Ticket {
     fn drop(&mut self) {
+        if let Some(timer) = self.timer.take() {
+            timer.abort();
+        }
         self.approvals.end(
             &self.id,
             ApprovalOutcome::Closed,

@@ -233,6 +233,11 @@ pub(crate) async fn run(
                             error: error.into(),
                         }));
                     }
+                    // One `hello` at a time: a client held for the person's answer can't
+                    // pile up more of them while it waits (#1334 review B2).
+                    Ok(ClientMessage::Hello(_)) if !hellos.is_empty() => {
+                        outbox.push(malformed(None, "a hello is already waiting for its answer"));
+                    }
                     Ok(ClientMessage::Hello(hello)) => hellos.push_back(control.hello(hello)),
                     Ok(ClientMessage::Request(request)) => {
                         calls.push(Box::pin(async move {

@@ -57,8 +57,9 @@ pub(crate) struct Admitted {
     serves_devices: bool,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,
-    /// Whether `hello` succeeded, which the calls answered here need too.
-    greeted: AtomicBool,
+    /// Whether `hello` succeeded, which the calls answered here need too, and which
+    /// [`Control::events`] waits for: a held agent gets no events (ADR-0131).
+    greeted: Arc<AtomicBool>,
     /// Numbers the requests answered here (`server_1`, ...).
     answered: AtomicU64,
     /// The agent approvals (ADR-0131).
@@ -106,7 +107,7 @@ impl Admitted {
             pairing_offered,
             serves_devices,
             ui_settings,
-            greeted: AtomicBool::new(false),
+            greeted: Arc::new(AtomicBool::new(false)),
             answered: AtomicU64::new(0),
             approvals,
             transport,
@@ -336,10 +337,16 @@ impl Control for Admitted {
                 }
             }
         });
+        // Nothing reaches a session before its `hello` succeeds: a client held for the
+        // person's answer, which MCP's HTTP transport subscribes for at `initialize`,
+        // sees no state, no activity and no other agent's request (ADR-0131).
+        let greeted = Arc::clone(&self.greeted);
         Box::pin(
             futures_util::stream::select(engine, approvals)
                 .take_while(|event| std::future::ready(event.is_some()))
-                .filter_map(|event: Option<Event>| std::future::ready(event)),
+                .filter_map(move |event: Option<Event>| {
+                    std::future::ready(event.filter(|_| greeted.load(Ordering::Acquire)))
+                }),
         )
     }
 
@@ -383,7 +390,10 @@ mod tests {
     }
 
     fn block<T>(future: impl Future<Output = T>) -> T {
-        match tokio::runtime::Builder::new_current_thread().build() {
+        match tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+        {
             Ok(runtime) => runtime.block_on(future),
             Err(error) => panic!("runtime: {error}"),
         }
@@ -398,9 +408,23 @@ mod tests {
         pairing_offered: bool,
         serves_devices: bool,
     ) -> (Admitted, Arc<Mutex<String>>) {
+        admitted_on(
+            &MockEngine::new(),
+            credential,
+            pairing_offered,
+            serves_devices,
+        )
+    }
+
+    fn admitted_on(
+        engine: &MockEngine,
+        credential: Credential,
+        pairing_offered: bool,
+        serves_devices: bool,
+    ) -> (Admitted, Arc<Mutex<String>>) {
         let name = Arc::new(Mutex::new(String::new()));
         let inner = Named {
-            inner: MockEngine::new().connect(),
+            inner: engine.connect(),
             name: Arc::clone(&name),
         };
         let devices = match Devices::load(None) {
@@ -461,6 +485,43 @@ mod tests {
         let (session, name) = admitted(Credential::Control, true);
         assert!(block(session.hello(hello())).is_ok());
         assert_eq!(said(&name), "claude-desktop");
+    }
+
+    /// A session gets no events until its `hello` succeeds, so a held agent, whose
+    /// transport may subscribe first (MCP over HTTP at `initialize`), sees nothing of
+    /// the studio before the person lets it in (ADR-0131, #1334 review B1).
+    #[test]
+    fn no_event_reaches_a_session_before_its_hello() {
+        use futures_util::StreamExt;
+        use jstream_protocol::{Batch, Edit, Event, SceneId};
+        let create = |id: &str| {
+            Call::Batch(Batch::single(Edit::SceneCreate {
+                scene_id: SceneId::new(id),
+                name: id.into(),
+                role: None,
+            }))
+        };
+        let engine = MockEngine::new();
+        let (held, _) = admitted_on(&engine, Credential::Control, true, true);
+        let other = engine.connect();
+        block(async {
+            let mut events = held.events();
+            assert!(other.hello(hello()).await.is_ok());
+            assert!(other.call(create("before")).await.is_ok());
+            let early = tokio::time::timeout(std::time::Duration::from_millis(200), events.next());
+            assert!(
+                early.await.is_err(),
+                "an event reached a session before its hello"
+            );
+
+            assert!(held.hello(hello()).await.is_ok());
+            assert!(other.call(create("after")).await.is_ok());
+            let next = tokio::time::timeout(std::time::Duration::from_secs(5), events.next()).await;
+            assert!(
+                matches!(next, Ok(Some(Event::StateChanged { .. }))),
+                "after hello the session hears the studio: {next:?}"
+            );
+        });
     }
 
     /// Beyond loopback, without TLS, pairing is refused.

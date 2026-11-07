@@ -45,7 +45,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   file), deny, or no answer in `approval_timeout` (2 minutes). Every session hears
   `agent.approval_requested` and `agent.approval_resolved`, and `Admitted` answers
   `agent.approve`, `agent.forget` and `agent.approved`. The request belongs to the
-  session, so a `hello` sent again (an MCP client's retry) waits on the same one. At
+  session, so a `hello` sent again (an MCP client's retry) waits on the same one, and
+  its timer stops when the session goes. A session's events start only once its
+  `hello` succeeds, so a held client, even one whose transport subscribed early (MCP
+  over HTTP at `initialize`), sees no state, activity or other agent's request. At
   most 8 are open at once; one more is turned away. Sessions the UI's own token
   (`ui_token`) or a device token admits are never held. It is a notice with a veto, not
   a control: a client can pass by naming itself after an approved one.
@@ -74,8 +77,9 @@ Contents (a first cut; [Design](#design) explains the choices):
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events, the cap on calls in flight, and the pings that close a connection that
-  went silent. A `hello` waits beside the rest of the loop, answered in order, so one
-  held for approval keeps the connection pinged; a control-token connection's
+  went silent. A `hello` waits beside the rest of the loop, so one held for approval
+  keeps the connection pinged; another `hello` while one waits is refused as
+  `malformed`; a control-token connection's
   handshake deadline is the handshake timeout plus the approval timeout while
   `ask_agents` is on, and a `not_allowed` `hello` closes the connection (1008).
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
