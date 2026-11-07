@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0120"
+id = "ADR-0122"
 title = "Controller input: MIDI and JTunnel, one binding system for every trigger"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0120: Controller input: MIDI and JTunnel, one binding system for every trigger
+# ADR-0122: Controller input: MIDI and JTunnel, one binding system for every trigger
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

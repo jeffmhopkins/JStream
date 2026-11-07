@@ -1,7 +1,7 @@
 [package]
 name = "jstream-midi"
 version = "0.0.0"
-description = "JStream's MIDI model (ADR-0120): parsing MIDI 1.0 messages, and the tempo and transport a MIDI clock gives."
+description = "JStream's MIDI model (ADR-0122): parsing MIDI 1.0 messages, and the tempo and transport a MIDI clock gives."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 0
-summary = "MIDI 1.0 model for controller input (ADR-0120): channel, system common and real-time messages parsed from bytes, and a tempo tracker that turns MIDI clock, start, stop, continue and song position into BPM, beat and bar on the media clock; no I/O, no allocation, no dependencies"
+summary = "MIDI 1.0 model for controller input (ADR-0122): channel, system common and real-time messages parsed from bytes, and a tempo tracker that turns MIDI clock, start, stop, continue and song position into BPM, beat and bar on the media clock; no I/O, no allocation, no dependencies"
 unsafe_allowed = false
 
 [lints]

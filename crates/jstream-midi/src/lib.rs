@@ -1,7 +1,7 @@
 //! JStream's MIDI model for controller input
-//! (docs/adr/0120-controller-input-midi-and-one-binding-system.md).
+//! (docs/adr/0122-controller-input-midi-and-one-binding-system.md).
 //!
-//! Docs: crates/jstream-midi/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0120-controller-input-midi-and-one-binding-system.md
+//! Docs: crates/jstream-midi/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0122-controller-input-midi-and-one-binding-system.md
 //!
 //! Two parts, both free of I/O, allocation and locks, so a MIDI input thread can run them
 //! on every event:

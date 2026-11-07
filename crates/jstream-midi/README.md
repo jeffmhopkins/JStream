@@ -16,7 +16,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-midi"]
 -->
 
 Layer-0 MIDI model for controller input
-([ADR-0120](../../docs/adr/0120-controller-input-midi-and-one-binding-system.md)).
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)).
 Every MIDI input, a JTunnel stream or a local port, produces its types. No I/O, no
 allocation, no locks and no dependencies, so an input thread can run it on every event.
 

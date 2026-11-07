@@ -1,7 +1,7 @@
 [package]
 name = "jstream-jtunnel"
 version = "0.0.0"
-description = "The JTunnel wire format and discovery records (ADR-0120), for receiving a DAW's audio and MIDI over the network."
+description = "The JTunnel wire format and discovery records (ADR-0122), for receiving a DAW's audio and MIDI over the network."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 1
-summary = "JTunnel's wire format, version 2 (ADR-0120): audio packets with their per-frame MIDI, SysEx pieces and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking (new, redundant, lost, late, restarted), and the mDNS / DNS-SD query and answers that find senders; no sockets, no threads"
+summary = "JTunnel's wire format, version 2 (ADR-0122): audio packets with their per-frame MIDI, SysEx pieces and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking (new, redundant, lost, late, restarted), and the mDNS / DNS-SD query and answers that find senders; no sockets, no threads"
 unsafe_allowed = false
 
 [lints]

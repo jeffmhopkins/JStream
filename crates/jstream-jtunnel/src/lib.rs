@@ -1,7 +1,7 @@
 //! The JTunnel wire format and discovery records, for receiving a DAW's audio and MIDI
-//! over the network (docs/adr/0120-controller-input-midi-and-one-binding-system.md).
+//! over the network (docs/adr/0122-controller-input-midi-and-one-binding-system.md).
 //!
-//! Docs: crates/jstream-jtunnel/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0120-controller-input-midi-and-one-binding-system.md
+//! Docs: crates/jstream-jtunnel/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0122-controller-input-midi-and-one-binding-system.md
 //!
 //! JTunnel is a CLAP plugin that sends a DAW track's audio and MIDI to other JTunnel
 //! instances on the LAN, in small UDP datagrams, and finds them with mDNS. JStream

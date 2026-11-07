@@ -17,7 +17,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-jtunnel"]
 
 Layer-1 crate for JTunnel, the plugin that sends a DAW track's audio and MIDI over the
 LAN, which JStream receives natively
-([ADR-0120](../../docs/adr/0120-controller-input-midi-and-one-binding-system.md)). It is
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)). It is
 the format only: no sockets and no threads, so the engine's receive thread, the tests and
 the `jtunnel` fuzz target drive the same code. It depends on `jstream-midi` alone.
 
