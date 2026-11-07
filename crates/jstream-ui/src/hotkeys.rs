@@ -52,22 +52,26 @@ pub fn of_event(event: &leptos::ev::KeyboardEvent) -> Option<Chord> {
     )
 }
 
-/// How far the wheel turns for one notch, by `WheelEvent.deltaMode`: about 100 pixels
-/// in the browsers that report pixels, 3 lines in those that report lines, and one page.
-const PIXELS_PER_NOTCH: f64 = 100.0;
+/// How far the wheel turns for one notch, by `WheelEvent.deltaMode`: in pixels, 120 as
+/// Chromium reports a notch on Linux at every devicePixelRatio (measured, #1346) and
+/// near the 100 it reports on Windows; 3 lines in browsers that report lines; one page.
+const PIXELS_PER_NOTCH: f64 = 120.0;
 const LINES_PER_NOTCH: f64 = 3.0;
 
-/// Turns wheel deltas into whole notches, carrying what's left over to the next event,
-/// so a smooth wheel or a touchpad runs a wheel chord once per notch's worth of turn.
+/// Counts wheel events as notches. An event of half a notch or more comes from a wheel
+/// that clicks, so it counts on its own, rounded, at least one: a notch is one step
+/// whether the browser reports it as 100 or 120 pixels, and an event the browser
+/// coalesced from several notches counts each. Smaller events, from a smooth wheel or a
+/// touchpad, add up, carrying what's left over to the next event.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct WheelNotches {
-    /// The turn not yet counted, in notches: negative is up.
+    /// The small turns not yet counted, in notches: negative is up.
     carry: f64,
 }
 
 impl WheelNotches {
-    /// Adds one wheel event's vertical turn ([`wheel_delta`], in `deltaMode`'s unit) and returns
-    /// the whole notches it completes: negative turns up (away from the person),
+    /// Adds one wheel event's vertical turn ([`wheel_delta`], in `deltaMode`'s unit) and
+    /// returns the whole notches it completes: negative turns up (away from the person),
     /// positive down. A turn the other way drops what was carried.
     pub fn turn(&mut self, delta_y: f64, delta_mode: u32) -> i32 {
         let per_notch = match delta_mode {
@@ -79,12 +83,21 @@ impl WheelNotches {
         if !turn.is_finite() || turn == 0.0 {
             return 0;
         }
-        if self.carry * turn < 0.0 {
+        let whole = if turn.abs() >= 0.5 {
+            // A wheel that clicks: this event alone.
             self.carry = 0.0;
-        }
-        self.carry += turn;
-        let whole = self.carry.trunc();
-        self.carry -= whole;
+            turn.round()
+        } else {
+            if self.carry * turn < 0.0 {
+                self.carry = 0.0;
+            }
+            self.carry += turn;
+            // Six 20-pixel deltas are a whole notch, though the sum of sixths falls
+            // just short of 1 in floating point.
+            let whole = (self.carry + self.carry.signum() * 1e-9).trunc();
+            self.carry -= whole;
+            whole
+        };
         // At most a few notches per event: the cast can't overflow.
         whole.clamp(-64.0, 64.0) as i32
     }
@@ -331,22 +344,43 @@ mod tests {
     #[test]
     fn wheel_deltas_count_whole_notches() {
         let mut notches = WheelNotches::default();
-        // One notch in pixels, lines and pages.
+        // One notch as Chromium reports it on Linux (120 px, at a devicePixelRatio of 1,
+        // 1.5 and 2) and on Windows (100 px), in lines and in pages.
+        assert_eq!(notches.turn(120.0, 0), 1);
+        assert_eq!(notches.turn(-120.0, 0), -1);
+        assert_eq!(notches.turn(100.0, 0), 1);
         assert_eq!(notches.turn(-100.0, 0), -1);
         assert_eq!(notches.turn(3.0, 1), 1);
         assert_eq!(notches.turn(1.0, 2), 1);
-        // A smooth wheel's small deltas add up to one notch, and the rest carries.
+        // Five notches are five steps, at either size.
+        let five = |px: f64, notches: &mut WheelNotches| -> i32 {
+            (0..5).map(|_| notches.turn(px, 0)).sum()
+        };
+        assert_eq!(five(120.0, &mut notches), 5);
+        assert_eq!(five(100.0, &mut notches), 5);
+        // Notches the browser coalesced into one event count each.
+        assert_eq!(notches.turn(240.0, 0), 2);
+        assert_eq!(notches.turn(360.0, 0), 3);
+        assert_eq!(notches.turn(-300.0, 0), -3);
+        // A smooth wheel's or a touchpad's small deltas add up to one notch, and the
+        // rest carries.
+        notches.reset();
         assert_eq!(notches.turn(40.0, 0), 0);
         assert_eq!(notches.turn(40.0, 0), 0);
         assert_eq!(notches.turn(40.0, 0), 1);
-        assert_eq!(notches.turn(80.0, 0), 1);
-        // Turning back drops what was carried.
-        assert_eq!(notches.turn(60.0, 0), 0);
-        assert_eq!(notches.turn(-60.0, 0), 0);
-        assert_eq!(notches.turn(-40.0, 0), -1);
-        // A fast flick is several notches.
+        assert_eq!(notches.turn(-1.0, 0), 0, "turning back drops the carry");
+        assert_eq!(notches.turn(-50.0, 0), 0);
+        assert_eq!(notches.turn(-50.0, 0), 0);
+        assert_eq!(notches.turn(-50.0, 0), -1);
+        // Six of a touchpad's 20-pixel deltas are one notch exactly.
         notches.reset();
-        assert_eq!(notches.turn(300.0, 0), 3);
+        let six: i32 = (0..6).map(|_| notches.turn(20.0, 0)).sum();
+        assert_eq!(six, 1);
+        // A notch-sized event drops what was carried.
+        assert_eq!(notches.turn(-50.0, 0), 0);
+        assert_eq!(notches.turn(-120.0, 0), -1);
+        assert_eq!(notches.turn(-50.0, 0), 0);
+        assert_eq!(notches.turn(-50.0, 0), 0, "the -50 before the notch is gone");
         assert_eq!(notches.turn(0.0, 0), 0);
         assert_eq!(notches.turn(f64::NAN, 0), 0);
     }

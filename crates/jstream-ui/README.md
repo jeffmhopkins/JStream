@@ -126,8 +126,12 @@ Contents ([Design](#design) explains the choices):
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
   (`Ctrl+WheelUp`, ADR-0112 §3) runs once per notch while the page has the focus:
-  `WheelNotches` turns `WheelEvent` deltas into notches (100 pixels, 3 lines or a page
-  each, carrying the rest; whether other webviews report 100 pixels a notch is #1346),
+  `WheelNotches` turns `WheelEvent` deltas into notches (120 pixels, 3 lines or a page
+  each): an event of half a notch or more counts on its own, rounded, so Chromium's
+  notch is one step whether it reports 120 pixels (Linux, at every devicePixelRatio,
+  measured under Xvfb) or 100 (Windows), and smaller events, from a touchpad, add up
+  (#1346 tracks the webviews not measured yet; `wheel-chords.spec.js` drives it in
+  Chromium at a devicePixelRatio of 1 and 2),
   with Shift held reading the sideways delta browsers report then (`wheel_delta`). The
   window's non-passive wheel listener prevents the browser's own use of a bound chord,
   such as Ctrl+wheel zooming the page, only when the direction turned is bound. The desktop

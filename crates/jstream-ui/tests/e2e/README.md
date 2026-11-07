@@ -69,6 +69,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   (or the directory `JSTREAM_E2E_DIST` names). It does not run trunk.
 - **The browser** is Playwright's Chromium, or the executable `JSTREAM_E2E_CHROMIUM`
   names. `@playwright/test` is pinned exactly in `package.json` and `package-lock.json`.
+  A test that needs a browser flag (`wheel-chords.spec.js`'s real devicePixelRatio)
+  launches a browser of its own from the same executable and fails on console errors
+  itself.
   Headless Chromium can hold a page that is not in front to about one animation frame a
   second, so a test with a second client calls `bringToFront()` on the page it drives
   with drags or clicks that wait on frames.
@@ -472,6 +475,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches, open in its Behaviour tab, send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
+- **Wheel chords** (`wheel-chords.spec.js`, ADR-0112 §3, #1346): with `Ctrl+WheelUp`
+  and `Ctrl+WheelDown` bound to Main's zoom by another client, each notch runs
+  `scene.zoom_camera` once, whether a notch is 120 pixels or 100, two coalesced into one
+  event are two, and six 20-pixel touchpad deltas are one, in a browser of its own at a
+  devicePixelRatio of 1 and of 2 (`--force-device-scale-factor`, since an emulated one
+  scales the deltas the page sees); every such turn is prevented, and a turn whose
+  direction has no binding isn't and runs nothing. With `Shift+WheelDown` bound, a
+  Shift turn reported in `deltaX` runs it, and the unbound way still scrolls. The
+  mock has no follow camera, so it refuses each zoom, and the test allows that error.
 - **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
