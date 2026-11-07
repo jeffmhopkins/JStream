@@ -80,6 +80,7 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("page_api", false),
             ("page_api_scenes", false),
             ("page_api_values", false),
+            ("page_api_bus", false),
         ]
     );
 }
@@ -305,8 +306,11 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
             program_scene: Some(("scn_1", "Main")),
             preview_scene: None,
             values,
+            buses: &NO_BUSES,
         }
     }
+    static NO_BUSES: BTreeMap<jstream_protocol::BusId, jstream_sources::BusLevels> =
+        BTreeMap::new();
 
     let browser = FakeBrowser::new();
     let ctx = ctx(&browser, None);
@@ -336,7 +340,8 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
         page.spec().page_api,
         Some(PageApi {
             scenes: false,
-            values: true
+            values: true,
+            levels: false,
         })
     );
     granted.page_view(&view(&values, 1000));

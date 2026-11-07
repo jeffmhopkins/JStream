@@ -523,6 +523,12 @@ impl BusControl {
         self.shared.meter.take()
     }
 
+    /// The bus output's levels, without restarting the held peak: the peak is the one
+    /// held since the last [`take_meter`](Self::take_meter).
+    pub fn peek_meter(&self) -> MeterReading {
+        self.shared.meter.peek()
+    }
+
     /// The bus's counters.
     pub fn stats(&self) -> BusStats {
         BusStats {

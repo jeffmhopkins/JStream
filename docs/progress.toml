@@ -1498,6 +1498,14 @@ prs = [1146,  1178]
 note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
 
 [[item]]
+id = "PA3"
+milestone = "M3"
+title = "Page API part 3: a bus's levels and bands for pages (jstream.levels)"
+status = "planned"
+release = "alpha.5"
+prs = [1263]
+
+[[item]]
 id = "PF1"
 milestone = "M3"
 title = "Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103)"
