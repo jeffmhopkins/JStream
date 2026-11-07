@@ -63,9 +63,9 @@ impl BrowserKind {
                     description: Some(
                         "The page itself, as HTML with its CSS and scripts inline: a graphic \
                          built here instead of loaded from a URL. Ignored when a local file \
-                         is set. It can load fonts and images from the web, but no local \
-                         files, and reaches this computer and the local network only when \
-                         allowed below."
+                         is set. It can load fonts, images and scripts from the web over \
+                         https, but no local files, and reaches this computer and the local \
+                         network only when allowed below."
                             .into(),
                     ),
                     ..param(
@@ -129,7 +129,8 @@ impl BrowserKind {
                         "Let a page from the internet make requests to this computer and \
                          the local network (localhost, 192.168.x.x and the like), for \
                          widgets that talk to an app running here. Off, those requests are \
-                         refused. A local file or a page on the local network may always."
+                         refused. It covers the page's own origin only, and only a page loaded \
+                         over https. A local file or a page on the local network may always."
                             .into(),
                     ),
                     advanced: true,
@@ -185,6 +186,21 @@ impl BrowserKind {
                         ),
                         json!(""),
                     )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The bus whose levels and bands the page may read, after its \
+                         fader, with jstream.levels(). A page given a bus can follow the \
+                         shape of its sound, and a page from the web can send that \
+                         anywhere. Give it only the bus it shows."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(VisibleIf {
+                        param: "page_api".into(),
+                        equals: json!(true),
+                    }),
+                    ..param("page_api_bus", "Levels", ParamType::Bus, Value::Null)
                 },
             ],
             ..kind(BROWSER, "Browser", true, true)
@@ -261,7 +277,14 @@ pub(crate) fn open(
         blank,
         audio,
         every_ms: i64::from(1000_u32.div_ceil(fps)),
-        feed: grant.map(|grant| Feed::new(grant, fps)),
+        feed: grant.map(|grant| {
+            let scope = grant
+                .bus
+                .as_ref()
+                .zip(ctx.audio.as_ref())
+                .map(|(bus, scopes)| scopes.bus(bus));
+            Feed::new(grant, fps, scope)
+        }),
         hidden: false,
     }))
 }

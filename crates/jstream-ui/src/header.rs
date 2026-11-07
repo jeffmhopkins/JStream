@@ -1,6 +1,7 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
 //! the File, Edit, View, Layout and Help menus (Help's links and About dialog are in
-//! `about.rs`; Check for updates and Settings are in `updates.rs`), the stats readout (frame rate, dropped frames
+//! `about.rs`; Check for updates is in `updates.rs`, and File › Settings… and Plugins… open
+//! the Settings dialog in `settings.rs`), the stats readout (frame rate, dropped frames
 //! and CPU), Studio mode,
 //! Record, and Go Live / End stream. The View and Layout menus change the workspace's
 //! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
@@ -19,8 +20,10 @@ use crate::panels::outputs::{
     start_or_stop_all,
 };
 use crate::projector::{self, Request, Target};
+use crate::settings::{SettingsDialog, SettingsPage};
 use crate::store::Studio;
-use crate::updates::{SettingsDialog, UpdateDialog};
+use crate::updates::UpdateDialog;
+use crate::video_settings::VideoSettingsDialog;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind};
@@ -306,7 +309,8 @@ pub fn Header(
     let engine_load = RwSignal::new(Load::default());
     let open = RwSignal::new(None::<Menu>);
     let about_open = RwSignal::new(false);
-    let settings_open = RwSignal::new(false);
+    let settings = use_context::<SettingsDialog>();
+    let video_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
     let protocol = Signal::derive(move || info.with(|i| i.protocol.clone()));
     let loads = StoredValue::new(0_u64);
@@ -552,16 +556,40 @@ pub fn Header(
                             <dd>{move || info.with(|i| i.rev.clone())}</dd>
                         </dl>
                         <div class="menu-sep"></div>
+                        {settings.map(|settings| view! {
+                            <button
+                                class="menuitem"
+                                role="menuitem"
+                                on:click=move |_| {
+                                    open.set(None);
+                                    settings.open(SettingsPage::General);
+                                }
+                            >
+                                "Settings…"
+                            </button>
+                        })}
                         <button
                             class="menuitem"
                             role="menuitem"
                             on:click=move |_| {
                                 open.set(None);
-                                settings_open.set(true);
+                                video_open.set(true);
                             }
                         >
-                            "Settings…"
+                            "Video settings…"
                         </button>
+                        {settings.map(|settings| view! {
+                            <button
+                                class="menuitem"
+                                role="menuitem"
+                                on:click=move |_| {
+                                    open.set(None);
+                                    settings.open(SettingsPage::Plugins);
+                                }
+                            >
+                                "Plugins…"
+                            </button>
+                        })}
                         <button class="menuitem" role="menuitem" on:click=move |_| disconnect.with_value(|d| d())>
                             "Disconnect"
                         </button>
@@ -727,8 +755,8 @@ pub fn Header(
             <Show when=move || about_open.get()>
                 <About protocol=protocol close=move || about_open.set(false) />
             </Show>
-            <Show when=move || settings_open.get()>
-                <SettingsDialog close=move || settings_open.set(false) />
+            <Show when=move || video_open.get()>
+                <VideoSettingsDialog close=move || video_open.set(false) />
             </Show>
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />

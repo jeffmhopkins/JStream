@@ -102,6 +102,17 @@ impl Meter {
         }
         r
     }
+
+    /// Reads the levels without restarting the held peak: the peak held since the last
+    /// [`take`](Self::take).
+    pub(crate) fn peek(&self) -> MeterReading {
+        let mut r = MeterReading::default();
+        for c in 0..2 {
+            r.peak[c] = f32::from_bits(self.peak[c].load(Ordering::Relaxed));
+            r.rms[c] = f32::from_bits(self.rms[c].load(Ordering::Relaxed));
+        }
+        r
+    }
 }
 
 /// Maps NaN and negative values to 0 and infinity to `f32::MAX`, so the bit order trick
@@ -187,6 +198,8 @@ mod tests {
         let m = Meter::default();
         m.publish([0.5, 0.25], [0.1, 0.1]);
         m.publish([0.2, 0.75], [0.05, 0.2]);
+        // A peek reads the held peak and leaves it held.
+        assert_eq!(m.peek().peak, [0.5, 0.75]);
         let r = m.take();
         assert_eq!(r.peak, [0.5, 0.75]);
         assert_eq!(r.rms, [0.05, 0.2]);

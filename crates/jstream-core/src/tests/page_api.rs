@@ -1,9 +1,10 @@
 //! The page API (ADR-0102): a `browser` source with `page_api` on is told whether it is
 //! shown on program and on preview, nested scenes included, which scenes those are, and
-//! the shared values its grant covers, each only when it changes.
+//! the shared values its grant covers, each only when it changes, and the levels of the
+//! bus it is given while the mixer runs.
 
-use super::audio::{engine, eventually};
-use super::{add, batch, block_on, connected, create, edits, switch_call};
+use super::audio::{audio_source, engine, eventually};
+use super::{add, batch, block_on, connected, create, edits, output_call, switch_call};
 use jstream_browser::PageData;
 use jstream_browser::fake::{FakeBrowser, FakePageState};
 use jstream_control::Control;
@@ -54,6 +55,7 @@ fn scene_source(id: &str, scene: &str) -> Edit {
 struct Seen {
     source: Option<Value>,
     scenes: Option<Value>,
+    levels: Option<Value>,
     values: BTreeMap<String, Option<Value>>,
     clock: bool,
 }
@@ -64,6 +66,7 @@ impl Seen {
             clock,
             source,
             scenes,
+            levels,
             values,
         } in page.take_data()
         {
@@ -74,6 +77,9 @@ impl Seen {
             }
             if let Some(scenes) = scenes {
                 self.scenes = Some(parse(scenes));
+            }
+            if let Some(levels) = levels {
+                self.levels = Some(parse(levels));
             }
             for (name, value) in values {
                 self.values.insert(name, value.map(parse));
@@ -229,4 +235,89 @@ fn a_page_without_the_grant_is_sent_nothing() {
     let page = browser.pages().remove(0);
     assert!(page.spec().page_api.is_none());
     assert!(page.take_data().is_empty());
+}
+
+/// A page given a bus reads its levels and bands each page frame while the mixer runs,
+/// and `null` while it doesn't (ADR-0102 decision 8).
+#[test]
+fn a_page_given_a_bus_reads_its_levels_while_the_mixer_runs() {
+    use jstream_protocol::{BusId, Finite32};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let browser = FakeBrowser::new();
+    let engine = engine(&audio, &clock).with_browser(browser.clone());
+    let control = connected(&engine);
+    let vod = BusId::new("vod");
+    let settings: BTreeMap<String, Value> = [
+        ("url", json!("https://example.com/")),
+        ("page_api", json!(true)),
+        ("page_api_bus", json!({"type": "bus", "bus_id": "vod"})),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_owned(), v))
+    .collect();
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            audio_source("desk", "desktop_audio", None),
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+            Edit::SendSet {
+                source_id: SourceId::new("desk"),
+                bus_id: vod.clone(),
+                gain_db: Finite32::ZERO,
+            },
+            Edit::SourceCreate {
+                source_id: SourceId::new("page"),
+                name: "page".into(),
+                kind: SourceKind::Builtin {
+                    kind: "browser".into(),
+                },
+                settings: Settings(settings),
+                duplicated_from: None,
+            },
+            add("a", "page-in-a", "page"),
+        ]),
+    )
+    .expect("collection");
+    assert!(eventually(|| browser.pages().len() == 1));
+    let page: Arc<FakePageState> = browser.pages().remove(0);
+    assert!(page.spec().page_api.is_some_and(|api| api.levels));
+
+    let mut seen = Seen::default();
+    assert!(seen.until(&clock, &page, |seen| seen.levels.is_some()));
+    assert_eq!(seen.levels, Some(Value::Null), "no mixer runs yet");
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let heard = |seen: &Seen| {
+        seen.levels.as_ref().is_some_and(|levels| {
+            levels["peak"][0].as_f64().is_some_and(|peak| peak > 0.1)
+                && levels["bands"]
+                    .as_array()
+                    .is_some_and(|bands| bands.iter().any(|b| b.as_f64().unwrap_or(0.0) > 0.0))
+        })
+    };
+    assert!(
+        eventually(|| {
+            audio.deliver(480, 0.25);
+            clock.advance(10_000);
+            seen.take(&page);
+            heard(&seen)
+        }),
+        "the page never heard the bus: {:?}",
+        seen.levels
+    );
+    let levels = seen.levels.as_ref().expect("levels");
+    assert_eq!(levels["rms"].as_array().map(Vec::len), Some(2), "{levels}");
+    assert_eq!(
+        levels["bands"].as_array().map(Vec::len),
+        Some(64),
+        "{levels}"
+    );
+
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+    assert!(seen.until(&clock, &page, |seen| seen.levels == Some(Value::Null)));
 }

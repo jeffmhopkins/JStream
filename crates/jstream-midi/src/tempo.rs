@@ -180,13 +180,17 @@ impl Tempo {
 
     /// The media-clock time the song reaches `beat` (in quarter notes), extrapolated at
     /// the current tempo from the last clock that played. `None` while stopped, before
-    /// the tempo is known, or for a beat already past.
+    /// the tempo is known, for a beat already past, or for one too far ahead to name.
     #[must_use]
     pub fn time_of_beat(&self, beat: f64) -> Option<u64> {
         let (pos, t) = self.last_played.filter(|_| self.playing)?;
         let spacing = self.tick_ns()?;
         let ahead = beat * f64::from(TICKS_PER_BEAT) - pos as f64;
-        (ahead >= 0.0).then(|| t + (ahead * spacing).round() as u64)
+        let wait = (ahead * spacing).round();
+        if !(0.0..=u64::MAX as f64).contains(&wait) {
+            return None;
+        }
+        t.checked_add(wait as u64)
     }
 
     /// The media-clock time of the first bar line after `at_ns`, as
@@ -210,6 +214,18 @@ mod tests {
     fn ticks(bpm: f64, from: u64, n: u64) -> impl Iterator<Item = u64> {
         let spacing = 60.0 * SEC as f64 / (bpm * f64::from(TICKS_PER_BEAT));
         (0..n).map(move |i| from + (i as f64 * spacing).round() as u64)
+    }
+
+    #[test]
+    fn a_beat_too_far_ahead_has_no_time() {
+        let mut t = Tempo::new(4);
+        t.apply(&Message::Start, 0);
+        for k in 0..48_u64 {
+            t.apply(&Message::TimingClock, k * 20_833_333);
+        }
+        assert!(t.time_of_beat(4.0).is_some());
+        assert_eq!(t.time_of_beat(1e300), None);
+        assert_eq!(t.time_of_beat(f64::INFINITY), None);
     }
 
     #[test]
