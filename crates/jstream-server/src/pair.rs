@@ -25,7 +25,7 @@
 //!   code, the token and the cookie are never logged (R-SEC-001).
 
 use crate::App;
-use crate::devices::{Attempt, Now, PairError, check_name};
+use crate::devices::{Now, PairError, check_name};
 use crate::gate::{Refusal, device_cookie_header};
 use crate::listener::Accepted;
 use axum::body::Body;
@@ -105,12 +105,7 @@ pub(crate) async fn handle(
     if browser && !app.tls(&accepted) {
         return bad_request("a browser pairs only on a TLS listener");
     }
-    let from = if accepted.network {
-        Attempt::Network(peer.ip())
-    } else {
-        Attempt::Host
-    };
-    match app.devices.pair(code, name, Now::current(), from) {
+    match app.devices.pair(code, name, Now::current()) {
         Ok((device_id, token)) if browser => {
             let Some(cookie) = device_cookie_header(token.as_bytes()) else {
                 // The server's tokens are hex digits, so this can't happen; the device
@@ -154,10 +149,6 @@ pub(crate) async fn handle(
             } else {
                 Refusal::WrongPairingCode.into_response()
             }
-        }
-        Err(PairError::PeerLimit) => {
-            Refusal::PairingPeerLimit.log(peer);
-            Refusal::PairingPeerLimit.into_response()
         }
         Err(PairError::Random(error)) => {
             tracing::warn!(error = %error, "could not draw a device token");

@@ -762,7 +762,7 @@ stamp = { hash = "b3:f1450f8e69153ead", by = "agent:ui-layouts", note = "Added t
 stamp = { hash = "b3:5384cb38aa6298dc", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:2a2ea3da441fbf46", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:98ecc9b8edf1b4c3", by = "agent:claude", note = "#1307 round 1 B2: the shared five-attempt cap is below this section's level of detail; transport text still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/envelope.rs"]
 stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the Envelope bullet's 4 MiB request limit, max_request_bytes, too_large keeping the connection and 16 MiB 1009 close still match; round 2's id cap is a server detail in envelope.rs that the server README carries." }
@@ -771,7 +771,7 @@ stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0639db9d40ef77a6", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:f740ec9f8e225b64", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:fd6232111a170234", by = "agent:claude", note = "#1307 round 1 B2: the shared five-attempt cap is below this section's level of detail; transport text still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/identity.rs"]
 stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
@@ -786,13 +786,13 @@ stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: tran
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/network.rs"]
-stamp = { hash = "b3:ce14f0196e5a0655", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:868524f86665bfe6", by = "agent:claude", note = "#1307 round 1 B2: the shared five-attempt cap is below this section's level of detail; transport text still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:acf4e80044ea132e", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:67d63bb0d75ac0b1", by = "agent:claude", note = "#1307 round 1 B2: the shared five-attempt cap is below this section's level of detail; transport text still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:96d69bbb1fb1824e", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
@@ -807,7 +807,7 @@ stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:dbbd13114fee0f54", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:10da2b6313b5e498", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:29398cad237fc2c5", by = "agent:claude", note = "#1307 round 1 B2: the shared five-attempt cap is below this section's level of detail; transport text still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:04489d5eebac692a", by = "agent:claude", note = "Server gains a token_file module for hosts; protocol, routes and auth are unchanged" }
@@ -849,7 +849,7 @@ stamp = { hash = "b3:5aafaf1567b2b8d5", by = "agent:perf-thread", note = "main.r
 stamp = { hash = "b3:f15b80c6adc1b5ff", by = "agent:claude", note = "#1129: daemon row adds --lan's TLS listener for paired devices (ADR-0104); the diagram and other hosts unchanged by this PR" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6e827919f2096352", by = "agent:claude", note = "#1129: daemon row adds --lan's TLS listener for paired devices (ADR-0104); the diagram and other hosts unchanged by this PR" }
+stamp = { hash = "b3:35a9ec2e267b8a56", by = "agent:claude", note = "#1307 round 1: daemon main.rs only adds the ADR-0130 line; the daemon row still holds" }
 
 ["ARCH#shape"."file:apps/jstream-desktop/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:96d9ee9867cf1a5d", by = "agent:claude-567", note = "This PR's whole change to main.rs: mod crash (daemon) and jstream_desktop::crash (desktop) are gone; main makes one jstream_crash::Secrets list, calls jstream_crash::install with Program (name, version), a clone of Secrets and crash_line, its stderr notifier (cfg(windows) in the desktop), and passes Secrets on (daemon: to token.rs and serve.rs; desktop: through app::start). Both apps' manifests now depend on jstream-crash. Re-read the daemon and desktop rows: they describe hosting, not crash reports, and still hold." }
@@ -2181,7 +2181,7 @@ stamp = { hash = "b3:f30430c5a6fa8edd", by = "agent:claude-3d", note = "Its depe
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:3b6c88e697db0948", by = "agent:claude", note = "#1129: Listening rewritten for the opt-in network listener (every interface by default, --lan-bind, fixed port, certificate beside the token file, renew only on --lan-renew); parser option list and the tls-feature dependency match Cargo.toml and args.rs" }
+stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1: main.rs's extra fingerprint line doesn't change the Listening or parser text; still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:770babb13029e236", by = "agent:grok", note = "Re-read the collection-file bullet: the daemon still loads and upgrades the file, and an unchanged 300 ms stock Cut now loads at duration 0, so it remains a collection the engine can load." }
@@ -2208,7 +2208,7 @@ stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:119277614bdb4e0a", by = "agent:claude", note = "#548 (#344): the paired-devices, log-file and token bullets describe the Windows protected DACL on creation and the DACL check on reuse (logs.rs, token.rs), and the dependencies bullet names jstream-platform-windows. The merge of #540's branch brought the wave's server design changes (the dep), which don't touch these bullets | merge: merged wave/m1-3 at f9d114e (#567: crash reports moved into the jstream-crash crate, ADR-0067; main makes the Secrets list and hands it to token.rs and serve.rs). The body's Crash reports and Dependencies bullets now cite jstream-crash beside this PR's token, paired-devices and log-file DACL text and the jstream-platform-windows dependency; token.rs and logs.rs keep this PR's create_private_file and check_private_file use; all hold" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6e827919f2096352", by = "agent:claude", note = "#1129: Listening rewritten for the opt-in network listener (every interface by default, --lan-bind, fixed port, certificate beside the token file, renew only on --lan-renew); parser option list and the tls-feature dependency match Cargo.toml and args.rs" }
+stamp = { hash = "b3:35a9ec2e267b8a56", by = "agent:claude", note = "#1307 round 1: main.rs's extra fingerprint line doesn't change the Listening or parser text; still holds" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:cea493ab8c2ba223", by = "agent:vcam-optin-561", note = "re-read: register.rs bullet now covers both flags, copy/DACL/registry work in the platform crate, readback by content, and that startup never prompts; parser bullet lists --unregister-vcam" }
@@ -2250,7 +2250,7 @@ stamp = { hash = "b3:c0121a362811be3d", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:119277614bdb4e0a", by = "agent:claude", note = "#548 (#344): logs.rs and token.rs create the log and token files user-only on Windows through jstream_platform_windows::create_private_file and refuse a reused one that fails check_private_file; tests/daemon.rs covers it. The Token file bullet and the dependencies paragraph say so. Merging #540's branch (with wave/m1-3) changes nothing in the daemon's own files | merge: merged wave/m1-3 at f9d114e (#567: crash reports moved into the jstream-crash crate, ADR-0067; main makes the Secrets list and hands it to token.rs and serve.rs). token.rs: load_or_create now takes the Secrets and keeps this PR's user-only creation and check_private_file refusal; logs.rs lost rfc3339 (the reports' timestamps moved to the crate) and keeps this PR's private log files. The Contents and Tests bullets hold" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6e827919f2096352", by = "agent:claude", note = "#1129: added --lan's TLS-only network listener to the purpose line; Startup/Command line/Serving bullets still match main.rs, args.rs and serve.rs (serve::bind now takes the network config)" }
+stamp = { hash = "b3:35a9ec2e267b8a56", by = "agent:claude", note = "#1307 round 1: main.rs only adds ADR-0130's warning line after the fingerprint; the purpose text still holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/src/register.rs"]
 stamp = { hash = "b3:cea493ab8c2ba223", by = "agent:vcam-optin-561", note = "re-read: the register.rs bullet now names the optional --register-vcam (admin-only copy), --unregister-vcam, and startup only logging; the rest unaffected" }
@@ -2307,13 +2307,13 @@ stamp = { hash = "b3:4fd0939213ad84da", by = "agent:claude@session_01FGswf5tb1RY
 stamp = { hash = "b3:517cc7668c494295", by = "agent:claude@session_01FGswf5tb1RYD9rNRZFDz7W", note = "OpenH264 pin: the xtask now takes --openh264-download (sets JSTREAM_E2E_OPENH264=download) besides --openh264 <library>, and its usage message names both; matches the encoder paragraph" }
 
 ["CRATE-jstream-daemon#usage"."body"]
-stamp = { hash = "b3:89c3f8bf39965b74", by = "agent:claude", note = "#1129: options table has --lan, --lan-port (default 4456, 1-65535), --lan-bind (not loopback), --lan-renew as args.rs parses them; Network access bullet, stdout lines and exit code 1 match main.rs network_config and its prints" }
+stamp = { hash = "b3:1e764b039ee3cb23", by = "agent:claude", note = "#1307 round 1 N1: Output bullet now lists ADR-0130's warning line printed after the network fingerprint, as main.rs prints it" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/args.rs"]
 stamp = { hash = "b3:454ca7f6ba5bf52c", by = "agent:claude", note = "#1129: options table has --lan, --lan-port (default 4456, 1-65535), --lan-bind (not loopback), --lan-renew as args.rs parses them; Network access bullet, stdout lines and exit code 1 match main.rs network_config and its prints" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/main.rs"]
-stamp = { hash = "b3:6e827919f2096352", by = "agent:claude", note = "#1129: options table has --lan, --lan-port (default 4456, 1-65535), --lan-bind (not loopback), --lan-renew as args.rs parses them; Network access bullet, stdout lines and exit code 1 match main.rs network_config and its prints" }
+stamp = { hash = "b3:35a9ec2e267b8a56", by = "agent:claude", note = "#1307 round 1 N1: Output bullet now lists ADR-0130's warning line printed after the network fingerprint, as main.rs prints it" }
 
 ["CRATE-jstream-daemon#usage"."file:apps/jstream-daemon/src/token.rs"]
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
@@ -4908,7 +4908,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:8af304651ffd2041", by = "agent:claude", note = "#1101 opacity above 1: tests.rs refuses opacity 4.5 instead of 2.0; testing approach unchanged | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: tests.rs gains #1109's and #1113's tests; the blend reference now applies this PR's gain and treats additive_srgb's alpha like additive's | kept from the merged side: tests.rs only made item() pub(crate) for the model goldens, which are now listed; the 2D and 3D goldens are unchanged. | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots)" }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:3b6c88e697db0948", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read Design against the protocol and control dependencies. The server still forwards edits. canvas.set_frame_rate is one more edit, and this section does not name a rate." }
@@ -4932,7 +4932,7 @@ stamp = { hash = "b3:f1450f8e69153ead", by = "agent:ui-layouts", note = "New UI 
 stamp = { hash = "b3:5384cb38aa6298dc", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:2a2ea3da441fbf46", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:98ecc9b8edf1b4c3", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/envelope.rs"]
 stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Message size bullet now says only type and id are read through envelope.rs and an id over 256 bytes is not echoed in too_large or malformed, so a queued answer stays small, which makes Slow clients' bound (64 parsed requests plus one message of up to 16 MiB being read) true again; the MCP table row says id is null over 256 bytes; the 1009 close with the 2 s unread hold matches session.rs." }
@@ -4941,7 +4941,7 @@ stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0639db9d40ef77a6", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:f740ec9f8e225b64", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:fd6232111a170234", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/identity.rs"]
 stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
@@ -4956,13 +4956,13 @@ stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: new 
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/network.rs"]
-stamp = { hash = "b3:ce14f0196e5a0655", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:868524f86665bfe6", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:acf4e80044ea132e", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:67d63bb0d75ac0b1", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:96d69bbb1fb1824e", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
@@ -4977,7 +4977,7 @@ stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:dbbd13114fee0f54", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:10da2b6313b5e498", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:29398cad237fc2c5", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:04489d5eebac692a", by = "agent:claude", note = "Contents list gains token_file.rs (load_or_create, device_file); lib.rs exposes it as pub mod" }
@@ -5001,7 +5001,7 @@ stamp = { hash = "b3:f1450f8e69153ead", by = "agent:ui-layouts", note = "Content
 stamp = { hash = "b3:5384cb38aa6298dc", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:2a2ea3da441fbf46", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:98ecc9b8edf1b4c3", by = "agent:claude", note = "#1307 round 1 B2: per-peer limits removed from devices.rs, gate.rs and pair.rs; the contents list never named them and still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/envelope.rs"]
 stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2: the new envelope.rs module (type and id only, ids capped at 256 bytes) sits beside session.rs and mcp.rs; the purpose names no limits or modules it contradicts." }
@@ -5010,7 +5010,7 @@ stamp = { hash = "b3:7e1c40f2bf347e19", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:0639db9d40ef77a6", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:f740ec9f8e225b64", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:fd6232111a170234", by = "agent:claude", note = "#1307 round 1 B2: per-peer limits removed from devices.rs, gate.rs and pair.rs; the contents list never named them and still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/identity.rs"]
 stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
@@ -5025,13 +5025,13 @@ stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/network.rs"]
-stamp = { hash = "b3:ce14f0196e5a0655", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:868524f86665bfe6", by = "agent:claude", note = "#1307 round 1 B2: per-peer limits removed from devices.rs, gate.rs and pair.rs; the contents list never named them and still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.html"]
 stamp = { hash = "b3:e4a1d8af8d430535", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:acf4e80044ea132e", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:67d63bb0d75ac0b1", by = "agent:claude", note = "#1307 round 1 B2: per-peer limits removed from devices.rs, gate.rs and pair.rs; the contents list never named them and still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:96d69bbb1fb1824e", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
@@ -5046,7 +5046,7 @@ stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:dbbd13114fee0f54", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests/network.rs"]
-stamp = { hash = "b3:10da2b6313b5e498", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:29398cad237fc2c5", by = "agent:claude", note = "#1307 round 1 B2: per-peer limits removed from devices.rs, gate.rs and pair.rs; the contents list never named them and still holds" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:04489d5eebac692a", by = "agent:claude", note = "Server gains a token_file module for hosts; protocol, routes and auth are unchanged" }
@@ -6423,7 +6423,7 @@ stamp = { hash = "b3:5971f0a5da96f3dd", by = "agent:claude", note = "ARCH thread
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
 ["RUNBOOK-GO-LIVE#before"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:89c3f8bf39965b74", by = "agent:claude", note = "#1129 adds only the opt-in --lan options; the build, token file and stream key prerequisites are unchanged" }
+stamp = { hash = "b3:1e764b039ee3cb23", by = "agent:claude", note = "#1307 round 1: usage change is only the --lan fingerprint line; prerequisites unchanged" }
 
 ["RUNBOOK-GO-LIVE#smoke"."body"]
 stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
@@ -6432,7 +6432,7 @@ stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Usage changed only in the bench's bullets; smoke.ps1 runs no bench command." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:89c3f8bf39965b74", by = "agent:claude", note = "#1129: smoke checks run on loopback without --lan; unchanged" }
+stamp = { hash = "b3:1e764b039ee3cb23", by = "agent:claude", note = "#1307 round 1: smoke checks run without --lan; unchanged" }
 
 ["RUNBOOK-GO-LIVE#smoke"."file:scripts/smoke.ps1"]
 stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
@@ -6444,10 +6444,10 @@ stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 n
 stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Usage changed only in the bench's bullets; the go-live steps use no bench command." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
-stamp = { hash = "b3:89c3f8bf39965b74", by = "agent:claude", note = "#1129: the steps use the loopback listener and printed lines that still come in that order (network lines appear only with --lan); unchanged" }
+stamp = { hash = "b3:1e764b039ee3cb23", by = "agent:claude", note = "#1307 round 1: steps run without --lan and the server design change is only pairing's shared cap; unchanged" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:3b6c88e697db0948", by = "agent:claude", note = "#1129: the steps use the loopback listener and printed lines that still come in that order (network lines appear only with --lan); unchanged" }
+stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1: steps run without --lan and the server design change is only pairing's shared cap; unchanged" }
 
 ["RUNBOOK-LINUX-TESTING#script"."body"]
 stamp = { hash = "b3:8562c2415ceafbaf", by = "agent:linux-install", note = "re-read against scripts/linux/install.sh, scripts/linux/jstream and linux-install.yml step by step: packages per family (Arch adds vulkan-swrast), the toolchain installed by name with the wasm target as the Mac script does, the libcef strip, the sandbox rule and its one root step, now described as catching a mistake only, with the residual risk named (code running as the user can place or swap the file before the chmod, accepted for a tester build), paths, launcher flags and the two-minute clipboard clear, the CI jobs; what it shares with the Mac script is stated exactly; install-tools.txt is in covers" }
@@ -6492,7 +6492,7 @@ stamp = { hash = "b3:26b4b843ef32097a", by = "agent:claude", note = "#1129: the 
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:mac-install", note = "whole PR: a new section for the one-command macOS install. Re-read against install.sh (checks, CLT, rustup, clone at --ref or newest tag else main, pinned UI tools from install-tools.txt checked against Cargo.lock, rustup toolchain install of rust-toolchain.toml's channel by name plus the wasm32 target, trunk and cargo builds, install folder and JStream.command, --uninstall/--purge, embedded --help), jstream.sh (daemon with the data folder's token file and collection, waits for listening on, opens the ui URL, SIGTERM on Ctrl-C, HUP or exit, JSTREAM_NO_BROWSER for CI), clipboard.js (stdin, current-host only, concealed and transient, cleared after 120 s, run with HUP ignored so a closed window still clears) and mac-install.yml (pins and install jobs). No app bundle or signing root: ADR-0063 §11 attributes prompts to Terminal and §13 leaves packaging and signing for later; usage strings come from the daemon's embedded Info.plist (apps/jstream-daemon README#purpose, whose token-file line #1091 changed); the clipboard paragraph matches threat-model#server's Accepted text" }
 
 ["RUNBOOK-MAC-TESTING#script"."dep:docs/security/threat-model.md#server"]
-stamp = { hash = "b3:707262ee957470a9", by = "agent:claude", note = "#1129: the launcher starts the daemon without --lan; the clipboard entry it cites in Server › Accepted is unchanged" }
+stamp = { hash = "b3:02f8e7c70a540023", by = "agent:claude", note = "#1307 round 1: the launcher runs without --lan; the Server › Accepted clipboard entry is unchanged" }
 
 ["RUNBOOK-MAC-TESTING#script"."file:.github/workflows/mac-install.yml"]
 stamp = { hash = "b3:f12b6e857370892e", by = "agent:mac-install", note = "whole PR: a new section for the one-command macOS install. Re-read against install.sh (checks, CLT, rustup, clone at --ref or newest tag else main, pinned UI tools from install-tools.txt checked against Cargo.lock, rustup toolchain install of rust-toolchain.toml's channel by name plus the wasm32 target, trunk and cargo builds, install folder and JStream.command, --uninstall/--purge, embedded --help), jstream.sh (daemon with the data folder's token file and collection, waits for listening on, opens the ui URL, SIGTERM on Ctrl-C, HUP or exit, JSTREAM_NO_BROWSER for CI), clipboard.js (stdin, current-host only, concealed and transient, cleared after 120 s, run with HUP ignored so a closed window still clears) and mac-install.yml (pins and install jobs). No app bundle or signing root: ADR-0063 §11 attributes prompts to Terminal and §13 leaves packaging and signing for later; usage strings come from the daemon's embedded Info.plist (apps/jstream-daemon README#purpose, whose token-file line #1091 changed); the clipboard paragraph matches threat-model#server's Accepted text" }
@@ -6669,7 +6669,7 @@ stamp = { hash = "b3:2e3a686f5d15ee5b", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d9c7698aeaa621e4", by = "agent:claude", note = "ADR-0098 context now counts three things lost outright, with the reversible actions as a separate paragraph; its decision (history destructive, batch refusing output-only edits) is unchanged and the section still matches it" }
 
 ["THREAT-MODEL#pairing"."body"]
-stamp = { hash = "b3:3e36f4ff403c0135", by = "agent:claude", note = "#1129: per-peer pairing limits (5 per IPv4 address or IPv6 /64, 64 network-wide voids the code, 429) match devices.rs and pair.rs; /pair served on the network listener" }
+stamp = { hash = "b3:73675741b3e6d833", by = "agent:claude", note = "#1307 round 1 B2: controls now say five wrong attempts from either listener void the code, as devices.rs does; Accepted adds that a network peer can deny pairing by voiding codes, never win it" }
 
 ["THREAT-MODEL#pairing"."dep:docs/adr/0044-pairing-remote-browsers.md"]
 stamp = { hash = "b3:5670e6a5758601b2" }
@@ -6684,13 +6684,13 @@ stamp = { hash = "b3:4458a76284b426ae", by = "agent:claude", note = "#1129: per-
 stamp = { hash = "b3:f1450f8e69153ead", by = "agent:ui-layouts", note = "admitted.rs also answers ui_settings, outside pairing; devices.rs only shares create_private. Pairing controls unchanged." }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
-stamp = { hash = "b3:2a2ea3da441fbf46", by = "agent:claude", note = "#1129: per-peer pairing limits (5 per IPv4 address or IPv6 /64, 64 network-wide voids the code, 429) match devices.rs and pair.rs; /pair served on the network listener" }
+stamp = { hash = "b3:98ecc9b8edf1b4c3", by = "agent:claude", note = "#1307 round 1 B2: controls now say five wrong attempts from either listener void the code, as devices.rs does; Accepted adds that a network peer can deny pairing by voiding codes, never win it" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:f740ec9f8e225b64", by = "agent:claude", note = "#1129: per-peer pairing limits (5 per IPv4 address or IPv6 /64, 64 network-wide voids the code, 429) match devices.rs and pair.rs; /pair served on the network listener" }
+stamp = { hash = "b3:fd6232111a170234", by = "agent:claude", note = "#1307 round 1 B2: controls now say five wrong attempts from either listener void the code, as devices.rs does; Accepted adds that a network peer can deny pairing by voiding codes, never win it" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair.rs"]
-stamp = { hash = "b3:acf4e80044ea132e", by = "agent:claude", note = "#1129: per-peer pairing limits (5 per IPv4 address or IPv6 /64, 64 network-wide voids the code, 429) match devices.rs and pair.rs; /pair served on the network listener" }
+stamp = { hash = "b3:67d63bb0d75ac0b1", by = "agent:claude", note = "#1307 round 1 B2: controls now say five wrong attempts from either listener void the code, as devices.rs does; Accepted adds that a network peer can deny pairing by voiding codes, never win it" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/pair_page.rs"]
 stamp = { hash = "b3:96d69bbb1fb1824e", by = "agent:claude", note = "#1129: per-peer pairing limits (5 per IPv4 address or IPv6 /64, 64 network-wide voids the code, 429) match devices.rs and pair.rs; /pair served on the network listener" }
@@ -6720,7 +6720,7 @@ stamp = { hash = "b3:f3e3a293b719fe8d" }
 stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read secrets: controls on main now say set_key fails where an app has no store (macOS Keychain built but unwired, Linux none); the ADR-0071 paragraph moved from proposed to accepted, nothing built, with the same risk and mitigations as the accepted ADR." }
 
 ["THREAT-MODEL#server"."body"]
-stamp = { hash = "b3:707262ee957470a9", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
+stamp = { hash = "b3:02f8e7c70a540023", by = "agent:claude", note = "#1307 round 1 B2: network listener's Limits bullet now says its pairing attempts share the code's five; other controls match network.rs, gate.rs and identity.rs" }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:2481538d771d9214", by = "agent:claude-0104", note = "Added a sentence: ADR-0104 decides an opt-in TLS-only network listener with a pinned self-signed certificate that admits device tokens and never the control token, not built. Re-read the controls on main against R-SEC-002's new sentence: the daemon still binds 127.0.0.1 with no flag and no TLS, so they hold." }
@@ -6744,7 +6744,7 @@ stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "Adds the de
 stamp = { hash = "b3:5384cb38aa6298dc", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/gate.rs"]
-stamp = { hash = "b3:f740ec9f8e225b64", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
+stamp = { hash = "b3:fd6232111a170234", by = "agent:claude", note = "#1307 round 1 B2: network listener's Limits bullet now says its pairing attempts share the code's five; other controls match network.rs, gate.rs and identity.rs" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/identity.rs"]
 stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
@@ -6756,7 +6756,7 @@ stamp = { hash = "b3:a43f169350ed1c0f", by = "agent:claude", note = "#1129: netw
 stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/network.rs"]
-stamp = { hash = "b3:ce14f0196e5a0655", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
+stamp = { hash = "b3:868524f86665bfe6", by = "agent:claude", note = "#1307 round 1 B2: network listener's Limits bullet now says its pairing attempts share the code's five; other controls match network.rs, gate.rs and identity.rs" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/session.rs"]
 stamp = { hash = "b3:8ce0c2db2d2b727e", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change at round 2 (B1): the Limits bullet says a message or body over 4 MiB up to 16 MiB is refused with too_large echoing at most a 256-byte id, so the 1024-reply backlog holds only small answers and one connection holds at most one oversized message being read, ADR-0074's accepted bound; envelope.rs builds nothing else of it." }

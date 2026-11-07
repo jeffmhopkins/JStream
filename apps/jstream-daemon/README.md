@@ -269,6 +269,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then with `--lan` one
   `network: https://<name>:<port>/ (TLS, paired devices only)` line for each name and
   address the certificate carries, `network certificate fingerprint (SHA-256): AB:CD:…`,
+  ADR-0130's line that a new certificate warning means continue only if it matches,
   and a line when the certificate was just made, renewed or lacks today's names, then
   `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go

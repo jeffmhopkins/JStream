@@ -330,7 +330,9 @@ fn run(mut options: Options) -> Result<(), Failure> {
                     lines.push_str(&format!("network: {url} (TLS, paired devices only)\n"));
                 }
                 lines.push_str(&format!(
-                    "network certificate fingerprint (SHA-256): {fingerprint}\n"
+                    "network certificate fingerprint (SHA-256): {fingerprint}\n\
+                     a new certificate warning on a paired device means: continue only if \
+                     the fingerprint matches this one\n"
                 ));
                 for note in notes {
                     lines.push_str(note);

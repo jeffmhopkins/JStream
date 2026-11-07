@@ -259,12 +259,10 @@ its own from a short code instead of the control token.
 - **The code.** `pairing.start`, from any admitted client, opens a code: 8 Crockford
   base32 characters (40 bits from `getrandom`), shown `XXXX-XXXX`. One is open at a time,
   and a new `pairing.start` replaces it. It lives 2 minutes, works once, and is void
-  after 5 wrong attempts on the host's own listener (logged at `warn`, without the
-  code). Attempts from the network listener are counted apart (#1129): each peer, an
-  IPv4 address or an IPv6 /64, gets 5 wrong attempts at the open code and is then
-  refused for it (`429`), and 64 wrong attempts from the network in all void it. So a
-  peer on the network can't void the host's code with five guesses, and 64 guesses at
-  40 bits leave about one chance in 17 billion. Entry ignores case,
+  after 5 wrong attempts (logged at `warn`, without the code), from the host's own
+  listener and the network listener together, as ADR-0044 sets. A peer on the network
+  can therefore void the open code, and the host starts pairing again; it never gets
+  more than five guesses at one. Entry ignores case,
   dashes and spaces, and reads `O` as `0` and `I`/`L` as `1`. `pairing.start` is refused
   (`action_failed`) unless the server is bound to loopback or `ServerConfig::tls` is on:
   a device token is accepted only over loopback or TLS
@@ -287,7 +285,6 @@ its own from a short code instead of the control token.
 | A body that isn't `Content-Type: application/json` | 415 |
 | A body over 4 KiB, one that isn't `{"code", "name"}`, a name that isn't allowed, a `browser` that isn't a boolean, or `"browser": true` without TLS | 400 (no attempt used up) |
 | A wrong code | 403 (its message says when that attempt voided the code) |
-| From a network peer that has used up its attempts at the open code | 429, nothing compared |
 | The open code | 200, `Cache-Control: no-store`, `{"device_id": "dev_…", "token": "<64 hex digits>"}` |
 | The open code, `"browser": true`, on a TLS listener | 200, `Cache-Control: no-store`, `{"device_id": "dev_…"}` and `Set-Cookie: __Host-jstream_device=<token>; Secure; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000` |
 | The device file can't be written | 500, and nothing is paired |
@@ -410,8 +407,8 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   host listener's only. The control token is refused there however it is presented,
   with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
   A device token, or a browser's device cookie, gets in while pairing is on. The
-  pairing exchange and `GET /pair` are served there, with the per-peer attempt limits
-  above.
+  pairing exchange and `GET /pair` are served there, sharing the code's five
+  attempts with the host's listener.
 - **Limits** (#1129 N1). It has its own pool of open TCP connections, as many as
   `max_tcp_connections`, so connections from the network that never authenticate can't
   use up the host's. The header-read and handshake timeouts are the same. The

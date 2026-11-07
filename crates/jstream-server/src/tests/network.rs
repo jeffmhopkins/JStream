@@ -249,10 +249,10 @@ fn the_network_listener_is_tls_only_and_takes_device_tokens_only() {
     assert_eq!(reply.status, 101, "{}", reply.body);
 }
 
-/// #1129 N1: a network peer that guesses wrong five times is refused for that code,
-/// and the code stays open for the host and for other devices.
+/// ADR-0044's five wrong attempts hold across both listeners: four from the host and
+/// one from the network void the code, so the network adds no guesses at it.
 #[test]
-fn a_network_peer_cant_void_the_hosts_code() {
+fn wrong_codes_from_both_listeners_share_the_five_attempts() {
     let (harness, identity) = start_network(|_| {});
     let pin = identity.fingerprint();
     let control = ok(harness.connect());
@@ -276,12 +276,18 @@ fn a_network_peer_cant_void_the_hosts_code() {
             .expect("tls")
             .status
     };
-    for _ in 0..crate::devices::MAX_WRONG_PER_PEER {
-        assert_eq!(post(&wrong), 403);
+    let origin = harness.own_origin();
+    let body = serde_json::json!({"code": wrong, "name": "Guess"}).to_string();
+    for _ in 1..crate::devices::MAX_WRONG_ATTEMPTS {
+        let reply = harness.post_pair(&[("Origin", &origin)], &body);
+        assert_eq!(reply.status, 403, "{}", reply.body);
     }
-    assert_eq!(post(&code), 429);
-    // The host's own listener still pairs with the same code.
-    harness.pair(&code, "Host browser");
+    assert_eq!(post(&wrong), 403);
+    // That was the fifth: the right code no longer pairs, from either listener.
+    assert_eq!(post(&code), 401);
+    let body = serde_json::json!({"code": code, "name": "Host browser"}).to_string();
+    let reply = harness.post_pair(&[("Origin", &origin)], &body);
+    assert_eq!(reply.status, 401, "{}", reply.body);
 }
 
 /// ADR-0047 on the network listener: the pairing page is served there, though the

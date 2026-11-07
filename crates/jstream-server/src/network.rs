@@ -17,8 +17,8 @@
 //!   name the listener's port with a name the certificate carries or the address the
 //!   connection arrived on; `Origin`, when present, is `https://` and that host; and only
 //!   a device token, never the control token. `POST /api/v1/pair` and `GET /pair` are
-//!   answered here too, with each network peer's pairing attempts limited apart
-//!   (`devices.rs`).
+//!   answered here too, sharing the open code's five attempts with the
+//!   host's listener (`devices.rs`).
 
 use crate::error::ServerError;
 use crate::identity::Identity;

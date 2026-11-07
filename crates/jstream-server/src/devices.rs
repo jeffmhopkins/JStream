@@ -3,16 +3,12 @@
 //! - **The pairing code.** `pairing.start` draws one: 40 random bits written as 8
 //!   characters of Crockford's base32 alphabet, shown `XXXX-XXXX`. One is open at a time,
 //!   and a new one replaces it. It is open for [`CODE_LIFETIME`], is used once, and is
-//!   void after [`MAX_WRONG_ATTEMPTS`] wrong attempts from the host. Only its BLAKE3
-//!   digest is kept, and a presented code is compared digest to digest, as the control
-//!   token is.
-//! - **Attempts from the network** (ADR-0104, #1129 N1) are counted apart, so a peer on
-//!   the network can't void the host's code with five guesses: each network peer (an
-//!   IPv4 address, or an IPv6 /64) gets [`MAX_WRONG_PER_PEER`] wrong attempts at a code,
-//!   after which that peer is refused for it ([`PairError::PeerLimit`]), and the code is
-//!   void after [`MAX_NETWORK_WRONG`] wrong attempts from the network in all. 40 bits
-//!   leave 64 guesses about one chance in 17 billion, and the map of peers holds at most
-//!   that many entries.
+//!   void after [`MAX_WRONG_ATTEMPTS`] wrong attempts. Only its BLAKE3 digest is kept, and
+//!   a presented code is compared digest to digest, as the control token is.
+//! - **Attempts from the network** (ADR-0104) count toward the same five: a code
+//!   is void after [`MAX_WRONG_ATTEMPTS`] wrong attempts from either listener together,
+//!   as ADR-0044 sets. So a peer on the network can void the host's open code, and the
+//!   host starts pairing again; it can't get more guesses at a code than ADR-0044 allows.
 //! - **Device tokens.** A right code gets a new 256-bit token, written as 64 hex digits
 //!   like the control token. The server keeps only its BLAKE3 digest, with the device's
 //!   ID, its name, when it paired and when its token was last presented. A token unused
@@ -43,7 +39,6 @@ use std::fs;
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::io::{self, Write};
-use std::net::{IpAddr, Ipv4Addr};
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -54,13 +49,6 @@ pub(crate) const CODE_LIFETIME: Duration = Duration::from_secs(120);
 
 /// How many wrong codes void the open one.
 pub(crate) const MAX_WRONG_ATTEMPTS: u32 = 5;
-
-/// How many wrong codes one network peer may try at the open code before it is refused
-/// for it.
-pub(crate) const MAX_WRONG_PER_PEER: u32 = 5;
-
-/// How many wrong codes from the network, from every peer together, void the open one.
-pub(crate) const MAX_NETWORK_WRONG: u32 = 64;
 
 /// How long a device token may go unused before it lapses: 30 days, in seconds.
 pub(crate) const LAPSE: u64 = 30 * 24 * 3600;
@@ -133,41 +121,8 @@ struct Pairing {
     /// The digest of the code, normalized (8 symbols, no dash).
     digest: blake3::Hash,
     expires: Instant,
-    /// Wrong attempts from the host's own listener (loopback).
+    /// Wrong attempts, from either listener.
     wrong: u32,
-    /// Wrong attempts from the network listener, in all.
-    network_wrong: u32,
-    /// Wrong attempts from the network listener, by peer.
-    peers: HashMap<Peer, u32>,
-}
-
-/// Where a pairing attempt came from.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Attempt {
-    /// The host's own listener: loopback, or a test's TLS listener.
-    Host,
-    /// The network listener, from this address.
-    Network(IpAddr),
-}
-
-/// A network peer, as its attempts are counted: an IPv4 address, or the /64 an IPv6
-/// address is in, since one host can take any address in its /64.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Peer {
-    V4(Ipv4Addr),
-    V6(u64),
-}
-
-impl Peer {
-    fn of(ip: IpAddr) -> Peer {
-        match ip {
-            IpAddr::V4(v4) => Peer::V4(v4),
-            IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
-                Some(v4) => Peer::V4(v4),
-                None => Peer::V6((v6.to_bits() >> 64) as u64),
-            },
-        }
-    }
 }
 
 /// Why `pair` refused.
@@ -177,8 +132,6 @@ pub(crate) enum PairError {
     NoCode,
     /// The code is wrong. `voided` when this attempt used up the last one.
     Wrong { voided: bool },
-    /// This network peer has used up its attempts at the open code; nothing was tried.
-    PeerLimit,
     /// The OS's random source failed.
     Random(getrandom::Error),
     /// The device file could not be written; nothing was paired.
@@ -254,8 +207,6 @@ impl Devices {
             digest: blake3::hash(symbols.as_bytes()),
             expires: now.instant + CODE_LIFETIME,
             wrong: 0,
-            network_wrong: 0,
-            peers: HashMap::new(),
         });
         Ok(format!("{}-{}", &symbols[..4], &symbols[4..]))
     }
@@ -268,48 +219,22 @@ impl Devices {
 
     /// Pairs a device named `name` (already checked) if `code` is the open code, and
     /// returns its ID and its new token. The code is used up by a right attempt and
-    /// voided by the last wrong one `from` the host, or the last from the network. A
-    /// network peer that has used up its own attempts is refused before its code is
-    /// compared.
+    /// voided by the last wrong one.
     pub(crate) fn pair(
         &self,
         code: &str,
         name: &str,
         now: Now,
-        from: Attempt,
     ) -> Result<(DeviceId, String), PairError> {
         let mut state = lock(&self.state);
         let pairing = open_pairing(&mut state, now).ok_or(PairError::NoCode)?;
-        let peer = match from {
-            Attempt::Host => None,
-            Attempt::Network(ip) => Some(Peer::of(ip)),
-        };
-        if let Some(peer) = peer
-            && pairing.peers.get(&peer).copied().unwrap_or(0) >= MAX_WRONG_PER_PEER
-        {
-            return Err(PairError::PeerLimit);
-        }
         let right = normalize(code).is_some_and(|c| blake3::hash(c.as_bytes()) == pairing.digest);
         if !right {
-            let voided = match peer {
-                None => {
-                    pairing.wrong += 1;
-                    pairing.wrong >= MAX_WRONG_ATTEMPTS
-                }
-                Some(peer) => {
-                    *pairing.peers.entry(peer).or_insert(0) += 1;
-                    pairing.network_wrong += 1;
-                    pairing.network_wrong >= MAX_NETWORK_WRONG
-                }
-            };
+            pairing.wrong += 1;
+            let voided = pairing.wrong >= MAX_WRONG_ATTEMPTS;
             if voided {
                 state.pairing = None;
-                match peer {
-                    None => tracing::warn!("pairing code voided after 5 wrong attempts"),
-                    Some(_) => tracing::warn!(
-                        "pairing code voided after {MAX_NETWORK_WRONG} wrong attempts from the network"
-                    ),
-                }
+                tracing::warn!("pairing code voided after 5 wrong attempts");
             }
             return Err(PairError::Wrong { voided });
         }
@@ -638,8 +563,8 @@ pub(crate) fn create_private(path: &Path) -> io::Result<fs::File> {
 #[cfg(test)]
 mod tests {
     use super::{
-        Attempt, CODE_LIFETIME, COOKIE_RENEW_EVERY, Devices, LAPSE, MAX_NETWORK_WRONG,
-        MAX_WRONG_ATTEMPTS, MAX_WRONG_PER_PEER, Now, PairError, TOUCH_EVERY, check_name, normalize,
+        CODE_LIFETIME, COOKIE_RENEW_EVERY, Devices, LAPSE, MAX_WRONG_ATTEMPTS, Now, PairError,
+        TOUCH_EVERY, check_name, normalize,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -693,18 +618,18 @@ mod tests {
         let devices = memory();
         let t = now();
         assert!(matches!(
-            devices.pair("0000-0000", "Tablet", t, Attempt::Host),
+            devices.pair("0000-0000", "Tablet", t),
             Err(PairError::NoCode)
         ));
         let code = devices.start_pairing(t).expect("random");
         assert!(devices.pairing_open(t));
         let (id, token) = devices
-            .pair(&code.to_lowercase(), "Tablet", t, Attempt::Host)
+            .pair(&code.to_lowercase(), "Tablet", t)
             .expect("paired");
         assert_eq!(token.len(), 64);
         assert!(!devices.pairing_open(t), "single-use");
         assert!(matches!(
-            devices.pair(&code, "Again", t, Attempt::Host),
+            devices.pair(&code, "Again", t),
             Err(PairError::NoCode)
         ));
         assert_eq!(
@@ -728,11 +653,11 @@ mod tests {
         let second = devices.start_pairing(t).expect("random");
         if first != second {
             assert!(matches!(
-                devices.pair(&first, "Old", t, Attempt::Host),
+                devices.pair(&first, "Old", t),
                 Err(PairError::Wrong { voided: false })
             ));
         }
-        assert!(devices.pair(&second, "New", t, Attempt::Host).is_ok());
+        assert!(devices.pair(&second, "New", t).is_ok());
     }
 
     #[test]
@@ -743,7 +668,7 @@ mod tests {
         let expired = later(t, CODE_LIFETIME.as_secs());
         assert!(!devices.pairing_open(expired));
         assert!(matches!(
-            devices.pair(&code, "Late", expired, Attempt::Host),
+            devices.pair(&code, "Late", expired),
             Err(PairError::NoCode)
         ));
 
@@ -757,75 +682,12 @@ mod tests {
         for attempt in 1..=MAX_WRONG_ATTEMPTS {
             let voided = attempt == MAX_WRONG_ATTEMPTS;
             assert!(
-                matches!(devices.pair(&wrong, "Guess", t, Attempt::Host), Err(PairError::Wrong { voided: v }) if v == voided),
+                matches!(devices.pair(&wrong, "Guess", t), Err(PairError::Wrong { voided: v }) if v == voided),
                 "attempt {attempt}"
             );
         }
         assert!(matches!(
-            devices.pair(&code, "Right, too late", t, Attempt::Host),
-            Err(PairError::NoCode)
-        ));
-    }
-
-    /// A peer on the network gets its own five attempts, which leave the host's code and
-    /// other peers alone (#1129 N1); the network's attempts together void it at 64.
-    #[test]
-    fn network_peers_are_limited_one_by_one() {
-        use std::net::{IpAddr, Ipv6Addr};
-        let devices = memory();
-        let t = now();
-        let code = devices.start_pairing(t).expect("random");
-        let wrong = if code.ends_with('0') {
-            format!("{}1", &code[..8])
-        } else {
-            format!("{}0", &code[..8])
-        };
-        let peer = |n: u8| Attempt::Network(IpAddr::from([192, 168, 1, n]));
-        for _ in 0..MAX_WRONG_PER_PEER {
-            assert!(matches!(
-                devices.pair(&wrong, "Guess", t, peer(9)),
-                Err(PairError::Wrong { voided: false })
-            ));
-        }
-        // That peer is refused, even with the right code; the code stays open.
-        assert!(matches!(
-            devices.pair(&code, "Guess", t, peer(9)),
-            Err(PairError::PeerLimit)
-        ));
-        // Another address in the same IPv6 /64 is the same peer.
-        let v6 = |last: u16| {
-            Attempt::Network(IpAddr::from(Ipv6Addr::new(0xfd00, 0, 0, 1, 0, 0, 0, last)))
-        };
-        for _ in 0..MAX_WRONG_PER_PEER {
-            assert!(devices.pair(&wrong, "Guess", t, v6(1)).is_err());
-        }
-        assert!(matches!(
-            devices.pair(&wrong, "Guess", t, v6(2)),
-            Err(PairError::PeerLimit)
-        ));
-        // The host's own attempts are counted apart, and another peer still pairs.
-        for _ in 1..MAX_WRONG_ATTEMPTS {
-            assert!(devices.pair(&wrong, "Guess", t, Attempt::Host).is_err());
-        }
-        assert!(devices.pair(&code, "Tablet", t, peer(10)).is_ok());
-
-        // 64 wrong attempts from the network void the code.
-        let code = devices.start_pairing(t).expect("random");
-        let wrong = if code.ends_with('0') {
-            format!("{}1", &code[..8])
-        } else {
-            format!("{}0", &code[..8])
-        };
-        for n in 0..MAX_NETWORK_WRONG {
-            let voided = n + 1 == MAX_NETWORK_WRONG;
-            let from = peer(u8::try_from(n / MAX_WRONG_PER_PEER).expect("small"));
-            assert!(
-                matches!(devices.pair(&wrong, "Guess", t, from), Err(PairError::Wrong { voided: v }) if v == voided),
-                "attempt {n}"
-            );
-        }
-        assert!(matches!(
-            devices.pair(&code, "Late", t, peer(200)),
+            devices.pair(&code, "Right, too late", t),
             Err(PairError::NoCode)
         ));
     }
@@ -835,9 +697,7 @@ mod tests {
         let devices = memory();
         let t = now();
         let code = devices.start_pairing(t).expect("random");
-        let (id, token) = devices
-            .pair(&code, "Tablet", t, Attempt::Host)
-            .expect("paired");
+        let (id, token) = devices.pair(&code, "Tablet", t).expect("paired");
         let watch = devices.watch(&id).expect("paired");
         assert!(devices.revoke(&id).expect("in memory"));
         assert!(*watch.borrow() || watch.has_changed().is_err());
@@ -846,9 +706,7 @@ mod tests {
         assert!(devices.watch(&id).is_none());
 
         let code = devices.start_pairing(t).expect("random");
-        let (id, token) = devices
-            .pair(&code, "Laptop", t, Attempt::Host)
-            .expect("paired");
+        let (id, token) = devices.pair(&code, "Laptop", t).expect("paired");
         let watch = devices.watch(&id).expect("paired");
         assert!(devices.contains(&id, t.unix + LAPSE - 1));
         assert_eq!(devices.admit(token.as_bytes(), t.unix + LAPSE), None);
@@ -861,9 +719,7 @@ mod tests {
         let devices = memory();
         let t = now();
         let code = devices.start_pairing(t).expect("random");
-        let (id, token) = devices
-            .pair(&code, "Tablet", t, Attempt::Host)
-            .expect("paired");
+        let (id, token) = devices.pair(&code, "Tablet", t).expect("paired");
         let used = t.unix + LAPSE - 10;
         assert!(devices.admit(token.as_bytes(), used).is_some());
         assert!(devices.contains(&id, t.unix + LAPSE + 10));
@@ -877,9 +733,7 @@ mod tests {
         let devices = memory();
         let t = now();
         let code = devices.start_pairing(t).expect("random");
-        let (_, token) = devices
-            .pair(&code, "Browser", t, Attempt::Host)
-            .expect("paired");
+        let (_, token) = devices.pair(&code, "Browser", t).expect("paired");
         let renews = |at: u64| {
             devices
                 .admit_cookie(token.as_bytes(), at)
@@ -910,9 +764,7 @@ mod tests {
         let devices = Devices::load(Some(path.clone())).expect("no file yet");
         let t = now();
         let code = devices.start_pairing(t).expect("random");
-        let (id, token) = devices
-            .pair(&code, "Tablet", t, Attempt::Host)
-            .expect("paired");
+        let (id, token) = devices.pair(&code, "Tablet", t).expect("paired");
         let text = fs::read_to_string(&path).expect("written");
         assert!(!text.contains(&token), "{text}");
         assert!(
@@ -948,9 +800,7 @@ mod tests {
         let path = dir.join("token.devices");
         let devices = Devices::load(Some(path.clone())).expect("no file yet");
         let code = devices.start_pairing(now()).expect("OS randomness");
-        devices
-            .pair(&code, "Tablet", now(), Attempt::Host)
-            .expect("paired");
+        devices.pair(&code, "Tablet", now()).expect("paired");
         assert!(
             Devices::load(Some(path.clone())).is_ok(),
             "its own DACL passes"

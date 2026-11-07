@@ -161,9 +161,6 @@ pub(crate) enum Refusal {
     NoPairingCode,
     /// `POST /api/v1/pair` with a code that isn't the open one.
     WrongPairingCode,
-    /// `POST /api/v1/pair` from a network peer that has used up its attempts at the open
-    /// code (#1129 N1).
-    PairingPeerLimit,
     /// The device cookie appears more than once.
     CookieRepeated,
     /// The device cookie on a request whose `Sec-Fetch-Site` is missing or neither
@@ -213,7 +210,6 @@ impl Refusal {
             Refusal::McpSessions => "too many MCP sessions",
             Refusal::NoPairingCode => "pairing attempted while no pairing code is open",
             Refusal::WrongPairingCode => "wrong pairing code",
-            Refusal::PairingPeerLimit => "too many wrong pairing codes from this address",
             Refusal::CookieRepeated => "device cookie repeated",
             Refusal::CookieSite => "device cookie without a same-origin Sec-Fetch-Site",
         }
@@ -270,11 +266,6 @@ impl IntoResponse for Refusal {
             Refusal::WrongPairingCode => {
                 (StatusCode::FORBIDDEN, "wrong pairing code\n").into_response()
             }
-            Refusal::PairingPeerLimit => (
-                StatusCode::TOO_MANY_REQUESTS,
-                "too many wrong codes from this device: start pairing again on the host\n",
-            )
-                .into_response(),
         }
     }
 }
@@ -858,7 +849,7 @@ pub(crate) mod tests {
         Refusal, check_extra_hosts, device_cookie_header, renew_cookie,
     };
     use crate::config::{ServerConfig, Token};
-    use crate::devices::{Attempt, Devices, Now};
+    use crate::devices::{Devices, Now};
     use crate::error::ServerError;
     use crate::listener::On;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
@@ -895,10 +886,7 @@ pub(crate) mod tests {
     fn paired(devices: &Devices, name: &str) -> String {
         let now = Now::current();
         let code = devices.start_pairing(now).expect("random");
-        devices
-            .pair(&code, name, now, Attempt::Host)
-            .expect("paired")
-            .1
+        devices.pair(&code, name, now).expect("paired").1
     }
 
     /// ADR-0044: a device token gets in the same three ways as the control token, as

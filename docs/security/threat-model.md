@@ -150,7 +150,7 @@ a stolen token, local denial of service.
   - **Limits.** It has its own pool of 128 open TCP connections, so the network can't
     use up the host's own UI's. Its TLS handshake runs on the connection's task, within
     the same 10 s header-read deadline. Its WebSocket and MCP sessions count against
-    the shared limits below. Pairing attempts from it are limited per peer (see
+    the shared limits below. Its pairing attempts share the code's five (see
     [Pairing](#pairing)).
   - **Where it listens.** Every interface by default, on a fixed port (4456, `--lan-port`),
     so it is also reachable on public Wi-Fi or a VPN the machine joins: `--lan-bind`
@@ -232,12 +232,10 @@ a device that should no longer have access.
 
 **Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
 [ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
-time, 40 bits, two minutes, void after five wrong attempts on the host's own listener,
-kept only as a digest. From the network listener, each peer (an IPv4 address, or an
-IPv6 /64) gets five wrong attempts at the open code and is then refused for it (`429`),
-and 64 wrong attempts from the network in all void it, so a peer on the network can't
-void the host's code with five guesses (#1129); 64 guesses at 40 bits leave about one
-chance in 17 billion;
+time, 40 bits, two minutes, void after five wrong attempts from either listener
+together, kept only as a digest. A peer on the network listener can void the open code
+with five wrong guesses, which costs the person a new `pairing.start`, but never gets
+more guesses at a code than ADR-0044's five;
 256-bit device tokens kept as digests, revocable, dropped after 30 days unused; the
 browser's copy only as a `__Host-` cookie that is `Secure`, `HttpOnly` and
 `SameSite=Strict`, set and read only on a TLS listener, refused when a request carries
@@ -249,7 +247,10 @@ browser whose user continues past a certificate warning for a certificate that i
 host's hands that device's token to the impostor; revoking the device ends it
 ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md)). A person who skips the
 fingerprint check on first pairing can be fooled by an attacker already in the middle of
-that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)).
+that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)). With `--lan`, anyone
+on the network can void each open code with five wrong guesses, so pairing can be
+denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
+network its own allowance.
 
 **Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
 hardware run (#546, for #344).
