@@ -233,8 +233,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
   device, which posts it to the server's `/api/v1/pair` for a device token of its own
   ([jstream-server › Design](../../crates/jstream-server/README.md#design)). When the
-  server also listens on the local network, `pair` then prints each address to open on
-  the device (`open on the device: <url>`), the certificate's fingerprint, and that the
+  server also listens on the local network, `pair` then prints the pairing page on each
+  of its addresses (`open on the device: <url>/pair`), the certificate's fingerprint, and that the
   certificate warning is to be passed only if the fingerprint matches
   ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). The code is
   printed because it is the answer, and is never logged. `device list` prints a table

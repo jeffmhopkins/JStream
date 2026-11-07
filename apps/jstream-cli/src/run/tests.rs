@@ -1603,7 +1603,7 @@ fn pairing_golden() {
         ok(concat!(
             "pairing code: 7K3M-9QXA\n",
             "enter it on the device within 120 s; it works once\n",
-            "open on the device: https://studio.local:4456/\n",
+            "open on the device: https://studio.local:4456/pair\n",
             "certificate fingerprint: AB:CD\n",
             "continue past the certificate warning only if the fingerprint matches\n",
         ))
