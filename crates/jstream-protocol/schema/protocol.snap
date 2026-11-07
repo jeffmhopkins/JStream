@@ -1402,6 +1402,24 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Binding": {
+      "description": "One binding, as `state.get`, `delete.plan` and a batch result report it.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "The action request it runs, as `binding.set` bound it. Read as plain JSON, so a\nclient older than an action type still reads the collection: it keeps the\nbinding and can't run it. [`Binding::action`] parses it."
+        },
+        "trigger": {
+          "$ref": "#/$defs/Trigger",
+          "description": "What fires it."
+        }
+      },
+      "required": [
+        "trigger",
+        "action"
+      ],
+      "type": "object"
+    },
     "BlendMode": {
       "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
       "oneOf": [
@@ -1871,6 +1889,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind": {
               "const": "batch",
               "type": "string"
+            },
+            "removed_bindings": {
+              "description": "The controller bindings the batch removed the same way (0.96), in the order\nit removed them. Omitted when there are none, and missing (from a server\nolder than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
             },
             "removed_hotkeys": {
               "description": "The hotkey bindings the batch removed because their action named an object it\ndeleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores\nthem. Omitted when there are none, and missing (from a server older than 0.25)\nparses as empty.",
@@ -4786,6 +4811,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound\n(rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Inverse: `binding.clear`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action",
+              "description": "The action request it runs, checked as an `action` call is."
+            },
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "What fires it."
+            },
+            "type": {
+              "const": "binding.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that\nisn't bound. Inverse: `binding.set` with its action.",
+          "properties": {
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "The trigger to unbind."
+            },
+            "type": {
+              "const": "binding.clear",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of\none the scene already holds, in its place. A timeline is timed cues, each running\nan action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't\nexist; with `already_exists` (entity `timeline`) for an ID another scene's timeline\nhas; and with `invalid_argument` at `timeline.<field>` for what\n[`TimelineInfo::problem`] refuses (an ID, a length, a loop, cues out of time order\nor past where they can fire, an action a cue can't run) and for a 33rd timeline in\nthe scene. The objects a cue names are not checked, and deleting one leaves the cue\nin place, inert, like a follow camera's item: when it fires its action fails as the\ncall would, and its `timeline.cue_fired` carries the error. Changing a timeline\nwhile it plays keeps its start, so its cues fire at their new times from then on.\nInverse: `timeline.delete` for a new timeline, else `timeline.set` with the old one.",
           "properties": {
             "scene_id": {
@@ -5505,6 +5571,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "hotkey",
           "description": "A hotkey binding, named by its chord.",
+          "type": "string"
+        },
+        {
+          "const": "binding",
+          "description": "A controller binding (0.96), named by its trigger as `Display` writes it, such as\n`MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,\nso a client older than 0.96, which sends none, never reads it.",
           "type": "string"
         },
         {
@@ -10422,6 +10493,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "minimum": 0,
               "type": "integer"
             },
+            "bindings": {
+              "description": "Every controller binding (ADR-0122), ordered by trigger. Kept apart from\n`hotkeys`, which lists key chords only. Omitted when there are none, and\nmissing (from a server older than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "buses": {
               "default": [],
               "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.19) parses as empty.",
@@ -10994,6 +11072,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `delete.plan`.",
           "properties": {
+            "bindings": {
+              "description": "The controller bindings the batch removes the same way, ordered by trigger.\nOmitted when there are none, and missing (from a server older than 0.96)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "edits": {
               "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` and `filter.set_settings` setting each reference to a\ndeleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
               "items": {
@@ -12737,6 +12822,125 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Trigger": {
+      "description": "What fires a binding: one MIDI message, from one input or any, on one channel or any.\n\n- A note fires on note-on (a note-on with velocity 0 is a note-off, and never fires).\n- A control change fires when its value crosses the middle upward, from 63 or below\n  to 64 or above, so a button that sends 127 then 0 fires once per press.\n- A program change fires each time it arrives.\n\n`channel` is 1 to 16, as a MIDI device's panel shows it, or missing for any channel.\n`input` is the name of the input (a MIDI port, or a JTunnel sender), or missing for\nany. Two triggers are the same exactly when they are equal, so `channel: 1` and any\nchannel are two triggers: a message that matches both fires both.",
+      "oneOf": [
+        {
+          "description": "A note-on.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_note",
+              "type": "string"
+            },
+            "note": {
+              "description": "The note number, 0 to 127 (60 is middle C).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A control change crossing the middle upward.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_cc",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "controller"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A program change.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_program",
+              "type": "string"
+            },
+            "program": {
+              "description": "The program number, 0 to 127, as sent (a device that shows programs from 1\nsends its program 1 as 0).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "program"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "UnitProfile": {
       "description": "One unit of drawing work and what it cost ([`ProfileInfo::units`]).",
       "properties": {
@@ -13378,5 +13582,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.95"
+  "title": "JStream protocol 0.96"
 }

@@ -40,8 +40,10 @@ protocol's types (`Overrides`).
   and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
-  always names objects that exist. A new state holds one preset, `cut`, as its default.
+  §3), the `bindings`: each controller `Trigger` bound to the `Action` it fires
+  ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)),
+  and the `transitions`: the presets, keyed by ID, and the default. A hotkey or
+  controller binding always names objects that exist. A new state holds one preset, `cut`, as its default.
   Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
   carries audio.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
@@ -451,6 +453,16 @@ that does not want to change the graph it has.
   `State::visible_in` reads a placement's visibility as `item.set_visible` with that
   `scene_id` would change it, for `item.toggle`.
   The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
+- **Controller bindings** (`hotkey.rs`, ADR-0122): `binding.set` and `binding.clear`
+  bind a MIDI `Trigger` (a note, a controller or a program, on one channel or any, from
+  one input or any) to an action and unbind it, with the hotkeys' checks in the same
+  order: the trigger's `Trigger::problem` (`invalid_argument` at `trigger.<field>`),
+  whether it is already bound (`already_exists`) or bound at all (`not_found`, entity
+  `binding`), `Action::bind_problem`, and the objects the action names. Deleting what
+  a binding's action names removes it as it removes a hotkey: the result's
+  `removed_bindings` lists them after `removed_hotkeys`, the inverse ends with a
+  `binding.set` for each after the hotkeys', and `delete.plan` lists them, ordered by
+  trigger. The touched set names the binding and the objects its action names.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its
@@ -479,13 +491,14 @@ placing any deleted source are removed, settings references to anything deleted 
 to `null` (one `source.set_settings` per source, one `transition.update` per transition
 preset, and one `filter.set_settings` per filter), the video mixes that show a deleted scene are pointed at the program
 (`video_mix.update`), and the target's own delete comes last. The plan also lists the
-hotkey bindings those deletes remove. A bus's plan clears references and moves the
+hotkey and controller bindings those deletes remove. A bus's plan clears references and moves the
 outputs that carry the bus to the master (`output.set_audio_buses`; its
 `bus.delete` takes its sends); the master's is `invalid_argument`.
 Sources come ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles, video mixes and buses
 ordered by ID, and sends by bus and then source. `state.get` carries the canvas, the
-buses, the sends, the hotkey bindings ordered by chord, and the transition presets
+buses, the sends, the hotkey bindings ordered by chord, the controller bindings
+ordered by trigger (omitted while there are none), and the transition presets
 (ordered by ID) with the default, and an audio source's info its `audio`; `kind.list`
 lists the transition kinds beside the source and filter kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
@@ -499,7 +512,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 8), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 9), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -518,7 +531,8 @@ each bus's `monitor` omitted for none)
 and `sends`, written whenever there is a send or a source with a channel of its own (so
 an empty list means every master send was removed) and omitted otherwise, the `master`
 with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, omitted
-when there are none, and `transitions` (each preset with its `kind_version`, and the
+when there are none, the `bindings` (each a `trigger` and an `action`) ordered by
+trigger, omitted when there are none, and `transitions` (each preset with its `kind_version`, and the
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default, `locked` when locked
@@ -537,7 +551,8 @@ an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), ordered
 by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
 `camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
-(ADR-0124) gives a `browser` source's page API a checkbox per kind of data. Loading creates the folders top level first, then
+(ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
+`bindings` (ADR-0122) are `schema_version` 9. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -555,7 +570,8 @@ the engine's; this crate does no I/O.
   scene or whose effects are full, and 7 to 8 turns on a `browser` source's
   `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
   `page_api_bus` already grant something, so rebuilding it with its kind's defaults
-  takes nothing away),
+  takes nothing away, and 8 to 9 adds `bindings`, refusing a version 8 file that
+  holds them),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -579,7 +595,8 @@ the engine's; this crate does no I/O.
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
-  scene's camera motion (once every item exists), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline. A
+  scene's camera motion (once every item exists), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
+(`` binding `MIDI note 36 on channel 10` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -630,7 +647,8 @@ duplicate's audio and a delete's restore, a bus deleted with its sends and undon
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
 `a_source_drawing_a_bus_round_trips`), hotkey checks, rebinds and the bindings
-deletes remove (and restore on undo), a `scene.switch` binding that names a preset
+deletes remove (and restore on undo), the same for controller bindings
+(`controller_bindings_follow_the_hotkeys_rules`), a `scene.switch` binding that names a preset
 (`a_switch_naming_a_preset_follows_the_preset`), the transition edits (in
 `transition.rs`: the initial `cut`, kind and settings checks, a source refusing a
 transition kind, patches and kind changes, the default's delete refused and a delete
@@ -689,7 +707,10 @@ existed) loading with those chains empty and the sources' filters intact; a remo
 master send's round trip, a webcam's among them (its audio on, no send back); a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
 transitions' round trip (with the initial `cut` deleted, or kept but changed), the
 old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
-preset of another kind version refused; hotkeys' round trip, and a file whose binding
+preset of another kind version refused; hotkeys' round trip; the parity collection
+with two controller bindings saving exactly as `persist/fixtures/v9.json` and that
+fixture loading exactly, and a version 8 file holding `bindings` refused by its
+migration; a file whose hotkey binding
 names a missing scene refused; a clone's
 link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
