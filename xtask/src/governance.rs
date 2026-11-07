@@ -229,8 +229,71 @@ fn doc_meta(f: &FileChange, out: &mut Vec<Change>) {
             }
         }
     }
+    identity(p, &base, &head, out);
     if accepted_adr(&base) && base_text != head_text {
         adr_edits(p, base_text, head_text, out);
+    }
+}
+
+/// The ids a doc's `retired_sections` tombstones name.
+fn tombstones(doc: &Doc) -> BTreeSet<&str> {
+    doc.meta
+        .as_ref()
+        .and_then(|m| m.get("retired_sections"))
+        .and_then(toml::Value::as_table)
+        .map(|t| t.keys().map(String::as_str).collect())
+        .unwrap_or_default()
+}
+
+/// R-DOC-010 beyond section and rule deletions (#1297): a removed plain `<a id>` anchor,
+/// a removed tombstone, a new anchor that reuses a tombstoned id, and a retired rule made
+/// active again.
+fn identity(p: &str, base: &Doc, head: &Doc, out: &mut Vec<Change>) {
+    // Sections and rules carry their own messages above.
+    let named: BTreeSet<&str> = base
+        .sections
+        .iter()
+        .map(|s| s.anchor.as_str())
+        .chain(base.rules.iter().map(|r| r.id.as_str()))
+        .collect();
+    let mut gone = BTreeSet::new();
+    for (a, _) in &base.anchors {
+        if !named.contains(a.as_str()) && !head.has_anchor(a) && gone.insert(a.as_str()) {
+            push(out, p, format!("anchor `#{a}` removed"));
+        }
+    }
+    let (was, now) = (tombstones(base), tombstones(head));
+    for t in was.difference(&now) {
+        push(
+            out,
+            p,
+            format!("tombstone `{t}` removed from `retired_sections`"),
+        );
+    }
+    let mut reused = BTreeSet::new();
+    for (a, _) in &head.anchors {
+        if was.contains(a.as_str()) && !base.has_anchor(a) && reused.insert(a.as_str()) {
+            push(
+                out,
+                p,
+                format!("anchor `#{a}` reuses a retired section's id"),
+            );
+        }
+    }
+    let status = |r: &crate::docs::parse::Rule| {
+        r.meta
+            .as_ref()
+            .and_then(|m| m.get("status"))
+            .and_then(toml::Value::as_str)
+            .map(str::to_owned)
+    };
+    for r in &base.rules {
+        if status(r).as_deref() == Some("retired")
+            && let Some(h) = head.rules.iter().find(|h| h.id == r.id)
+            && status(h).as_deref() != Some("retired")
+        {
+            push(out, p, format!("rule `{}` reuses a retired id", r.id));
+        }
     }
 }
 
@@ -983,6 +1046,56 @@ mod tests {
                 "docs/X.md: deletes a tracked doc (retire it instead)",
             ]
         );
+    }
+
+    /// #1297: a removed plain anchor, a removed tombstone, a tombstoned id used again and a
+    /// retired rule made active again are all identity changes (R-DOC-010).
+    #[test]
+    fn removed_and_reused_ids_are_flagged() {
+        let base = RULES
+            .replace(
+                "status = \"active\"\n-->\n<a id=\"s\">",
+                "status = \"active\"\nretired_sections = { old = [], gone = [] }\n-->\n<a id=\"s\">",
+            )
+            .replace("Text.\n", "<a id=\"plain\"></a>\nText.\n")
+            .replace(
+                "status = \"active\"\nenforced_by",
+                "status = \"retired\"\nenforced_by",
+            );
+        let f = Fixture::new("identity", &[("docs/RULES.md", &base)]);
+        let head = base
+            .replace("<a id=\"plain\"></a>\n", "<a id=\"old\"></a>\n")
+            .replace(", gone = []", "")
+            .replace(
+                "status = \"retired\"\nenforced_by",
+                "status = \"active\"\nenforced_by",
+            );
+        let (changes, _) = f.change(&[("docs/RULES.md", &head)]);
+        assert_eq!(
+            whats(&changes),
+            vec![
+                "docs/RULES.md: rule `R-X-001` `status`: \"retired\" → \"active\"",
+                "docs/RULES.md: anchor `#plain` removed",
+                "docs/RULES.md: tombstone `gone` removed from `retired_sections`",
+                "docs/RULES.md: anchor `#old` reuses a retired section's id",
+                "docs/RULES.md: rule `R-X-001` reuses a retired id",
+            ]
+        );
+    }
+
+    /// Adding, keeping or moving a plain anchor within a doc is not an identity change.
+    #[test]
+    fn kept_and_added_anchors_are_not_flagged() {
+        let base = RULES.replace("Text.\n", "<a id=\"plain\"></a>\nText.\n");
+        let f = Fixture::new("anchors-kept", &[("docs/RULES.md", &base)]);
+        let head = base
+            .replace("<a id=\"plain\"></a>\nText.\n", "Text.\n")
+            .replace(
+                "Rule.\n",
+                "Rule.\n<a id=\"plain\"></a>\n<a id=\"fresh\"></a>\nMore.\n",
+            );
+        let (changes, _) = f.change(&[("docs/RULES.md", &head)]);
+        assert!(whats(&changes).is_empty(), "{:?}", whats(&changes));
     }
 
     #[test]
