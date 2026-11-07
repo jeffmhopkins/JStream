@@ -80,6 +80,7 @@ use jstream_protocol::{
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use jstream_protocol::KeyframeTiming;
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
@@ -87,8 +88,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
 /// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
-/// (ADR-0099).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+/// (ADR-0099). An overridden timing applies to transitions into the keyframe (ADR-0129).
+pub type Overrides =
+    jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
 pub type MotionList = Vec<jstream_protocol::MotionModifier>;

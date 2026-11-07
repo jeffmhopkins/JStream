@@ -15,8 +15,8 @@
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
     Blocker, Crop, Edit, EntityKind, FilterChains, FilterInfo, Finite32, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, KeyframeTiming, MAX_CHAIN_FILTERS, MotionModifier,
-    OverrideField, ProtocolError, SceneId, SceneRole, Settings, SourceKind,
+    ItemOverride, ItemTransform, KeyframeTiming, MAX_CHAIN_FILTERS, MotionModifier, OverrideField,
+    ProtocolError, SceneId, SceneRole, Settings, SourceKind,
 };
 use std::collections::{BTreeMap, BTreeSet};
 

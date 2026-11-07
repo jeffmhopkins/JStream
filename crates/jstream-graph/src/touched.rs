@@ -53,6 +53,8 @@ enum Prop {
     /// An item's motion modifiers, the whole list, its own or a keyframe scene's
     /// override (ADR-0099).
     Motion,
+    /// A keyframe scene's timing for an item in transitions into it (ADR-0129).
+    Timing,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -171,6 +173,7 @@ impl Touched {
                     OverrideField::Opacity => Prop::Opacity,
                     OverrideField::Effects => Prop::Effects,
                     OverrideField::Motion => Prop::Motion,
+                    OverrideField::Timing => Prop::Timing,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
             }
@@ -211,6 +214,9 @@ impl Touched {
             }
             Edit::ItemSetMotion { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Motion);
+            }
+            Edit::ItemSetTiming { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Timing);
             }
             Edit::ItemSetOpacity { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Opacity);

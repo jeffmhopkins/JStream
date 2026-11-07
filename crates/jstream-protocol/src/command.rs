@@ -144,8 +144,8 @@ pub enum Edit {
     /// is `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or
     /// `x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3
     /// (`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the
-    /// override. Inverse: `item.set_timing` with the old timing, or with none when the
-    /// keyframe didn't override it.
+    /// override. Inverse: `item.set_timing` with the old timing, or `item.clear_override`
+    /// of `timing` when the keyframe didn't override it.
     #[serde(rename = "item.set_timing")]
     ItemSetTiming {
         /// The keyframe scene.
