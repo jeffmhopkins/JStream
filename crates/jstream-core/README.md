@@ -1165,7 +1165,11 @@ and the client and request that started it. Nothing of it is saved or undone.
   until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
-  round sends its loops and ends after its cues fire. A round collects every
+  round sends each loop or end in time order with its cues, once the cues due at or
+  before that pass boundary (`boundary`) have run, and drops it when one of them
+  stopped that run or started the timeline again (`send_timeline_step`): a stopped
+  timeline sends no `looped`, and a run restarted before its end sends no `ended`
+  after the new run's `started`. A round collects every
   timeline's due fires before it runs them, and skips a fire when an earlier cue in
   that round stopped its timeline or started it again (`started_ns`); a timeline that
   only reached its own end still runs the cues that were due before the end. When all
