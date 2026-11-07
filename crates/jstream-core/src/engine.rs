@@ -54,10 +54,10 @@ use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, CollectionCause,
     DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
     FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
-    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
-    VideoMixId, YoutubeAuth,
+    IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
+    OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
+    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -395,8 +395,14 @@ impl Engine {
         let _running = self.shared.clap.begin();
         let _one_at_a_time = lock(&self.shared.clap.scan_lock);
         let scan = clap_kinds::scan(hosts.as_ref());
+        let mut wake = Vec::new();
         {
             let mut state = lock(&self.shared.state);
+            // Only a kind that is new, or described differently, changes `kind.list`.
+            let changed = scan
+                .kinds
+                .iter()
+                .any(|k| state.graph.kind(&k.descriptor.kind_id) != Some(&k.descriptor));
             state.graph = std::mem::take(&mut state.graph)
                 .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
             state.audio.add_clap_plugins(
@@ -408,7 +414,16 @@ impl Engine {
                     )
                 }),
             );
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::ClapScan,
+                    },
+                    &mut wake,
+                );
+            }
         }
+        wake_all(wake);
         self.shared.clap.finished(&scan);
         for (file, error) in &scan.failed {
             tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
@@ -5947,10 +5962,21 @@ impl Shared {
                 return;
             }
             state.effects_seq = update.seq;
+            let changed = !update.removed.is_empty()
+                || !update.described.is_empty()
+                || state.quarantined != update.quarantined;
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             state.quarantined = update.quarantined;
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::EffectPacks,
+                    },
+                    &mut wake,
+                );
+            }
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);

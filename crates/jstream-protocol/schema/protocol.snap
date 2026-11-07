@@ -6476,6 +6476,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "client_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "The kinds `kind.list` and `kind.describe` answer changed without an edit (0.106,\n#1328): a CLAP scan found an effect or a changed one, or an effect pack was\nadded, changed or removed, or one of its effects was quarantined or re-enabled.\nRuntime state, so no `rev`. A client that keeps the kinds reads `kind.list`\nagain; one that misses it sees the change on its next read.",
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/KindsCause",
+              "description": "What changed them."
+            },
+            "type": {
+              "const": "kinds.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7427,6 +7445,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "version"
       ],
       "type": "object"
+    },
+    "KindsCause": {
+      "description": "What changed the kinds ([`Event::KindsChanged`], 0.106).",
+      "oneOf": [
+        {
+          "const": "clap_scan",
+          "description": "A CLAP plugin scan, at start or from `plugin.clap_rescan`.",
+          "type": "string"
+        },
+        {
+          "const": "effect_packs",
+          "description": "The effect packs: a pack added, changed or removed (by the folder watcher,\n`pack.write` or `pack.delete`), or an effect quarantined after a GPU device loss\nor re-enabled with `effect.enable`.",
+          "type": "string"
+        }
+      ]
     },
     "LabelId": {
       "description": "A label that sources carry (ADR-0024 §4).",
@@ -13535,5 +13568,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.95"
+  "title": "JStream protocol 0.106"
 }

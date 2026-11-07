@@ -110,8 +110,9 @@ Contents ([Design](#design) explains the choices):
   and the kind descriptors read so far, the last failed call, the toast's confirmation
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
-  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does,
-  since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does.
+  `kinds.changed` (0.106), from a CLAP scan or the effect packs, perhaps another
+  client's, and `events.dropped` read it again too. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key

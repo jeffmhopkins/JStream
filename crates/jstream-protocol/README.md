@@ -229,7 +229,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
-  `collection.file_changed` (with `CollectionCause`, 0.94).
+  `collection.file_changed` (with `CollectionCause`, 0.94), and `kinds.changed` (with
+  `KindsCause`, 0.106).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -309,7 +310,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.95 because a person can see and redo the CLAP plugin scan: the
+`PROTOCOL_VERSION` is 0.106 because the event `kinds.changed` (`KindsCause`) tells
+every client when a CLAP scan or the effect packs change the kinds
+([Events](#events), #1328, a placeholder number the release queue sets); 0.95 because a person can see and redo the CLAP plugin scan: the
 query `plugin.clap_scan` (`ClapScanInfo`) and the action `plugin.clap_rescan`
 ([Plugins](#plugins), a placeholder number the release queue sets); 0.94 because of projects: the actions `collection.open`,
 `collection.new` and `collection.save_as`, the query `collection.info`, the event
@@ -1858,6 +1861,12 @@ After `welcome`, the server pushes every event to every client.
   under [Timelines](#timelines). Neither is sent once a frame: a cue fires once a pass.
 - `scene.keyframe_changed {scene_id, keyframe_id?, client_id, request_id?}` (0.88) is
   described under [Keyframe tracks](#keyframe-tracks).
+- `kinds.changed {cause}` (0.106, #1328) says the kinds `kind.list` and `kind.describe`
+  answer changed without an edit. `cause` is `clap_scan` (a CLAP scan found a new
+  effect, or one described differently; a rescan that finds the same ones sends
+  nothing) or `effect_packs` (a pack added, changed or removed, or an effect quarantined
+  or re-enabled). Runtime state, so no `rev`: a client that keeps the kinds reads
+  `kind.list` again, and one that misses it sees the change on its next read.
 
 <a id="youtube"></a>
 ## YouTube
@@ -2015,7 +2024,8 @@ not WASM plugins: the engine scans for `.clap` files and offers each effect as a
   (each effect as `{kind_id, name, file}`, ordered by kind ID; `name` is the plugin's
   own text) and `failed` (each file the scan couldn't read, as `{file, reason}`).
 - **`plugin.clap_rescan`** scans again and answers once the scan ends; a scan already
-  running is waited for first. A kind found earlier stays until a restart. An engine
+  running is waited for first. A kind found earlier stays until a restart. When a scan
+  finds a new kind, every client gets `kinds.changed` (0.106, [Events](#events)). An engine
   that hosts no CLAP plugins, the mock among them, answers it `unsupported`.
 - Both are a person's: no MCP tool carries them, no plugin is granted them (they name
   files on the machine) and no hotkey binds the rescan.

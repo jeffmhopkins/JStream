@@ -668,6 +668,81 @@ fn clap_rescan_finds_a_plugin_installed_since_and_the_scan_reports_it() {
     assert!(kinds.iter().any(|k| k.kind_id == "clap/org.example.verb"));
 }
 
+/// Every client hears `kinds.changed` when a CLAP scan finds a new kind, and when the
+/// effect packs change one, but not for a rescan that finds nothing new (#1328).
+#[test]
+fn every_client_hears_when_the_kinds_change() {
+    use crate::effect_packs::Packs;
+    use crate::effect_packs::test_pack::{self, Temp};
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use jstream_protocol::KindsCause;
+    use std::path::{Path, PathBuf};
+
+    /// The fake hosts, searching `0`.
+    struct In(PathBuf, FakePluginHosts);
+    impl PluginHosts for In {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.1.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.1.start(request)
+        }
+    }
+    let changes = |events: Vec<Event>| -> Vec<KindsCause> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::KindsChanged { cause } => Some(cause),
+                _ => None,
+            })
+            .collect()
+    };
+    let engine = Engine::new();
+    let other = connected(&engine);
+    let mut events = other.events();
+
+    let dir = std::env::temp_dir().join(format!(
+        "jstream-engine-kinds-changed-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let gain = dir.join("gain.clap");
+    std::fs::write(&gain, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(
+        &gain,
+        vec![PluginDesc {
+            id: "org.example.gain".into(),
+            name: "Gain".into(),
+            vendor: String::new(),
+            version: String::new(),
+            description: String::new(),
+            params: vec![fake_param()],
+        }],
+    );
+    engine.scan_clap_plugins(std::sync::Arc::new(In(dir.clone(), fake)));
+    assert_eq!(changes(drain(&mut events)), [KindsCause::ClapScan]);
+    // The same plugins again: nothing changed.
+    let asker = connected(&engine);
+    block_on(asker.call(Call::Action {
+        action: Action::PluginClapRescan,
+    }))
+    .expect("rescan");
+    assert_eq!(changes(drain(&mut events)), []);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let temp = Temp::new("kinds-changed");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let mut packs = Packs::new(temp.0.clone());
+    engine.install_effects(packs.poll().expect("the pack loads"));
+    assert_eq!(changes(drain(&mut events)), [KindsCause::EffectPacks]);
+}
+
 /// `plugin.clap_rescan` scans on its own thread: while it runs, the session that asked
 /// still gets answers, and `plugin.clap_scan` reports it as scanning (#1288).
 #[test]

@@ -342,6 +342,16 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         request_id: Option<RequestId>,
     },
+    /// The kinds `kind.list` and `kind.describe` answer changed without an edit (0.106,
+    /// #1328): a CLAP scan found an effect or a changed one, or an effect pack was
+    /// added, changed or removed, or one of its effects was quarantined or re-enabled.
+    /// Runtime state, so no `rev`. A client that keeps the kinds reads `kind.list`
+    /// again; one that misses it sees the change on its next read.
+    #[serde(rename = "kinds.changed")]
+    KindsChanged {
+        /// What changed them.
+        cause: KindsCause,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -373,6 +383,7 @@ impl Event {
             Event::TimelineChanged { .. } => Some("timeline.changed"),
             Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
             Event::CollectionFileChanged { .. } => Some("collection.file_changed"),
+            Event::KindsChanged { .. } => Some("kinds.changed"),
             Event::Unknown => None,
         }
     }
@@ -390,6 +401,19 @@ pub enum CollectionCause {
     New,
     /// `collection.save_as`: the same collection, saved to another file.
     SaveAs,
+}
+
+/// What changed the kinds ([`Event::KindsChanged`], 0.106).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum KindsCause {
+    /// A CLAP plugin scan, at start or from `plugin.clap_rescan`.
+    ClapScan,
+    /// The effect packs: a pack added, changed or removed (by the folder watcher,
+    /// `pack.write` or `pack.delete`), or an effect quarantined after a GPU device loss
+    /// or re-enabled with `effect.enable`.
+    EffectPacks,
 }
 
 /// The engine's load at one `stats.tick` (0.48): running totals since the engine

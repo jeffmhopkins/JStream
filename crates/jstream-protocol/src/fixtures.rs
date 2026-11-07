@@ -2860,6 +2860,9 @@ pub(crate) fn events() -> Vec<Event> {
             request_id: Some(RequestId::new("r7")),
         });
     }
+    for cause in [crate::KindsCause::ClapScan, crate::KindsCause::EffectPacks] {
+        events.push(Event::KindsChanged { cause });
+    }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),

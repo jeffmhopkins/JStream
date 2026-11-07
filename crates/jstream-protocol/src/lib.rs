@@ -70,8 +70,8 @@ pub use envelope::{
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{
-    ChainCost, CollectionCause, DropCounts, EngineLoad, Event, OutputHealth, OutputState,
-    OutputStatsInfo,
+    ChainCost, CollectionCause, DropCounts, EngineLoad, Event, KindsCause, OutputHealth,
+    OutputState, OutputStatsInfo,
 };
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
