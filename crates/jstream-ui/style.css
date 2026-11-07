@@ -68,6 +68,13 @@
   --danger-dark: #7a1e23;
   --problem: #ff8a8f;
   --ok: #3fb27f;
+  /* Code colours, for the shader editor's highlighting. */
+  --code-keyword: #c792ea;
+  --code-type: #7fd1c7;
+  --code-number: #f2a07b;
+  --code-attribute: #e6c07b;
+  --code-call: #82aaff;
+  --code-annotation: #d7a65f;
   --bg: var(--app);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   font-size: 13px;
@@ -1874,6 +1881,19 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .shader-line.bad { color: var(--problem); background: rgba(255, 80, 80, 0.15); border-radius: 3px; }
 .shader-text { flex: 1 1 auto; margin: 0; padding: 8px; border: 0; border-radius: 0; background: none; color: var(--text); resize: none; white-space: pre; overflow: auto; tab-size: 4; }
 .shader-text:focus { outline: none; }
+/* The coloured copy of the text under a transparent textarea (#1295): same box, font and padding, scrolled with it. */
+.shader-stack { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.shader-stack .shader-text { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; }
+.shader-shade { overflow: hidden; pointer-events: none; }
+.shader-input { color: transparent; caret-color: var(--text); }
+.shader-input::selection { color: transparent; background: var(--selection); }
+.hl-comment { color: var(--dim); }
+.hl-annotation { color: var(--code-annotation); }
+.hl-keyword { color: var(--code-keyword); }
+.hl-type { color: var(--code-type); }
+.hl-number { color: var(--code-number); }
+.hl-attribute { color: var(--code-attribute); }
+.hl-call { color: var(--code-call); }
 .shader-status { margin: 0; font-size: 12px; color: var(--muted); }
 .shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
 .shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }
