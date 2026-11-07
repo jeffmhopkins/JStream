@@ -27,6 +27,9 @@
 //! The pieces that don't touch libasound (sample conversion, channel layouts, which
 //! names are listed, frame-to-time arithmetic and error mapping) are platform independent
 //! and tested everywhere.
+//!
+//! alsa-lib prints its own error lines to stderr (such as for an unknown PCM). Silencing
+//! them needs a variadic C callback, which stable Rust can't define.
 
 use jstream_platform::PlatformError;
 use jstream_platform::media::ChannelLayout;
