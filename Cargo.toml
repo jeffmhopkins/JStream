@@ -5,7 +5,7 @@ members = ["apps/*", "crates/*", "crates/jstream-ui/tests/e2e/mock-daemon", "xta
 [workspace.package]
 # The release version, which the apps in the portable zip take (`version.workspace`); a
 # release tag is `v` and this (docs/runbooks/release.md). Libraries stay at 0.0.0.
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.4.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/jeffmhopkins/JStream"
@@ -263,6 +263,9 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["f
 # Rust/JavaScript bindings for the browser builds (`jstream-control`'s wasm32 WebSocket
 # client, `jstream-ui`). Already in the tree through wgpu's wasm32 dependencies.
 wasm-bindgen = { version = "0.2", default-features = false, features = ["std"] }
+# Turns a JavaScript promise into a future (`jstream-ui`, wasm32 only): the desktop
+# file dialog and the update check's `fetch`. Already in the tree through Leptos.
+wasm-bindgen-futures = "0.4"
 # Web API bindings; each crate enables the interfaces it uses.
 web-sys = { version = "0.3", default-features = false, features = ["std"] }
 # GPU (ADR-0004): pinned exactly, because wgpu-hal interop can change between releases;

@@ -377,7 +377,7 @@ pub const MOCK_DISPLAY: &str = "mock:display";
 pub const MOCK_WINDOW: &str = "mock:window";
 
 /// The ID of the one video capture device the mock's `capture.targets` lists, named
-/// "Mock webcam", with two formats (since protocol 0.89).
+/// "Mock webcam", with two formats (since protocol 0.90).
 pub const MOCK_DEVICE: &str = "mock:webcam";
 
 /// The fonts the mock's `font.list` lists, as (family, style, path): made up, so a
@@ -550,6 +550,7 @@ impl History {
 struct Collection {
     rev: Rev,
     canvas: Canvas,
+    base_fps: u32,
     /// In display order.
     scenes: Vec<Scene>,
     items: BTreeMap<ItemId, Item>,
@@ -591,6 +592,7 @@ impl Default for Collection {
         Self {
             rev: Rev::default(),
             canvas: Canvas::default(),
+            base_fps: jstream_protocol::DEFAULT_BASE_FPS,
             scenes: Vec::new(),
             items: BTreeMap::new(),
             sources: BTreeMap::new(),
@@ -1303,6 +1305,7 @@ impl State {
             Query::StateGet => QueryResult::StateGet {
                 rev: self.collection.rev,
                 canvas: self.collection.canvas,
+                base_fps: self.collection.base_fps,
                 sources: self.collection.source_infos(),
                 scenes: self
                     .collection
@@ -1950,6 +1953,13 @@ impl Collection {
                     width: old.width,
                     height: old.height,
                 }]
+            }
+            Edit::CanvasSetFrameRate { fps } => {
+                if !jstream_protocol::allowed_base_fps(fps) {
+                    return Err(invalid(at, "fps", "must be 30 or 60"));
+                }
+                let old = std::mem::replace(&mut self.base_fps, fps);
+                vec![Edit::CanvasSetFrameRate { fps: old }]
             }
             Edit::ItemSetCrop {
                 item_id,
@@ -4039,6 +4049,7 @@ mod tests {
         match query(control, Query::StateGet).expect("state.get") {
             QueryResult::StateGet {
                 canvas,
+                base_fps,
                 sources,
                 scenes,
                 outputs,
@@ -4055,6 +4066,7 @@ mod tests {
             } => QueryResult::StateGet {
                 rev: Rev(0),
                 canvas,
+                base_fps,
                 sources,
                 scenes,
                 outputs,
@@ -4270,6 +4282,7 @@ mod tests {
             QueryResult::StateGet {
                 rev: Rev(0),
                 canvas: Canvas::DEFAULT,
+                base_fps: jstream_protocol::DEFAULT_BASE_FPS,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],

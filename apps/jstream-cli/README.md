@@ -128,7 +128,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   are always sent neutral: the command sets the 2D box only, though the engine accepts
   any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
   the command has no flip argument yet.
-  `canvas.set_size <width> <height>` sets the canvas. Groups
+  `canvas.set_size <width> <height>` sets the canvas, and
+  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119). Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:

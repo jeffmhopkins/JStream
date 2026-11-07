@@ -173,7 +173,7 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-place
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60)
 ├── sources        Source { id, kind, settings, filters { video[], audio[] }, duplicated_from?, labels, favourite, audio? }   video and/or audio
 │                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
@@ -273,9 +273,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height })
     ID and a group is one shared scene, so a variant's override on a group's child
     applies to every placement of that group in the variant's tree, including two
     placements in the same parent. To vary one copy, duplicate the group.
-  - **A placed scene can switch its own keyframe** as studio state
-    ([ADR-0116](adr/0116-keyframe-tracks.md)), never in the collection: see
-    Keyframe tracks under [Protocol](#protocol).
+  - **A placed scene can switch its own keyframe** as runtime state on the engine's
+    graph ([ADR-0116](adr/0116-keyframe-tracks.md),
+    [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
+    collection: see Keyframe tracks under [Protocol](#protocol).
 - **Folders and organisation are collection state:** folders, labels (which sources and
   scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
@@ -508,12 +509,23 @@ every mix runs at the base rate divided by an integer.
 |---|---|---|
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
-| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001) |
-| Render | Composites every mix on each base-rate tick | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. |
+| Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
+| Render | Composites every mix on each base-rate tick; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | Draws the program mix, or the stream's scene, small for each `preview.subscribe` stream and encodes it (H.264, JPEG, or PNG for a screenshot) into the session's bounded frame queue | Not real-time: it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | For an H.264 stream of the program, holds the program stage (opening it with no output) and hands it the stream's encoder, which the render thread feeds with the program at the stream's size; a sender thread per such stream forwards its packets ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a scene, a source, JPEG or PNG) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while any output runs, fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while it runs (while any output or H.264 preview stream of the program holds it), fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+
+**Target video model** ([ADR-0117](adr/0117-real-time-video-thread-model.md), being built
+in steps under #1221): the render thread only composites and submits, never touching
+pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
+slots from their own threads, so a new frame no longer re-plans; read-back consumers are
+served by a `jstream-readback` thread from a ring of staging buffers; the engine shares
+one GPU context; and the program stage runs while anything consumes it (a preview stream,
+a projector, an output or a virtual camera), compositing the program and every monitored
+scene, so the preview thread encodes and sends frames the render thread drew instead of
+compositing its own. A small `jstream-work-*` pool takes CPU work with no thread of its
+own. The table above is the model as built; each step edits it as it lands.
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
 next to its code, which that section covers: the output pipeline in
@@ -672,7 +684,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
-  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box
+  `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
+  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89)
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
   0.32). `encoder.create`, `encoder.update` and `encoder.delete`
@@ -1056,7 +1069,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
   action undo can't take back or a history call, today `device`, `history`, `output`,
-  `pack`, `pairing`, `ui_settings` and `values`;
+  `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
+  may set a shared value a page may send off the machine,
+  [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
+  is not an undoable edit, and a page granted the value may send it off,
+  [ADR-0102](adr/0102-page-api-for-browser-sources.md));
   `openWorldHint` for `output`, `source`, whose `browser` kind loads any web page, and
   `batch`), so a client can ask the user before an agent retargets an output, sets its
   key, goes live, steps through undo or points a browser source at a page, and lets
@@ -1078,6 +1095,10 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   has its own image: a frame sheet, several pictures taken at an interval and tiled in
   time order into one PNG, from `video.frames` or, starting with a switch, from the
   `scene` tool's `scene.switch_and_watch` (#1061), sent the same way.
+- **`serverInfo.version`** is the workspace release version, the one the apps ship
+  (`jstream-mcp`'s `build.rs` reads `[workspace.package] version`). The crate itself
+  stays at `0.0.0` ([The version](runbooks/release.md#version)), so `CARGO_PKG_VERSION`
+  would report that (#1189).
 - **Access:** full access ([ADR-0006](adr/0006-mcp-full-access.md)), always authenticated.
   The stdio proxy (`jstream-cli mcp`) reads the token from the user-only token file. The
   streamable-HTTP transport is served by `jstream-server` at `/mcp` on the control port,
@@ -1197,7 +1218,10 @@ Staging attaches to the queue's next submit, so render holds the context's
 conversion's), and other threads that submit on that queue (the browser source's
 copies, Linux's PipeWire capture copies) take it too.
 Without a context, or a capture that can deliver on it, the engine keeps CPU frames
-(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). A
+(step 6; [jstream-core › Runtime](../crates/jstream-core/README.md#runtime)), uploaded as
+they arrive (RGBA8, BGRA8 or NV12) and converted to premultiplied linear by a compute
+pass, so the render thread copies bytes but converts no pixel
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §2). A
 browser source's page paints on the same context and is imported the same way, read
 as premultiplied sRGB (`import_premultiplied`), CEF's layout. Step 5's encoder side is built:
 on Windows, `Codecs::on_context` gives H.264 encoders that copy each NV12 encode target
@@ -1211,8 +1235,9 @@ left-sited chroma. The render thread (in `jstream-core`) runs it: a video sessio
 opened on the context gets each composite of its video mix converted into the next of
 that mix's ring of the platform's encode targets, which it is pushed as a GPU frame, in
 its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
-on the CPU path and the virtual cameras still get their mix read back, and a mix none
-of them is fed is not read back. Built-in video filters are kinds with
+on the CPU path and the virtual cameras still get their mix read back, through a ring
+of map-read buffers the render thread collects without waiting for the GPU (§4 of the
+ADR), and a mix none of them is fed is not read back. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
@@ -1397,7 +1422,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   for new collection state (encoder profiles, hotkey bindings, transition presets and
   settings, folders, labels and organisation metadata, keyframe scenes' `variant_of` and
   `overrides`, an output's `audio_bus`, a scene's `camera` and a variant's override of it, an item's `locked` and `effects_space`) is omitted when empty or at its default (for presets, a new collection's one `cut`), so a file without it is still
-  valid at the same `schema_version`. Scene filters and item effects (version 2) and a
+  valid at the same `schema_version`. A file that still stores that Cut at 300 ms,
+  ease-in-out and otherwise unchanged, loads it at duration 0 (#1209), with no schema
+  bump: a `cut` already showed the new scene on the next frame. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
@@ -1453,8 +1480,9 @@ admin ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The folder als
 `bootstrap.exe` renamed `jstream-browser-helper.exe` and `jstream-browser-helper.dll`,
 signed with the same certificate if releases are signed
 ([ADR-0048](adr/0048-sandboxed-browser-helper.md)). The hosts look for the helper there
-(`CefConfig::beside_exe`). From M3 it also holds `jstream-plugin-host.exe`, the
-out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)).
+(`CefConfig::beside_exe`). It also holds `jstream-plugin-host.exe`, the out-of-process
+CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)), which the engine
+starts from beside its own exe.
 Release builds link the C runtime statically and need only OS components (WebView2, Media
 Foundation, Direct3D 12).
 

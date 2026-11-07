@@ -10,6 +10,7 @@ use crate::hotkeys::Hotkeys;
 use crate::menu::{ContextMenu, Menus};
 use crate::panels::AddSource;
 use crate::panels::add_source::AddSourceDialog;
+use crate::panels::agent::ActivityCleared;
 use crate::panels::filters::{AddFilter, FilterDialogs, FilterSettings};
 use crate::panels::inspector::Folds;
 use crate::panels::labels::LabelManager;
@@ -87,6 +88,10 @@ pub fn App() -> impl IntoView {
     let info = RwSignal::new(SessionInfo::default());
     let session = SessionContext(StoredValue::new_local(None));
     provide_context(session);
+    // The URL the open session connected to, so Browse can tell this app's engine
+    // from another one (`host::same_engine`).
+    let connected = RwSignal::new(String::new());
+    provide_context(crate::host::ConnectedEngine(connected));
     let studio = Studio::new();
     provide_context(studio);
     // Bumped each time a session ends, so a stale event loop can tell it is stale.
@@ -95,6 +100,7 @@ pub fn App() -> impl IntoView {
     let end_session = move |reason: Option<String>| {
         generation.update_value(|g| *g += 1);
         session.0.set_value(None);
+        connected.set(String::new());
         status.set(Status::Disconnected(reason));
     };
 
@@ -104,6 +110,7 @@ pub fn App() -> impl IntoView {
             match Session::connect(&url, &token).await {
                 Ok(opened) => {
                     let mine = generation.get_value();
+                    connected.set(url.clone());
                     info.set(SessionInfo {
                         url,
                         protocol: opened.welcome.protocol.to_string(),
@@ -273,10 +280,14 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(Folds::restore());
     provide_context(LabelManager::new());
     provide_context(MixerOrientation::new());
+    provide_context(ActivityCleared::new());
     provide_context(crate::canvas::taps::PreviewTaps::new());
+    // Each dialog's place for this page. Not the engine's UI settings (ADR-0084).
+    provide_context(crate::dialog::DialogPlaces::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
+            <crate::updates::LaunchNotice />
             {move || studio.problem.get().map(|problem| view! {
                 <div class="problem-bar" role="alert">
                     <span>{problem}</span>

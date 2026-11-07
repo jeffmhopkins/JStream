@@ -23,7 +23,11 @@ events, wave formats and credentials Windows returns
 ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)). It uses Microsoft's `windows` crate
 ([R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)). The backends exist only on Windows;
 elsewhere the crate builds just its platform-independent helpers, which are tested on
-every platform.
+every platform. It also opens the desktop app's Browse dialogs (`dialog.rs`): a file,
+a save or a folder, filtered by the extensions it is given and then by All files, and
+returns the filesystem path the person picked. Cancel is not an error. The extension
+filter and the checks on a starting folder and a suggested file name are tested on
+every platform. Showing the dialog needs a window and a person, which CI does not have.
 
 The code is ported from spikes S1 to S3. This first cut has:
 - **`QpcClock`** (`MediaClock`): QueryPerformanceCounter in **100 ns ticks**
@@ -35,6 +39,9 @@ The code is ported from spikes S1 to S3. This first cut has:
   `GetProcessTimes`, for `stats.tick`'s load. **`WindowsThreadCpu`** (`ThreadCpu`): the
   process's threads from a ToolHelp snapshot, each one's kernel and user time from
   `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`.
+  **`WindowsThreadPriority`** (`ThreadPriority`): MMCSS through
+  `AvSetMmThreadCharacteristicsW`, the `Playback` task for video and `Pro Audio` for
+  audio, reverted when the guard drops.
 - **`WasapiAudio`** (`AudioIo`):
   - **Listing** the active capture and render endpoints, with the console-role default
     of each, and the running processes (a ToolHelp snapshot: each one's ID, its
@@ -247,7 +254,8 @@ The code is ported from spikes S1 to S3. This first cut has:
       encoders on every platform.
     - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
       size, no B-frames (so packets come out in presentation order and `dts == pts`),
-      low latency, the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
+      low latency, quality over speed (`QualityVsSpeed` 70, the band hardware MFTs map to
+      their quality preset), the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
       Main), and BT.709 limited range. `ICodecAPI` settings are
       best effort; the media type always carries the bit rate.
     - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
@@ -564,7 +572,8 @@ The code is ported from spikes S1 to S3. This first cut has:
 decode through `MfMediaDecoders`), the virtual camera taking
 `VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
-**Tests:** the clock conversion, the stream helpers (format choice, sample copies,
+**Tests:** the file-dialog filter (which extensions a row keeps, All files beside them,
+which paths may start the dialog, and the suggested file name), the clock conversion, the stream helpers (format choice, sample copies,
 packet flags, positions across a device move), the capture helpers (target IDs; the
 BGRA and RGBA to NV12 converter and the mailbox are `jstream-platform`'s, tested there), the
 AAC helpers (configuration check, PCM conversion, packet timing and padding), the video

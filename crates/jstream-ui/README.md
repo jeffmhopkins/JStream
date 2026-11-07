@@ -30,9 +30,9 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
-  Help menu (the project's pages, and About), the stats
+  Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
@@ -41,6 +41,14 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
+  built as with GitHub's public releases list, pre-releases included, which the desktop
+  app fetches for it. It says "You're up to date" or names the newer version and links
+  its release page. File › Settings… holds "Check for updates at launch", off until the
+  user turns it on; the desktop app's main window then checks once as the workspace
+  opens and shows a dismissable notice only when a newer release exists. A failure is
+  quiet there and reported by the menu. A page that isn't the desktop app says the
+  check runs there. Nothing is downloaded. The comparison is tested natively.
 - **Dock** (`dock.rs`): `Dock`, the model of which panel sits where: eight `Zone`s
   around the canvas, each holding `Group`s of tabbed `PanelId`s, the zones' sizes, and
   the saved layouts (`Layout`, with Editing and Live built in). Every change goes
@@ -58,8 +66,15 @@ Contents ([Design](#design) explains the choices):
   scene's Pop out submenu) and `pop_out_source` (an object's), which open one, and `subscribe` and `multiview_scenes`, its logic, tested
   natively.
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
-  app hands the page through the `__JSTREAM_DESKTOP__` global, if the page runs there,
-  and `desktop_vcam()`, what that global says about the virtual camera.
+  app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
+  same-origin opener's for a projector window), if the page runs there,
+  `desktop_vcam()`, what that global says about the virtual camera, and `browse`,
+  which calls the global's `browse` to open a native dialog. `same_engine` says
+  whether the open session is that app's own engine.
+- **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
+  file is stored (`place_asset`, tested natively): under the collection folder as a
+  `collection` path, otherwise `absolute`. App assets offer no button. With no desktop
+  shell the button is not rendered; connected to another engine it is disabled.
 - **Session** (`session.rs`): `Session` (the connection and the engine's `welcome`),
   `Session::connect` and `Session::open` (`hello` with the client name `jstream-ui`),
   and `engine_url_for_page`, the engine URL the connect form offers.
@@ -99,7 +114,8 @@ Contents ([Design](#design) explains the choices):
   `screenshot.rs` (Screenshot (scene) and Screenshot (source), ADR-0096: a one-picture
   PNG preview stream on a tap of the canvas's channel, saved through a download link;
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
-  the modal dialog frame) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
+  the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
+  place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
   the tool bars' own).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
@@ -189,8 +205,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
-  app defines `window.__JSTREAM_DESKTOP__` (`{ url, token }`) before the page loads,
-  and `App` connects to that engine at once (`host.rs`). That connection carries the
+  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection` and
+  `browse`) before the page loads,
+  and `App` connects to that engine at once (`host.rs`). A projector window lacking the
+  global (WebView2 doesn't run the app's script in a window handed to its opener) reads
+  its same-origin opener's instead. That connection carries the
   token in the subprotocol, which `jstream-server` accepts
   ([jstream-server › Design](../jstream-server/README.md#design)). After a disconnect the form
   shows, without the token; reloading the page connects again. A failed connect shows the transport's reason;
@@ -320,7 +339,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, layer order
   (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
   Fit and Stretch to canvas and Reset rotation (`item.set_geometry`), a Blending submenu
-  (`item.set_blend`), Clear crop (`item.set_crop`, with
+  (`item.set_blend`, then its amount as `item.set_opacity` at 100, 75, 50 or 25%), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
   (crop mode, for one item), Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
@@ -358,7 +377,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   group scene has filters, or the group's look, or a keyframe scene's, can't become its
   items' own (`Kept` in `item_menu.rs`). The scene and object lists fill their dock group, so the space under
   their rows opens the panel's menu. `dialog.rs` is the modal frame: Escape and the
-  backdrop cancel, and Enter presses the button marked `data-primary`. The Add source
+  backdrop cancel, and Enter presses the button marked `data-primary`. A primary press
+  on that dialog's own header drags it, as a `translate` from the centred place, clamped
+  so the box stays inside the window (a box wider than the window keeps covering it; the
+  top never goes above the window). The offset is remembered for the dialog's label in
+  the shell's `DialogPlaces` context for the page's lifetime, not in the engine's UI
+  settings (ADR-0084); a double-click on the header, timed from the pointer event, centres
+  it, and a control in the header does not start a drag. The Add source
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
@@ -484,7 +509,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (stored as an `absolute` asset of its path), and "Other file…", which shows the
   root and path below it (`font_choices`, tested natively); a stored file the list
   doesn't name selects "Other file…". Until the list arrives, or if the engine can't
-  list fonts, only the root and path show. Fields
+  list fonts, only the root and path show. In the desktop app, while the session is
+  that app's own engine, a Browse… button sits beside an asset path whose root is the
+  collection folder or an absolute path (`browse.rs`). It opens a file dialog filtered
+  by the parameter's `accept`, with every file still offered, and stores a file under
+  the collection folder as a `collection` path and any other file as `absolute`
+  (`place_asset`, tested natively). App assets have no button. A browser page renders
+  none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
   ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
@@ -538,7 +569,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   background and checks both switches, keeping the camera. Below the audio switch, a 3D
   camera check gives the scene a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)),
   starting from `SceneCamera::framing`, with its position, target, field of view, roll
-  and Nearest on top as fields; OK sends it as `scene.set_camera`, refused first when
+  and Nearest on top as fields in one column under Camera and Rendering headings (each
+  label on the row of its control, the check in front of its text); OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
   an override that starts from the parent's camera, offered only while the parent has
   one (`camera_start`). A note warns when items already have depth or angles
@@ -548,10 +580,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
-  offered while the scene places a display or window capture (`followable`), with the
+  offered while the scene places a display or window capture (`followable`), its fields
+  shown only while it is on and indented under the check, one row each for the
   item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
   hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
-  Camera motion, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
+  Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. Both are draft fields, which OK sends as
   `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
@@ -637,7 +670,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
   belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
-- **The shell** is the header bar over the workspace. A failed call shows in a
+- **The shell** is the header bar over the workspace. When the desktop app's launch
+  check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
+  A failed call shows in a
   dismissable bar. A confirmation, such as "Added a reference…" after a placement of
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
@@ -674,7 +709,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
   leaving out JStream's own UIs, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
-  5 seconds; the
+  5 seconds. Its Clear button empties only the list shown: `ActivityCleared`, kept by
+  the shell, marks the newest entry's `seq`, and the panel asks only after it, so the
+  list stays clear across tab switches while the engine's log is untouched; the
   Live layout shows Stream stats, Outputs and it as tabs in one group. The
   panels' own `h2` headings are hidden, since the tab is the title. Narrow windows
   stack the zones, without splitters.
@@ -725,7 +762,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then About JStream. The About dialog's version is the workspace's
+  system browser), then Check for updates and About JStream. Check for updates and
+  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
   protocol the session's `welcome`. Below the licence it lists each codec
@@ -741,7 +780,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
   an RTMP server URL (`output.set_target`) or a recording's file path (`output.set_path`,
   #1072) with the card's Edit, and the encoder profile, deletes a stopped
-  output, and starts and stops each. A card's Audio select picks the bus the output
+  output, and starts and stops each. In the desktop app a recording's path, on the add
+  form and on Edit, has the same Browse… button, opening a save dialog for an `.mp4`;
+  a stream's URL has none. A card's Audio select picks the bus the output
   carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
   titled "Stop the output to change its bus", as the engine refuses the move. A virtual
   camera's card has none. A card's Video select picks the mix it shows
@@ -824,7 +865,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
   isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
-  plugin asks for the package folder and an ID, suggested from the folder's name
+  plugin asks for the package folder (in the desktop app, a Browse… button opens a
+  folder dialog) and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
   with no grant beyond `read`; when the manifest asks for more, the grant dialog opens
   next. The grant dialog, titled "Plugin permissions" with the plugin's name quoted
@@ -990,8 +1032,13 @@ browser, and `mod.rs` is the component.
   picture only the selected items, the box under the pointer and hidden items (which
   aren't in the picture but still take clicks) are outlined, so an unselected source
   shows no box; without the picture every box gets a faint outline and
-  its name. Hidden items are drawn dashed, and the box under the pointer gets a light
-  outline. A keyframe scene shows its
+  its name. The name sits just inside the box's top-left corner and runs along its
+  top edge, so it turns with the box; a flip mirrors the picture and not the box, and
+  the name stays on that corner. On a mirrored box the glyphs still grow into the
+  box, so the name sits about one line deeper. When that corner or the far end of
+  the edge is behind the viewer, or the edge has no direction, the name stays
+  upright on the box's bounds. Hidden items are drawn dashed, and the box
+  under the pointer gets a light outline. A keyframe scene shows its
   parent's items at its overrides under a banner, "◆ Keyframe of “<parent>”: only
   placement and visibility can change", and its edits are addressed to it, so they
   write its overrides (ADR-0049). Its drags send the keyframe's live values, addressed
@@ -1007,7 +1054,7 @@ browser, and `mod.rs` is the component.
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
   `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1280×720).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
@@ -1017,8 +1064,12 @@ browser, and `mod.rs` is the component.
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
-  channel number, so a late frame of the old stream is never drawn; until the new
-  stream's first frame, the background says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  channel number, so a late frame of the old stream is never drawn, once the change has
+  held for 250 ms (`preview::SETTLE`). A scene switch changes the selection before the
+  program, so for that moment the canvas wants the new scene on its own; settling keeps
+  the program stream, with its transition, through the switch (#1205). Until a new
+  stream's first frame, the last picture stays on the canvas; only a canvas that has
+  shown no picture yet, or whose stream had ended, says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
@@ -1099,8 +1150,11 @@ browser, and `mod.rs` is the component.
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
   compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
-  (`camera::polygon`, #1054). A press hits the box the engine draws on top: the nearest
-  along the view (`CameraView::depth_of`) when the camera sorts, the later in stacking order
+  (`camera::polygon`, #1054). The name uses the projected top-left when that corner and
+  the far end of the top edge are both in front of the camera, and stays upright on the
+  visible part's bounds when either is not. A press hits the box the engine
+  draws on top: the nearest along the view (`CameraView::depth_of`) when the
+  camera sorts, the later in stacking order
   on a tie or when it doesn't. A move drag takes the pointer to the moved box's depth
   plane (`CameraView::on_plane`) before the gesture sees it, so the box stays under
   the pointer, and nothing snaps; a group moves by the delta on the first selected

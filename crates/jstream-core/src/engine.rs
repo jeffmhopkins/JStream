@@ -31,9 +31,9 @@ use crate::preview::{
 use crate::profile::{DrawMeter, Profiler};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
-    OutputEncode, OutputStats, Pending, PipelineEvent, Release, RenderHub, RenderSnapshot, Running,
-    SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch, launch_program,
-    launch_vcam, parts_from,
+    OutputEncode, OutputStats, Pending, PipelineEvent, Program, Release, RenderHub, RenderSnapshot,
+    Running, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
+    launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
 use crate::snapshot::{
@@ -45,10 +45,10 @@ use crate::values::SharedValues;
 use crate::youtube::{NO_YOUTUBE_CLIENT, Youtube, YoutubeSetup};
 use jstream_audio::OutputTapId;
 use jstream_graph::Graph;
-use jstream_media::FrameSize;
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu, VideoDeviceInfo, VideoDevices,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId, DropCounts, Edit,
@@ -132,6 +132,9 @@ struct Shared {
     /// Where the engine's time goes, for `profile.get` (ADR-0103). Its locks are its
     /// own; only its source meters and plan totals are taken under the collection lock.
     profile: Profiler,
+    /// What raises the render and mixer threads as each stage starts (ADR-0117 §8), once
+    /// the host sets it. Its lock is its own, taken only as a stage launches.
+    priority: Mutex<Option<Arc<dyn ThreadPriority>>>,
     /// The WASM automation plugins installed this run (ADR-0069). On its own lock,
     /// never taken with the collection lock held, nor while a plugin runs.
     #[cfg(feature = "wasm-plugins")]
@@ -199,6 +202,7 @@ impl Default for Engine {
                     load: LoadMeter::default(),
                     output_meters: Arc::default(),
                     profile,
+                    priority: Mutex::new(None),
                     #[cfg(feature = "wasm-plugins")]
                     automation: crate::plugins::automation::Registry::default(),
                     effect_packs: Mutex::new(None),
@@ -689,14 +693,35 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
-        // The preview captures what the program shows itself.
+        let host = self.host();
+        // The preview draws the program on the program stage, which it opens when no
+        // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
+        // opener holds the engine weakly: the hub belongs to it.
+        let stage: crate::preview::StageOpener = {
+            let shared = Arc::downgrade(&self.shared);
+            let media = Arc::downgrade(&host);
+            let drops = Arc::downgrade(&self.drops);
+            Arc::new(move || {
+                let (Some(shared), Some(media), Some(drops)) =
+                    (shared.upgrade(), media.upgrade(), drops.upgrade())
+                else {
+                    return Ok(None);
+                };
+                Engine {
+                    shared,
+                    media: Some(media),
+                    drops,
+                }
+                .preview_stage()
+            })
+        };
         self.shared.previews.set_capture(PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
             codecs: Arc::clone(&backends.codecs),
             clock: backends.clock.timebase(),
+            stage: Some(stage),
         });
-        let host = self.host();
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;
@@ -755,6 +780,14 @@ impl Engine {
         lock(&host.gate).running.values().next().map(Running::stats)
     }
 
+    /// Whether the program stage runs, for tests of what holds it.
+    #[cfg(test)]
+    pub(crate) fn stage_running(&self) -> bool {
+        self.media
+            .as_ref()
+            .is_some_and(|host| lock(&host.gate).program().is_some())
+    }
+
     /// Encoder and subscriber counters for `output_id`, if it is running.
     pub fn output_stats_of(&self, output_id: &OutputId) -> Option<OutputStats> {
         let host = self.media.as_ref()?;
@@ -799,6 +832,18 @@ impl Engine {
     /// empty. Read outside the collection lock, at most about once a second.
     pub fn set_thread_cpu(&self, threads: Arc<dyn ThreadCpu>) {
         self.shared.profile.set_threads(threads);
+    }
+
+    /// Raises the render and mixer threads with `priority` (on Windows their MMCSS
+    /// tasks, ADR-0117 §8) on each program stage started from now on. Without one they
+    /// run at the OS's normal priority.
+    pub fn set_thread_priority(&self, priority: Arc<dyn ThreadPriority>) {
+        *lock(&self.shared.priority) = Some(priority);
+    }
+
+    /// What raises the real-time threads, if the host set one.
+    pub(crate) fn thread_priority(&self) -> Option<Arc<dyn ThreadPriority>> {
+        lock(&self.shared.priority).clone()
     }
 
     /// The engine's profiler, which the drawing threads' meters publish to.
@@ -1034,6 +1079,16 @@ impl Engine {
         self.with_draw(crate::runtime::cpu_draw())
     }
 
+    /// Keeps every preview stream on the preview thread's own compositor, for tests of
+    /// that path: the program stage draws none (ADR-0117 §6). Call after
+    /// [`with_backends`](Self::with_backends).
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn without_preview_stage(self) -> Self {
+        self.shared.previews.clear_stage();
+        self
+    }
+
     /// Replaces how the preview thread draws, for tests that watch what it is given.
     #[cfg(test)]
     #[must_use]
@@ -1074,6 +1129,13 @@ impl Engine {
     /// The current state revision.
     pub fn rev(&self) -> Rev {
         lock(&self.shared.state).graph.rev()
+    }
+
+    /// Whether a gesture's live source settings are drawn from a copy of the collection,
+    /// for tests. A placed keyframe alone does not make one (ADR-0118).
+    #[cfg(test)]
+    pub(crate) fn has_settings_copy(&self) -> bool {
+        lock(&self.shared.state).shown.is_some()
     }
 
     /// A source's setting as the engine draws it, with open gestures' live values
@@ -1913,6 +1975,52 @@ impl Engine {
         }
     }
 
+    /// The program stage a preview stream of the program draws on (ADR-0117 §6): the
+    /// running one, or one opened now. `Ok(None)` while an output is starting or a
+    /// failed one still joins, or when the engine has no backends: the preview then
+    /// draws on its own for now and asks again later. Never waits for a start.
+    pub(crate) fn preview_stage(&self) -> Result<Option<Arc<Program>>, String> {
+        let Some(host) = &self.media else {
+            return Ok(None);
+        };
+        // Taken as a start takes it, so only one ever opens the stage; a start under
+        // way is not waited for.
+        let _starting = match host.starts.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(None),
+        };
+        {
+            let gate = lock(&host.gate);
+            if let Some(program) = gate.program() {
+                return Ok(Some(program));
+            }
+            if gate.must_wait() || gate.pending.is_some() {
+                return Ok(None);
+            }
+        }
+        let parts = {
+            let state = lock(&self.shared.state);
+            let backends = lock(&host.backends);
+            let Some(backends) = backends.as_ref() else {
+                return Ok(None);
+            };
+            parts_from(
+                backends,
+                Arc::clone(&lock(&host.draw)),
+                *lock(&host.open_timeout),
+                Arc::clone(&state.render),
+                state.audio.wanted(),
+                canvas_size(&state.graph),
+                state.graph.state().base_fps(),
+            )
+        };
+        let program = launch_program(self, parts)?;
+        lock(&host.gate).set_program(&program);
+        tracing::info!("program stage opened for the preview");
+        Ok(Some(program))
+    }
+
     fn start_pipeline(&self, output_id: OutputId) -> Result<CallResult, ProtocolError> {
         // Where the output's uptime in `stats.tick` counts from (protocol 0.57).
         let started = Instant::now();
@@ -2039,6 +2147,7 @@ impl Engine {
                     Arc::clone(&state.render),
                     state.audio.wanted(),
                     canvas_size(&state.graph),
+                    state.graph.state().base_fps(),
                 )
             };
             let generation = host.next_generation.fetch_add(1, Ordering::Relaxed);
@@ -2419,7 +2528,7 @@ impl Engine {
             return waiting;
         }
         let begin = Instant::now();
-        let start = match self.shared.sample(scene_id.as_ref()) {
+        let start = match self.shared.sample(scene_id.as_ref(), None) {
             Ok(sample) => sample.at,
             Err(error) => {
                 reply.send(Err(error));
@@ -2616,6 +2725,10 @@ fn take_samples(
     scene_id: Option<&SceneId>,
     begin: Instant,
 ) -> Result<Vec<frames::Sample>, ProtocolError> {
+    // A scene sheet has no render-thread follower. This one measures the same scopes
+    // for the sheet's pictures, so an audio modifier hears the mix (#1189). A program
+    // sheet uses the published snapshot, whose levels the render thread already set.
+    let mut heard = scene_id.map(|_| SceneHearing::default());
     let mut samples = Vec::with_capacity(strip.count as usize);
     for index in 0..strip.count {
         let due = begin + Duration::from_millis(strip.offset_ms(index));
@@ -2625,17 +2738,53 @@ fn take_samples(
         let shared = shared.upgrade().ok_or_else(|| ProtocolError::Internal {
             reason: "the engine ended while taking the frame sheet".into(),
         })?;
-        samples.push(shared.sample(scene_id)?);
+        samples.push(shared.sample(scene_id, heard.as_mut())?);
     }
     Ok(samples)
+}
+
+/// The envelope a scene frame sheet keeps across its pictures.
+#[derive(Default)]
+struct SceneHearing {
+    follower: crate::reactive::Follower,
+    /// Whether the lead step has run. The follower's first step is zero time, which
+    /// stays at silence; the lead gives the first picture audio that is already playing.
+    primed: bool,
+}
+
+/// How far before a picture the first measure steps, so a short attack has time to rise.
+const HEAR_LEAD_MS: i64 = 50;
+
+fn hear_scene(hearing: &mut SceneHearing, bindings: &crate::reactive::Bindings, at: MediaTime) {
+    if !hearing.primed {
+        if let Some(earlier) = earlier_by(at, HEAR_LEAD_MS) {
+            hearing.follower.follow(bindings, earlier);
+        }
+        hearing.primed = true;
+    }
+    hearing.follower.follow(bindings, at);
+}
+
+/// `at` minus `ms` milliseconds, or `None` when that instant is not in `at`'s time base.
+fn earlier_by(at: MediaTime, ms: i64) -> Option<MediaTime> {
+    let lead = MediaTime::new(ms, Timebase::MILLIS)
+        .rescale(at.timebase(), Rounding::Down)
+        .ok()?;
+    at.checked_sub(lead).ok()
 }
 
 impl Shared {
     /// What `video.snapshot` would draw now, for a frame sheet: the program mix's
     /// published render snapshot, or `scene_id`'s scene planned alone as its preview
     /// stream plans it, with the live values, `rev` and the media clock's time, all
-    /// read under the collection lock. `not_found` for a scene not in the collection.
-    fn sample(&self, scene_id: Option<&SceneId>) -> Result<frames::Sample, ProtocolError> {
+    /// read under the collection lock. `heard` follows a scene sheet's audio modifiers
+    /// (#1189); a program sheet passes `None` and keeps the render thread's levels.
+    /// `not_found` for a scene not in the collection.
+    fn sample(
+        &self,
+        scene_id: Option<&SceneId>,
+        heard: Option<&mut SceneHearing>,
+    ) -> Result<frames::Sample, ProtocolError> {
         let mut state = lock(&self.state);
         let snapshot = match scene_id {
             None => state.render.load(),
@@ -2647,6 +2796,9 @@ impl Shared {
                             entity: EntityKind::Scene,
                             id: scene_id.to_string(),
                         })?;
+                if let Some(heard) = heard {
+                    hear_scene(heard, shot.audio(), state.live.now());
+                }
                 RenderSnapshot::following(None, shot)
             }
         };
@@ -3154,7 +3306,10 @@ fn command_name(call: &Call) -> &'static str {
 /// Everything the engine knows.
 #[derive(Default)]
 struct State {
-    /// The collection and its `rev`. Only `Graph::apply` changes it.
+    /// The collection and its `rev`. Only `Graph::apply` changes the collection.
+    /// Switched keyframes are runtime state on the same graph
+    /// ([`Graph::place_keyframe`](jstream_graph::Graph::place_keyframe), ADR-0118):
+    /// not a revision, and `apply` keeps them.
     graph: Graph,
     /// The effect-pack kinds quarantined after a GPU device loss (#349), which
     /// `kind.list` marks.
@@ -3209,12 +3364,9 @@ struct State {
     /// The timelines playing (ADR-0115): studio state, like the program scene.
     timelines: crate::timelines::Timelines,
     /// While a timeline's cue runs, its exact time on the animation clock, which a
-    /// transition or a fire it starts takes as its start (ADR-0099 decision 4).
+    /// transition, a fire or a `source.restart` it starts takes as its start
+    /// (ADR-0099 decision 4).
     cue_at: Option<jstream_media::MediaTime>,
-    /// The keyframe scene each placed scene is drawn through (keyframe tracks,
-    /// ADR-0116): studio state, like the program scene, which the drawn copy of the
-    /// collection ([`shown`](Self::shown)) carries.
-    placed_keyframes: BTreeMap<SceneId, SceneId>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -3226,7 +3378,9 @@ struct State {
     camera_zooms: BTreeMap<SceneId, i64>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
-    /// while any is open.
+    /// while any is open. The clone carries the graph's switched keyframes. `None`
+    /// while no gesture has source settings, even when a keyframe is placed (ADR-0118):
+    /// the planners then read `graph` itself.
     shown: Option<Graph>,
     /// The last entries of the audit log, with their sentences (ADR-0083), for
     /// `activity.list`.
@@ -3683,7 +3837,7 @@ impl State {
                     pass: 0,
                     at_ns: now_ns,
                 };
-                self.run_cue(timeline_id, &schedule, &fire, &by, wake);
+                let _ = self.run_cue(timeline_id, &schedule, &fire, &by, wake);
             }
         }
         if self.cue_at.is_none() {
@@ -3728,6 +3882,7 @@ impl State {
     /// Runs the cue `fire` names, of `timeline_id`, at its time on the animation clock,
     /// as its action's call would run, credited to `by`, the client and request that
     /// started the timeline, and emits `timeline.cue_fired` with its error, if any.
+    /// Returns whether the action succeeded.
     fn run_cue(
         &mut self,
         timeline_id: &jstream_protocol::TimelineId,
@@ -3735,9 +3890,9 @@ impl State {
         fire: &jstream_anim::Fire,
         by: &(ClientId, RequestId),
         wake: &mut Vec<Waker>,
-    ) {
+    ) -> bool {
         let Some(c) = schedule.cues.get(fire.cue) else {
-            return;
+            return false;
         };
         let (cue, pass) = (fire.cue, fire.pass);
         let outer = self
@@ -3752,6 +3907,7 @@ impl State {
             )),
         };
         self.cue_at = outer;
+        let ok = result.is_ok();
         self.subscribers.emit(
             &Event::TimelineCueFired {
                 timeline_id: timeline_id.clone(),
@@ -3762,16 +3918,31 @@ impl State {
             },
             wake,
         );
+        ok
+    }
+
+    /// The timeline a cue stops or starts again, when the action is one of those.
+    fn cue_retarget(action: &Action) -> Option<&jstream_protocol::TimelineId> {
+        match action {
+            Action::TimelineStop { timeline_id }
+            | Action::TimelinePlay { timeline_id }
+            | Action::TimelineSeek { timeline_id, .. } => Some(timeline_id),
+            _ => None,
+        }
     }
 
     /// Fires every playing timeline's cues due by now, in the order they fall due
     /// across timelines, and emits each loop and end (ADR-0115). A cue that plays a
     /// timeline starts it at the cue's time, so its first cues are due at once: they
     /// run in the next round, up to [`crate::timelines::MAX_ROUNDS`] rounds a tick. A
-    /// round's loops and ends are sent after its cues have fired. Returns when the next
-    /// cue or pass boundary falls due, if any timeline plays: no sooner than
-    /// [`crate::timelines::CAPPED_WAIT_NS`] from now when every round ran with cues due,
-    /// so cues that keep starting each other can't spin the ticker.
+    /// round collects every timeline's due fires and then runs them, so a fire is
+    /// skipped when an earlier cue in the round has stopped its timeline or started it
+    /// again (#1172): a timeline that only reached its own end still runs the cues that
+    /// were due before that end. A round's loops and ends are sent after its cues have
+    /// fired. Returns when the next cue or pass boundary falls due, if any timeline
+    /// plays: no sooner than [`crate::timelines::CAPPED_WAIT_NS`] from now when every
+    /// round ran with cues due, so cues that keep starting each other can't spin the
+    /// ticker.
     fn timeline_tick(&mut self, wake: &mut Vec<Waker>) -> Option<jstream_media::MediaTime> {
         use crate::timelines::{Step, schedule};
         let mut capped = true;
@@ -3779,6 +3950,9 @@ impl State {
             let now_ns = crate::timelines::ns(self.live.now());
             let mut due = Vec::new();
             let mut steps = Vec::new();
+            // Timelines this round's advance ended. Their cues were due before the end,
+            // so they still run, unless an earlier cue stopped or restarted them.
+            let mut ended = BTreeSet::new();
             for id in self.timelines.ids() {
                 let Some((scene_id, info)) = self
                     .graph
@@ -3789,19 +3963,19 @@ impl State {
                     continue;
                 };
                 let timeline = schedule(&info);
-                let Some(by) = self
-                    .timelines
-                    .get(&id)
-                    .map(|playing| (playing.client_id.clone(), playing.request_id.clone()))
-                else {
+                let Some(playing) = self.timelines.get(&id) else {
                     continue;
                 };
-                let pass_before = self.timelines.get(&id).map_or(0, |playing| playing.pass);
+                let (by, started_ns, pass_before) = (
+                    (playing.client_id.clone(), playing.request_id.clone()),
+                    playing.started_ns,
+                    playing.pass,
+                );
                 let Some((fires, step)) = self.timelines.advance(&id, &timeline, now_ns) else {
                     continue;
                 };
                 for fire in fires {
-                    due.push((id.clone(), fire, info.clone(), by.clone()));
+                    due.push((id.clone(), fire, info.clone(), by.clone(), started_ns));
                 }
                 let (change, playing, position_ms, pass) = match step {
                     Some(Step::Looped { pass, position_ms }) => (
@@ -3810,12 +3984,15 @@ impl State {
                         position_ms,
                         pass,
                     ),
-                    Some(Step::Ended { position_ms }) => (
-                        jstream_protocol::TimelineChange::Ended,
-                        false,
-                        position_ms,
-                        pass_before,
-                    ),
+                    Some(Step::Ended { position_ms }) => {
+                        ended.insert(id.clone());
+                        (
+                            jstream_protocol::TimelineChange::Ended,
+                            false,
+                            position_ms,
+                            pass_before,
+                        )
+                    }
                     None => continue,
                 };
                 steps.push(Event::TimelineChanged {
@@ -3830,8 +4007,30 @@ impl State {
             let idle = due.is_empty();
             // In time order across timelines; a sort that keeps each timeline's order.
             due.sort_by_key(|(_, fire, ..)| fire.at_ns);
-            for (id, fire, info, by) in due {
-                self.run_cue(&id, &schedule(&info), &fire, &by, wake);
+            // A cue that stops or restarts a timeline invalidates that generation from
+            // the cue's time on, so a fire already collected for it does not run after.
+            let mut invalidated: BTreeMap<jstream_protocol::TimelineId, i64> = BTreeMap::new();
+            for (id, fire, info, by, started_ns) in due {
+                if invalidated.get(&id).is_some_and(|at| fire.at_ns >= *at) {
+                    continue;
+                }
+                match self.timelines.get(&id).map(|playing| playing.started_ns) {
+                    Some(current) if current != started_ns => continue,
+                    None if !ended.contains(&id) => continue,
+                    _ => {}
+                }
+                let schedule = schedule(&info);
+                let retarget = schedule
+                    .cues
+                    .get(fire.cue)
+                    .and_then(|cue| cue.action.0.as_ref())
+                    .and_then(Self::cue_retarget)
+                    .cloned();
+                if self.run_cue(&id, &schedule, &fire, &by, wake)
+                    && let Some(target) = retarget
+                {
+                    invalidated.insert(target, fire.at_ns);
+                }
             }
             for step in steps {
                 self.subscribers.emit(&step, wake);
@@ -3898,19 +4097,24 @@ impl State {
         request_id: &RequestId,
         wake: &mut Vec<Waker>,
     ) {
-        let state = self.graph.state();
-        let gone: Vec<SceneId> = self
-            .placed_keyframes
+        let placed: Vec<(SceneId, SceneId)> = self
+            .graph
+            .placed_keyframes()
             .iter()
+            .map(|(scene_id, keyframe_id)| (scene_id.clone(), keyframe_id.clone()))
+            .collect();
+        let gone: Vec<SceneId> = placed
+            .into_iter()
             .filter(|(scene_id, keyframe_id)| {
-                state
+                self.graph
+                    .state()
                     .scene(keyframe_id)
-                    .is_none_or(|keyframe| keyframe.variant_of() != Some(*scene_id))
+                    .is_none_or(|keyframe| keyframe.variant_of() != Some(scene_id))
             })
-            .map(|(scene_id, _)| scene_id.clone())
+            .map(|(scene_id, _)| scene_id)
             .collect();
         for scene_id in gone {
-            self.placed_keyframes.remove(&scene_id);
+            self.graph.place_keyframe(scene_id.clone(), None);
             self.subscribers.emit(
                 &Event::SceneKeyframeChanged {
                     scene_id,
@@ -3983,7 +4187,8 @@ impl State {
         let run = animates
             .then(|| preset_run(&self.graph, &preset_id))
             .flatten();
-        if self.placed_keyframes.get(&scene_id) == keyframe_id.as_ref() {
+        let unchanged = self.graph.placed_keyframes().get(&scene_id) == keyframe_id.as_ref();
+        if unchanged {
             return Ok(());
         }
         let now = self.action_now();
@@ -4004,15 +4209,8 @@ impl State {
             }
             _ => None,
         };
-        match &keyframe_id {
-            Some(keyframe_id) => {
-                self.placed_keyframes
-                    .insert(scene_id.clone(), keyframe_id.clone());
-            }
-            None => {
-                self.placed_keyframes.remove(&scene_id);
-            }
-        }
+        self.graph
+            .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
         if let Some(((from, shared), program, mut run)) = started {
             let to_camera = transition::camera_of(&self.graph, &program);
@@ -4160,7 +4358,7 @@ impl State {
                         id: source_id.to_string(),
                     });
                 }
-                self.live.restart(&source_id);
+                self.live.restart(&source_id, self.action_now());
                 return Ok(CallResult::action());
             }
             other @ (Action::PairingStart
@@ -4243,7 +4441,8 @@ impl State {
                             Some(crate::timelines::schedule(info))
                         }),
                     keyframes: self
-                        .placed_keyframes
+                        .graph
+                        .placed_keyframes()
                         .iter()
                         .map(|(scene_id, keyframe_id)| jstream_protocol::PlacedKeyframe {
                             scene_id: scene_id.clone(),
@@ -4647,7 +4846,23 @@ impl State {
     /// a transition that has ended is let go. The shot lists the displays and windows the
     /// program and every mix capture. A source the shot shows enlarged is drawn again at
     /// the density that keeps it sharp, when its kind can be (ADR-0073).
+    ///
+    /// A plan that finds the transition over plans again at once, without it: the
+    /// ended plan still looked at the scene it moved away from, so without a plan after
+    /// it those sources would count as reached until something else asks for a plan. A
+    /// still program asks for none, and the switch back would then be the next plan:
+    /// no `restart_on_show` reload, and a page that never rests (#1185).
     fn publish_render(&mut self) -> Option<f32> {
+        let transitioning = self.studio.running().is_some();
+        let end_ms = self.publish_render_once();
+        if transitioning && self.studio.running().is_none() {
+            return self.publish_render_once();
+        }
+        end_ms
+    }
+
+    /// One plan of [`Self::publish_render`].
+    fn publish_render_once(&mut self) -> Option<f32> {
         let started = Instant::now();
         let Self {
             graph,
@@ -4874,19 +5089,16 @@ impl State {
     }
 
     /// Rebuilds [`shown`](Self::shown) from the open gestures' source settings. Returns
-    /// whether what is drawn may have changed: it had or has settings applied.
+    /// whether what is drawn may have changed: it had or has settings applied. A placed
+    /// keyframe does not build a copy: it lives on [`graph`](Self::graph), which a
+    /// settings copy carries because it clones the graph (ADR-0118).
     fn refresh_shown(&mut self) -> bool {
         let settings = self.gestures.settings();
         let had = self.shown.is_some();
-        self.shown = match (settings.is_empty(), self.placed_keyframes.is_empty()) {
-            (true, true) => None,
-            (false, true) => Some(self.graph.with_values(&settings)),
-            (true, false) => Some(self.graph.with_placed_keyframes(&self.placed_keyframes)),
-            (false, false) => Some(
-                self.graph
-                    .with_values(&settings)
-                    .with_placed_keyframes(&self.placed_keyframes),
-            ),
+        self.shown = if settings.is_empty() {
+            None
+        } else {
+            Some(self.graph.with_values(&settings))
         };
         had || self.shown.is_some()
     }

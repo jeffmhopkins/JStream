@@ -7,10 +7,11 @@
 //!   link with a target) opens only for one of the UI's own projector pages
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
 //!   script, full screen when the page asks for it. A link to one of the project's own
-//!   pages on GitHub ([`links`]: the UI's Help menu and About dialog) opens in the
+//!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
 //!   system browser instead. Any other is refused.
-//! - The page gets no Tauri IPC commands: the app defines none and grants no
-//!   capabilities, so the UI talks to the engine only over the WebSocket API.
+//! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
+//!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
+//!   only over the WebSocket API. The scheme's one other answer is the update check.
 //! - When the app exits, the host stops: the server closes its connections and the
 //!   engine stops.
 //!
@@ -19,6 +20,7 @@
 use crate::host::Host;
 use crate::links;
 use crate::ui::{self, Ui};
+use crate::updates;
 use anyhow::Context;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
@@ -76,9 +78,9 @@ fn allowed(url: &Url, blank: bool) -> bool {
     allowed
 }
 
-/// Opens `url`, one of the project's pages ([`links::is_project_page`]), in the system
-/// browser: Explorer hands an `https` URL to the default browser. The URL is one
-/// argument, never parsed by a shell.
+/// Opens `url`, one [`links::opens_in_browser`] accepts, in the system browser:
+/// Explorer hands an `https` URL to the default browser. The URL is one argument,
+/// never parsed by a shell.
 fn open_in_browser(url: &Url) {
     let explorer = std::env::var_os("SystemRoot")
         .map(|root| std::path::Path::new(&root).join("explorer.exe"))
@@ -101,7 +103,7 @@ fn open_projector(
     features: NewWindowFeatures,
 ) -> NewWindowResponse<Wry> {
     static NEXT: AtomicU64 = AtomicU64::new(1);
-    if url.scheme() == "https" && links::is_project_page(url.as_str()) {
+    if url.scheme() == "https" && links::opens_in_browser(url.as_str()) {
         open_in_browser(url);
         return NewWindowResponse::Deny;
     }
@@ -135,29 +137,42 @@ fn open_projector(
     }
 }
 
+/// A scheme reply as the response the webview takes. A builder failure is an empty 500.
+fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
+    let mut response =
+        Response::builder().status(StatusCode::from_u16(reply.status).unwrap_or(StatusCode::OK));
+    for (name, value) in reply.headers {
+        response = response.header(name, value);
+    }
+    response.body(reply.body).unwrap_or_else(|error| {
+        tracing::warn!(%error, "could not build a UI response");
+        let mut empty = Response::new(Vec::new());
+        *empty.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
+        empty
+    })
+}
+
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
 /// engine started) hands them the engine, and `host` is stopped on exit.
 pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result<()> {
     let start = start_url()?;
     let app = tauri::Builder::default()
-        .register_uri_scheme_protocol(ui::SCHEME, move |_context, request| {
-            let reply = ui.respond(
-                request.method().as_str(),
-                request.uri().path(),
-                ui::new_nonce,
-            );
-            let mut response = Response::builder()
-                .status(StatusCode::from_u16(reply.status).unwrap_or(StatusCode::OK));
-            for (name, value) in reply.headers {
-                response = response.header(name, value);
-            }
-            response.body(reply.body).unwrap_or_else(|error| {
-                tracing::warn!(%error, "could not build a UI response");
-                let mut empty = Response::new(Vec::new());
-                *empty.status_mut() = StatusCode::INTERNAL_SERVER_ERROR;
-                empty
-            })
-        })
+        .invoke_handler(tauri::generate_handler![crate::pick::pick_path])
+        // Asynchronous so the update check's request to GitHub doesn't block the
+        // window. File requests are answered on this call, as they were before.
+        .register_asynchronous_uri_scheme_protocol(
+            ui::SCHEME,
+            move |_context, request, responder| {
+                let method = request.method().as_str().to_owned();
+                let path = request.uri().path().to_owned();
+                if updates::handles(&method, &path) {
+                    std::thread::spawn(move || responder.respond(http_response(updates::reply())));
+                    return;
+                }
+                let reply = ui.respond(&method, &path, ui::new_nonce);
+                responder.respond(http_response(reply));
+            },
+        )
         .setup(move |app| {
             let handle = app.handle().clone();
             let projector_script = script.clone();

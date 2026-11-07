@@ -330,6 +330,7 @@ fn path(backends: &Backends) -> (bool, bool) {
         Arc::new(RenderHub::default()),
         Arc::new(Wanted::default()),
         (1280, 720),
+        jstream_protocol::DEFAULT_BASE_FPS,
     );
     let opened = open_capture(&parts).expect("a capture path");
     let mut stream = start_capture(&opened.backends, &crate::snapshot::CaptureKey::primary())
@@ -444,6 +445,7 @@ fn with_gpu_interop_video_devices_are_asked_onto_the_device() {
             Arc::new(RenderHub::default()),
             Arc::new(Wanted::default()),
             (1280, 720),
+            jstream_protocol::DEFAULT_BASE_FPS,
         );
         let opened = open_capture(&parts).expect("a capture path");
         assert_eq!(
@@ -1010,6 +1012,12 @@ fn an_output_fails_when_the_gpu_fallback_fails() {
 /// once that one has drawn `after` frames: what a driver reset after a hang (Windows'
 /// TDR) does to it, as wgpu reports both through the device-lost callback (#349). Each
 /// open is recorded in `opens`.
+///
+/// A driver's loss is reported at once, but wgpu reports `destroy` only once the work
+/// already submitted has finished. The render thread no longer waits for that work
+/// (ADR-0117 §4), and on a slow software adapter the frames on their way could outlast
+/// the run of failed draws that fails the output. So the hook waits for them, as the
+/// loss it stands in for would not.
 fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         let opened = {
@@ -1021,6 +1029,10 @@ fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDra
         let hook: DrawHook = Arc::new(move |compositor: &Compositor| {
             if opened <= lose && drawn.fetch_add(1, Ordering::Relaxed) + 1 == u64::from(after) {
                 compositor.device().destroy();
+                let _ = compositor.device().poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(Duration::from_secs(5)),
+                });
             }
         });
         (gpu_draw_with(hook))(context)
@@ -1371,7 +1383,7 @@ fn a_hung_gpu_fallback_fails_the_output_at_its_deadline() {
     // Dropped before the engine, which joins the render thread.
     let _release = Release(gate);
     block_on(control.call(output_call("yt", true))).expect("output.start");
-    // The first frame draws; the next ten fail and set the fallback off.
+    // The first frame draws; the next third of a second fails and sets the fallback off.
     let mut received = 0;
     tick_until(&clock, || {
         received = engine

@@ -136,7 +136,7 @@ impl CaptureKind {
                 kind: CaptureTargetKind::Window,
                 max_len: MAX_TARGET,
             },
-            // Since protocol 0.89 a device is one too; before, it was a plain string.
+            // Since protocol 0.90 a device is one too; before, it was a plain string.
             Flavor::Device => ParamType::CaptureTarget {
                 kind: CaptureTargetKind::Device,
                 max_len: MAX_TARGET,

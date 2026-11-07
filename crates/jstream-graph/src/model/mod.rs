@@ -179,6 +179,8 @@ pub const MAX_BUSES: usize = jstream_protocol::MAX_BUSES;
 #[derive(Clone, Debug, PartialEq)]
 pub struct State {
     pub(crate) canvas: Canvas,
+    /// The base frame rate, 30 or 60 (ADR-0119). A new collection is 30.
+    pub(crate) base_fps: u32,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -198,9 +200,9 @@ pub struct State {
     /// In label order.
     pub(crate) labels: Vec<Label>,
     /// The keyframe scene each placed scene is drawn through (keyframe tracks,
-    /// ADR-0116): studio state, which only a drawn copy holds
-    /// ([`Graph::with_placed_keyframes`](crate::Graph::with_placed_keyframes)). Empty in
-    /// the collection, never saved and never undone.
+    /// ADR-0116, ADR-0118): runtime state on the engine's graph.
+    /// [`Graph::apply`](crate::Graph::apply) keeps it, nothing saves it, and it is not a
+    /// revision. Empty until a switch sets it.
     pub(crate) placed_keyframes: BTreeMap<SceneId, SceneId>,
 }
 
@@ -211,6 +213,7 @@ impl Default for State {
         let master_bus = Bus::new(BusId::master(), MASTER_NAME.to_owned());
         Self {
             canvas: Canvas::default(),
+            base_fps: jstream_protocol::DEFAULT_BASE_FPS,
             sources: BTreeMap::new(),
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
@@ -235,6 +238,11 @@ impl State {
     /// The canvas every scene is laid out on.
     pub fn canvas(&self) -> Canvas {
         self.canvas
+    }
+
+    /// The collection's base frame rate, 30 or 60 (ADR-0119).
+    pub fn base_fps(&self) -> u32 {
+        self.base_fps
     }
 
     /// Every source, ordered by ID. Sources have no display order of their own.
@@ -444,7 +452,7 @@ impl State {
     }
 
     /// The keyframe scene that scene `scene_id` is drawn through where another scene
-    /// places it (ADR-0116), if a drawn copy sets one and it is still one of its
+    /// places it (ADR-0116), if this graph sets one and it is still one of its
     /// keyframe scenes.
     pub fn placed_keyframe(&self, scene_id: &SceneId) -> Option<&Scene> {
         let keyframe = self.scene(self.placed_keyframes.get(scene_id)?)?;

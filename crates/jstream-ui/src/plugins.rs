@@ -660,16 +660,45 @@ fn InstallDialog(section: Section) -> impl IntoView {
             <div class="plugin-dialog-body">
                 <label class="field">
                     <span>"Folder"</span>
-                    <input
-                        type="text"
-                        class="mono"
-                        placeholder="/path/to/plugin"
-                        prop:value=move || path.get()
-                        on:input=move |ev| {
-                            path.set(event_target_value(&ev));
-                            suggest();
-                        }
-                    />
+                    <span class="path-row">
+                        <input
+                            type="text"
+                            class="mono"
+                            placeholder="/path/to/plugin"
+                            prop:value=move || path.get()
+                            on:input=move |ev| {
+                                path.set(event_target_value(&ev));
+                                suggest();
+                            }
+                        />
+                        {crate::browse::browse_button(
+                            crate::browse::BrowseKind::Folder,
+                            Vec::new(),
+                            "Choose the plugin folder".into(),
+                            || true,
+                            String::new,
+                            move || {
+                                let current = path.get();
+                                if current.trim().is_empty() {
+                                    String::new()
+                                } else {
+                                    current
+                                }
+                            },
+                            move |picked| {
+                                path.set(picked);
+                                if !id_edited.get_untracked() {
+                                    let taken = section.plugins.with_untracked(|plugins| {
+                                        plugins
+                                            .iter()
+                                            .map(|p| p.plugin_id.clone())
+                                            .collect::<Vec<_>>()
+                                    });
+                                    id.set(suggested_id(&path.get_untracked(), &taken));
+                                }
+                            },
+                        )}
+                    </span>
                 </label>
                 <label class="field">
                     <span>"ID"</span>

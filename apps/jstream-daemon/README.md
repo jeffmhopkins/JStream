@@ -152,6 +152,9 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   a bitrate that matches the bytes sent between ticks and stays at most a little above
   the profile's, no drops, and health `good`. The uptime counts from `output.start` and starts again at
   the next one.
+- **60 fps is opt-in.** `canvas.set_frame_rate` 60 makes the program stream run at 60,
+  with a one-second keyframe every 60 frames. The measured rate allows a few fps,
+  because FLV stamps are whole milliseconds.
 - **A vertical mix with an output filter.** A wide stream and a 180x320, half-rate
   stream run together. The vertical stream has a hue shift on its own video chain
   (FL-07), which gives it a dedicated session. Its receiver gets the canvas fitted in
@@ -480,7 +483,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   Linux (`LinuxProcessCpu`), for the ticks' `load` (protocol 0.48). Elsewhere the ticks
   leave `cpu_ms` out. On Windows (`WindowsThreadCpu`), macOS (`MacosThreadCpu`) and
   Linux (`LinuxThreadCpu`) it also hands it the thread CPU reader, for `profile.get`'s
-  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)).
+  threads ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). On
+  Windows it hands it `WindowsThreadPriority` too, so the program stage's render and
+  mixer threads run in their MMCSS tasks
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
 - **Media Foundation check and delay-load.** The `windows` crate imports Media
   Foundation's DLLs as load-time imports, so on a Windows without Media Foundation
   the loader would refuse to start the binary, naming a DLL, before `main` runs.
@@ -572,7 +578,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
   `jstream-browser-helper.dll`) and CEF's runtime files must be in the `browser` folder
-  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. On Linux
+  beside `jstream-daemon.exe`, as the portable zip has them, or next to it. CEF's cache
+root is the data folder's `daemon\cef`, not the app's `cef`: CEF refuses to start on a
+folder another process is using, so the daemon couldn't start pages while the app ran
+(#1187). On Linux
   the helper is the `jstream-browser-helper` executable with `libcef.so` and CEF's
   runtime files beside it, in the `browser` folder `cargo xtask browser-linux` lays out,
   beside `jstream-daemon` or next to it, and no device is opened: pages paint in

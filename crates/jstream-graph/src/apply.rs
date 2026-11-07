@@ -69,10 +69,33 @@ impl Graph {
         self.apply_with_running(edits, expected_rev, &BTreeSet::new())
     }
 
+    /// The keyframe scene each placed scene is drawn through (ADR-0116, ADR-0118).
+    /// Runtime state: empty until [`place_keyframe`](Self::place_keyframe) sets one.
+    pub fn placed_keyframes(&self) -> &BTreeMap<SceneId, SceneId> {
+        &self.state.placed_keyframes
+    }
+
+    /// Draws placed scene `scene_id` through `keyframe_id`, or through its own values
+    /// when `keyframe_id` is `None` (ADR-0116, ADR-0118). Not a revision: [`apply`](Self::apply)
+    /// keeps the field, and the collection file never stores it.
+    pub fn place_keyframe(&mut self, scene_id: SceneId, keyframe_id: Option<SceneId>) {
+        match keyframe_id {
+            Some(keyframe_id) => {
+                self.state.placed_keyframes.insert(scene_id, keyframe_id);
+            }
+            None => {
+                self.state.placed_keyframes.remove(&scene_id);
+            }
+        }
+    }
+
     /// A copy of the graph whose placed scenes draw through `keyframes` (keyframe
     /// tracks, ADR-0116): each scene ID to the keyframe scene of it that its placements
     /// draw. Studio state, not a revision: no undo step, no inverse, and a pair that no
-    /// longer names a scene and one of its keyframe scenes is ignored.
+    /// longer names a scene and one of its keyframe scenes is ignored. The engine writes
+    /// the field on its own graph ([`place_keyframe`](Self::place_keyframe)) instead of
+    /// cloning on each batch (ADR-0118); a live-settings copy carries the field because
+    /// it clones the graph.
     #[must_use]
     pub fn with_placed_keyframes(&self, keyframes: &BTreeMap<SceneId, SceneId>) -> Graph {
         let mut copy = self.clone();
@@ -121,6 +144,8 @@ impl Graph {
         let rev = self.rev.next().ok_or_else(|| ProtocolError::Internal {
             reason: "the revision counter overflowed".into(),
         })?;
+        // `placed_keyframes` rides along: it is runtime state, not an edit, so a batch
+        // does not drop the keyframes the engine switched (ADR-0118).
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
         let mut removed_hotkeys = Vec::new();
@@ -698,6 +723,13 @@ fn apply_edit(
                 width: old.width,
                 height: old.height,
             }])
+        }
+        Edit::CanvasSetFrameRate { fps } => {
+            if !jstream_protocol::allowed_base_fps(*fps) {
+                return Err(invalid(at, "fps", "must be 30 or 60"));
+            }
+            let old = std::mem::replace(&mut state.base_fps, *fps);
+            Ok(vec![Edit::CanvasSetFrameRate { fps: old }])
         }
         Edit::ItemSetSource { item_id, source_id } => {
             let (si, ii) = find_item(state, item_id)?;
@@ -1508,4 +1540,46 @@ fn check_reference_cycles(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod placed_keyframe_tests {
+    use super::*;
+
+    /// A batch keeps the runtime field, and the collection file does not store it
+    /// (ADR-0118). A live-settings copy carries it because it clones the graph.
+    #[test]
+    fn a_batch_keeps_placed_keyframes_and_the_file_omits_them() {
+        let mut graph = Graph::new();
+        graph.place_keyframe(SceneId::new("s"), Some(SceneId::new("kf-runtime")));
+        graph
+            .apply(
+                &[Edit::SceneCreate {
+                    scene_id: SceneId::new("s"),
+                    name: "S".into(),
+                    role: None,
+                }],
+                None,
+            )
+            .expect("the scene is created");
+        assert_eq!(
+            graph
+                .placed_keyframes()
+                .get(&SceneId::new("s"))
+                .map(std::string::ToString::to_string),
+            Some("kf-runtime".to_owned())
+        );
+        let json = graph.to_collection_json();
+        assert!(
+            !json.contains("kf-runtime"),
+            "the file stored the runtime field: {json}"
+        );
+        let copy = graph.with_values(&[]);
+        assert_eq!(
+            copy.placed_keyframes()
+                .get(&SceneId::new("s"))
+                .map(std::string::ToString::to_string),
+            Some("kf-runtime".to_owned())
+        );
+    }
 }

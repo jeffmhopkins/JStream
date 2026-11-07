@@ -29,8 +29,9 @@ pub const MAX_BACKLOG: u32 = 3;
 
 /// The `preview.subscribe` for a stage `width` × `height` CSS pixels at
 /// `pixel_ratio` device pixels per CSS pixel: a picture as sharp as the stage, kept
-/// between 320×180 and 1280×720 so a tiny window still shows something and a large
-/// one doesn't make the engine encode more than an editing view needs. H.264 is asked
+/// between 320×180 and the largest the engine sends (1920×1080), so a tiny window still
+/// shows something and a large one shows the canvas at full resolution (#1203: at the
+/// old 1280×720 cap a window capture's text was unreadable). H.264 is asked
 /// for first when `h264` (the browser can decode it), with JPEG as the fallback.
 pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Action {
     let side = |css: f32, low: u32, high: u32| {
@@ -48,8 +49,8 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
     };
     Action::PreviewSubscribe {
         channel: CHANNEL,
-        max_width: Some(side(width, 320, 1280).min(*PreviewSettings::WIDTH.end())),
-        max_height: Some(side(height, 180, 720).min(*PreviewSettings::HEIGHT.end())),
+        max_width: Some(side(width, 320, *PreviewSettings::WIDTH.end())),
+        max_height: Some(side(height, 180, *PreviewSettings::HEIGHT.end())),
         fps: Some(FPS),
         codecs,
         scene_id: None,
@@ -63,6 +64,24 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
 /// scene it shows.
 pub fn stream_scene(shown: Option<&SceneId>, program: Option<&SceneId>) -> Option<SceneId> {
     shown.filter(|s| Some(*s) != program).cloned()
+}
+
+/// How long what the canvas's stream should show must hold before the canvas switches
+/// streams. A scene switch changes the canvas's selection first and the program once the
+/// switch lands, so for that moment the canvas wants the new scene on its own; within
+/// this time it wants the program again, and the program stream, with its transition,
+/// plays on (#1205).
+pub const SETTLE: std::time::Duration = std::time::Duration::from_millis(250);
+
+/// The stream to switch to once `want`, wanted [`SETTLE`] ago, has settled: `None` while
+/// what is wanted `now` has moved on (a later change settles on its own) or `current`
+/// already shows it.
+pub fn settled_switch(
+    current: &Stream,
+    want: &Option<SceneId>,
+    now: &Option<SceneId>,
+) -> Option<Stream> {
+    (want == now && current.scene != *want).then(|| current.showing(want.clone()))
 }
 
 /// The canvas's current stream: its channel and what it shows, and how to ask for it.
@@ -278,6 +297,17 @@ pub enum PreviewState {
 }
 
 impl PreviewState {
+    /// The state once the canvas subscribes to another scene's stream: `Live` stays
+    /// `Live`, so the last picture stays on the canvas until the new stream draws
+    /// (#1205: a scene switch re-subscribes, and showing the "Starting" placeholder
+    /// each time flashed grey boxes), and anything else starts again.
+    pub fn resubscribed(&self) -> PreviewState {
+        match self {
+            PreviewState::Live => PreviewState::Live,
+            _ => PreviewState::Starting,
+        }
+    }
+
     /// The text the canvas shows over the background, if any.
     pub fn message(&self) -> Option<String> {
         match self {
@@ -402,6 +432,24 @@ mod tests {
         assert_eq!(wrapped.showing(None).channel, 1, "0 is skipped");
     }
 
+    /// #1205: a scene switch's moment of wanting the new scene on its own, before the
+    /// program follows, doesn't switch streams; a change that holds does, once.
+    #[test]
+    fn only_a_settled_change_switches_streams() {
+        let program = Stream::first((800.0, 450.0, 1.0), true);
+        let b = Some(SceneId::new("b"));
+        // Wanted B, then the program again before B settled: the program stream stays.
+        assert_eq!(settled_switch(&program, &b, &None), None);
+        // Wanted the program all along: nothing to do.
+        assert_eq!(settled_switch(&program, &None, &None), None);
+        // B held: the stream switches to it, on the next channel.
+        let next = settled_switch(&program, &b, &b).expect("a switch");
+        assert_eq!(next.scene, b);
+        assert_ne!(next.channel, program.channel);
+        // B shown already: a second settle of the same change does nothing.
+        assert_eq!(settled_switch(&next, &b, &b), None);
+    }
+
     #[test]
     fn the_request_follows_the_stage_within_bounds() {
         let Action::PreviewSubscribe {
@@ -418,7 +466,7 @@ mod tests {
         };
         assert_eq!(channel, CHANNEL);
         assert_eq!(scene_id, None, "the program mix");
-        assert_eq!((max_width, max_height), (Some(1280), Some(720)));
+        assert_eq!((max_width, max_height), (Some(1600), Some(900)));
         assert_eq!(fps, Some(FPS));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);
         let Action::PreviewSubscribe {
@@ -432,6 +480,16 @@ mod tests {
         };
         assert_eq!((max_width, max_height), (Some(320), Some(180)));
         assert_eq!(codecs, vec![PreviewCodec::Jpeg]);
+        // #1203: a large stage gets the full 1080p picture, not a 720p one.
+        let Action::PreviewSubscribe {
+            max_width,
+            max_height,
+            ..
+        } = subscribe(1600.0, 900.0, 1.5, true)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
         // Each request resolves on the engine's side.
         for action in [
             subscribe(1.0, 1.0, 1.0, true),
@@ -454,5 +512,15 @@ mod tests {
             Some("No preview: x")
         );
         assert_eq!(PreviewState::Live.message(), None);
+        // #1205: a re-subscribe keeps a live picture, and starts again otherwise.
+        assert_eq!(PreviewState::Live.resubscribed(), PreviewState::Live);
+        assert_eq!(
+            PreviewState::Starting.resubscribed(),
+            PreviewState::Starting
+        );
+        assert_eq!(
+            PreviewState::Unavailable("x".into()).resubscribed(),
+            PreviewState::Starting
+        );
     }
 }

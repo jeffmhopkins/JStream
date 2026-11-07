@@ -18,6 +18,7 @@ use crate::id::{
 use crate::keyframe::{ItemOverride, PlacedKeyframe};
 use crate::kind::{KindDescriptor, KindSummary};
 use crate::live::GestureInfo;
+use crate::mix::DEFAULT_BASE_FPS;
 use crate::mix::VideoMixInfo;
 use crate::motion::MotionModifier;
 use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
@@ -33,6 +34,14 @@ use crate::youtube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+fn default_base_fps() -> u32 {
+    DEFAULT_BASE_FPS
+}
+
+fn is_default_base_fps(fps: &u32) -> bool {
+    *fps == DEFAULT_BASE_FPS
+}
 
 /// A read. Queries change nothing, so they need no classification as edit or action.
 ///
@@ -192,7 +201,7 @@ pub enum Query {
     },
     /// Lists the displays, windows and video capture devices the engine can capture now:
     /// what a `display` or `window` source's `target` setting, or a `webcam` source's
-    /// `device` setting (since 0.89), can name. A device comes with the formats it
+    /// `device` setting (since 0.90), can name. A device comes with the formats it
     /// captures in that the engine reads, which its `capture_format` settings pick from.
     /// They are runtime state, not collection state, so the result carries no `rev`, and
     /// a window closed or a device unplugged since may still be named by a source. Fails
@@ -460,6 +469,13 @@ pub enum QueryResult {
         /// parses as 1920×1080.
         #[serde(default)]
         canvas: Canvas,
+        /// The collection's base frame rate, 30 or 60 (ADR-0119, since 0.89). Omitted
+        /// while it is 30, so a collection that has not opted in reads as it did before.
+        #[serde(
+            default = "default_base_fps",
+            skip_serializing_if = "is_default_base_fps"
+        )]
+        base_fps: u32,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -837,14 +853,14 @@ pub struct CaptureTargetInfo {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
     /// For a device, the formats it captures in that the engine reads, in the order the
-    /// device lists them (since 0.89). Omitted when empty: always for a display or a
+    /// device lists them (since 0.90). Omitted when empty: always for a display or a
     /// window, and for a device whose formats couldn't be read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub formats: Vec<CaptureFormatInfo>,
 }
 
 /// One format a video capture device captures in, in a `capture.targets` result: the
-/// values a `webcam` source's `capture_format` settings take to pick it (since 0.89).
+/// values a `webcam` source's `capture_format` settings take to pick it (since 0.90).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CaptureFormatInfo {
     /// The frame size in pixels.
@@ -868,7 +884,7 @@ pub enum CaptureTargetKind {
     /// One top-level window, captured by a `window` source.
     Window,
     /// A video capture device, a webcam or a capture card, captured by a `webcam`
-    /// source. Since 0.89.
+    /// source. Since 0.90.
     Device,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding

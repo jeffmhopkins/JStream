@@ -19,6 +19,16 @@
 #         holds only merged items; an item that is merged but not yet tagged belongs to
 #         the next release. Items no release is gathering yet leave it out.
 # gate:   true when the release waits for the item; set only with `release`.
+#
+# A `[[target]]` is an outcome a release still to come aims for, beside the roadmap items it
+# carries; most come from a Windows run's findings and are tracked by issues. The README
+# shows the next release's targets, its items and its progress, and no shipped release.
+# release:   the release it aims for, one without a `tag`.
+# priority:  the maintainer's order, 1 first; leave it out for the rest.
+# status:    as for items; anything but `planned` names its PRs in `prs`.
+# issues:    the issues it closes or tracks; `prs`, the PRs that deliver it.
+# undecided: true while the maintainer hasn't placed it in this release or the next; it
+#            doesn't count toward the release's progress.
 # Item IDs are the roadmap board's; PR titles name them in parentheses, e.g. "(A5)".
 
 [[release]]
@@ -44,6 +54,157 @@ id = "alpha.4"
 version = "0.1.0-alpha.4"
 goal = "A functional alpha for building layered, animated scenes over MCP on Windows"
 tag = "v0.1.0-alpha.4"
+
+[[release]]
+id = "alpha.4.1"
+version = "0.1.0-alpha.4.1"
+goal = "alpha.4 with the Windows run's fixes: dropped frames, stream and preview quality, browser sources from the zip"
+tag = "v0.1.0-alpha.4.1"
+
+[[release]]
+id = "alpha.4.2"
+version = "0.1.0-alpha.4.2"
+goal = "alpha.4.1 with fewer dropped frames: CPU frames converted on the GPU, readback without waiting, and raised thread priority for render and mix"
+tag = "v0.1.0-alpha.4.2"
+
+[[release]]
+id = "alpha.5"
+version = "0.1.0-alpha.5"
+goal = "A seamless, full-quality preview on a thread model that uses more cores, proved by a bench, then pop-out projectors, application settings and saved projects"
+
+[[target]]
+release = "alpha.5"
+title = "A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video"
+priority = 1
+status = "planned"
+issues = [1221]
+prs = [1235, 1236]
+note = "measured, then decided in an ADR; no further preview fix is built until it lands"
+
+[[target]]
+release = "alpha.5"
+title = "jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality"
+priority = 1
+status = "planned"
+issues = [1220, 1140]
+note = "each Windows run opens with it, and a fail blocks the release"
+
+[[target]]
+release = "alpha.5"
+title = "A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording"
+priority = 1
+status = "planned"
+issues = [1205, 1217]
+note = "#1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar"
+
+[[target]]
+release = "alpha.5"
+title = "Animated sources plan once a frame, and a small still image costs what it draws"
+priority = 1
+status = "planned"
+issues = [1138, 1139]
+
+[[target]]
+release = "alpha.5"
+title = "Pop-out projectors: the program, the preview or a scene in its own window or full screen on another monitor, at full quality and frame rate"
+priority = 2
+status = "planned"
+issues = [1208]
+prs = [1199]
+note = "#1199 merged; the Windows check is #1208"
+
+[[target]]
+release = "alpha.5"
+title = "An Application Settings dialog: plugin management, Check for updates, a CLAP plugins page, project video settings, and one set of blend modes"
+priority = 3
+status = "planned"
+issues = [1207, 1210, 1212, 1192, 1230]
+prs = [1249]
+note = "#1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open"
+
+[[target]]
+release = "alpha.5"
+title = "Save and load projects: File › New, Open, Save As and Open recent"
+priority = 4
+status = "planned"
+issues = [1218]
+
+[[target]]
+release = "alpha.5"
+title = "A UI scrub of every panel, dialog and window, with a decluttered Inspector and Properties and Filters in one dialog"
+priority = 5
+status = "planned"
+issues = [1219, 1198, 1202, 1204, 1206]
+
+[[target]]
+release = "alpha.5"
+title = "Snapshots and frame sheets draw browser pages and screen captures on Windows"
+status = "planned"
+issues = [1184, 1194, 1215]
+
+[[target]]
+release = "alpha.5"
+title = "Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus"
+status = "planned"
+issues = [1225, 1216, 1214, 1188]
+prs = [1251]
+note = "#1251 lays out the 3D camera section (#1214); #1225, #1216 and #1188 remain"
+
+[[target]]
+release = "alpha.5"
+title = "Looping media files play without a gap at the wrap"
+status = "planned"
+issues = [445]
+
+[[target]]
+release = "alpha.5"
+title = "Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings"
+status = "planned"
+issues = [1209, 1189]
+prs = [1240, 1245, 1255, 1257]
+
+[[target]]
+release = "alpha.5"
+title = "Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter"
+status = "planned"
+issues = [1226, 1227, 1232]
+
+[[target]]
+release = "alpha.5"
+title = "Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read"
+status = "planned"
+issues = [1228, 1060]
+
+[[target]]
+release = "alpha.5"
+title = "Webcam Properties: a device picker, resolution, frame rate and format, and camera controls"
+status = "planned"
+issues = [1195, 1196]
+
+[[target]]
+release = "alpha.5"
+title = "Ask before a new agent connects, with always-allowed agents listed in Settings"
+status = "planned"
+issues = [1229]
+
+[[target]]
+release = "alpha.5"
+title = "Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects"
+status = "planned"
+issues = [1231]
+note = "finishes roadmap item 3D3"
+
+[[target]]
+release = "alpha.5"
+title = "MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources"
+status = "planned"
+issues = [1222, 1223, 1224]
+
+[[target]]
+release = "alpha.5"
+title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
+status = "planned"
+issues = [1182, 1181]
 
 [[milestone]]
 id = "M0"

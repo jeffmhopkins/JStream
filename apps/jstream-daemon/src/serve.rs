@@ -147,6 +147,9 @@ pub fn engine(
     engine.set_thread_cpu(Arc::new(jstream_platform_macos::MacosThreadCpu));
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     engine.set_thread_cpu(Arc::new(jstream_platform_linux::LinuxThreadCpu));
+    // The render and mixer threads' MMCSS tasks (ADR-0117 §8).
+    #[cfg(windows)]
+    engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
     engine.start_stats_heartbeat();
     Ok(engine)
 }
@@ -389,7 +392,9 @@ fn cef_browser(
         tracing::warn!("no data directory for the browser's cache, so browser sources are off");
         return engine;
     };
-    let mut config = match CefConfig::beside_exe(&state) {
+    // A cache folder of its own: CEF refuses to start on a folder another process (the
+    // app, running beside the daemon) is using (#1187).
+    let mut config = match CefConfig::beside_exe(&state.join("daemon")) {
         Ok(config) => config,
         Err(error) => {
             tracing::warn!(%error, "browser sources are off");

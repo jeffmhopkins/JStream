@@ -14,8 +14,11 @@ use serde::{Deserialize, Serialize};
 /// How an output's video and audio are encoded.
 ///
 /// An output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:
-/// H.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when
-/// there is one (else the software one), and AAC at 160 kbit/s.
+/// H.264 at a constant 8000 kbit/s with a keyframe every 2 s on a hardware encoder when
+/// there is one (else the software one), and AAC at 160 kbit/s. 8000 kbit/s is
+/// YouTube's recommended rate for 1080p at 30 fps, the default base rate. A collection
+/// that opts into 60 fps (ADR-0119) spreads that same budget over twice the frames.
+/// 2500 kbit/s, the default before, looked poor at 1080p (#1191).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 pub struct EncoderProfile {
     /// The video encoding.
@@ -29,7 +32,7 @@ impl EncoderProfile {
     pub const DEFAULT: EncoderProfile = EncoderProfile {
         video: VideoEncoding {
             codec: VideoCodec::H264,
-            rate_control: RateControl::Cbr { kbps: 2500 },
+            rate_control: RateControl::Cbr { kbps: 8000 },
             keyframe_interval_s: 2,
             hardware: HardwarePreference::Prefer,
         },
@@ -305,7 +308,7 @@ mod tests {
             Some(json!({
                 "video": {
                     "codec": "h264",
-                    "rate_control": {"type": "cbr", "kbps": 2500},
+                    "rate_control": {"type": "cbr", "kbps": 8000},
                     "keyframe_interval_s": 2,
                     "hardware": "prefer"
                 },

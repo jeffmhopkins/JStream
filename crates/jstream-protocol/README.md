@@ -52,7 +52,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
-  `canvas.set_size`, `source.create`, `source.rename`, `source.set_settings`,
+  `canvas.set_size`, `canvas.set_frame_rate`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
   `output.set_target`, `output.set_path`, `output.set_encoder`, `output.set_video_mix`,
@@ -301,11 +301,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.89 because `capture.targets` lists video capture devices
+`PROTOCOL_VERSION` is 0.90 because `capture.targets` lists video capture devices
 (`CaptureTargetKind::Device`, with each device's `formats` as `CaptureFormatInfo`), a
 `webcam` source's `device` is a `capture_target` of kind `device`, and the
 `capture_format` parameter type (`CaptureFormatPart`) picks a device's resolution, frame
-rate and pixel format; 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
+rate and pixel format; 0.89 because a collection can set its base frame rate with
+`canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
+0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), a placeholder number the release
 queue sets); 0.87 because of timelines: `timeline.set`, `timeline.delete`,
@@ -810,14 +812,14 @@ never a type per kind.
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
-  `capture_target` with a `kind`, `display`, `window` or, since 0.89, `device` (an
+  `capture_target` with a `kind`, `display`, `window` or, since 0.90, `device` (an
   unknown one parses as `CaptureTargetKind::Unknown`, so adding a kind is a minor
   change), and `max_len`, since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from; `capture_format` with a `part`
   (`resolution`, `fps` or `pixel_format`; an unknown one parses as
   `CaptureFormatPart::Unknown`) and the `target` parameter naming the device, since
-  0.89: one part of the format a device is opened in, a UI offering what
+  0.90: one part of the format a device is opened in, a UI offering what
   `capture.targets` lists for that device. A `resolution` is `<width>x<height>`, each
   side 1 to `MAX_CAPTURE_SIDE`; an `fps` a number from 0 to `MAX_CAPTURE_FPS`; a
   `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine), a
@@ -1045,7 +1047,7 @@ is refused with `invalid_argument` naming the field. Whether the machine has an 
 for the codec is not checked there, since a profile is valid on any machine: an
 `output.start` on a machine with none fails. `encoder.delete` is refused while
 an output uses the profile. `output.set_encoder` points an output at a profile, or with
-no `profile_id` back at the engine's default (H.264 CBR 2500 kbit/s, a keyframe every
+no `profile_id` back at the engine's default (H.264 CBR 8000 kbit/s, a keyframe every
 2 s, hardware when there is one, AAC 160 kbit/s). Both apply from the output's next `output.start`.
 Running outputs with the same mix and the same profile, as it was when each started,
 share one encoder session, and `output.status` reports the sharing.
@@ -1177,7 +1179,7 @@ Video mixes (0.28) are collection state too: what an output's video shows.
 since no mix draws studio mode's preview scene yet; or `scene` with a `scene_id`, one scene whatever is on
 program), a `resolution` whose sides are even and 16..=8192, and an `fps_divisor` of
 1..=60 (missing, it parses as 1): the mix renders on every `fps_divisor`th tick of the
-engine's base frame rate. The canvas is fitted inside the resolution, centred, with
+engine's base frame rate (30 by default, or 60 after `canvas.set_frame_rate`, ADR-0119). The canvas is fitted inside the resolution, centred, with
 black bars where the aspect ratios differ, never stretched
 ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)). Anything else,
 including an input a newer server sent as `unknown`, is refused with `invalid_argument`
@@ -1214,8 +1216,10 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   removing the hotkey bindings that name it in the same edit; its inverse re-creates
   the preset and restores them. The
   default preset can't be deleted (`invalid_argument` on `preset_id`);
-  `transition.set_default` moves it. A new collection holds one preset, `cut`, as its
-  default.
+  `transition.set_default` moves it. A new collection holds one preset, `cut`, named
+  Cut, as its default, with `duration_ms` 0: a switch that uses it shows the new scene
+  on the next frame. A `cut` ignores a stored duration, so one saved at 300 ms (the
+  preset this collection used to start with) still cuts.
 - `scene.set_transitions {scene_id, transition_in?, transition_out?}` sets both of a
   scene's overrides (absent clears one), and `item.set_transition {item_id,
   transition}` an item's `ItemTransition {delay_ms, easing, glide, appear,
@@ -1334,7 +1338,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is.
-- `capture.targets`: the displays, windows and (since 0.89) video capture devices the
+- `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
   `window` or `webcam`), its `target` (the value for that source's `target` or
@@ -2391,6 +2395,12 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   maximum (`jstream-graph` accepts up to 8192 each way, so 7680×4320 and its portrait
   form fit), is `invalid_argument` on `edits.N.width` or `edits.N.height`. Items keep
   their canvas-pixel placements. Inverse: `canvas.set_size` with the previous size.
+  `canvas.set_frame_rate { fps }` (0.89, ADR-0119) sets the collection's base frame
+  rate to 30 or 60. A new collection is 30. The program stage keeps the rate it opened
+  with, and a change applies the next time it opens. A mix's `fps_divisor` is relative
+  to that rate, so 60 doubles every mix. Anything else is `invalid_argument` on
+  `edits.N.fps`. `state.get` reports `base_fps`, omitted while it is 30. Inverse:
+  `canvas.set_frame_rate` with the previous rate.
 - **Two placement forms.** An item stores either a geometry or a legacy 0.3 transform,
   and only an edit changes which. `item.add` takes an optional `geometry` beside the
   deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and

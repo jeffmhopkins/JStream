@@ -9,7 +9,7 @@
 //! both ends) with the plugin host's MMCSS registration (`ProAudioThread`),
 //! `check_media_foundation`, which reports a Windows N edition without Media Foundation,
 //! and user-only files for a host's secrets (`create_private_file`,
-//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`); packet video decoders follow. Layer 2, and one of the few crates allowed
+//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`), and the MMCSS tasks of the real-time threads (`WindowsThreadPriority`); packet video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -25,6 +25,9 @@ mod codec;
 mod com;
 mod credential;
 mod decode;
+// The extension filter is tested on every platform; the dialog itself is Windows.
+#[cfg(any(windows, test))]
+mod dialog;
 #[cfg(windows)]
 mod gpu;
 // Its decision logic is tested on every platform.
@@ -62,6 +65,8 @@ pub use credential::WindowsCredentials;
 #[cfg(windows)]
 pub use decode::MfMediaDecoders;
 #[cfg(windows)]
+pub use dialog::{Pick, PickKind, pick_path};
+#[cfg(windows)]
 pub use gpu::WindowsGpu;
 #[cfg(windows)]
 pub use n_edition::check_media_foundation;
@@ -72,7 +77,7 @@ pub use plugin_hosts::{PLUGIN_HOST_EXE, WindowsPluginHosts};
 #[cfg(windows)]
 pub use private_file::{check_private_file, create_private_file};
 #[cfg(windows)]
-pub use process::{WindowsProcessCpu, WindowsThreadCpu};
+pub use process::{WindowsProcessCpu, WindowsThreadCpu, WindowsThreadPriority};
 #[cfg(windows)]
 pub use vcam::WindowsVcam;
 #[cfg(windows)]

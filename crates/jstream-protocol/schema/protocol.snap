@@ -3998,6 +3998,26 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets the collection's base frame rate to 30 or 60 (since 0.89, ADR-0119). A new\ncollection is 30. The program stage keeps the rate it opened with; a change\napplies the next time the stage opens. A preview stream holds the stage open, so\nthe program keeps the old rate until every consumer stops. `profile.get`'s\n`frame_budget_ms` is the rate the stage is actually running at. Mixes run at this\nrate divided by their `fps_divisor`, so 60 doubles every mix. Anything else is\n`invalid_argument`. Inverse: `canvas.set_frame_rate` with the previous rate.",
+          "properties": {
+            "fps": {
+              "description": "Frames per second: 30 or 60.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "canvas.set_frame_rate",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "fps"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Hotkey bindings whose action names the output\nare removed with it (ADR-0040 §3). Inverse: `output.create` with its kind,\n`output.set_encoder` if it had a profile, then `hotkey.set` for each removed\nbinding; it can't restore the key: set it again with `output.set_key`.",
           "properties": {
             "output_id": {
@@ -5287,7 +5307,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "EncoderProfile": {
-      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 2500 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s.",
+      "description": "How an output's video and audio are encoded.\n\nAn output with no profile uses the engine's default, [`EncoderProfile::DEFAULT`]:\nH.264 at a constant 8000 kbit/s with a keyframe every 2 s on a hardware encoder when\nthere is one (else the software one), and AAC at 160 kbit/s. 8000 kbit/s is\nYouTube's recommended rate for 1080p at 30 fps, the default base rate. A collection\nthat opts into 60 fps (ADR-0119) spreads that same budget over twice the frames.\n2500 kbit/s, the default before, looked poor at 1080p (#1191).",
       "properties": {
         "audio": {
           "$ref": "#/$defs/AudioEncoding",
@@ -10223,6 +10243,12 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `state.get`: the whole collection state at one revision.",
           "properties": {
+            "base_fps": {
+              "description": "The collection's base frame rate, 30 or 60 (ADR-0119, since 0.89). Omitted\nwhile it is 30, so a collection that has not opted in reads as it did before.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
             "buses": {
               "default": [],
               "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.19) parses as empty.",
@@ -10313,7 +10339,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "default": "cut",
                 "presets": [
                   {
-                    "duration_ms": 300,
+                    "duration_ms": 0,
                     "easing": "ease_in_out",
                     "kind": "cut",
                     "name": "Cut",

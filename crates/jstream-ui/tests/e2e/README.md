@@ -73,6 +73,13 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 -->
 
+- **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
+  Browse… stores a path under the collection folder as a collection path and a path
+  outside it as absolute, hides the button for app assets, and leaves the field when
+  the stub cancels; a recording's add form and Edit ask for a save dialog and a
+  stream has no button; Install plugin asks for a folder dialog and fills the path and
+  the suggested id. A page with no desktop global has no Browse button. The native
+  dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
   connects with the browser's credentials; the header's File menu shows the URL and
   protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused
@@ -142,7 +149,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   second.
 - **Stream stats** (`stream-stats.spec.js`): added from the View menu, the panel says
   there are no outputs; with a recording added it is READY with no uptime and shows
-  the default profile's H.264 at 2500 kbps; once the recording starts it is LIVE with
+  the default profile's H.264 at 8000 kbps; once the recording starts it is LIVE with
   the no-data box, and the ticks the test sends give the uptime, the bitrate against
   the target, the dropped share, Excellent then Poor, the chart and what was sent;
   hovering the chart's right edge reads the newest sample "now" and further left the
@@ -216,9 +223,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   second Left pressed before the next menu is drawn still moves along the bar. The
   header's mark is the bundle's `icon.png`, loaded; the Help menu lists Documentation,
   Getting started, Release notes and Report an issue, each a link to the repository's
-  page in a new tab with `noopener noreferrer`, then About JStream, whose dialog shows
+  page in a new tab with `noopener noreferrer`, then Check for updates and About
+  JStream. About shows
   the icon, the version, the build, the engine's protocol and the licence with its
-  links, and closes on Escape and on Close.
+  links, and closes on Escape and on Close. Check for updates, on this page, says the
+  check runs in the desktop app. File's first item is Settings…, and its "Check for
+  updates at launch" checkbox starts off and is kept in the page's storage. Arriving at
+  File from the keyboard focuses Settings….
 - **Copy and paste** (`clipboard.spec.js`): Ctrl+C and Ctrl+V on the canvas paste the
   seed's Backdrop again as one batch, on top and selected; the empty canvas's Paste puts
   it in Intro, and a row's Ctrl+C and Ctrl+V do the same; Paste scene is disabled until
@@ -237,6 +248,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the type's title, the source's name, its two filters and an enabled Add filter
   button; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
+  Dragging the title moves the dialog, which stays inside the window and opens again
+  where it was left; a double-click on the title centres it, and the header's × still
+  closes it.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively. A video capture device created through Add source, with its descriptor
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
@@ -404,7 +418,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
-  one revision, which one undo puts back.
+  one revision, which one undo puts back. With a window capture in the scene, the
+  camera, Depth of field and Follow pointer on, and a camera-motion row added, the
+  settings column's `scrollWidth` stays within its `clientWidth` at the dialog's width
+  and when a 720-wide viewport clamps the dialog; the Nearest on top check sits in
+  front of its text, and the From the right stepper keeps room for its number.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the

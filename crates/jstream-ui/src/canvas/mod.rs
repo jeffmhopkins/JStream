@@ -314,18 +314,24 @@ pub fn Canvas() -> impl IntoView {
             ));
         });
     }
-    // Another scene shown: close the stream and open one of it (CV-03).
-    Effect::new(move |_| {
-        let want = wanted.get();
-        let Some(current) = stream.get_value() else {
+    // Another scene shown: close the stream and open one of it (CV-03), once what the
+    // canvas wants has held for `preview::SETTLE`. A scene switch changes the selection
+    // before the program, so `wanted` goes program, the scene, program again: settling
+    // keeps the program stream through it, and its transition plays without a stall
+    // (#1205).
+    let resubscribe = move |want: Option<SceneId>| {
+        let Some(current) = stream.try_get_value().flatten() else {
             return;
         };
-        if current.scene == want {
+        let Some(now) = wanted.try_get_untracked() else {
             return;
-        }
-        let next = current.showing(want);
+        };
+        let Some(next) = preview::settled_switch(&current, &want, &now) else {
+            return;
+        };
         stream.set_value(Some(next.clone()));
-        preview_state.set(PreviewState::Starting);
+        // A picture already shown stays until the new stream draws (#1205).
+        preview_state.update(|state| *state = state.resubscribed());
         let Some(open) = session.and_then(|s| s.get()) else {
             return;
         };
@@ -349,6 +355,16 @@ pub fn Canvas() -> impl IntoView {
                 preview_state.try_set(PreviewState::Unavailable(error.to_string()));
             }
         });
+    };
+    Effect::new(move |_| {
+        let want = wanted.get();
+        if stream
+            .get_value()
+            .is_none_or(|current| current.scene == want)
+        {
+            return;
+        }
+        set_timeout(move || resubscribe(want), preview::SETTLE);
     });
     {
         let alive = Arc::clone(&alive);
@@ -1378,7 +1394,11 @@ pub fn Canvas() -> impl IntoView {
                     None => (outline(&geometry), Bounds::of(&geometry)),
                 };
                 let dash = if visible { "none" } else { "6 4" };
-                // The label sits in the top-left of the box's bounds, whatever its rotation.
+                // Just inside the box's own top-left, running along its top edge.
+                let label = name_label(&geometry, seen.as_ref(), bounds, px(4.0), px(14.0));
+                let turn = label
+                    .rotation
+                    .map(|rot| format!("rotate({} {} {})", rot.degrees, rot.cx, rot.cy));
                 Some(view! {
                     <g>
                         <polygon
@@ -1390,8 +1410,9 @@ pub fn Canvas() -> impl IntoView {
                             vector-effect="non-scaling-stroke"
                         />
                         <text
-                            x=bounds.left + px(4.0)
-                            y=bounds.top + px(14.0)
+                            x=label.x
+                            y=label.y
+                            transform=turn
                             font-size=px(12.0)
                             fill=if is_selected {
                                 selection_colour(picked.len(), crop_mode.get())
@@ -1940,6 +1961,99 @@ fn group_readout_text(
     }
 }
 
+/// Where an item's name is drawn, in canvas units.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NameLabel {
+    /// `<text>` x before [`NameRotation`] is applied: the corner plus the along-edge inset.
+    x: f32,
+    /// `<text>` y before the rotation: the corner plus the into-item inset.
+    y: f32,
+    /// Rotation about the top-left corner, when the name runs along the top edge.
+    /// Absent, the name stays upright on the bounds.
+    rotation: Option<NameRotation>,
+}
+
+/// `rotate(degrees cx cy)` about the box's top-left, in degrees clockwise.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NameRotation {
+    /// The top edge's angle, from its top-left toward its top-right.
+    degrees: f32,
+    /// The corner the rotation is about.
+    cx: f32,
+    /// The corner the rotation is about.
+    cy: f32,
+}
+
+/// The name just inside the box's top-left, turned to run along its top edge.
+///
+/// `pad_along` and `pad_in` are the insets in canvas units (4 and 14 screen pixels,
+/// through the viewport). They are added in the unrotated frame and the SVG rotation
+/// about the corner carries them onto the edge, which is how an upright box's name,
+/// at its bounds' top-left, is drawn. The glyphs grow back toward the edge from that
+/// baseline. `flip_h` and `flip_v` mirror the picture, not the box
+/// ([`ItemGeometry`]), so the corner stays the box's own top-left. The angle is the
+/// edge's own, including past a quarter turn, so the name stays with that corner
+/// instead of jumping to the other end to stay upright.
+///
+/// Corners come from [`ItemGeometry::project_seen`]: the camera's when `view` is set,
+/// otherwise the item's own projection, tilt and turn included. When the top-left or
+/// the far end of the top edge is behind the viewer, or the edge has no direction (a
+/// box turned edge-on), the name stays upright on `bounds`. A mirrored projection (a
+/// turn past the side, or a camera behind the item) insets into the box. The glyphs
+/// still grow toward the rotated frame's negative y, so on a mirrored box the name
+/// sits about one line deeper than on an unmirrored one.
+fn name_label(
+    geometry: &ItemGeometry,
+    view: Option<&CameraView>,
+    bounds: Bounds,
+    pad_along: f32,
+    pad_in: f32,
+) -> NameLabel {
+    let upright = NameLabel {
+        x: bounds.left + pad_along,
+        y: bounds.top + pad_in,
+        rotation: None,
+    };
+    let Ok(quad) = geometry.project_seen(view) else {
+        return upright;
+    };
+    let at = |placed: Placed| match placed {
+        Placed::At(point) if point.x.is_finite() && point.y.is_finite() => Some(Point {
+            x: point.x,
+            y: point.y,
+        }),
+        _ => None,
+    };
+    let (Some(top_left), Some(top_right)) = (at(quad.corners[0]), at(quad.corners[1])) else {
+        return upright;
+    };
+    let dx = top_right.x - top_left.x;
+    let dy = top_right.y - top_left.y;
+    // An edge-on top (a 90° turn, drawn flat) has no direction to run along.
+    if dx.hypot(dy) < 1.0e-3 {
+        return upright;
+    }
+    // A third corner says which side of the edge the box is on. Positive is clockwise
+    // from the edge in this y-down frame, which is the side the +y inset lands on.
+    let pad_in = match at(quad.corners[3]).or_else(|| at(quad.corners[2])) {
+        Some(inside) => {
+            let cross = dx * (inside.y - top_left.y) - dy * (inside.x - top_left.x);
+            if cross < 0.0 { -pad_in } else { pad_in }
+        }
+        None => pad_in,
+    };
+    NameLabel {
+        x: top_left.x + pad_along,
+        y: top_left.y + pad_in,
+        rotation: Some(NameRotation {
+            // Adding zero turns -0 into 0.
+            degrees: dy.atan2(dx).to_degrees() + 0.0,
+            cx: top_left.x,
+            cy: top_left.y,
+        }),
+    }
+}
+
 /// A box's outline as SVG `points`, from `jstream-protocol`'s placement formula, so it
 /// is exactly what the compositor draws. Empty if a corner is behind the viewer (only
 /// possible with 3D, which the engine accepts from protocol 0.34).
@@ -2075,7 +2189,32 @@ fn shown_scene(layout: &Layout) -> Option<&SceneId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{Finite32, Size, Vec2};
+    use jstream_control::protocol::{Canvas, Finite32, Size, Vec2};
+
+    /// The baseline after the SVG rotation, where the name is actually drawn.
+    fn baseline(label: NameLabel) -> Point {
+        let Some(rot) = label.rotation else {
+            return Point {
+                x: label.x,
+                y: label.y,
+            };
+        };
+        let (sin, cos) = rot.degrees.to_radians().sin_cos();
+        let dx = label.x - rot.cx;
+        let dy = label.y - rot.cy;
+        Point {
+            x: rot.cx + dx * cos - dy * sin,
+            y: rot.cy + dx * sin + dy * cos,
+        }
+    }
+
+    /// Signed distance of `point` from the edge `from` → `to`: positive on the clockwise
+    /// side, in canvas units.
+    fn side(from: Point, to: Point, point: Point) -> f32 {
+        let dx = to.x - from.x;
+        let dy = to.y - from.y;
+        (dx * (point.y - from.y) - dy * (point.x - from.x)) / dx.hypot(dy)
+    }
 
     fn geometry(cx: f32, cy: f32, w: f32, h: f32, rotation: f32) -> ItemGeometry {
         ItemGeometry {
@@ -2183,5 +2322,193 @@ mod tests {
         assert_eq!(handle_cursor(Handle::Resize { x: 0, y: 1 }), "ns-resize");
         assert_eq!(handle_cursor(Handle::Resize { x: -1, y: 0 }), "ew-resize");
         assert_eq!(handle_cursor(Handle::Rotate), "grab");
+    }
+
+    #[test]
+    fn an_upright_name_stays_on_the_bounds_corner() {
+        let g = geometry(100.0, 80.0, 200.0, 100.0, 0.0);
+        let bounds = Bounds::of(&g);
+        let label = name_label(&g, None, bounds, 4.0, 14.0);
+        let rot = label.rotation.expect("the top edge is drawn");
+        assert!(rot.degrees.abs() < 1e-4, "{}", rot.degrees);
+        let at = baseline(label);
+        assert!((at.x - (bounds.left + 4.0)).abs() < 1e-3, "{at:?}");
+        assert!((at.y - (bounds.top + 14.0)).abs() < 1e-3, "{at:?}");
+    }
+
+    #[test]
+    fn the_name_follows_the_rotated_top_left() {
+        // The reported case: −16°, where the upright bounds' corner floats off the box.
+        let g = geometry(960.0, 540.0, 400.0, 200.0, -16.0);
+        let bounds = Bounds::of(&g);
+        let label = name_label(&g, None, bounds, 4.0, 14.0);
+        let quad = g.project().expect("placed");
+        let Placed::At(c0) = quad.corners[0] else {
+            panic!("in front")
+        };
+        let Placed::At(c1) = quad.corners[1] else {
+            panic!("in front")
+        };
+        let Placed::At(c3) = quad.corners[3] else {
+            panic!("in front")
+        };
+        let top_left = Point { x: c0.x, y: c0.y };
+        let top_right = Point { x: c1.x, y: c1.y };
+        let bottom_left = Point { x: c3.x, y: c3.y };
+        let rot = label.rotation.expect("turned with the box");
+        assert!((rot.cx - top_left.x).abs() < 1e-3 && (rot.cy - top_left.y).abs() < 1e-3);
+        let edge = (top_right.y - top_left.y)
+            .atan2(top_right.x - top_left.x)
+            .to_degrees();
+        assert!(
+            (rot.degrees - edge).abs() < 1e-3,
+            "{} vs {edge}",
+            rot.degrees
+        );
+        // Not the old place: the upright bounds' top-left, off the rotated corner.
+        assert!((bounds.left - top_left.x).abs() > 1.0 || (bounds.top - top_left.y).abs() > 1.0);
+        let at = baseline(label);
+        let along = {
+            let dx = top_right.x - top_left.x;
+            let dy = top_right.y - top_left.y;
+            let len = dx.hypot(dy);
+            ((at.x - top_left.x) * dx + (at.y - top_left.y) * dy) / len
+        };
+        assert!((along - 4.0).abs() < 1e-2, "{along}");
+        let inside = side(top_left, top_right, bottom_left).signum();
+        let inset = side(top_left, top_right, at);
+        assert!((inset.abs() - 14.0).abs() < 1e-2, "{inset}");
+        assert!(
+            inset.signum() == inside,
+            "the name is outside the box: {inset}"
+        );
+    }
+
+    #[test]
+    fn a_flip_does_not_move_the_name() {
+        let mut g = geometry(960.0, 540.0, 400.0, 200.0, -16.0);
+        let plain = name_label(&g, None, Bounds::of(&g), 4.0, 14.0);
+        g.flip_h = true;
+        g.flip_v = true;
+        let flipped = name_label(&g, None, Bounds::of(&g), 4.0, 14.0);
+        assert_eq!(plain, flipped);
+    }
+
+    #[test]
+    fn a_mirrored_turn_insets_the_name_into_the_box() {
+        let mut g = geometry(100.0, 100.0, 200.0, 100.0, 0.0);
+        g.turn_deg = Finite32::new(180.0).expect("finite");
+        let label = name_label(&g, None, Bounds::of(&g), 4.0, 14.0);
+        let quad = g.project().expect("placed");
+        let Placed::At(c0) = quad.corners[0] else {
+            panic!("in front")
+        };
+        let Placed::At(c1) = quad.corners[1] else {
+            panic!("in front")
+        };
+        let Placed::At(c3) = quad.corners[3] else {
+            panic!("in front")
+        };
+        let top_left = Point { x: c0.x, y: c0.y };
+        let top_right = Point { x: c1.x, y: c1.y };
+        let inside = side(top_left, top_right, Point { x: c3.x, y: c3.y }).signum();
+        let inset = side(top_left, top_right, baseline(label));
+        assert!(
+            (inset.abs() - 14.0).abs() < 1e-2 && inset.signum() == inside,
+            "inset {inset}, inside {inside}"
+        );
+    }
+
+    #[test]
+    fn an_edge_on_top_keeps_the_upright_name() {
+        let mut g = geometry(100.0, 100.0, 200.0, 100.0, 0.0);
+        g.turn_deg = Finite32::new(90.0).expect("finite");
+        let bounds = Bounds::of(&g);
+        let label = name_label(&g, None, bounds, 4.0, 14.0);
+        assert!(label.rotation.is_none());
+        assert!((label.x - (bounds.left + 4.0)).abs() < 1e-3);
+        assert!((label.y - (bounds.top + 14.0)).abs() < 1e-3);
+    }
+
+    /// #1054's item: close to the camera, tilted nearly flat and long enough that one
+    /// end reaches behind it. `tilt` positive moves the top away.
+    fn partly_behind(tilt: f32) -> (Canvas, CameraView, ItemGeometry) {
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let seen = camera::view(Some(SceneCamera::framing(canvas)), canvas).expect("camera");
+        let camera_z = SceneCamera::framing(canvas).position.z.get();
+        let mut g = geometry(960.0, 560.0, 100.0, 2000.0, 0.0);
+        g.depth_px = Finite32::new(camera_z - 200.0).expect("finite");
+        g.tilt_deg = Finite32::new(tilt).expect("finite");
+        (canvas, seen, g)
+    }
+
+    #[test]
+    fn a_top_edge_behind_the_camera_keeps_the_upright_name() {
+        let (_canvas, seen, g) = partly_behind(-80.0);
+        let quad = g.project_seen(Some(&seen)).expect("projected");
+        assert!(
+            matches!(quad.corners[0], Placed::BehindViewer)
+                || matches!(quad.corners[1], Placed::BehindViewer),
+            "the top edge is in front: {quad:?}"
+        );
+        let bounds = Bounds::of(&camera::screen_box(&g, &seen).expect("its front is drawn"));
+        let label = name_label(&g, Some(&seen), bounds, 4.0, 14.0);
+        assert!(label.rotation.is_none());
+        assert!((label.x - (bounds.left + 4.0)).abs() < 1e-3);
+        assert!((label.y - (bounds.top + 14.0)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn a_top_edge_in_front_is_named_though_the_bottom_is_behind() {
+        let (_canvas, seen, g) = partly_behind(80.0);
+        let quad = g.project_seen(Some(&seen)).expect("projected");
+        let (Placed::At(c0), Placed::At(c1)) = (quad.corners[0], quad.corners[1]) else {
+            panic!("the top edge is behind: {quad:?}");
+        };
+        assert!(
+            matches!(quad.corners[2], Placed::BehindViewer)
+                || matches!(quad.corners[3], Placed::BehindViewer)
+        );
+        let bounds = Bounds::of(&camera::screen_box(&g, &seen).expect("its front is drawn"));
+        let label = name_label(&g, Some(&seen), bounds, 4.0, 14.0);
+        let rot = label.rotation.expect("the top edge is in front");
+        assert!((rot.cx - c0.x).abs() < 1e-3 && (rot.cy - c0.y).abs() < 1e-3);
+        let edge = (c1.y - c0.y).atan2(c1.x - c0.x).to_degrees();
+        assert!(
+            (rot.degrees - edge).abs() < 1e-3,
+            "{} vs {edge}",
+            rot.degrees
+        );
+    }
+
+    #[test]
+    fn a_flat_box_through_the_framing_camera_names_its_top_left() {
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let seen = camera::view(Some(SceneCamera::framing(canvas)), canvas).expect("camera");
+        let g = geometry(500.0, 300.0, 400.0, 200.0, -16.0);
+        let through = name_label(
+            &g,
+            Some(&seen),
+            Bounds::of(&camera::screen_box(&g, &seen).expect("in front")),
+            4.0,
+            14.0,
+        );
+        let flat = name_label(&g, None, Bounds::of(&g), 4.0, 14.0);
+        let rot_c = through.rotation.expect("edge in front");
+        let rot_f = flat.rotation.expect("edge drawn");
+        assert!((rot_c.cx - rot_f.cx).abs() < 0.05, "{rot_c:?} vs {rot_f:?}");
+        assert!((rot_c.cy - rot_f.cy).abs() < 0.05, "{rot_c:?} vs {rot_f:?}");
+        assert!(
+            (rot_c.degrees - rot_f.degrees).abs() < 0.05,
+            "{} vs {}",
+            rot_c.degrees,
+            rot_f.degrees
+        );
     }
 }

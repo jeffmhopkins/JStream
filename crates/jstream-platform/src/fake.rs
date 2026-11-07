@@ -24,10 +24,10 @@ use crate::{
     CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
     CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
     HardwarePreference, MediaAudioInfo, MediaClock, MediaDecoder, MediaDecoderConfig,
-    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, ProcessCpu, Secret,
-    StreamKeyStore, ThreadCpu, ThreadTime, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
-    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
-    VideoSurface,
+    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, ProcessCpu,
+    RaisedThread, Secret, StreamKeyStore, ThreadCpu, ThreadPriority, ThreadRole, ThreadTime,
+    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
+    VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -1467,6 +1467,48 @@ impl Default for FakeThreads {
 impl ThreadCpu for FakeThreads {
     fn threads(&self) -> Option<Vec<ThreadTime>> {
         lock(&self.threads).clone()
+    }
+}
+
+/// A [`ThreadPriority`] that records each raise by the name of the thread it was on, and
+/// each revert. Clones share the record.
+#[derive(Clone, Debug, Default)]
+pub struct FakePriority {
+    log: Arc<Mutex<PriorityLog>>,
+}
+
+/// What a [`FakePriority`] saw.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct PriorityLog {
+    /// Each raise: the calling thread's name and the role.
+    pub raised: Vec<(String, ThreadRole)>,
+    /// Each revert, by the name of the thread it ran on.
+    pub reverted: Vec<String>,
+}
+
+impl FakePriority {
+    /// Nothing raised yet.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// What it has seen so far.
+    pub fn log(&self) -> PriorityLog {
+        lock(&self.log).clone()
+    }
+}
+
+fn thread_name() -> String {
+    std::thread::current().name().unwrap_or_default().to_owned()
+}
+
+impl ThreadPriority for FakePriority {
+    fn raise(&self, role: ThreadRole) -> Option<RaisedThread> {
+        lock(&self.log).raised.push((thread_name(), role));
+        let log = Arc::clone(&self.log);
+        Some(RaisedThread::new(move || {
+            lock(&log).reverted.push(thread_name());
+        }))
     }
 }
 

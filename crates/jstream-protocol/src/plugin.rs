@@ -155,6 +155,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("send.set", Class(E)),
     ("send.remove", Class(E)),
     ("canvas.set_size", Class(E)),
+    ("canvas.set_frame_rate", Class(E)),
     ("hotkey.set", Class(E)),
     ("hotkey.clear", Class(E)),
     ("timeline.set", N),

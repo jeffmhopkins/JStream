@@ -29,7 +29,7 @@ protocol's types (`Overrides`).
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
   (`cut`, `fade`, `move`), which every graph has.
-- `State`: the `canvas` (default 1920×1080), the `sources`, keyed by ID, the `scenes`
+- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
@@ -113,12 +113,14 @@ the batch **touched**. `Graph::with_values(edits)` is the other way in: a copy o
 graph with each edit that applies applied, skipping any that fails, at the same `rev`,
 with no inverse. The engine draws open gestures' source settings through it
 ([ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)).
-`Graph::with_placed_keyframes` is the third: a copy whose runtime-only
-`State::placed_keyframes` holds the keyframe each placed scene is switched to
-([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)), never saved or compared.
+`Graph::place_keyframe` records the keyframe each placed scene is switched to
+([ADR-0116](../../docs/adr/0116-keyframe-tracks.md),
+[ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)) on the graph itself:
+`apply` keeps the field, the collection file never stores it, and it is not a revision.
 `State::placed_keyframe` reads it back (only while the keyframe scene is still one of
 the scene's), and `State::draws` tells whether a root draws a scene through scene
-sources.
+sources. `Graph::with_placed_keyframes` is a copy with a different map, for a caller
+that does not want to change the graph it has.
 
 - **Inverses** are computed from the state before each edit, and the batch's inverse is
   its edits' inverses in reverse order. They are plain protocol edits, as the protocol's
@@ -144,12 +146,12 @@ sources.
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
   `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
   scene's transition overrides and options, an item's transition settings), and whether the
-  scenes' order, the canvas size or the default preset was set. A send is an object of its own, so two sources'
+  scenes' order, the canvas size, the base frame rate or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
   its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
-  set the same property, both set the scenes' order, both set the canvas size, or both
+  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, or both
   set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a source kind the graph describes (a
@@ -555,7 +557,9 @@ the engine's; this crate does no I/O.
   addressed to them (then `item.set_motion` for their motion and `item.set_effects` for
   their effects, keeping a filter of an unknown
   kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
-  initial `cut` is updated in place when the file has it, and deleted when it doesn't),
+  initial `cut` is updated in place when the file has it, and deleted when it doesn't;
+  the stock Cut a collection used to start with, 300 ms ease-in-out and otherwise
+  unchanged, loads at duration 0, #1209),
   then each scene's overrides, then video mixes, then outputs with their profiles, mixes
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
@@ -669,7 +673,8 @@ loading with its master send and its audio off, so an older collection never sta
 recording a webcam's microphone, and saving that back; a file without `master` or any output's `filters` (as saved before their chains
 existed) loading with those chains empty and the sources' filters intact; a removed
 master send's round trip, a webcam's among them (its audio on, no send back); a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
-transitions' round trip (with the initial `cut` deleted, or kept but changed) and a
+transitions' round trip (with the initial `cut` deleted, or kept but changed), the
+old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
 preset of another kind version refused; hotkeys' round trip, and a file whose binding
 names a missing scene refused; a clone's
 link surviving a round trip after its original is deleted; the migration runner over stand-in

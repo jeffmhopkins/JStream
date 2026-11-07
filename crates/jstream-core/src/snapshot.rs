@@ -2795,7 +2795,9 @@ impl Shot {
     /// the video mixes', from the placements the shot holds, not a gesture's live
     /// values, so a drag is measured once it commits. A source a video chain runs over
     /// counts as 1, since its filters' settings are in the frame's pixels. A source the
-    /// shot draws only in a transition's tracks, or not at all, isn't listed.
+    /// shot draws only in a transition's tracks, or not at all, isn't listed. A legacy
+    /// item draws nothing, and is left out, when
+    /// [`legacy_quad`](jstream_protocol::legacy_quad) gives it no quad (#1168).
     pub(crate) fn scales(&self) -> BTreeMap<SourceId, f32> {
         let mut scales: BTreeMap<SourceId, f32> = BTreeMap::new();
         for layer in self
@@ -2840,9 +2842,14 @@ impl Shot {
 /// How many canvas pixels each way one pixel of an image of `extent`, cropped by
 /// `crop`, covers where `placement` puts it, along the axis it is enlarged most. 0 when
 /// it draws nothing.
+///
+/// A legacy item draws nothing when [`legacy_quad`](jstream_protocol::legacy_quad) gives
+/// no quad, the same rule `place::legacy` uses: the crop or a zero scale leaves nothing,
+/// a field isn't finite, or a finite scale's size or a corner overflows `f32` (#1168).
+/// The scale of an item that does draw is still `max(|scale.x|, |scale.y|)`.
 fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
     let scale = match placement {
-        Placement::Legacy(transform) => transform.scale[0].abs().max(transform.scale[1].abs()),
+        Placement::Legacy(transform) => legacy_magnification(transform, crop, extent),
         // Drawn at its own size.
         Placement::Layer(_) => 1.0,
         Placement::Geometry(geometry) => {
@@ -2863,6 +2870,37 @@ fn magnification(placement: Placement, crop: Crop, extent: [u32; 2]) -> f32 {
         }
     };
     if scale.is_finite() { scale } else { 0.0 }
+}
+
+/// The legacy scale a drawn quad is enlarged by, or 0 when [`legacy_quad`] gives nothing.
+///
+/// [`legacy_quad`]: jstream_protocol::legacy_quad
+fn legacy_magnification(transform: LegacyTransform, crop: Crop, extent: [u32; 2]) -> f32 {
+    let Some(position) = jstream_protocol::Vec2::new(transform.position[0], transform.position[1])
+    else {
+        return 0.0;
+    };
+    let Some(scale) = jstream_protocol::Vec2::new(transform.scale[0], transform.scale[1]) else {
+        return 0.0;
+    };
+    let Some(rotation_deg) = jstream_protocol::Finite32::new(transform.rotation_deg) else {
+        return 0.0;
+    };
+    let transform = jstream_protocol::ItemTransform {
+        position,
+        scale,
+        rotation_deg,
+    };
+    let cut = ProtocolCrop {
+        left: crop.left,
+        top: crop.top,
+        right: crop.right,
+        bottom: crop.bottom,
+    };
+    match jstream_protocol::legacy_quad(transform, cut, extent[0], extent[1]) {
+        Ok(Some(_)) => scale.x.get().abs().max(scale.y.get().abs()),
+        _ => 0.0,
+    }
 }
 
 /// The composites a frame makes for the scene `program`, in order: every nested scene
@@ -3964,6 +4002,7 @@ impl CaptureFrame<'_> {
     pub(crate) fn size(&self) -> (f32, f32) {
         let size = match self.image {
             CaptureImage::Rgba { size, .. } => size,
+            CaptureImage::Cpu(frame) => frame.info().size,
             CaptureImage::Gpu(frame) => frame.info().size,
         };
         (size.width() as f32, size.height() as f32)
@@ -3975,6 +4014,11 @@ impl CaptureFrame<'_> {
 pub(crate) enum CaptureImage<'a> {
     /// Tightly packed straight sRGB RGBA8 at `size`, uploaded on a new version.
     Rgba { size: FrameSize, rgba: &'a [u8] },
+    /// A capture's CPU frame as it arrived (packed RGBA8 or BGRA8, or NV12), read as
+    /// opaque and converted on the GPU as it is uploaded on a new version
+    /// ([`ResourceCache::upload_frame`], ADR-0117 §2), so the drawing thread never
+    /// converts it pixel by pixel.
+    Cpu(&'a jstream_media::VideoFrame),
     /// A texture shared with the platform, on the compositor's device: sampled where
     /// it is, with no CPU copy ([`ResourceCache::import`]).
     Gpu(&'a GpuFrame),
@@ -4186,6 +4230,9 @@ pub(crate) fn compose_metered(
                 size.height(),
                 rgba,
             )?,
+            CaptureImage::Cpu(frame) => {
+                cache.upload_frame(compositor, &key, capture.version, frame)?
+            }
             // Opaque, as the CPU path ignores a capture's alpha (#451).
             CaptureImage::Gpu(frame) => cache.import_opaque(compositor, &key, frame)?,
         };
@@ -6647,6 +6694,81 @@ pub(crate) mod tests {
             },
         );
         assert_eq!(scales(&planned)[1], (SourceId::new("red"), 1.0));
+    }
+
+    /// #1168: a legacy item counts only when `legacy_quad` draws it. A scale of `1e35`
+    /// on a 4096-wide frame overflows and counts as 0, and so does a corner that
+    /// overflows after a turn or a shift to `f32::MAX`, and a crop that leaves nothing.
+    /// The same `1e35` on a 1×1 frame still draws, and a scale that stays finite still
+    /// counts.
+    #[test]
+    fn a_legacy_scale_that_draws_nothing_is_not_magnified() {
+        let legacy = |scale: [f32; 2], rotation_deg: f32, position: [f32; 2]| {
+            Placement::Legacy(LegacyTransform {
+                position,
+                scale,
+                rotation_deg,
+            })
+        };
+        let wide = frame(RED).placed_at(FrameSize::new(4096, 2160).expect("non-zero"));
+        let tiny = frame(GREEN).placed_at(FrameSize::new(1, 1).expect("non-zero"));
+        let mut cut = placed(
+            SourceRef::Frame(SourceId::new("cut")),
+            legacy([4.0, 4.0], 0.0, [0.0, 0.0]),
+        );
+        cut.crop = Crop {
+            left: 4096,
+            ..Crop::NONE
+        };
+        let mut planned = shot(vec![(
+            "program",
+            vec![
+                placed(
+                    SourceRef::Frame(SourceId::new("overflow")),
+                    legacy([1e35, 1.0], 0.0, [0.0, 0.0]),
+                ),
+                placed(
+                    SourceRef::Frame(SourceId::new("turned")),
+                    legacy([8e34, -1.5e35], 45.0, [0.0, 0.0]),
+                ),
+                placed(
+                    SourceRef::Frame(SourceId::new("shifted")),
+                    legacy([1e34, 1.0], 0.0, [f32::MAX, 0.0]),
+                ),
+                placed(
+                    SourceRef::Frame(SourceId::new("tiny")),
+                    legacy([1e35, 1.0], 0.0, [0.0, 0.0]),
+                ),
+                placed(
+                    SourceRef::Frame(SourceId::new("kept")),
+                    legacy([3.0, -1.5], 0.0, [0.0, 0.0]),
+                ),
+                cut,
+            ],
+        )]);
+        planned
+            .frames
+            .insert(SourceId::new("overflow"), wide.clone());
+        planned.frames.insert(SourceId::new("turned"), wide.clone());
+        planned
+            .frames
+            .insert(SourceId::new("shifted"), wide.clone());
+        planned.frames.insert(SourceId::new("cut"), wide);
+        planned.frames.insert(SourceId::new("tiny"), tiny);
+        planned.frames.insert(SourceId::new("kept"), frame(GREEN));
+        let scale = |id: &str| {
+            planned
+                .scales()
+                .get(&SourceId::new(id))
+                .copied()
+                .unwrap_or(f32::NAN)
+        };
+        assert_eq!(scale("overflow"), 0.0, "the size overflows");
+        assert_eq!(scale("turned"), 0.0, "a corner overflows after the turn");
+        assert_eq!(scale("shifted"), 0.0, "a corner overflows past f32::MAX");
+        assert_eq!(scale("cut"), 0.0, "the crop leaves nothing");
+        assert_eq!(scale("tiny"), 1e35, "the same scale still draws on 1x1");
+        assert_eq!(scale("kept"), 3.0, "a finite scale still counts");
     }
 
     /// A mix whose aspect ratio differs from the canvas shows the canvas fitted inside

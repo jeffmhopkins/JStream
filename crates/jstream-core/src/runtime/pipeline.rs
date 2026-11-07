@@ -58,16 +58,16 @@ use jstream_media::{
 use jstream_platform::wgpu;
 use jstream_platform::{
     AudioEncoderConfig, AudioIo, Backends, Capture, CodecInfo, CodecRole, Codecs, GpuContext,
-    GpuFrame, GpuInterop, HardwarePreference, MediaClock, RateControl, VcamFormat, VideoDevices,
-    VideoEncoderConfig, VideoSurface,
+    GpuFrame, GpuInterop, HardwarePreference, MediaClock, RaisedThread, RateControl,
+    ThreadPriority, ThreadRole, VcamFormat, VideoDevices, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
     ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
-    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, Reclaimed, RenderError,
-    ResourceCache,
+    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
+    RenderError, ResourceCache,
 };
 use jstream_sources::AudioScopes;
 
@@ -90,13 +90,32 @@ use crate::runtime::{
 };
 use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, View};
 
-/// Base frame rate of this cut: one frame every 1/30 s.
+/// Numerator of a base-rate frame period. The denominator is the collection's base
+/// frame rate, 30 by default and 60 when it opts in (ADR-0119).
 pub(crate) const FRAME_NUM: u32 = 1;
-pub(crate) const FRAME_DEN: u32 = 30;
+/// The default base frame rate, for a stage that has not been told otherwise.
+pub(crate) const FRAME_DEN: u32 = jstream_protocol::DEFAULT_BASE_FPS;
 
-/// The base frame period: what a frame may take for the program to keep up (ADR-0103).
+/// The rate a virtual camera offers. The Windows contract is 1080p BGRA at 30 fps
+/// (`jstream-vcam-windows` paces samples to that). A faster base rate feeds it every
+/// `base_fps / VCAM_FPS` tick; both allowed rates divide evenly.
+pub(crate) const VCAM_FPS: u32 = 30;
+
+const _: () = assert!(
+    VCAM_FPS > 0
+        && jstream_protocol::DEFAULT_BASE_FPS.is_multiple_of(VCAM_FPS)
+        && jstream_protocol::FAST_BASE_FPS.is_multiple_of(VCAM_FPS)
+);
+
+/// The base frame period at `fps`: what a frame may take for the program to keep up
+/// (ADR-0103).
+pub(crate) fn frame_budget_at(fps: u32) -> Duration {
+    Duration::from_secs(u64::from(FRAME_NUM)) / fps.max(1)
+}
+
+/// The default base frame period.
 pub(crate) fn frame_budget() -> Duration {
-    Duration::from_secs(u64::from(FRAME_NUM)) / FRAME_DEN
+    frame_budget_at(FRAME_DEN)
 }
 const SAMPLE_RATE: u32 = 48_000;
 /// How long `output.start` waits for the render thread to open the compositor, on the
@@ -106,12 +125,17 @@ const SAMPLE_RATE: u32 = 48_000;
 /// forever; a slower open is not a pipeline fault.
 pub(crate) const OPEN_TIMEOUT: Duration = Duration::from_secs(10);
 /// Composite errors in a row that the render thread rides out by repeating the last
-/// frame. One more reports the output failed: one second at the base rate.
-const MAX_DRAW_ERRORS: u32 = 30;
+/// frame. One more reports the output failed: one second at `fps`.
+fn max_draw_errors(fps: u32) -> u32 {
+    fps.max(1)
+}
+
 /// Composite errors in a row on the platform's GPU context after which the render thread
-/// leaves it ([`Switch`]), well before [`MAX_DRAW_ERRORS`] would fail the output. A
-/// third of a second at the base rate, so one bad frame does not cost the GPU path.
-const GPU_FALLBACK_ERRORS: u32 = 10;
+/// leaves it ([`Switch`]), well before [`max_draw_errors`] would fail the output. A
+/// third of a second at `fps`, so one bad frame does not cost the GPU path.
+fn gpu_fallback_errors(fps: u32) -> u32 {
+    fps.max(1) / 3
+}
 /// Device losses within [`LOSS_WINDOW`] that end the drawing: the render thread opens a
 /// new device after each of the first two, and fails the output at the third
 /// (#349's decision: a GPU that keeps resetting is not retried for ever).
@@ -197,14 +221,61 @@ pub(crate) struct MixFrame {
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
     /// virtual camera is fed it. Without, `out` is left as it was.
     pub(crate) readback: bool,
-    /// Where it is read back: RGBA8 at `size` once a draw succeeds.
+    /// Where it is read back: RGBA8 at `size` once a readback the draw recorded has
+    /// finished, a tick or two after it was drawn (ADR-0117 §4).
     pub(crate) out: Vec<u8>,
+    /// Set by the draw when `out` holds a frame newly read back, to the time it was
+    /// drawn for: the pts it goes out with.
+    pub(crate) ready: Option<MediaTime>,
+    /// Set by [`Frames::draw`] when it moves a newly read frame into `shown`, to its
+    /// time, until [`MixFrame::push_time`] takes it.
+    pub(crate) fresh: Option<MediaTime>,
+    /// Set by the draw when this tick's frame went into a readback still on its way:
+    /// the tick pushes nothing rather than repeat the frame before it. Cleared by
+    /// [`MixFrame::push_time`].
+    pub(crate) awaiting: bool,
+    /// The time of the last frame pushed from `shown`, which the next one must pass.
+    pushed: Option<MediaTime>,
+    /// This tick's [`MixFrame::push_time`].
+    pub(crate) push_at: Option<MediaTime>,
+    /// Ticks this mix was not read back because every readback buffer was still on its
+    /// way (R-RT-004), counted by the draw.
+    pub(crate) unread: u64,
     /// The platform's NV12 encode target on the compositor's device to convert it into
     /// this tick (ARCH › GPU pipeline, step 4), for the sessions on the GPU path.
     pub(crate) nv12: Option<GpuFrame>,
 }
 
 impl MixFrame {
+    /// The time this tick pushes `shown` at, to the sessions on the CPU path and a
+    /// virtual camera, or `None` for no push. A due frame newly read back goes out with
+    /// the time it was drawn for, so a readback's latency never shifts it from audio;
+    /// one whose readback is on its way pushes nothing; otherwise, and always on a
+    /// broken stage, the last frame repeats at `due`. Never a time at or before the last
+    /// one pushed: a readback that lands after a repeat is dropped.
+    fn push_time(&mut self, due: MediaTime, broken: bool) -> Option<MediaTime> {
+        let fresh = self.fresh.take();
+        let awaiting = std::mem::take(&mut self.awaiting);
+        if !self.due {
+            return None;
+        }
+        let at = match fresh {
+            Some(pts) if !broken => pts,
+            _ if awaiting && !broken => return None,
+            _ => due,
+        };
+        if self.pushed.is_some_and(|pushed| at <= pushed) {
+            // A frame read back after a repeat already went out past it: dropped, and
+            // counted (R-RT-004).
+            if fresh.is_some() {
+                self.unread += 1;
+            }
+            return None;
+        }
+        self.pushed = Some(at);
+        Some(at)
+    }
+
     /// A frame of `mix` not yet drawn or due.
     fn new(
         mix: Option<VideoMixId>,
@@ -221,6 +292,12 @@ impl MixFrame {
             next: 0,
             readback: false,
             out: Vec::new(),
+            ready: None,
+            fresh: None,
+            awaiting: false,
+            pushed: None,
+            push_at: None,
+            unread: 0,
             nv12: None,
         }
     }
@@ -256,7 +333,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
              _: &LiveParams,
              captures: &dyn Captures,
              frames: &mut [MixFrame],
-             _: MediaTime,
+             at: MediaTime,
              _: &mut DrawMeter| {
                 let first = shot
                     .captures()
@@ -268,7 +345,23 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                 {
                     let (size, out) = (frame.size, &mut frame.out);
                     out.clear();
-                    match first.map(|capture| capture.image) {
+                    // The GPU path converts a CPU capture as it uploads it; this one
+                    // converts it here, for tests.
+                    let mut converted = Vec::new();
+                    let image = first.map(|capture| match capture.image {
+                        CaptureImage::Cpu(frame) => {
+                            let surface = VideoSurface::Cpu(frame.clone());
+                            match captures::rgba_from_surface(&surface, &mut converted) {
+                                Some(own) => CaptureImage::Rgba {
+                                    size: own,
+                                    rgba: &converted,
+                                },
+                                None => capture.image,
+                            }
+                        }
+                        image => image,
+                    });
+                    match image {
                         Some(CaptureImage::Rgba { size: own, rgba }) if own == size => {
                             out.extend_from_slice(rgba);
                         }
@@ -277,6 +370,7 @@ pub(crate) fn cpu_draw() -> OpenDraw {
                         }
                         _ => out.resize(size.width() as usize * size.height() as usize * 4, 0),
                     }
+                    frame.ready = Some(at);
                 }
                 Ok(None)
             },
@@ -634,8 +728,9 @@ pub(crate) struct AudioTap {
 }
 
 /// The stage every running output shares: capture, the render thread compositing the
-/// program, the audio devices and the mixer thread. It runs while any output holds it
-/// and stops when the last one lets go.
+/// program, the audio devices and the mixer thread. It runs while any output or H.264
+/// preview stream of the program holds it (ADR-0117 §6), and stops when the last one
+/// lets go.
 ///
 /// The render and mixer threads push each frame and block into every encoder session
 /// that is open. A session is handed to them through a channel, never a lock, and
@@ -657,6 +752,8 @@ pub(crate) struct Program {
     clock: Arc<dyn MediaClock>,
     codecs: Arc<dyn Codecs>,
     size: FrameSize,
+    /// The base frame rate this stage opened at (ADR-0119).
+    pub(crate) base_fps: u32,
     format: AudioFormat,
     /// How far the mixer's blocks run behind the clock; an output's stream origin
     /// sits that far back.
@@ -725,21 +822,27 @@ impl Program {
             let mut claim = self.context.as_ref().and_then(|_| self.gpu_gate.claim());
             let context = claim.as_ref().and(self.context.as_deref());
             // A settings error is no refusal: only the encoder's open is classified below.
-            let config = video_config(&feed, &key.2)?;
+            let config = video_config(&feed, &key.2, self.base_fps)?;
             let listed =
                 !hardware_held.is_empty() && hardware_listed(self.codecs.as_ref(), config.codec);
             let (profile, limited) = while_hardware_held(&key.2, hardware_held, listed);
-            let video =
-                open_video(self.codecs.as_ref(), context, &feed, &profile).map_err(|reason| {
-                    if limited {
-                        StartError::HardwareSessionLimit {
-                            outputs: hardware_held.to_vec(),
-                            reason,
-                        }
-                    } else {
-                        StartError::Failed(reason)
+            let video = open_video(
+                self.codecs.as_ref(),
+                context,
+                &feed,
+                &profile,
+                self.base_fps,
+            )
+            .map_err(|reason| {
+                if limited {
+                    StartError::HardwareSessionLimit {
+                        outputs: hardware_held.to_vec(),
+                        reason,
                     }
-                })?;
+                } else {
+                    StartError::Failed(reason)
+                }
+            })?;
             if config.hardware == HardwarePreference::Prefer && !video.info().codec.hardware {
                 tracing::warn!(
                     output_id = %output,
@@ -825,6 +928,30 @@ impl Program {
             claim: lock(&encoders.claim).take(),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
+    }
+
+    /// Feeds the program mix to a preview stream's encoder session (ADR-0117 §6): the
+    /// render thread draws it at `size` on its own compositor, every `divisor`th base
+    /// tick, reads it back and pushes it into `input` until the session closes. At the
+    /// stage's size it is the program's own frame, drawn once for every consumer.
+    pub(crate) fn attach_preview(&self, size: FrameSize, divisor: u32, input: VideoInput) {
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: divisor.max(1),
+            owner: None,
+        };
+        let tap = VideoTap {
+            input,
+            gpu: false,
+            claim: None,
+        };
+        let _ = self.video_taps.send((feed, tap));
+    }
+
+    /// The size the stage composites the program at: the canvas when it opened.
+    pub(crate) fn size(&self) -> FrameSize {
+        self.size
     }
 
     /// Where an output that starts now puts its stream's time zero: the mixer's
@@ -1384,6 +1511,8 @@ pub(crate) struct Parts {
     /// The collection's canvas (width, height) when the program stage opens: the output
     /// size follows it ([`output_size`]).
     canvas: (u32, u32),
+    /// The collection's base frame rate when the stage opens (ADR-0119).
+    base_fps: u32,
 }
 
 pub(crate) fn parts_from(
@@ -1393,9 +1522,11 @@ pub(crate) fn parts_from(
     render: Arc<RenderHub>,
     audio_sources: Arc<Wanted>,
     canvas: (u32, u32),
+    base_fps: u32,
 ) -> Parts {
     Parts {
         canvas,
+        base_fps,
         clock: Arc::clone(&backends.clock),
         capture: Arc::clone(&backends.capture),
         video_devices: Arc::clone(&backends.video_devices),
@@ -1446,6 +1577,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         let mut cache = ResourceCache::<GpuKey>::new();
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
+        let mut readbacks = Readbacks::default();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
@@ -1455,6 +1587,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             // this tick claims its layers without drawing, so they aren't retired and
             // reallocated when it is due again.
             cache.begin_frame();
+            readbacks.retain(frames);
             for frame in frames.iter().filter(|frame| !frame.due) {
                 let claimed = snapshot::claim_layers(
                     &mut compositor,
@@ -1467,6 +1600,40 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             }
             for frame in frames.iter_mut().filter(|frame| frame.due) {
                 let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
+                // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
+                // is collected first, freeing its buffer.
+                let mut handed: u64 = 0;
+                if frame.readback {
+                    let ring = readbacks.ring(frame);
+                    ring.collect(&compositor, &mut frame.out, |pts, _| {
+                        frame.ready = Some(pts);
+                        handed += 1;
+                    });
+                    // Every buffer still on its way: the GPU is behind. A mix only read
+                    // back skips its composite, so the queue doesn't grow, and the tick
+                    // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
+                    // are kept, as a mix not due keeps them.
+                    if ring.is_full() && frame.nv12.is_none() {
+                        // A lost device's maps may never finish (DX12), so the ring
+                        // stays full and no draw would fail to say so (#349).
+                        if let Some(why) = compositor.lost() {
+                            return Err(DrawError::Lost(why));
+                        }
+                        // This tick's collected frames, but the newest, are counted
+                        // here too, as below.
+                        frame.unread += 1 + handed.saturating_sub(1);
+                        frame.awaiting = true;
+                        snapshot::claim_layers(
+                            &mut compositor,
+                            (&mut cache, &mut chains),
+                            shot,
+                            view,
+                            frame.size,
+                        )
+                        .map_err(|err| draw_error(&compositor, &err))?;
+                        continue;
+                    }
+                }
                 let drawn = snapshot::compose_metered(
                     &mut compositor,
                     (&mut cache, &mut chains, &mut *meter),
@@ -1474,15 +1641,26 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     view,
                     live,
                     captures,
+                    // The readback is the ring's, recorded after the draw.
                     snapshot::DrawAt {
                         size: frame.size,
-                        readback: frame.readback,
+                        readback: false,
                     },
                 )
                 .and_then(|output| {
                     let started = Instant::now();
                     if frame.readback {
-                        copy_pixels(&output, &mut frame.out)?;
+                        // Recorded now and collected once mapped, a tick or two on.
+                        let ring = readbacks.ring(frame);
+                        if !ring.record(&compositor, &output, at)? {
+                            frame.unread += 1;
+                        }
+                        // Pushes wait for what is on its way rather than repeat.
+                        frame.awaiting = ring.pending() > 0;
+                        ring.collect(&compositor, &mut frame.out, |pts, _| {
+                            frame.ready = Some(pts);
+                            handed += 1;
+                        });
                     }
                     let converted = match &frame.nv12 {
                         Some(target) => nv12.submit(&compositor, output.texture(), target),
@@ -1491,6 +1669,9 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                     meter.phase_since(Phase::Finish, started);
                     converted
                 });
+                // Only the newest frame collected this tick goes out; the rest are
+                // counted.
+                frame.unread += handed.saturating_sub(1);
                 drawn.map_err(|err| draw_error(&compositor, &err))?;
             }
             // A failed frame skips this: what it retired waits for the next frame's
@@ -1499,6 +1680,57 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         });
         Ok(draw)
     })
+}
+
+/// The readback rings of the mixes read back, one per mix by its feed's identity
+/// ([`Frames::add`]), kept in the draw so they go with its compositor's device.
+#[derive(Default)]
+struct Readbacks {
+    rings: Vec<(ReadbackKey, ReadbackRing<MediaTime>)>,
+}
+
+/// A mix's identity, as [`Frames::add`] matches feeds.
+#[derive(PartialEq)]
+struct ReadbackKey {
+    mix: Option<VideoMixId>,
+    size: FrameSize,
+    divisor: u32,
+    owner: Option<OutputId>,
+}
+
+impl ReadbackKey {
+    fn is(&self, frame: &MixFrame) -> bool {
+        self.mix == frame.mix
+            && self.size == frame.size
+            && self.divisor == frame.divisor
+            && self.owner == frame.owner
+    }
+}
+
+impl Readbacks {
+    /// Drops the rings of mixes no longer drawn, or no longer read back.
+    fn retain(&mut self, frames: &[MixFrame]) {
+        self.rings
+            .retain(|(key, _)| frames.iter().any(|frame| frame.readback && key.is(frame)));
+    }
+
+    /// The ring of `frame`, made the first time it is read back.
+    fn ring(&mut self, frame: &MixFrame) -> &mut ReadbackRing<MediaTime> {
+        let at = match self.rings.iter().position(|(key, _)| key.is(frame)) {
+            Some(at) => at,
+            None => {
+                let key = ReadbackKey {
+                    mix: frame.mix.clone(),
+                    size: frame.size,
+                    divisor: frame.divisor,
+                    owner: frame.owner.clone(),
+                };
+                self.rings.push((key, ReadbackRing::default()));
+                self.rings.len() - 1
+            }
+        };
+        &mut self.rings[at].1
+    }
 }
 
 /// The NV12 conversion of the compositor's output into encode targets, built on the
@@ -1672,6 +1904,32 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
     }
 }
 
+/// The longest the render thread sleeps before it looks again for a stop, a session or
+/// the clock: a clock that runs slow or jumps is followed within this.
+const MAX_TICK_WAIT: Duration = Duration::from_millis(4);
+
+/// How long until `due` on the media clock, from `now`, at most [`MAX_TICK_WAIT`] and
+/// never zero, so a clock that cannot say still leaves the thread asleep a moment.
+fn until_due(now: MediaTime, due: MediaTime) -> Duration {
+    let left = due
+        .checked_sub(now)
+        .map(|left| left.as_secs_f64())
+        .unwrap_or_default();
+    let floor = Duration::from_micros(100);
+    if left.is_finite() && left > 0.0 {
+        Duration::from_secs_f64(left).clamp(floor, MAX_TICK_WAIT)
+    } else {
+        floor
+    }
+}
+
+/// Puts the calling thread in its role's scheduling class until the guard drops, when
+/// the host gave the engine a [`ThreadPriority`] (ADR-0117 §8). Called once, as the
+/// thread starts, before its loop.
+fn raise(priority: Option<&dyn ThreadPriority>, role: ThreadRole) -> Option<RaisedThread> {
+    priority?.raise(role)
+}
+
 /// Opens the program stage: the capture and the audio devices, then the render and
 /// mixer threads, and waits for the compositor to open. On failure everything opened
 /// is dropped again.
@@ -1710,7 +1968,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         monitor_routes,
     )?;
     let bus = mixer.bus();
-    let period = frame_period(parts.clock.timebase())?;
+    let period = frame_period(parts.clock.timebase(), parts.base_fps)?;
+    engine
+        .profiler()
+        .set_budget(frame_budget_at(parts.base_fps));
     if period.ticks() <= 0 {
         return Err("the media clock is too coarse for the frame rate".into());
     }
@@ -1746,7 +2007,9 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         }
     };
     let mixer_collector = collector.clone();
+    let priority = engine.thread_priority();
     let render = spawn("jstream-render", {
+        let priority = priority.clone();
         let job = RenderJob {
             context: context.clone(),
             gpu: Arc::clone(&parts.gpu),
@@ -1761,6 +2024,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             cams: vcam_inputs,
             size,
             period,
+            base_fps: parts.base_fps,
             stop: Arc::clone(&stop),
             ready: ready_tx,
             readbacks: Arc::clone(&readbacks),
@@ -1773,7 +2037,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             losses: loss_tx,
             meter: engine.profiler().program_meter(),
         };
-        move || render_thread(job)
+        move || {
+            let _raised = raise(priority.as_deref(), ThreadRole::Video);
+            render_thread(job);
+        }
     });
     // The render and mixer threads own the collector's senders, so the collector ends
     // once both have (or here, if they never started).
@@ -1800,7 +2067,10 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             monitors: monitor_feeds,
         };
         let mixing = Mixing { mixer, metering };
-        move || mixer_thread(mixing, clock, &out, stop, fail, &collector)
+        move || {
+            let _raised = raise(priority.as_deref(), ThreadRole::Audio);
+            mixer_thread(mixing, clock, &out, stop, fail, &collector);
+        }
     }) {
         Ok(handle) => handle,
         Err(err) => {
@@ -1820,6 +2090,7 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         clock: Arc::clone(&parts.clock),
         codecs: Arc::clone(&parts.codecs),
         size,
+        base_fps: parts.base_fps,
         format,
         latency,
         video_taps,
@@ -1922,7 +2193,7 @@ pub(crate) fn launch(
     };
     // Set once the start has succeeded; until then a recording is provisional.
     let keep = Arc::new(AtomicBool::new(false));
-    let info = stream_info(&encoders.feed, origin, &encoders.key.2)?;
+    let info = stream_info(&encoders.feed, origin, &encoders.key.2, program.base_fps)?;
     let publishing = matches!(destination, Destination::Publish(_));
     let sink = Sink::open(destination, &info, Arc::clone(&keep))?;
     let stop = Arc::new(AtomicBool::new(false));
@@ -2015,8 +2286,9 @@ pub(crate) fn launch(
 }
 
 /// Starts a virtual-camera output on `program`: starts the camera at `canvas`, as BGRA8
-/// at the base frame rate, hands the render thread a tap that sends it every program
-/// frame, and starts the camera thread that publishes them. No encoder session opens.
+/// at [`VCAM_FPS`] (30 fps, the camera contract, not the base rate), hands the render
+/// thread a tap that sends it every camera tick, and starts the camera thread that
+/// publishes them. No encoder session opens.
 /// On failure `vcam` drops, which stops the camera and returns its sink to the engine.
 /// The stop sets the output's stop flag and waits for the camera thread to stop the
 /// camera, as long as it waits for any output thread.
@@ -2034,8 +2306,7 @@ pub(crate) fn launch_vcam(
     vcam.start(VcamFormat {
         size: canvas,
         pixel_format: PixelFormat::Bgra8,
-        frame_period: Timebase::new(FRAME_NUM, FRAME_DEN)
-            .map_err(|err| format!("frame period: {err}"))?,
+        frame_period: Timebase::new(1, VCAM_FPS).map_err(|err| format!("frame period: {err}"))?,
     })?;
     let stop = Arc::new(AtomicBool::new(false));
     let output_drops = Arc::new(AtomicU64::new(0));
@@ -2099,8 +2370,9 @@ fn engine_format() -> Result<AudioFormat, String> {
     .map_err(|err| format!("engine audio format: {err}"))
 }
 
-fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
-    let base = Timebase::new(FRAME_NUM, FRAME_DEN).map_err(|err| format!("frame period: {err}"))?;
+fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
+    let base =
+        Timebase::new(FRAME_NUM, fps.max(1)).map_err(|err| format!("frame period: {err}"))?;
     MediaTime::new(1, base)
         .rescale(clock, Rounding::Nearest)
         .map_err(|err| format!("frame period on the media clock: {err}"))
@@ -2109,7 +2381,7 @@ fn frame_period(clock: Timebase) -> Result<MediaTime, String> {
 /// The size the program stage renders and encodes at: the canvas, rounded down to even
 /// sizes (NV12, the encoders' input, halves both for chroma), and at least 2x2. Each
 /// capture keeps its own size and is scaled by its item's placement (#433).
-fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
+pub(crate) fn output_size((width, height): (u32, u32)) -> Result<FrameSize, String> {
     let even = |edge: u32| (edge & !1).max(2);
     FrameSize::new(even(width), even(height)).map_err(|err| format!("output size: {err}"))
 }
@@ -2304,8 +2576,12 @@ fn check_video_encoder(codecs: &dyn Codecs, config: &VideoEncoderConfig) -> Resu
 }
 
 /// The video encoder settings for `profile` at `feed`'s size and rate.
-fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderConfig, String> {
-    let period = Timebase::new(FRAME_NUM.saturating_mul(feed.divisor), FRAME_DEN)
+fn video_config(
+    feed: &Feed,
+    profile: &EncoderProfile,
+    base_fps: u32,
+) -> Result<VideoEncoderConfig, String> {
+    let period = Timebase::new(FRAME_NUM.saturating_mul(feed.divisor), base_fps.max(1))
         .map_err(|err| format!("frame period: {err}"))?;
     let video = &profile.video;
     let rate_control = match video.rate_control {
@@ -2327,7 +2603,7 @@ fn video_config(feed: &Feed, profile: &EncoderProfile) -> Result<VideoEncoderCon
         // Frames per keyframe interval at the mix's rate, at least one.
         keyframe_interval: video
             .keyframe_interval_s
-            .saturating_mul(FRAME_DEN)
+            .saturating_mul(base_fps.max(1))
             .checked_div(FRAME_NUM.saturating_mul(feed.divisor))
             .unwrap_or(1)
             .max(1),
@@ -2343,8 +2619,9 @@ fn open_video(
     context: Option<&GpuContext>,
     feed: &Feed,
     profile: &EncoderProfile,
+    base_fps: u32,
 ) -> Result<VideoSession, String> {
-    let config = video_config(feed, profile)?;
+    let config = video_config(feed, profile, base_fps)?;
     let session = VideoSession::open_on(codecs, context, config, SessionOptions::default())
         .map_err(|err| video_open_failure(codecs, &config, &err))?;
     match session.path() {
@@ -2387,6 +2664,7 @@ fn stream_info(
     feed: &Feed,
     origin: MediaTime,
     profile: &EncoderProfile,
+    base_fps: u32,
 ) -> Result<StreamInfo, String> {
     let video_kbps = match profile.video.rate_control {
         ProfileRate::Cbr { kbps } | ProfileRate::Vbr { kbps, .. } => kbps,
@@ -2396,7 +2674,7 @@ fn stream_info(
         codec: video_codec(profile)?,
         size: feed.size,
         origin,
-        frame_rate: f64::from(FRAME_DEN) / f64::from(FRAME_NUM.saturating_mul(feed.divisor)),
+        frame_rate: f64::from(base_fps.max(1)) / f64::from(FRAME_NUM.saturating_mul(feed.divisor)),
         video_kbps,
         audio_kbps: profile.audio.kbps,
         sample_rate: SAMPLE_RATE,
@@ -2502,6 +2780,8 @@ struct RenderJob {
     cams: Receiver<VcamTap>,
     size: FrameSize,
     period: MediaTime,
+    /// The base frame rate this stage opened at (ADR-0119).
+    base_fps: u32,
     stop: Arc<AtomicBool>,
     ready: mpsc::Sender<Result<(), String>>,
     readbacks: Arc<AtomicU64>,
@@ -2734,13 +3014,17 @@ impl Frames {
             .zip(&mut self.encode)
         {
             let target = frame.nv12.take();
-            if frame.due && drawn.is_ok() {
-                if frame.readback {
-                    std::mem::swap(&mut frame.out, shown);
-                }
-                if let Some(target) = target {
-                    encode.shown = Some(target);
-                }
+            // A frame read back reaches `shown` once its map has finished, whatever this
+            // tick's draw did.
+            if let Some(pts) = frame.ready.take() {
+                std::mem::swap(&mut frame.out, shown);
+                frame.fresh = Some(pts);
+            }
+            if frame.due
+                && drawn.is_ok()
+                && let Some(target) = target
+            {
+                encode.shown = Some(target);
             }
         }
         drawn
@@ -2800,6 +3084,7 @@ fn render_loop(job: RenderJob) {
         cams: cam_inputs,
         size,
         period,
+        base_fps,
         stop,
         ready,
         readbacks,
@@ -2812,6 +3097,9 @@ fn render_loop(job: RenderJob) {
         losses: loss_sender,
         mut meter,
     } = job;
+    let max_errors = max_draw_errors(base_fps);
+    let fallback_errors = gpu_fallback_errors(base_fps);
+    let camera_every = u64::from(base_fps / VCAM_FPS).max(1);
     let mut cams: Vec<VcamTap> = Vec::new();
     let mut draw = match open(context.as_deref()) {
         Ok(draw) => draw,
@@ -2841,6 +3129,8 @@ fn render_loop(job: RenderJob) {
     // divisor draw on every `divisor`th, or later when an overrun skips one.
     let mut index: u64 = 0;
     let mut skipped: u64 = 0;
+    // Frames not read back because every readback buffer was still on its way.
+    let mut unread: u64 = 0;
     // Frames GPU sessions missed because their mix's every encode target was held.
     let mut encode_held: u64 = 0;
     let mut draw_errors: u32 = 0;
@@ -2876,7 +3166,9 @@ fn render_loop(job: RenderJob) {
         let now = clock.now();
         let due = next.unwrap_or(now);
         if now < due {
-            thread::sleep(Duration::from_millis(1));
+            // Asleep until the tick is due, rather than waking every millisecond to
+            // look (ADR-0117 §8); a long wait wakes on the way, for a stop or a session.
+            thread::sleep(until_due(now, due));
             continue;
         }
         let (due, missed) = match catch_up(due, now, period) {
@@ -2889,6 +3181,11 @@ fn render_loop(job: RenderJob) {
         skipped = skipped.saturating_add(missed);
         meter.skip(missed);
         index = index.saturating_add(missed);
+        // The tick being drawn, before `index` steps to the next one. The camera
+        // contract is slower than the base rate, so it takes this tick only when
+        // the base tick lands on one of its own.
+        let tick = index;
+        let camera_due = tick.is_multiple_of(camera_every);
         let drawn = frames.schedule(index);
         index = index.saturating_add(1);
         // Encode targets only while compositing on the context: after a fallback a
@@ -3060,7 +3357,7 @@ fn render_loop(job: RenderJob) {
                     // context's GPU frames, so while one runs there is no fallback: the
                     // errors run on to MAX_DRAW_ERRORS, as without one.
                     if on_context
-                        && draw_errors >= GPU_FALLBACK_ERRORS
+                        && draw_errors >= fallback_errors
                         && !frames.feeds_gpu()
                         && gpu_gate.leave()
                     {
@@ -3087,7 +3384,7 @@ fn render_loop(job: RenderJob) {
                                 report(&fail, why.failed(&fell));
                             }
                         }
-                    } else if draw_errors > MAX_DRAW_ERRORS {
+                    } else if draw_errors > max_errors {
                         broken = true;
                         // No longer adopting snapshots, so it holds no gesture up.
                         reader.stop();
@@ -3111,12 +3408,18 @@ fn render_loop(job: RenderJob) {
             // gesture never waits on a mix with a divisor.
             reader.adopt();
         }
+        for frame in &mut frames.mixes {
+            unread = unread.saturating_add(std::mem::take(&mut frame.unread));
+        }
         drops.publish(
             capture_drops(captures.stats())
-                .saturating_add(render_tick_drops(skipped))
+                .saturating_add(render_tick_drops(skipped.saturating_add(unread)))
                 .saturating_add(encode_frame_drops(encode_held)),
         );
         gpu_captures.store(captures.gpu_captures(), Ordering::Relaxed);
+        for frame in &mut frames.mixes {
+            frame.push_at = frame.push_time(due, broken);
+        }
         for (((frame, shown), targets), encode) in frames
             .mixes
             .iter()
@@ -3134,9 +3437,10 @@ fn render_loop(job: RenderJob) {
                         // is dropped, not repeated.
                         (true, _) if starved => true,
                         (true, Some(target)) => push_gpu(&tap.input, target, due),
-                        (false, _) if !shown.is_empty() => {
-                            push_frame(&tap.input, frame.size, due, shown)
-                        }
+                        (false, _) if !shown.is_empty() => match frame.push_at {
+                            Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
+                            None => true,
+                        },
                         _ => true,
                     },
                     |tap| collector.free(Garbage::Video(tap.input)),
@@ -3150,9 +3454,11 @@ fn render_loop(job: RenderJob) {
             let cam = &mut cams[at];
             let program = frames
                 .program_frame(size, cam.owner())
-                .map(|at| &frames.shown[at]);
+                .map(|at| (&frames.shown[at], frames.mixes[at].push_at));
             let stays = match program {
-                Some(shown) if !shown.is_empty() => cam.push(size, due, shown),
+                Some((shown, Some(pts))) if camera_due && !shown.is_empty() => {
+                    cam.push(size, pts, shown)
+                }
                 _ => cam.stay(),
             };
             if stays {
@@ -3375,20 +3681,6 @@ fn render_open_error(err: &RenderError) -> String {
         err.to_string()
     } else {
         format!("opening the compositor: {err}")
-    }
-}
-
-/// Copies the readback of `output` into `out`, reusing its allocation.
-fn copy_pixels(output: &jstream_render::Output, out: &mut Vec<u8>) -> Result<(), RenderError> {
-    match output.pixels() {
-        Some(snapshot) => {
-            out.clear();
-            out.extend_from_slice(snapshot.rgba());
-            Ok(())
-        }
-        None => Err(RenderError::Readback {
-            detail: "the compositor returned no pixels".into(),
-        }),
     }
 }
 
@@ -3915,9 +4207,9 @@ fn report_link(sink: &Sink, last: LinkState, fail: &FailLine) -> LinkState {
 #[cfg(test)]
 mod tests {
     use super::{
-        DrawFn, EncodeRing, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw, Switch,
-        SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock, open_video,
-        output_size, push_each, stream_info, video_config,
+        DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw,
+        Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock,
+        open_video, output_size, push_each, stream_info, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -4103,9 +4395,13 @@ mod tests {
             divisor: 1,
             owner: None,
         };
-        let config = video_config(size, &EncoderProfile::DEFAULT).expect("default");
-        assert_eq!(config.rate_control, RateControl::Cbr { kbps: 2500 });
+        let config = video_config(size, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
+        assert_eq!(config.rate_control, RateControl::Cbr { kbps: 8000 });
+        assert_eq!(config.frame_period, Timebase::new(1, 30).expect("30 fps"));
         assert_eq!(config.keyframe_interval, 60);
+        let fast = video_config(size, &EncoderProfile::DEFAULT, 60).expect("60 fps");
+        assert_eq!(fast.frame_period, Timebase::new(1, 60).expect("60 fps"));
+        assert_eq!(fast.keyframe_interval, 120);
         assert_eq!(config.hardware, HardwarePreference::Prefer);
 
         let mut profile = EncoderProfile::DEFAULT;
@@ -4115,7 +4411,7 @@ mod tests {
         };
         profile.video.keyframe_interval_s = 4;
         profile.video.hardware = ProfileHardware::Require;
-        let config = video_config(size, &profile).expect("vbr");
+        let config = video_config(size, &profile, FRAME_DEN).expect("vbr");
         assert_eq!(
             config.rate_control,
             RateControl::Vbr {
@@ -4127,13 +4423,13 @@ mod tests {
         assert_eq!(config.hardware, HardwarePreference::Require);
 
         profile.video.hardware = ProfileHardware::Prefer;
-        let config = video_config(size, &profile).expect("prefer");
+        let config = video_config(size, &profile, FRAME_DEN).expect("prefer");
         assert_eq!(config.hardware, HardwarePreference::Prefer);
         profile.video.hardware = ProfileHardware::Avoid;
-        let config = video_config(size, &profile).expect("avoid");
+        let config = video_config(size, &profile, FRAME_DEN).expect("avoid");
         assert_eq!(config.hardware, HardwarePreference::Avoid);
         profile.video.rate_control = ProfileRate::Unknown;
-        assert!(video_config(size, &profile).is_err());
+        assert!(video_config(size, &profile, FRAME_DEN).is_err());
 
         let mut profile = EncoderProfile::DEFAULT;
         for (codec, want) in [
@@ -4142,17 +4438,22 @@ mod tests {
             (VideoCodec::Av1, Codec::Av1),
         ] {
             profile.video.codec = codec;
-            assert_eq!(video_config(size, &profile).expect("known").codec, want);
             assert_eq!(
-                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile)
+                video_config(size, &profile, FRAME_DEN)
+                    .expect("known")
+                    .codec,
+                want
+            );
+            assert_eq!(
+                stream_info(size, MediaTime::zero(Timebase::MICROS), &profile, FRAME_DEN)
                     .expect("known")
                     .codec,
                 want
             );
         }
         profile.video.codec = VideoCodec::Unknown;
-        assert!(video_config(size, &profile).is_err());
-        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile).is_err());
+        assert!(video_config(size, &profile, FRAME_DEN).is_err());
+        assert!(stream_info(size, MediaTime::zero(Timebase::MICROS), &profile, FRAME_DEN).is_err());
     }
 
     /// #965: an output whose hardware encoder fell back to software at its first frame
@@ -4255,7 +4556,7 @@ mod tests {
         let config = |codec, hardware| VideoEncoderConfig {
             codec,
             hardware,
-            ..video_config(&feed, &EncoderProfile::DEFAULT).expect("default")
+            ..video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default")
         };
         use HardwarePreference::{Avoid, Prefer, Require};
         let mf = Listed(
@@ -4319,7 +4620,7 @@ mod tests {
             profile.video.hardware = ProfileHardware::Require;
             profile
         };
-        let err = open_video(&software, None, &feed, &require).err();
+        let err = open_video(&software, None, &feed, &require, FRAME_DEN).err();
         assert_eq!(
             err.as_deref(),
             Some(
@@ -4330,7 +4631,7 @@ mod tests {
         // when the list has no encoder at all: Linux without a VA-API H.264 driver and
         // without OpenH264 (#807 B1).
         let bare = Listed(Ok(vec![]), true);
-        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT) else {
+        let Err(err) = open_video(&bare, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN) else {
             panic!("refused");
         };
         assert!(
@@ -4338,7 +4639,7 @@ mod tests {
             "{err}"
         );
         // The open fails for a reason the list doesn't explain: its own error stands.
-        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT) else {
+        let Err(err) = open_video(&mf, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN) else {
             panic!("refused");
         };
         assert!(err.starts_with("opening the video encoder:"), "{err}");
@@ -4367,7 +4668,7 @@ mod tests {
                 FakeCodecs.video_decoder(config)
             }
         }
-        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT).is_ok());
+        assert!(open_video(&Unlisting, None, &feed, &EncoderProfile::DEFAULT, FRAME_DEN).is_ok());
     }
 
     /// #433: the program renders and encodes at the canvas, rounded down to even sizes
@@ -4507,7 +4808,7 @@ mod tests {
             divisor: 2,
             owner: None,
         };
-        let config = video_config(&feed, &EncoderProfile::DEFAULT).expect("default");
+        let config = video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
         assert_eq!(config.size, feed.size);
         assert_eq!(config.frame_period, Timebase::new(2, 30).expect("timebase"));
         // 2 s at 15 fps.
@@ -4516,13 +4817,22 @@ mod tests {
             divisor: 60,
             ..feed.clone()
         };
-        let config = video_config(&slow, &EncoderProfile::DEFAULT).expect("slow");
+        let config = video_config(&slow, &EncoderProfile::DEFAULT, FRAME_DEN).expect("slow");
         assert_eq!(config.keyframe_interval, 1, "at least one frame");
         assert_eq!(
-            stream_info(&feed, us(0), &EncoderProfile::DEFAULT)
+            stream_info(&feed, us(0), &EncoderProfile::DEFAULT, FRAME_DEN)
                 .expect("h264")
                 .frame_rate,
             15.0
+        );
+        let fast = video_config(&feed, &EncoderProfile::DEFAULT, 60).expect("60 fps");
+        assert_eq!(fast.frame_period, Timebase::new(1, 30).expect("half of 60"));
+        assert_eq!(fast.keyframe_interval, 60);
+        assert_eq!(
+            stream_info(&feed, us(0), &EncoderProfile::DEFAULT, 60)
+                .expect("h264")
+                .frame_rate,
+            30.0
         );
     }
 
@@ -4543,6 +4853,7 @@ mod tests {
             None,
             &feed(None, 1),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         let input = || cpu_tap(session.input());
@@ -4592,6 +4903,7 @@ mod tests {
             None,
             &shared,
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(shared.clone(), cpu_tap(session.input()));
@@ -4620,6 +4932,7 @@ mod tests {
             None,
             &feed(),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         assert!(!frames.feeds_gpu());
@@ -4665,6 +4978,7 @@ mod tests {
             None,
             &feed(),
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(
@@ -4766,6 +5080,7 @@ mod tests {
             None,
             &program,
             &EncoderProfile::DEFAULT,
+            FRAME_DEN,
         )
         .expect("fake session");
         frames.add(program, cpu_tap(session.input()));
@@ -4807,6 +5122,51 @@ mod tests {
 
     fn us(ticks: i64) -> MediaTime {
         MediaTime::new(ticks, Timebase::MICROS)
+    }
+
+    /// The render thread sleeps until the tick is due, a few milliseconds at most.
+    #[test]
+    fn the_render_thread_sleeps_until_the_tick() {
+        use super::{MAX_TICK_WAIT, until_due};
+        assert_eq!(
+            until_due(us(1_000), us(3_500)),
+            Duration::from_micros(2_500)
+        );
+        assert_eq!(until_due(us(0), us(33_333)), MAX_TICK_WAIT);
+        assert_eq!(until_due(us(10), us(20)), Duration::from_micros(100));
+        assert_eq!(until_due(us(20), us(10)), Duration::from_micros(100));
+    }
+
+    /// A frame read back goes out with the time it was drawn for, a frame whose readback
+    /// is on its way pushes nothing, anything else repeats at the tick, a broken stage
+    /// always repeats, and no push goes back in time.
+    #[test]
+    fn a_frame_read_back_pushes_at_the_time_it_was_drawn_for() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.due = true;
+        // In flight: no push, and no repeat of the frame before.
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(100), false), None);
+        // Landed a tick later, with the next one in flight.
+        frame.fresh = Some(us(100));
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(133), false), Some(us(100)));
+        // Nothing drawn this tick (a failed draw, a fallback opening): a repeat.
+        assert_eq!(frame.push_time(us(166), false), Some(us(166)));
+        // The readback recorded before the repeat lands after it, and is dropped.
+        frame.fresh = Some(us(133));
+        assert_eq!(frame.push_time(us(200), false), None);
+        assert_eq!(frame.fresh, None, "taken");
+        assert_eq!(frame.unread, 1, "the dropped readback is counted");
+        // A broken stage repeats at the tick whatever is on its way.
+        frame.fresh = Some(us(200));
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(233), true), Some(us(233)));
+        assert!(!frame.awaiting, "cleared");
+        // A frame not due pushes nothing.
+        frame.due = false;
+        assert_eq!(frame.push_time(us(266), false), None);
     }
 
     /// Less than a period late keeps the tick. A period or more skips to the latest

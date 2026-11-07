@@ -67,7 +67,9 @@ on **program**, drawn on the canvas in the middle.
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device or the file. A display,
+   display or window from the list of those open now, the device or the file. In the
+   desktop app a file field has a **Browse…** button; a browser page keeps the path as
+   text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,
    before you press **OK**.
 3. Drag the source on the canvas to move it, and its handles to resize it. To crop it,
@@ -89,8 +91,11 @@ which shows wherever no item covers it.
 
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements. **Help** links to these docs, the release notes and the issue
-tracker, and **About JStream** there shows the version you run, which an issue report
-should name.
+tracker. **Check for updates** there compares this build with the latest release,
+including pre-releases, and links a newer one; nothing is downloaded. **About JStream**
+shows the version you run, which an issue report should name. **File › Settings…** can
+look once at start and show a notice only when a newer release exists; that check stays
+off until you turn it on.
 
 To watch a scene, a source, the program or a multiview on another screen, choose
 **Pop out** on a scene's or a source's right-click menu, or a projector under **View**: each opens in a window of its
@@ -137,10 +142,12 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
 -->
 
-In **Outputs**, add a **Recording (MP4)** output with the file path to write, then press
+In **Outputs**, add a **Recording (MP4)** output with the file path to write. In the
+desktop app, **Browse…** beside that field opens a save dialog; a browser page keeps
+the path as text. Then press
 **Record** at the top. **Stop recording** finishes the file. A recording runs on its own,
 whether or not you are live. It never overwrites a file, so for another take, press
-**Edit** on its card and give it a new file name.
+**Edit** on its card and give it a new file name. Browse… is there on Edit too.
 
 <a id="vcam"></a>
 ## The virtual camera (optional)

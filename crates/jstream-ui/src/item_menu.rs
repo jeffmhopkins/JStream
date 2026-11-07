@@ -1,12 +1,13 @@
 //! The right-click menu of the selected items, shared by the canvas and the Sources
 //! panel (spec-workspace.md 5.2.8 to 5.2.12): Properties, the Audio and Visible checks,
 //! Copy and Paste, layer order, a Transform submenu (Center, Fit and Stretch to canvas,
-//! Reset rotation), a Blending submenu, Clear crop, Crop (crop mode), the two duplicates
+//! Reset rotation), a Blending submenu (the mode, and its amount as the item's
+//! opacity), Clear crop, Crop (crop mode), the two duplicates
 //! and Remove from scene, and for a placement of a shared or copied source the switch
 //! between a reference and a clone (decision register D3, ADR-0023). Each choice sends
 //! one batch, so one undo step. In a keyframe scene only geometry, crop, visibility and
 //! opacity change (ADR-0049), so what would change the parent's items (layer order,
-//! blending, the duplicates, Paste, Remove, the reference or clone switch, Group
+//! the blend mode, the duplicates, Paste, Remove, the reference or clone switch, Group
 //! selection, New group, Ungroup, Add source) is disabled, and the placement choices
 //! write the keyframe's overrides.
 //!
@@ -677,6 +678,8 @@ struct Facts {
     /// Whether the primary item's box is locked (ADR-0096).
     locked: bool,
     blend: BlendMode,
+    /// The primary item's opacity, which sets how strongly its blend shows.
+    opacity: Finite32,
     /// The primary item's source, its name and kind, and whether it has a picture.
     source_id: SourceId,
     name: String,
@@ -733,6 +736,7 @@ impl Facts {
             visible: primary.visible,
             locked: primary.locked,
             blend: primary.blend,
+            opacity: primary.opacity,
             source_id: source.source_id.clone(),
             name: source.name.clone(),
             kind: source.kind.clone(),
@@ -1163,6 +1167,40 @@ fn transform_clip_entries(cx: Context, scene_id: &SceneId, facts: &Facts) -> Vec
     vec![copy, paste]
 }
 
+/// The amounts the Blending submenu offers, in percent of the item's opacity. The
+/// Inspector's Opacity field takes any other, up to 400%.
+const BLEND_AMOUNTS: [u32; 4] = [100, 75, 50, 25];
+
+/// The opacity as a whole percent, when it is one.
+fn percent_of(opacity: Finite32) -> Option<u32> {
+    let percent = opacity.get() * 100.0;
+    let whole = percent.round();
+    ((percent - whole).abs() < 0.01 && whole >= 0.0).then_some(whole as u32)
+}
+
+/// The Blending submenu's hint: the mode, and its amount when it isn't 100%.
+fn blend_hint(mode: BlendMode, opacity: Finite32) -> String {
+    match percent_of(opacity) {
+        Some(100) => blend_name(mode).to_owned(),
+        Some(percent) => format!("{}, {percent}%", blend_name(mode)),
+        None => format!("{}, {:.0}%", blend_name(mode), opacity.get() * 100.0),
+    }
+}
+
+/// The batch that sets each of `items` to `percent` opacity in `scene_id` (in a keyframe
+/// scene, its override).
+fn amount_edits(scene_id: &SceneId, items: &[ItemId], percent: u32) -> Vec<Edit> {
+    let opacity = Finite32::new(percent as f32 / 100.0).unwrap_or(Finite32::ONE);
+    items
+        .iter()
+        .map(|item_id| Edit::ItemSetOpacity {
+            item_id: item_id.clone(),
+            scene_id: Some(scene_id.clone()),
+            opacity,
+        })
+        .collect()
+}
+
 /// The menu for the selected `items` of `scene_id`, the primary one first; empty when
 /// none of them is in the scene.
 pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) -> Vec<Entry> {
@@ -1410,28 +1448,37 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
     // The canvas draws no box for a keyframe's group child, so crop mode has nothing
     // to crop there; leaving it stays on.
     .disabled_if(many || (facts.child && !crop_mode.get_untracked()));
-    // Blending sets every selected item's mode; a keyframe doesn't override it.
+    // Blending sets every selected item's mode, which a keyframe doesn't override, and
+    // its amount: the opacity, which mixes what is below the item with the blended
+    // result. A keyframe overrides the opacity, so the amount stays open there.
     let blending = {
-        let modes = BlendMode::ALL
-            .into_iter()
-            .map(|mode| {
-                let ids = facts.items.clone();
-                Entry::item(blend_name(mode), move || {
-                    cx.send(
-                        ids.iter()
-                            .map(|item_id| Edit::ItemSetBlend {
-                                item_id: item_id.clone(),
-                                blend: mode,
-                            })
-                            .collect(),
-                    );
-                })
-                .checked(mode == facts.blend)
+        let modes = BlendMode::ALL.into_iter().map(|mode| {
+            let ids = facts.items.clone();
+            Entry::item(blend_name(mode), move || {
+                cx.send(
+                    ids.iter()
+                        .map(|item_id| Edit::ItemSetBlend {
+                            item_id: item_id.clone(),
+                            blend: mode,
+                        })
+                        .collect(),
+                );
             })
-            .collect();
-        Entry::submenu("Blending", modes)
-            .hint(blend_name(facts.blend))
+            .checked(mode == facts.blend)
             .disabled_if(keyframe)
+        });
+        let amounts = BLEND_AMOUNTS.into_iter().map(|percent| {
+            let (ids, scene) = (facts.items.clone(), scene_id.clone());
+            Entry::item(format!("{percent}%"), move || {
+                cx.send(amount_edits(&scene, &ids, percent));
+            })
+            .checked(percent_of(facts.opacity) == Some(percent))
+        });
+        let entries = modes
+            .chain([Entry::Sep, Entry::Head("Amount (opacity)".to_owned())])
+            .chain(amounts)
+            .collect();
+        Entry::submenu("Blending", entries).hint(blend_hint(facts.blend, facts.opacity))
     };
     let duplicate = |label: &str, clone: bool| {
         let facts = Rc::clone(&facts);
@@ -2161,5 +2208,35 @@ mod tests {
         assert!(flat.is_neutral_3d());
         assert_eq!(flat.rotation_deg, Finite32::ZERO);
         assert_eq!(flat.center, g.center);
+    }
+
+    #[test]
+    fn the_blend_amount_sets_each_items_opacity_in_the_scene() {
+        let scene = SceneId::new("kf");
+        let items = ids(&["a", "b"]);
+        let edits = amount_edits(&scene, &items, 50);
+        let half = Finite32::new(0.5).expect("finite");
+        assert_eq!(
+            edits,
+            items
+                .iter()
+                .map(|item_id| Edit::ItemSetOpacity {
+                    item_id: item_id.clone(),
+                    scene_id: Some(scene.clone()),
+                    opacity: half,
+                })
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn the_blending_hint_shows_an_amount_below_or_above_full() {
+        let at = |v: f32| Finite32::new(v).expect("finite");
+        assert_eq!(blend_hint(BlendMode::Exclusion, Finite32::ONE), "Exclusion");
+        assert_eq!(blend_hint(BlendMode::Exclusion, at(0.5)), "Exclusion, 50%");
+        assert_eq!(blend_hint(BlendMode::Screen, at(1.5)), "Screen, 150%");
+        assert_eq!(blend_hint(BlendMode::Normal, at(0.333)), "Normal, 33%");
+        assert_eq!(percent_of(at(0.75)), Some(75));
+        assert_eq!(percent_of(at(0.333)), None);
     }
 }

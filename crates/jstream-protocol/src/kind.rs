@@ -246,7 +246,7 @@ pub enum ParamType {
     },
     /// One part of the format a video capture device is opened in, picked from the
     /// formats `capture.targets` lists for the device that parameter `target` names, so
-    /// a UI can offer those. Since 0.89. Its value is `part`'s:
+    /// a UI can offer those. Since 0.90. Its value is `part`'s:
     /// [`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),
     /// [`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]
     /// one of [`PIXEL_FORMATS`]. Its default, `""` or `0`, leaves that part to the

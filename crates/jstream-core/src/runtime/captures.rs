@@ -34,6 +34,7 @@ use std::thread::JoinHandle;
 
 use jstream_media::{
     ColorInfo, ColorRange, ColorSpace, FrameSize, MediaTime, PixelFormat, Rounding, Timebase,
+    VideoFrame,
 };
 use jstream_platform::{
     Capture, CaptureEncoding, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, Codecs,
@@ -395,9 +396,9 @@ pub(crate) fn readable(format: &VideoDeviceFormat, mjpeg: bool) -> bool {
 
 /// The format a webcam or capture card is opened in, from those it lists.
 ///
-/// The candidates are the formats whose frames arrive uncompressed in a format
-/// [`rgba_from_surface`] converts (RGBA, BGRA, or NV12, which YUY2 is delivered as), and
-/// MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at most
+/// The candidates are the formats whose frames arrive uncompressed in a format the
+/// compositor uploads ([`readable_cpu_frame`]: RGBA, BGRA, or NV12, which YUY2 is
+/// delivered as), and MJPEG when `mjpeg` says a decoder is there. Of those it picks the largest of at most
 /// [`MAX_DEVICE_PIXELS`] (else the smallest), then the fastest, then an uncompressed one
 /// (no decoding), then the first listed. `None` when no format is a candidate.
 pub(crate) fn device_format(
@@ -492,8 +493,6 @@ struct Slot {
     frame: Option<Latest>,
     /// The version of `frame`.
     version: u64,
-    /// The latest CPU frame's pixels, reused from frame to frame.
-    rgba: Vec<u8>,
     warned_format: bool,
     /// The epoch of the slot's latest start: an answer to an earlier one is stopped
     /// again. A video device keeps its epoch when the render thread leaves the GPU path,
@@ -518,7 +517,8 @@ enum State {
 }
 
 enum Latest {
-    Cpu(FrameSize),
+    /// As it arrived: the compositor converts it on the GPU (ADR-0117 §2).
+    Cpu(VideoFrame),
     Gpu(GpuFrame),
 }
 
@@ -680,10 +680,10 @@ impl RenderCaptures {
                 }
                 Ok(Some(surface)) => {
                     *failing = false;
-                    if let Some(size) = rgba_from_surface(&surface, &mut slot.rgba) {
+                    if let Some(frame) = readable_cpu_frame(surface) {
                         self.versions += 1;
                         slot.version = self.versions;
-                        slot.frame = Some(Latest::Cpu(size));
+                        slot.frame = Some(Latest::Cpu(frame));
                     } else if !slot.warned_format {
                         slot.warned_format = true;
                         tracing::warn!(
@@ -717,7 +717,7 @@ impl RenderCaptures {
     fn report_sizes(&mut self) {
         for (spec, slot) in &mut self.slots {
             let size = match &slot.frame {
-                Some(Latest::Cpu(size)) => *size,
+                Some(Latest::Cpu(frame)) => frame.info().size,
                 Some(Latest::Gpu(frame)) => frame.info().size,
                 // A capture restarting keeps the size it had until a frame says otherwise.
                 None => continue,
@@ -792,10 +792,7 @@ impl Captures for RenderCaptures {
         let slot = self.slots.get(spec)?;
         let image = match slot.frame.as_ref()? {
             Latest::Gpu(frame) => CaptureImage::Gpu(frame),
-            Latest::Cpu(size) => CaptureImage::Rgba {
-                size: *size,
-                rgba: &slot.rgba,
-            },
+            Latest::Cpu(frame) => CaptureImage::Cpu(frame),
         };
         Some(CaptureFrame {
             version: slot.version,
@@ -817,7 +814,6 @@ impl Slot {
             state: State::Starting,
             frame: None,
             version: 0,
-            rgba: Vec::new(),
             warned_format: false,
             epoch: 0,
             reported: None,
@@ -839,6 +835,32 @@ fn send_size(sizes: &Option<Sender<SizeChange>>, key: &CaptureKey, size: Option<
 fn add(total: &mut CaptureStats, stats: CaptureStats) {
     total.frames_captured = total.frames_captured.saturating_add(stats.frames_captured);
     total.frames_skipped = total.frames_skipped.saturating_add(stats.frames_skipped);
+}
+
+/// `surface` when it is a CPU frame the compositor converts (packed RGBA8 or BGRA8, or
+/// NV12, which YUY2 is delivered as) with planes long enough for its size. Checking rows
+/// costs one comparison each; the pixels are converted on the GPU (ADR-0117 §2).
+fn readable_cpu_frame(surface: VideoSurface) -> Option<VideoFrame> {
+    let VideoSurface::Cpu(frame) = surface else {
+        return None;
+    };
+    let info = frame.info();
+    let width = info.size.width() as usize;
+    let height = info.size.height();
+    let ok = match info.format {
+        PixelFormat::Rgba8 | PixelFormat::Bgra8 => {
+            let row = width.checked_mul(4)?;
+            (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= row))
+        }
+        PixelFormat::Nv12 => {
+            let chroma = width.div_ceil(2) * 2;
+            (0..height).all(|y| frame.row(0, y).is_some_and(|r| r.len() >= width))
+                && (0..height.div_ceil(2))
+                    .all(|y| frame.row(1, y).is_some_and(|r| r.len() >= chroma))
+        }
+        _ => false,
+    };
+    ok.then_some(frame)
 }
 
 /// Converts a CPU capture into `out` as opaque RGBA8, reusing its allocation, and returns
@@ -885,11 +907,22 @@ pub(crate) fn rgba_from_surface(surface: &VideoSurface, out: &mut Vec<u8>) -> Op
             let yuv = Yuv::new(info.color);
             out.resize(len, 0);
             for (y, dst) in (0..height).zip(out.chunks_exact_mut(row_len)) {
-                let luma = frame.row(0, y)?;
-                let chroma = frame.row(1, y / 2)?;
-                for (x, d) in dst.chunks_exact_mut(4).enumerate() {
-                    let c = (x / 2) * 2;
-                    d.copy_from_slice(&yuv.rgba(luma[x], chroma[c], chroma[c + 1]));
+                let luma = &frame.row(0, y)?[..width];
+                let chroma = &frame.row(1, y / 2)?[..chroma_len];
+                // Two pixels share each chroma sample, so its terms are worked out once
+                // for both (#1191: this runs on the render thread for every new frame).
+                let mut pairs = dst.chunks_exact_mut(8);
+                for ((d, l), c) in (&mut pairs)
+                    .zip(luma.chunks_exact(2))
+                    .zip(chroma.chunks_exact(2))
+                {
+                    yuv.pair(l[0], l[1], c[0], c[1], d);
+                }
+                // An odd width's last pixel has a chroma sample of its own.
+                let last = pairs.into_remainder();
+                if !last.is_empty() {
+                    let c = width - 1;
+                    last.copy_from_slice(&yuv.rgba(luma[c], chroma[c], chroma[c + 1]));
                 }
             }
         }
@@ -931,6 +964,22 @@ impl Yuv {
             cb_g: fixed(2.0 * kb * (1.0 - kb) / kg),
             cr_g: fixed(2.0 * kr * (1.0 - kr) / kg),
             cb_b: fixed(2.0 * (1.0 - kb)),
+        }
+    }
+
+    /// Two opaque RGBA8 pixels side by side, `y0` then `y1`, sharing one chroma sample,
+    /// into `out` (8 bytes): the same values [`Self::rgba`] gives each.
+    #[inline]
+    fn pair(&self, y0: u8, y1: u8, cb: u8, cr: u8, out: &mut [u8]) {
+        let cb = (i64::from(i32::from(cb) - 128) * i64::from(self.c)) >> 16;
+        let cr = (i64::from(i32::from(cr) - 128) * i64::from(self.c)) >> 16;
+        let r = cr * i64::from(self.cr_r);
+        let g = -cb * i64::from(self.cb_g) - cr * i64::from(self.cr_g);
+        let b = cb * i64::from(self.cb_b);
+        let channel = |v: i64| ((v + (1 << 15)) >> 16).clamp(0, 255) as u8;
+        for (px, y) in out.chunks_exact_mut(4).zip([y0, y1]) {
+            let l = i64::from((i32::from(y) - self.y.0) * self.y.1);
+            px.copy_from_slice(&[channel(l + r), channel(l + g), channel(l + b), 255]);
         }
     }
 
@@ -1117,6 +1166,58 @@ mod tests {
             jstream_protocol::SourceId::new("cam"),
         );
         assert!(start(&backends, &nope).is_err());
+    }
+
+    /// #1191: NV12 is converted two pixels at a time, sharing their chroma terms, with
+    /// the same values as converting each pixel on its own, an odd width's last one too.
+    #[test]
+    fn nv12_converts_by_pairs_as_it_does_pixel_by_pixel() {
+        use jstream_media::{
+            ColorInfo, ColorRange, ColorSpace, MediaTime, Plane, VideoFrame, VideoFrameInfo,
+        };
+        use jstream_platform::VideoSurface;
+        for (width, color) in [
+            (6, ColorInfo::default()),
+            (5, ColorInfo::default()),
+            (
+                7,
+                ColorInfo {
+                    space: ColorSpace::Bt601,
+                    range: ColorRange::Full,
+                },
+            ),
+        ] {
+            let height = 3_u32;
+            let w = width as usize;
+            let chroma_len = w.div_ceil(2) * 2;
+            // Rows padded past the picture, with bytes that cover the range.
+            let luma: Vec<u8> = (0..(w + 3) * 3).map(|i| (i * 37 % 256) as u8).collect();
+            let chroma: Vec<u8> = (0..(chroma_len + 2) * 2)
+                .map(|i| (i * 91 % 256) as u8)
+                .collect();
+            let info = VideoFrameInfo {
+                size: FrameSize::new(width, height).expect("size"),
+                format: PixelFormat::Nv12,
+                color,
+                pts: MediaTime::zero(Timebase::NANOS),
+            };
+            let planes = vec![
+                Plane::new(luma.clone(), w + 3),
+                Plane::new(chroma.clone(), chroma_len + 2),
+            ];
+            let frame = VideoFrame::new(info, planes).expect("an NV12 frame");
+            let mut out = Vec::new();
+            rgba_from_surface(&VideoSurface::Cpu(frame), &mut out).expect("NV12");
+            let yuv = super::Yuv::new(color);
+            let mut expected = Vec::new();
+            for y in 0..height as usize {
+                for x in 0..w {
+                    let c = (y / 2) * (chroma_len + 2) + (x / 2) * 2;
+                    expected.extend(yuv.rgba(luma[y * (w + 3) + x], chroma[c], chroma[c + 1]));
+                }
+            }
+            assert_eq!(out, expected, "width {width}");
+        }
     }
 
     /// Leaving the GPU path restarts a display capture on the CPU path, but not a

@@ -35,6 +35,14 @@ mod tests;
 /// loads (R-API-003).
 pub const SCHEMA_VERSION: u32 = 6;
 
+fn default_base_fps() -> u32 {
+    jstream_protocol::DEFAULT_BASE_FPS
+}
+
+fn is_default_base_fps(fps: &u32) -> bool {
+    *fps == jstream_protocol::DEFAULT_BASE_FPS
+}
+
 /// The built-in `webcam` kind, which gained audio (its device's paired input) after
 /// collection files existed; see `rebuild_audio`.
 const WEBCAM: &str = "webcam";
@@ -206,6 +214,13 @@ struct File {
     schema_version: u32,
     rev: Rev,
     canvas: Canvas,
+    /// The base frame rate (ADR-0119). Omitted while it is 30, so a collection that
+    /// has not opted into 60 saves as it did before.
+    #[serde(
+        default = "default_base_fps",
+        skip_serializing_if = "is_default_base_fps"
+    )]
+    base_fps: u32,
     /// In display order.
     scenes: Vec<FileScene>,
     /// Ordered by ID.
@@ -619,6 +634,7 @@ impl Graph {
             schema_version: SCHEMA_VERSION,
             rev: self.rev,
             canvas: state.canvas,
+            base_fps: state.base_fps,
             scenes: state
                 .scenes
                 .iter()
@@ -986,6 +1002,12 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 width: file.canvas.width,
                 height: file.canvas.height,
             },
+        ));
+    }
+    if file.base_fps != graph.state.base_fps {
+        edits.push((
+            "the base frame rate".to_owned(),
+            Edit::CanvasSetFrameRate { fps: file.base_fps },
         ));
     }
     // Folders are created top level in folder order, then nested, so a parent may come
@@ -1522,6 +1544,20 @@ fn check_kind_version(
     Ok(())
 }
 
+/// The duration a loaded preset keeps. The stock Cut a collection used to start with
+/// stored 300 ms while a `cut` already showed the new scene on the next frame (#1209).
+/// A file that still has that preset, unchanged, loads it at 0. Any other duration, or
+/// a cut someone renamed or retimed, is kept: a `cut` ignores it when a switch runs.
+fn loaded_cut_duration(preset: &FilePreset) -> u32 {
+    let stock = preset.id.as_str() == INITIAL_PRESET
+        && preset.name == "Cut"
+        && preset.kind == "cut"
+        && preset.duration_ms == 300
+        && preset.easing == Easing::EaseInOut
+        && preset.settings.is_empty();
+    if stock { 0 } else { preset.duration_ms }
+}
+
 /// Pushes the edits that turn a new collection's one `cut` preset into the file's
 /// presets and default: each preset created (the `cut` one updated in place), the
 /// default set, and the initial `cut` deleted if the file doesn't have it.
@@ -1534,12 +1570,13 @@ fn rebuild_transitions(
     for preset in &file.presets {
         let object = format!("transition `{}`", preset.id);
         check_kind_version(graph, &object, &preset.kind, Some(preset.kind_version))?;
+        let duration_ms = loaded_cut_duration(preset);
         let edit = if preset.id == initial {
             Edit::TransitionUpdate {
                 preset_id: preset.id.clone(),
                 name: Some(preset.name.clone()),
                 kind: Some(preset.kind.clone()),
-                duration_ms: Some(preset.duration_ms),
+                duration_ms: Some(duration_ms),
                 easing: Some(preset.easing),
                 patch: preset.settings.clone(),
             }
@@ -1548,7 +1585,7 @@ fn rebuild_transitions(
                 preset_id: preset.id.clone(),
                 name: preset.name.clone(),
                 kind: preset.kind.clone(),
-                duration_ms: preset.duration_ms,
+                duration_ms,
                 easing: preset.easing,
                 settings: preset.settings.clone(),
             }
