@@ -2,14 +2,14 @@
 id = "ADR-0124"
 title = "What a page may read: one checkbox and one warning per kind of data"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0124: What a page may read: one checkbox and one warning per kind of data
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
