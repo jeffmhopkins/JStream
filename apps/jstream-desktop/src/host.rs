@@ -60,6 +60,8 @@ pub struct Host {
     ws_url: String,
     token: String,
     mcp_url: Option<String>,
+    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows.
+    hotkeys: Option<JoinHandle<()>>,
 }
 
 impl Host {
@@ -108,6 +110,8 @@ impl Host {
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
         config.ui_settings_file = ui_settings;
+        #[cfg(windows)]
+        let listening = Arc::clone(&engine);
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
             .block_on(Server::bind(config, connector))
@@ -122,6 +126,10 @@ impl Host {
             })?;
         let ws_url = server.ws_url();
         let mcp_url = server.mcp_url();
+        #[cfg(windows)]
+        let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
+        #[cfg(not(windows))]
+        let hotkeys = None;
         if let (Some(agents), Some(mcp_url)) = (agents, &mcp_url) {
             tracing::info!(
                 url = %ws_url,
@@ -142,6 +150,7 @@ impl Host {
             ws_url,
             token,
             mcp_url,
+            hotkeys,
         })
     }
 
@@ -171,6 +180,10 @@ impl Host {
     /// Stops the server, closing every connection, and waits for it (at most
     /// 5 s). The engine stops when its last session goes.
     pub fn stop(mut self) {
+        // Lets every global hotkey go first.
+        if let Some(hotkeys) = self.hotkeys.take() {
+            hotkeys.abort();
+        }
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
         }
@@ -187,6 +200,53 @@ impl Host {
         }
         self.runtime.shutdown_timeout(STOP_TIMEOUT);
     }
+}
+
+/// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: a
+/// `RegisterHotKey` listener thread and a session on `engine` that keeps it in step with
+/// the bindings and the `hotkeys.global` UI setting. `None`, logged, when the listener
+/// can't start: the page still hears hotkeys while it has the focus.
+#[cfg(windows)]
+fn global_hotkeys(
+    runtime: &Runtime,
+    engine: &Arc<Engine>,
+    settings: jstream_server::UiSettingsView,
+) -> Option<JoinHandle<()>> {
+    use crate::hotkeys::{self, GLOBAL_KEY, Registrar, Switch};
+    use jstream_platform_windows::GlobalHotkeys;
+
+    struct Windows(GlobalHotkeys);
+    impl Registrar for Windows {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+    }
+
+    let (press, presses) = tokio::sync::mpsc::unbounded_channel();
+    let listener = match GlobalHotkeys::start(move |chord| {
+        let _ = press.send(chord.to_owned());
+    }) {
+        Ok(listener) => listener,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "global hotkeys are off: hotkeys are heard only while JStream has the focus"
+            );
+            return None;
+        }
+    };
+    let switch = Switch {
+        changes: settings.changes(),
+        on: Box::new(move || hotkeys::global_on(settings.get(GLOBAL_KEY).as_ref())),
+    };
+    let session = engine.connect();
+    Some(runtime.spawn(async move {
+        if let Err(error) =
+            hotkeys::run(session, Arc::new(Windows(listener)), switch, presses).await
+        {
+            tracing::warn!(%error, "global hotkeys stopped");
+        }
+    }))
 }
 
 /// A new control token: 32 random bytes from the OS, as lowercase hex, which is valid

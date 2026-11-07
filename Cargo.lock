@@ -2936,6 +2936,7 @@ name = "jstream-desktop"
 version = "0.1.0-alpha.4.2"
 dependencies = [
  "anyhow",
+ "futures-util",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
@@ -2948,6 +2949,7 @@ dependencies = [
  "jstream-sources",
  "rustls",
  "rustls-native-certs",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tokio",
@@ -3093,6 +3095,7 @@ version = "0.0.0"
 dependencies = [
  "jstream-platform",
  "jstream-plugin-proto",
+ "jstream-protocol",
  "jstream-vcam-proto",
  "tracing",
  "wgpu",
