@@ -72,6 +72,14 @@ Commands:
   device list                      list the paired devices (query device.list)
   device revoke <device-id>        revoke a paired device and close its
                                    connections (action device.revoke)
+  collection info                  the project file the engine saves to, and the
+                                   recent ones (query collection.info)
+  collection open <path>           open a project; outputs stop and undo is
+                                   cleared (action collection.open)
+  collection new <path>            create an empty project and open it (action
+                                   collection.new)
+  collection save-as <path>        save the project to a new file and keep
+                                   saving there (action collection.save_as)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
@@ -360,6 +368,16 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
             output_id: OutputId::new(*id),
         }),
+        ["collection", "info"] => Command::Query(Query::CollectionInfo),
+        ["collection", "open", path] => Command::Action(Action::CollectionOpen {
+            path: (*path).to_owned(),
+        }),
+        ["collection", "new", path] => Command::Action(Action::CollectionNew {
+            path: (*path).to_owned(),
+        }),
+        ["collection", "save-as", path] => Command::Action(Action::CollectionSaveAs {
+            path: (*path).to_owned(),
+        }),
         ["pair"] => Command::Action(Action::PairingStart),
         ["device", "list"] => Command::Query(Query::DeviceList),
         ["device", "revoke", id] => Command::Action(Action::DeviceRevoke {
@@ -371,8 +389,23 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
-                "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp", "pair", "device", "bench",
+                "help",
+                "version",
+                "hello",
+                "state",
+                "scene",
+                "source",
+                "item",
+                "output",
+                "video",
+                "studio",
+                "edit",
+                "events",
+                "mcp",
+                "pair",
+                "device",
+                "collection",
+                "bench",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -1051,6 +1084,36 @@ mod tests {
             })
         );
         assert!(err(&["profile", "get", "ten"]).contains("seconds"));
+    }
+
+    #[test]
+    fn collection_commands_map_to_the_project_calls() {
+        assert_eq!(
+            ok(&["collection", "info"]).command,
+            Command::Query(Query::CollectionInfo)
+        );
+        assert_eq!(
+            ok(&["collection", "open", "/p/show.json"]).command,
+            Command::Action(Action::CollectionOpen {
+                path: "/p/show.json".into()
+            })
+        );
+        assert_eq!(
+            ok(&["collection", "new", "/p/new.json"]).command,
+            Command::Action(Action::CollectionNew {
+                path: "/p/new.json".into()
+            })
+        );
+        assert_eq!(
+            ok(&["collection", "save-as", "/p/copy.json"]).command,
+            Command::Action(Action::CollectionSaveAs {
+                path: "/p/copy.json".into()
+            })
+        );
+        assert!(
+            err(&["collection", "save-as", "/p/c.json", "--force"]).contains("wrong arguments")
+        );
+        assert!(err(&["collection", "open"]).contains("wrong arguments"));
     }
 
     #[test]

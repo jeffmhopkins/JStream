@@ -216,6 +216,8 @@ Contents:
   the UI settings, so the desktop app and the daemon name the same one
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)), and
   `paths::EFFECTS_DIR` the folder of WGSL effect packs both watch.
+  `paths::RECENT_COLLECTIONS_FILE` names the file that keeps the projects opened most
+  recently ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code
   the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
   capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and

@@ -165,6 +165,14 @@ impl Graph {
     pub fn state(&self) -> &State {
         &self.state
     }
+
+    /// This graph at revision `rev`, with its state unchanged: a collection the engine
+    /// opens in place of another keeps its revisions increasing (ADR-0121 §3).
+    #[must_use]
+    pub fn with_rev(mut self, rev: Rev) -> Self {
+        self.rev = rev;
+        self
+    }
 }
 
 /// The largest canvas side this engine accepts, in pixels. ADR-0022 asks for at least

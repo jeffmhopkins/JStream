@@ -128,6 +128,8 @@ title = "Save and load projects: File › New, Open, Save As and Open recent"
 priority = 4
 status = "planned"
 issues = [1218]
+prs = [1269]
+note = "#1269 is the protocol and engine part (ADR-0121); the File menu follows"
 
 [[target]]
 release = "alpha.5"
