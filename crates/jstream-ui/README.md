@@ -129,9 +129,10 @@ Contents ([Design](#design) explains the choices):
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
   and the `LabelManager` context that opens it in the Scenes or Sources panel,
   with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
-  blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
+  blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
+  arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
-  properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
+  properties form the Properties dialog and a filter's settings draw (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -442,9 +443,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
   items, the item's source's or the scene's label chips and tag button, whose popover
   opens under the header, and a favourite star (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
-  is placed in another scene too. Its sections fold, and each stays as it was last left,
+  is placed in another scene too, and its header has a Properties & filters… button,
+  which opens its source's Properties dialog (a nested scene's: the scene's), where the
+  source's settings and filters are; the Inspector doesn't show them. Under an item's
+  header, a tab strip (Transform, Motion with the modifier count, Behaviour; Left,
+  Right, Home and End move along it) shows one tab's sections at a time, and the tab
+  last picked is kept in the browser's storage as `jstream.inspector.tab` (#1219). The
+  header and the strip stay pinned while the tab scrolls, and every tab stays mounted
+  while hidden, so a field keeps what is typed in it. Its sections fold, and each stays as it was last left,
   by title, across items and reloads (`Folds`, kept in the browser's storage as
-  `jstream.folds`): Parameters (X and Y of the
+  `jstream.folds`). Transform holds Parameters (X and Y of the
   unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
   while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
   on by default, keeps the aspect ratio when either side changes), 3D (folded
@@ -454,11 +462,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Depth has no effect), Crop
   (`item.set_crop`, in source pixels), Blending (the eleven modes, `item.set_blend`, each drawn by
   the engine since 0.47, with `normal_srgb` and `additive_srgb` since 0.75 shown as
-  "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`) and
-  Scene switches (folded: the item's delay, easing, glide and appear and disappear
+  "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`).
+  Behaviour holds Scene switches (the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's), Motion (folded, with the modifier count as its hint: a row per motion
+  the parent's) and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
   one-shot impulse with its length and decay, or audio: what it hears, the program mix or
   a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
@@ -467,11 +478,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
-  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
-  scene, as a scene's Hotkey row is,
-  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
-  source's settings form. A scene shows its object
+  in a keyframe its override, ADR-0099). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the

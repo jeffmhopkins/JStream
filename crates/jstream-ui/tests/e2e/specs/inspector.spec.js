@@ -151,3 +151,39 @@ test('with no item selected, the scene is inspected', async ({ page, daemon }) =
   // takes a placement in another scene.
   await expect(inspector(page).locator('.source-title')).not.toHaveClass(/reference/);
 });
+
+test('an item\'s sections are in tabs, and its settings in the Properties dialog', async ({ page, daemon }) => {
+  await selectBackdrop(page, daemon);
+  const tabs = inspector(page).getByRole('tablist', { name: 'Inspector' });
+  const tab = (name) => tabs.getByRole('tab', { name: new RegExp(`^${name}`) });
+  await expect(tab('Transform')).toHaveAttribute('aria-selected', 'true');
+  await expect(field(page, 'X')).toBeVisible();
+  await expect(inspector(page).locator('.hotkey-row').first()).toBeHidden();
+  // The source's settings aren't in the Inspector any more.
+  await expect(inspector(page).locator('section.fold').filter({ hasText: /^Properties/ })).toHaveCount(0);
+
+  // Behaviour holds the scene switches and hotkeys; the box fields hide.
+  await tab('Behaviour').click();
+  await expect(tab('Behaviour')).toHaveAttribute('aria-selected', 'true');
+  await expect(inspector(page).getByLabel('Glide to other scenes')).toBeVisible();
+  await expect(inspector(page).locator('.hotkey-row')).toHaveCount(3);
+  await expect(field(page, 'X')).toBeHidden();
+
+  // The arrow keys move along the strip, and the focus follows.
+  await page.keyboard.press('ArrowLeft');
+  await expect(tab('Motion')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab('Motion')).toBeFocused();
+  await expect(inspector(page).getByRole('button', { name: /^Motion/ })).toBeVisible();
+
+  // The tab picked is kept across a reload.
+  await connect(page, daemon);
+  await page.locator('.sources-panel li.row .row-main').first().click();
+  await expect(tab('Motion')).toHaveAttribute('aria-selected', 'true');
+
+  // The header's button opens the source's Properties dialog.
+  await inspector(page).getByRole('button', { name: 'Properties & filters…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Properties' });
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+});
