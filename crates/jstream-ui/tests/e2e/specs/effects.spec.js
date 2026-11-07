@@ -64,9 +64,10 @@ test('an item\'s effects are its own: added, reordered, turned off and removed u
   await effects(page).getByRole('button', { name: '+ Add effect…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await expect(add.locator('.modal-sub')).toHaveText('For this item of “Backdrop”');
-  // Video kinds only; the vignette under Style with its hint.
+  // Video kinds only, then Custom shader; the vignette under Style with its hint.
   const types = add.getByRole('listbox', { name: 'Filter type' }).getByRole('option');
-  await expect(types).toHaveCount(2);
+  await expect(types).toHaveCount(3);
+  await expect(types.last()).toHaveText('Custom shader');
   await types.filter({ hasText: 'Vignette' }).click();
   await expect(add.locator('.add-filter-kind')).toHaveText('Video · Style');
   await expect(add.locator('.add-filter-hint')).toHaveText('Darken or tint the edges');

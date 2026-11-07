@@ -488,8 +488,10 @@ PR with its base are enforced by the `governance` check instead (see
   `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
   delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
 - **Identity changes:** a doc, section or rule that existed on the base is deleted or
-  retired, whether or not it leaves a tombstone ([R-DOC-010](RULES.md#R-DOC-010)). See
-  [Lifecycle](#lifecycle).
+  retired, whether or not it leaves a tombstone; any other `<a id>` anchor or a
+  `retired_sections` tombstone is removed; or an ID is reused, as a new anchor a base
+  tombstone names or a retired rule made active again ([R-DOC-010](RULES.md#R-DOC-010)).
+  See [Lifecycle](#lifecycle) and [Governance](#governance).
 
 It also **reports**, without failing (as `warning:` lines), crates that no section covers,
 and `applies_to` globs naming a crate directory (`crates/<name>/…`, `apps/<name>/…`) that
@@ -610,9 +612,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     reopens it if it was closed. Findings never fail the job; a tool that can't run does.
   - Not built yet: link-checking every external with lychee (cached, authenticated; 403
     and 429 count as *unknown*, not broken), due externals and `ext` facts, fact drift,
-    verify-to-edit ratios, pending enforcement past its milestone, and every Tier-1 ADR
-    decision on merged PRs, marked direct or proxy, with the quoted instruction (the
-    decision audit).
+    verify-to-edit ratios, pending enforcement past its milestone, and every
+    maintainer-tier ADR decision on merged PRs, marked direct or proxy, with the quoted
+    instruction (the decision audit).
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
 
