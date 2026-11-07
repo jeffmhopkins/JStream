@@ -462,6 +462,15 @@ state machine. Contents:
   atomics, and the program stage registers it with its master bus's skips; the audio
   inputs' underruns and drops are the drop ledger's `AudioInputDrops`, summed with the
   ones removed.
+  The clients' views (protocol 0.103, `profile/views.rs`,
+  [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)):
+  `preview.report` is answered outside the collection lock, which it takes only to read
+  the session's client name, and keeps each (session, view)'s latest counts in
+  `ViewMeters`, behind a lock of its own, at most 16 open views a session; counts that
+  fall below the last start the view's next run, which a window counts from zero. A
+  session's end marks its views ended, and they are forgotten once no window reaches
+  their last report. Each sample copies them, and a window lists the views reported
+  since its base, with their growth.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
@@ -3125,7 +3134,9 @@ a plan reaches after the thread skipped it (*Live sources*). The snapshot compos
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
-drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
+drawing or encoding; a session's preview streams and binary channel are leaf locks, and so is the profiler's
+`ViewMeters` lock, which `preview.report` takes after releasing the collection lock it
+read the client's name under. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
@@ -3242,7 +3253,9 @@ and after are the same.
 
 `values.set` gets no entry either, nor an `activity.list` line: a shared value is data
 for pages, not a change to the studio, and may be set many times a second (ADR-0102
-decision 7, [Shared values](#shared-values)).
+decision 7, [Shared values](#shared-values)). Nor does `preview.report`: it carries
+a client view's counts once a second, and only `profile.get` reads them
+([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection

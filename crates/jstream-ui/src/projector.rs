@@ -388,19 +388,47 @@ fn Picture(
     let canvas = NodeRef::<Canvas>::new();
     let shown = RwSignal::new(Shown::Starting);
     let channel = channels.take();
+    // What the picture did with its frames, reported to the engine (`preview.report`,
+    // ADR-0132), under a label naming what it shows.
+    let tally = crate::views::ViewTally::default();
+    {
+        let tally = tally.clone();
+        Effect::new(move |before: Option<Shown>| {
+            let now = shown.get();
+            if before.as_ref() != Some(&now) {
+                match now {
+                    Shown::Starting => tally.placeholder(),
+                    Shown::Ended(_) => tally.blank(),
+                    Shown::Live => {}
+                }
+            }
+            now
+        });
+    }
+    let view = match (&source, &scene) {
+        (Some(source), _) => crate::views::label("projector:source", Some(source.as_str())),
+        (None, Some(scene)) => crate::views::label("projector", Some(scene.as_str())),
+        (None, None) => crate::views::label("projector", Some("program")),
+    };
+    let reporting = StoredValue::new_local(None::<leptos::prelude::IntervalHandle>);
     let control: Option<Weak<dyn Control>> = session.get().map(|s| Rc::downgrade(&s.control));
     canvas.on_load({
         let channels = channels.clone();
         let control = control.clone();
+        let tally = tally.clone();
         move |element| {
             let Some(control) = control else {
                 return;
             };
-            let Some(screen) = Screen::new(element, move || {
-                if shown.try_get_untracked() == Some(Shown::Starting) {
-                    shown.try_set(Shown::Live);
-                }
-            }) else {
+            let Some(screen) = Screen::new(
+                element,
+                move || {
+                    if shown.try_get_untracked() == Some(Shown::Starting) {
+                        shown.try_set(Shown::Live);
+                    }
+                },
+                tally.clone(),
+            ) else {
                 shown.set(Shown::Ended("this browser can't draw on a canvas".into()));
                 return;
             };
@@ -411,6 +439,7 @@ fn Picture(
                 let h264 = Rc::clone(&h264);
                 let scene = scene.clone();
                 let source = source.clone();
+                let tally = tally.clone();
                 Box::new(move |frame| {
                     let header = frame.header;
                     if header.end {
@@ -430,11 +459,13 @@ fn Picture(
                         // reused.
                         h264.set(false);
                         let control = control.clone();
+                        let tally = tally.clone();
                         let shows = (scene.clone(), source.clone());
                         spawn_local(async move {
                             let close = Action::PreviewUnsubscribe { channel };
                             let _closed = act(&control, close).await;
                             let again = subscribe(channel, shows, max, fps, false);
+                            tally.opened();
                             if let Some(Err(error)) = act(&control, again).await {
                                 shown.try_set(Shown::Ended(error));
                             }
@@ -443,7 +474,13 @@ fn Picture(
                 })
             };
             channels.handlers.borrow_mut().insert(channel, handler);
+            reporting.set_value(crate::views::report_every_second(
+                control.clone(),
+                view.clone(),
+                tally.clone(),
+            ));
             let shows = (scene.clone(), source.clone());
+            tally.opened();
             spawn_local(async move {
                 let open = subscribe(channel, shows, max, fps, h264.get());
                 if let Some(Err(error)) = act(&control, open).await {
@@ -454,6 +491,9 @@ fn Picture(
     });
     // Handles only: the cleanup runs where any other may.
     on_cleanup(move || {
+        if let Some(handle) = reporting.try_update_value(Option::take).flatten() {
+            handle.clear();
+        }
         shared
             .0
             .try_with_value(|channels| channels.handlers.borrow_mut().remove(&channel));

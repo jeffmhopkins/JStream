@@ -211,6 +211,32 @@ pub fn Canvas() -> impl IntoView {
     let area = NodeRef::<leptos::html::Div>::new();
     let screen = NodeRef::<leptos::html::Canvas>::new();
     let preview_state = RwSignal::new(PreviewState::Starting);
+    // What the canvas did with its preview pictures, reported to the engine
+    // (`preview.report`, ADR-0132): each time it shows its waiting text or why it has
+    // no picture counts once.
+    let tally = crate::views::ViewTally::default();
+    {
+        let tally = tally.clone();
+        Effect::new(move |before: Option<PreviewState>| {
+            let now = preview_state.get();
+            if before.as_ref() != Some(&now) {
+                match now {
+                    PreviewState::Starting => tally.placeholder(),
+                    PreviewState::Unavailable(_) => tally.blank(),
+                    PreviewState::Live => {}
+                }
+            }
+            now
+        });
+    }
+    // Kept where a `Copy` closure can reach it.
+    let view_tally = StoredValue::new_local(tally.clone());
+    let reporting = StoredValue::new_local(None::<IntervalHandle>);
+    on_cleanup(move || {
+        if let Some(handle) = reporting.try_update_value(Option::take).flatten() {
+            handle.clear();
+        }
+    });
     // What the canvas's preview stream shows: the program mix while the canvas shows
     // the program scene, else the scene it shows.
     let wanted = Memo::new(move |_| {
@@ -281,6 +307,7 @@ pub fn Canvas() -> impl IntoView {
     let taps = use_context::<taps::PreviewTaps>();
     {
         let alive = Arc::clone(&alive);
+        let tally = tally.clone();
         screen.on_load(move |element| {
             let Some(open) = session.and_then(|s| s.get()) else {
                 return;
@@ -298,16 +325,25 @@ pub fn Canvas() -> impl IntoView {
             // What the canvas shows by now.
             first.scene = wanted.get_untracked();
             stream.set_value(Some(first));
+            reporting.set_value(crate::views::report_every_second(
+                control.clone(),
+                crate::views::label("canvas", None),
+                tally.clone(),
+            ));
             spawn_local(run_preview(
                 frames,
-                (control, taps),
-                screen::Screen::new(element, move || {
-                    // Shown once the first picture is drawn, unless the stream has
-                    // already ended.
-                    if preview_state.try_get_untracked() == Some(PreviewState::Starting) {
-                        preview_state.try_set(PreviewState::Live);
-                    }
-                }),
+                (control, taps, tally.clone()),
+                screen::Screen::new(
+                    element,
+                    move || {
+                        // Shown once the first picture is drawn, unless the stream has
+                        // already ended.
+                        if preview_state.try_get_untracked() == Some(PreviewState::Starting) {
+                            preview_state.try_set(PreviewState::Live);
+                        }
+                    },
+                    tally.clone(),
+                ),
                 stream,
                 preview_state,
                 alive,
@@ -320,6 +356,9 @@ pub fn Canvas() -> impl IntoView {
     // keeps the program stream through it, and its transition plays without a stall
     // (#1205).
     let resubscribe = move |want: Option<SceneId>| {
+        let Some(tally) = view_tally.try_get_value() else {
+            return;
+        };
         let Some(current) = stream.try_get_value().flatten() else {
             return;
         };
@@ -346,6 +385,7 @@ pub fn Canvas() -> impl IntoView {
             if stream.try_get_value().flatten().map(|s| s.channel) != Some(next.channel) {
                 return;
             }
+            tally.opened();
             if let Err(error) = control
                 .call(Call::Action {
                     action: next.subscribe(),
@@ -2092,9 +2132,10 @@ fn describe(error: &CanvasError) -> String {
 /// shown opens a new stream (the canvas's effect does), whose frames it then draws.
 async fn run_preview(
     mut frames: jstream_control::BinaryStream,
-    (control, taps): (
+    (control, taps, tally): (
         std::rc::Weak<dyn jstream_control::Control>,
         Option<taps::PreviewTaps>,
+        crate::views::ViewTally,
     ),
     screen: Option<screen::Screen>,
     stream: StoredValue<Option<preview::Stream>, LocalStorage>,
@@ -2122,6 +2163,7 @@ async fn run_preview(
         }
     };
     let Some(first) = current() else { return };
+    tally.opened();
     match subscribe(first.subscribe()).await {
         Some(Ok(_)) => {}
         // The canvas shows why; the channel is still read, for the taps' frames.
@@ -2174,6 +2216,7 @@ async fn run_preview(
             if stream.try_get_value().flatten().map(|s| s.channel) != Some(jpeg.channel) {
                 continue;
             }
+            tally.opened();
             if let Some(Err(error)) = subscribe(jpeg.subscribe()).await {
                 state.try_set(PreviewState::Unavailable(error.to_string()));
             }

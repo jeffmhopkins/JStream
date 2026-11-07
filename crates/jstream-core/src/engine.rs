@@ -1580,6 +1580,7 @@ impl Engine {
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
     /// gets an audit entry. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
+        self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
@@ -1816,6 +1817,11 @@ impl Engine {
         } = call
         {
             self.preview_action(previews, action)
+        } else if let Call::Action {
+            action: Action::PreviewReport { view, counts },
+        } = &call
+        {
+            self.preview_report(client_id, view, *counts)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -1988,6 +1994,26 @@ impl Engine {
             },
             _ => return None,
         })
+    }
+
+    /// `preview.report` (ADR-0132): records the view's counts for `profile.get`. Only
+    /// reads the client's name from the collection state; changes nothing in it.
+    fn preview_report(
+        &self,
+        client_id: &ClientId,
+        view: &str,
+        counts: jstream_protocol::ViewCounts,
+    ) -> Result<CallResult, ProtocolError> {
+        jstream_protocol::check_view_label(view)?;
+        let client = lock(&self.shared.state)
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        self.shared
+            .profile
+            .report_view(client_id, &client, view, counts)?;
+        Ok(CallResult::Action { result: None })
     }
 
     /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's

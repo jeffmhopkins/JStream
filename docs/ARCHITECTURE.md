@@ -928,7 +928,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   where the frame time went over the last few seconds: each drawing thread's frame time
   against the budget, the costliest units (a source's upload, a capture, a chain, a
   scene pass, the composite), each source's paints, looks and builds, the planner, and
-  each named thread's CPU;
+  each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
+  the clients' views did with their preview pictures, as they report it with
+  `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md));
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
