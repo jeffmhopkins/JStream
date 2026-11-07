@@ -1169,7 +1169,9 @@ non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn pol
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
-anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34. A 2D
+item drawn small (a canvas pixel spanning more than 1.15 texels) samples such a chain
+too, so an inset source keeps its detail at its drawn size (#1217).
 An item in a 3D scene ([ADR-0094](adr/0094-scene-cameras.md)) carries its scene's
 camera and always takes that path: the same polygon, built through the camera's view
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
