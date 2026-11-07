@@ -750,7 +750,7 @@ stamp = { hash = "b3:b01df98ee0af0900", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read the canvas sentence. canvas.set_frame_rate sets the base rate to 30 or 60 at protocol 0.89, beside canvas.set_size." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "version.rs only gained a README-opening-line test; nothing this section states about versions or the handshake changed." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -3720,7 +3720,7 @@ stamp = { hash = "b3:a0c350cacfab6283", by = "agent:grok", note = "Re-read it. T
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read it. 0.89 is an addition: old clients still work, and base_fps is omitted at 30 so a collection that has not opted in reads as before." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "version.rs only gained a test that the README's version paragraph opens on PROTOCOL_VERSION; the version, its type and can_serve are unchanged, so this section holds." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:3419348239df8ce7", by = "agent:claude-timelines", note = "Events list gains scene.keyframe_changed (0.88) for keyframe tracks (ADR-0116, protocol 0.88); plugin class table entry added in plugin.rs. | merge: merge: the timelines branch (#1169) now carries main (the landed wave: codec downloads and other wave text); re-read, keyframe tracks (0.88 on top of 0.87 timelines and main's 0.86) still hold, scene.set_keyframe is in the actions list beside codec.*, and no cue, plugin or MCP rule names a codec op. | kept from the merged side: The Motion contents name MotionKind::Audio, MotionMeasure and MotionCurve since 0.86 (ADR-0100), with the link to the Motion section; the camera motion entry now says check_camera_motion refuses an audio modifier (motion.N.kind), since a camera hears nothing (#1149 review B4). | merge: main into wave/alpha4 (second sync): main changed this section's text through #1041 (Cisco's OpenH264 download on Linux, LNX2). The queries list has codec.downloads beside the wave's video.frames; plugin.rs places the codec calls as never and the wave's calls in their classes. | merge: merge: wave/alpha4's final tip (now main, #1176) brought codec downloads (codec.download, codec.delete, codec.downloads) and other wave text into this section's inputs; re-read, timelines (0.87 on top of main's 0.86) still hold beside it and no cue, plugin or MCP rule names a codec op. | kept from the merged side: merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): this section's text changed in the merge, from #1125 (item motion, item.set_motion (ADR-0099, 0.81)); #1082 (item.show, item.hide and item.toggle (ADR-0101, 0.80)); #1134 (file filters on master and output chains (0.79)). plugin.rs classes scene.switch_and_watch beside the item actions and item.set_motion; query.rs's video.frames holds. | kept from the merged side: This PR adds values.list to the query list and values.changed to the event list in this section main split out; event.rs's ValuesChanged, plugin.rs's scopes and query.rs's ValuesList match. Holds. | kept from the merged side: Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/** | kept from the merged side: merge: wave/alpha4 into #1125 (protocol 0.81): the merge changed this section's text, from #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)); #1134 (file filters such as Apply LUT on master and output chains (0.79)); #1127 (shared values values.set and values.list (ADR-0102, 0.78)); #1145 (an upright 3D camera at the poles and near-plane outlines); #1122 (camera depth of field (ADR-0108, 0.77)); #1111 (item effects over the canvas, item.set_effects_space (ADR-0106, 0.76)); #1144 (the split of the protocol and core README into topic sections). keyframe.rs's ItemOverride.motion, plugin.rs's edit class for item.set_motion beside #1082's item actions and #1127's values, and query.rs hold against this list. | kept from the merged side: Re-read against ADR-0113: added SceneInfo's camera_motion and camera_follow and a Camera motion and follow entry for camera_motion.rs; the plugin scopes table is described as before; then the release queue gave it 0.84: the camera motion and follow entry now says since 0.84. | Builds on #1125 (item motion, ADR-0099), which this branch carries from its branch and the wave. | merge: wave/alpha4 brought #1080 (frame sheets: video.frames and scene.switch_and_watch, protocol 0.82) and #1104 (an opacity above 1 is a gain on an item's light, protocol 0.83); re-read against them: this PR's camera motion, follow camera and scene.zoom_camera text still holds beside them, the merged lists keep both sides' entries, and the protocol is 0.84 over 0.83 and 0.82. | merge: wave/alpha4 into #1157 (protocol 0.85): this section's text changed in the merge, from #1156 (item.trigger_motion, the impulse kind and the triggered clock (#1107, 0.84)). plugin.rs classes the camera edits as edit, scene.zoom_camera as live and item.trigger_motion as edit; query.rs holds. | kept from the merged side: #1107: the motion bullet names check_motion_id, which lib.rs re-exports and item.trigger_motion uses | merge: wave/alpha4 into #1156 (protocol 0.84): this section's text changed in the merge, from #1104 (opacity above 1 as a gain, MAX_OPACITY (#1101, 0.83)); #1080 (frame sheets, video.frames and scene.switch_and_watch (0.82)). plugin.rs classes item.trigger_motion as edit beside #1080's scene.switch_and_watch; holds. | kept from the merged side: merge: main into #1041 (codec downloads, 0.69): this section's text changed in the merge, from #1127 (shared values, 0.78); #1144 (protocol and core README split into topic sections). The queries list holds codec.downloads beside main's values.list; plugin.rs places all three codec calls as never." }
@@ -3777,7 +3777,7 @@ stamp = { hash = "b3:6eef84d0d81bd66e", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read it. The version bump does not change an error code. A bad fps is invalid_argument, which this section already describes." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "version.rs only gained a test that the README's version paragraph opens on PROTOCOL_VERSION; the version, its type and can_serve are unchanged, so this section holds." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:3dcd2ce5c339688e", by = "agent:release-thread", note = "merge: wave/alpha4 into #1125 (protocol 0.81): the merge changed this section's text, from #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)); #1134 (file filters such as Apply LUT on master and output chains (0.79)); #1127 (shared values values.set and values.list (ADR-0102, 0.78)); #1145 (an upright 3D camera at the poles and near-plane outlines); #1122 (camera depth of field (ADR-0108, 0.77)); #1111 (item effects over the canvas, item.set_effects_space (ADR-0106, 0.76)); #1144 (the split of the protocol and core README into topic sections). Re-read the Geometry bullet: it keeps #1125's check_drawable and MAX_LEGACY_SCALE sentence (#1130) before #1144's versions split, with no version list left in it. | kept from the merged side: merge: Re-read this section, which #1144 split out of the crate contents, against this branch: it names CameraView's blur_at, the camera's depth-of-field blur at a distance (ADR-0108), and camera.rs's focus_px, blur_px and validate match it. #1111 changed no geometry here. | kept from the merged side: Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to geometry.rs, geometry/**, the modules its text names; #purpose still covers all of src/**" }
@@ -3855,7 +3855,7 @@ stamp = { hash = "b3:3d06a39c51c5a9e4", by = "agent:release-thread", note = "Add
 stamp = { hash = "b3:4a5e45a1b79165a5", by = "agent:grok", note = "Re-read the version sentence. The protocol is 0.89. The design does not otherwise fix the frame rate." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read the version sentence. The protocol is 0.89. The design does not otherwise fix the frame rate." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "version.rs only gained a test that the README's version paragraph opens on PROTOCOL_VERSION; the version, its type and can_serve are unchanged, so this section holds." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4098,7 +4098,7 @@ stamp = { hash = "b3:b01df98ee0af0900", by = "agent:grok", note = "Re-read the p
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read the overview. It points at the version section, which is now 0.89 for canvas.set_frame_rate." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "version.rs only gained a test that the README's version paragraph opens on PROTOCOL_VERSION; the version, its type and can_serve are unchanged, so this section holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4149,13 +4149,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:89b3cc5901a1b98f", by = "agent:grok", note = "Re-read the opening. PROTOCOL_VERSION is 0.89 because of canvas.set_frame_rate, 30 by default or 60. 0.88 remains the keyframe-track addition." }
+stamp = { hash = "b3:2bb5bf3c841710d2", by = "agent:wave-owner", note = "Added a paragraph: each bump rewrites the opening line with its own reason, and the_readme_opens_on_the_current_version holds it to the number, so two PRs taking the same number conflict in git (waves runbook, protocol). The version history above is unchanged." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f56445a1c9753b6c", by = "agent:grok", note = "Re-read the opening. PROTOCOL_VERSION is 0.89 because of canvas.set_frame_rate, 30 by default or 60. 0.88 remains the keyframe-track addition." }
+stamp = { hash = "b3:4455b5a41b5d4a56", by = "agent:wave-owner", note = "Added a paragraph: each bump rewrites the opening line with its own reason, and the_readme_opens_on_the_current_version holds it to the number, so two PRs taking the same number conflict in git (waves runbook, protocol). The version history above is unchanged." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -6239,8 +6239,11 @@ stamp = { hash = "b3:302d01fa61544c5e", by = "agent:claude", note = "Added the L
 ["GETTING-STARTED#live"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
-["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
+["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#header"]
+stamp = { hash = "b3:375362858aaad229", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to its header (Go Live, Record) and outputs areas, the only ones these steps use; re-read and it holds." }
+
+["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md#outputs"]
+stamp = { hash = "b3:c0e862c92f5a5c75", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to its header (Go Live, Record) and outputs areas, the only ones these steps use; re-read and it holds." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read recording: the desktop app's Browse opens a save dialog on add and on Edit, and a browser still types the path. Record and Stop recording are unchanged." }
@@ -6248,8 +6251,11 @@ stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read rec
 ["GETTING-STARTED#record"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
-["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the recording steps don't depend on HD-11; nothing changed" }
+["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#header"]
+stamp = { hash = "b3:375362858aaad229", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to its header (Go Live, Record) and outputs areas, the only ones these steps use; re-read and it holds." }
+
+["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md#outputs"]
+stamp = { hash = "b3:c0e862c92f5a5c75", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to its header (Go Live, Record) and outputs areas, the only ones these steps use; re-read and it holds." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6266,8 +6272,38 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 ["GETTING-STARTED#scene"."body"]
 stamp = { hash = "b3:54d5843586051feb", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
-["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#canvas"]
+stamp = { hash = "b3:d8d9054ffde9ad73", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
+stamp = { hash = "b3:c4666740e89cbd91", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#docking"]
+stamp = { hash = "b3:58b68f0c40555406", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#header"]
+stamp = { hash = "b3:375362858aaad229", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#inspector"]
+stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
+stamp = { hash = "b3:9c35156a76e11edd", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#mixer"]
+stamp = { hash = "b3:15f728c24aa44db0", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#objects"]
+stamp = { hash = "b3:d76423768eb5d62f", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#scenes"]
+stamp = { hash = "b3:b707dc391261c445", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#transform"]
+stamp = { hash = "b3:94b5523166a74b43", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
+
+["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#transitions"]
+stamp = { hash = "b3:461840a9a8dc82d9", by = "agent:wave-owner", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6498,10 +6534,10 @@ stamp = { hash = "b3:ef078d22b4977c46", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:3572c14a6dacb70c", by = "agent:cursor", note = "Re-read the version section against Cargo.toml: workspace.package version is unchanged. wasm-bindgen-futures was added under workspace.dependencies and does not change the version the apps ship. | merge: merge #1249: Cargo.toml's wasm-bindgen-futures comment now covers the update check and the file dialog. workspace.package version is unchanged. | kept from the merged side: Re-read: Cargo.toml adds wasm-bindgen-futures as a workspace dependency for the UI update check; the workspace version, SemVer rules and which apps take version.workspace are unchanged." }
 
 ["RUNBOOK-WAVES#churn"."body"]
-stamp = { hash = "b3:a1044690d58295b7", by = "agent:release-thread", note = "Main and wave rulesets have strict_required_status_checks_policy false, so merge main (a wave PR merges its wave) only on a conflict, on becoming the protocol holder or holding it and conflicting (matches Protocol steps 2 and 3), or for needed code; one push per round; batch ledger verifies; a merge of a passed PR keeps its pass via ADR-0109 when its diff is unchanged (merge plus ledger-only restamp commits, as onlyBaseMerges checks), otherwise a normal round; drafts until ready (R-GIT-003) | kept from the merged side: New section: main has no up-to-date requirement (ruleset required_status_checks strict=false), so merge main only on a conflict, as protocol holder, or for needed code; one push per round; batch ledger verifies; merge-only pushes say so and get REVIEW gather item 6's lighter review; drafts until ready (R-GIT-003 skips CI on drafts)" }
+stamp = { hash = "b3:59bac5719c90918f", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
 
 ["RUNBOOK-WAVES#churn"."dep:docs/runbooks/waves.md#protocol"]
-stamp = { hash = "b3:faae342ae8a3ca35", by = "agent:release-thread", note = "New section: main has no up-to-date requirement (ruleset required_status_checks strict=false), so merge main only on a conflict, as protocol holder, or for needed code; one push per round; batch ledger verifies; merge-only pushes say so and get REVIEW gather item 6's lighter review; drafts until ready (R-GIT-003 skips CI on drafts)" }
+stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }
@@ -6525,7 +6561,7 @@ stamp = { hash = "b3:c9f78031bb1abe35", by = "agent:wave-owner", note = "Step 2'
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#protocol"."body"]
-stamp = { hash = "b3:faae342ae8a3ca35", by = "agent:release-thread", note = "Step 2 now says a non-holder bump keeps its placeholder and auto-merge off and sets its real number once, in the push that merges the wave in when it becomes the holder; steps 1 and 3 unchanged and consistent with it; links the new #churn section" }
+stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Rewritten: no owner hand-out; a bump takes the next number, rewrites the protocol README's opening version line (held by a test), so a second bump on the same number conflicts and renumbers after merging the wave. Checked against ADR-0055's consequences: bumps still go to the earliest wave and must be right in each PR." }
 
 ["RUNBOOK-WAVES#protocol"."dep:docs/adr/0055-wave-branches.md#consequences"]
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }
@@ -6916,57 +6952,6 @@ stamp = { hash = "b3:ff4277dd64b296d5", by = "agent:claude-timelines", note = "R
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
-
-["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:c05a570253daa634", by = "agent:claude", note = "Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
-stamp = { hash = "b3:d8d9054ffde9ad73", by = "agent:cursor", note = "Re-read Summary. CV-04 is still built, so the Canvas row stays 18 rows, 17 built and 1 paused, and the total stays 133, 121, 3, 0, 5, 4. The extra clause about a mirrored name does not change a status." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:c4666740e89cbd91", by = "agent:grok", note = "Re-counted after the DL-01 note: dialogs stay 8 rows, 6 built, 1 partial (DL-07), 1 locked (DL-08). No status changed, so the total stays 133 / 121 / 3 / 0 / 5 / 4. | merge: #1251 edits DL-03's notes only and changes no row status. Dialogs stay 8 / 6 / 1 / 0 / 1 / 0 and the total stays 133 / 121 / 3 / 0 / 5 / 4. | kept from the merged side: Re-read the counts against the dialogs section: DL-03 stays built, so Dialogs remains 8 rows with 6 built, 1 partial and 1 locked, and the total stays 133, 121, 3, 0, 5, 4. No row status changed." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#docking"]
-stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-08 changed wording only (the Editing layout's right column is one tab group); it stays partial, so the Docking counts (10: 9 done, 1 partial) hold." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:59d14d49d4679afa", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "Only FL-07's note changed; no status, so the totals hold. | merge: Main brought #1144 (protocol and core README split into topic sections), #1111 (item effects in canvas space, 0.76), #1122 (depth of field, 0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's change, file filters (asset references) allowed on master and output chains at protocol 0.79, still reads right in the merged text. | kept from the merged side: #1075 adds item.set_effects_space and ItemInfo.effects_space (box or canvas, protocol 0.76 from the release queue, ADR-0106): re-read; FL-09 stays done, counts unchanged" }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:375362858aaad229", by = "agent:claude", note = "Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
-stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the counts against the inspector and outputs tables: no status cell changed, so the row counts and the total still match. Browse is prose in those sections, not a new row." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#keyboard"]
-stamp = { hash = "b3:f9cf68a539bfb95e", by = "agent:release-thread", note = "No row was added or changed status (motion is listed beyond the prototype); the counts still match | merge: wave/alpha4 into #1125 (protocol 0.81): docs/UI-FEATURES.md#keyboard re-verified on the wave after #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)); #1134 (file filters such as Apply LUT on master and output chains (0.79)); #1145 (an upright 3D camera at the poles and near-plane outlines); #1122 (camera depth of field (ADR-0108, 0.77)); #1111 (item effects over the canvas, item.set_effects_space (ADR-0106, 0.76)). IN-10 stays ✅ and no row changed status with the merge; the counts match. | kept from the merged side: KB-07's note grew (an item's show/hide/toggle keys are set from the Inspector too, ADR-0101); no keyboard row was added or changed status, so the counts hold. | kept from the merged side: Lock and screenshots are notes on existing rows (CV, OB, CM, KB), so the summary counts are unchanged. | merge: the merge brought #1044 (3D scenes: scene.set_camera, SceneInfo.camera, protocol 0.70) and #1053 (3D scenes on the canvas and in scene Properties) and #1039; KB-01/KB-02 conflicted and kept both sides' notes (locked items aren't nudged; Alt-drag orbits a 3D camera). Counts hold. | kept from the merged side: This PR (ADR-0094 UI): no row was added or changed status (the 3D canvas is under Beyond the prototype; DL-03 and KB-02 only gained notes), so the counts hold." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#live-panels"]
-stamp = { hash = "b3:6a6589f6f99aa1d1", by = "agent:activity-clear", note = "AG-01 status unchanged (✅); row counts and totals still hold" }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#menus"]
-stamp = { hash = "b3:9c35156a76e11edd", by = "agent:blend-amount", note = "Re-read: summary counts unchanged, CM-02 stays built" }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#mixer"]
-stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "Re-read Summary: counted rows per section again, Header 9|6|1|0|1|1, Canvas 18|15|1|0|1|1, Mixer 7|6|0|0|0|1, Keyboard 7|5|0|1|0|1, Total 130|104|10|1|11|4, with the four privacy rows ⏸; batch 9 no longer lists them." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#objects"]
-stamp = { hash = "b3:d76423768eb5d62f", by = "agent:obs-ui-thread", note = "Counts unchanged: lock and screenshots are notes on existing rows. Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#outputs"]
-stamp = { hash = "b3:c0e862c92f5a5c75", by = "agent:cursor", note = "Re-read the counts against the inspector and outputs tables: no status cell changed, so the row counts and the total still match. Browse is prose in those sections, not a new row." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#scenes"]
-stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "Re-read: round 1 edits only notes in SC-08, SC-09, SC-11, OB-07 and OB-10; no status changes, so the counts hold." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#theme"]
-stamp = { hash = "b3:0f91aec44760eb21", by = "agent:obs-ui-thread", note = "Re-read: Scenes 11 rows (SC-11 added), Sources panel 10 rows (OB-10 added), all built; other counts unchanged." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transform"]
-stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Recounted after the CV-08 note change, by script from the status column, which is unchanged: Canvas 18 = 14/1/1/2/0, Dialogs 8 = 5/0/0/3/0, Inspector 10 = 6/2/1/1/0, Keyboard 7 = 3/1/1/2/0, total 130 = 69/23/12/25/1, as the table says." }
-
-["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#transitions"]
-stamp = { hash = "b3:461840a9a8dc82d9", by = "agent:claude", note = "Transitions still counts 6 rows, all done; TR-01 only gained a note about the Stinger button." }
 
 ["UI-FEATURES#theme"."body"]
 stamp = { hash = "b3:0f91aec44760eb21", by = "agent:obs-ui-thread", note = "Re-read: WS-04 names the tool bars' added icons; WS-07 says Sources rows; style.css adds the tool bar's styles only." }
