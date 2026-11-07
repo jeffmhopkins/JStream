@@ -1,10 +1,11 @@
-//! The pairing panel (ADR-0044, ADR-0047): start pairing, show the one-time code until
+//! The pairing panel (ADR-0044, ADR-0047), the Settings dialog's Devices page
+//! (`settings.rs`): start pairing, show the one-time code until
 //! it is used or expires, and list and revoke the paired devices.
 //!
 //! - **Calls.** `pairing.start` opens a code, `device.list` reads the devices and
 //!   `device.revoke` revokes one. The server in front of the engine answers them; a
 //!   session with no listener behind it, such as the desktop app's, answers
-//!   `unsupported`, and the panel then hides itself.
+//!   `unsupported`, and the page then says no device can pair with this session.
 //! - **The code** is shown, large, with the time it has left, and how a device uses it:
 //!   a browser opens `/pair` on the host's TLS address and types it; a native client
 //!   posts it to `POST /api/v1/pair`. It is shown until the countdown ends or a device
@@ -144,6 +145,9 @@ struct Panel {
     session: SessionContext,
     /// Whether the session serves the pairing calls. The panel shows only then.
     served: RwSignal<bool>,
+    /// Whether the first `device.list` has answered, so the page can say a session
+    /// that doesn't serve pairing doesn't, rather than say so while it asks.
+    read: RwSignal<bool>,
     devices: RwSignal<Vec<DeviceInfo>>,
     /// The open code and the seconds it has left.
     code: RwSignal<Option<(OpenCode, u32)>>,
@@ -156,7 +160,7 @@ struct Panel {
 
 impl Panel {
     /// Re-reads the devices. Returns them, or `None` when the read failed or isn't
-    /// served (and hides the panel then).
+    /// served (and hides the panel's controls then).
     async fn reload(self) -> Option<Vec<DeviceInfo>> {
         let session = self.session.get()?;
         match devices(&*session.control).await {
@@ -284,6 +288,7 @@ pub fn Pairing() -> impl IntoView {
     let panel = Panel {
         session,
         served: RwSignal::new(false),
+        read: RwSignal::new(false),
         devices: RwSignal::new(Vec::new()),
         code: RwSignal::new(None),
         known: StoredValue::new(Vec::new()),
@@ -292,6 +297,7 @@ pub fn Pairing() -> impl IntoView {
     };
     spawn_local(async move {
         panel.reload().await;
+        panel.read.try_set(true);
     });
 
     let code_view = move || {
@@ -339,9 +345,16 @@ pub fn Pairing() -> impl IntoView {
     };
 
     view! {
-        <Show when=move || panel.served.get()>
+        <Show
+            when=move || panel.served.get()
+            fallback=move || panel.read.get().then(|| view! {
+                <p class="placeholder">
+                    "No device can pair with this session. Pairing is offered when the engine runs behind the JStream server, which other browsers connect to."
+                </p>
+                {move || panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
+            })
+        >
             <section class="pairing">
-                <h2>"Devices"</h2>
                 <button class="primary" on:click=move |_| panel.start()>
                     {move || if panel.code.with(Option::is_some) { "New code" } else { "Pair a device" }}
                 </button>

@@ -114,7 +114,11 @@ and calls this crate.
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
-  `jstream-core`'s.
+  `jstream-core`'s. A paired item's effects may differ only in their settings
+  ([ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+  `settings_blend` says whether two settings maps can blend (no reference or `null`
+  differs), and `blend_settings` gives them `k` of the way, numbers and colours
+  linearly (rounded for the kind's `int` parameters, which the caller names), every other differing value switching at one half, `k` clamped to `[0, 1]`.
 
 **Where it sits on the existing APIs.**
 
@@ -273,7 +277,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    by the sampler and its alpha replaced by 1, in the composite shader and in a
    filter's input alike.
 2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
-   item draws gets its mip chain rebuilt if its image changed: an `Rgba16Float` texture
+   item, or a visible 2D item drawn small, draws gets its mip chain rebuilt if its image
+   changed: an `Rgba16Float` texture
    with every level down to 1×1, premultiplied linear. A chain is of the item's crop,
    not the whole source: level 0 copies the cropped texels one for one (a `Region`, the
    crop's whole texels carried as integers from the item's crop, never recovered from
@@ -297,8 +302,15 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
    change, and not at all while it is unchanged. A 3D item samples its chain, which is
    always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`
-   16; wgpu clamps that to 1 on an adapter without anisotropic filtering. A source with
-   no 3D placement gets no chain.
+   16; wgpu clamps that to 1 on an adapter without anisotropic filtering. A 2D item
+   samples one the same way when a canvas pixel spans more than `MINIFIED`, 1.15,
+   texels along either axis of its quad (`Shape::minification`, counted in the image's
+   texels, so a density counts), which one bilinear tap would skip texels at (#1217).
+   When it spans 2 or more along both axes the sampler never reads level 0, so that
+   item's chain starts a level down (`Mips::skip`): the first pass renders the region
+   at half size, its one linear tap averaging 2×2 texels, and the chain holds a quarter
+   of the texels. An image keeps that chain apart from a full one of the same crop. A
+   source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
@@ -414,7 +426,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
-| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
+| Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
@@ -965,6 +977,16 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 | D cropped, a smaller D cropped just past a texel ring | edge | 5 | 2.8 | 6.6 with the chain built from the whole source, 8.2 without the UV clamp either |
 | E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
 
+**2D minification goldens** (`tests/minified.rs`, #1217). The same reference and
+pattern (512²) for flat items drawn small, as a camera or test card inset in a box: a
+box at 400, 256, 160, 90 and 40 px wide (half as tall), straight and rotated 20°, has
+a mean of at most 10 and a p99 of at most 50 over its interior (measured 3.6 to 9.9
+and 11 to 45; with one level they were 19 to 62 and 98 to 134), and one at 1 / 1.2 of
+its size at most 4 and 40 (measured 3.1 and 26; with one level 5.5 and 46). A third
+test checks which chain an item gets: none at or near its size, a full one when one
+axis is squeezed, and a half-size one, built once while the upload is unchanged, at a
+quarter of its size.
+
 Three more run the same comparison through a scene camera
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), the reference mapping each sample
 back with `unplace_seen`:
@@ -1128,8 +1150,12 @@ a hardware GPU.
 -->
 
 - **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
-  rotated 2D items should get edge coverage too, which changes their goldens; whether
-  strongly minified 2D items should get mips.
+  rotated 2D items should get edge coverage too, which changes their goldens.
+- **Small sources.** A 2D item drawn small samples a chain built from its whole crop
+  every frame its source changes, so a 1080p camera in a small box costs a quarter-size
+  chain and its rebuild. Open: a level 0 built at the drawn size, which a first pass of
+  more than one tap would allow, and uploading a still image at the size it is drawn
+  (#1139).
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

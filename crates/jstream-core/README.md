@@ -1575,8 +1575,16 @@ it. A legacy transform has the box its quad covers, so
 over a capture, whose size isn't known when planning, its effects are bypassed. A
 source's own chain still runs once, wherever it is placed. In a transition an item
 with effects is its effects' layer over its grown box, uncropped, and two items pair
-only when their effects are the same kinds with the same settings in order
-([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)). Goldens in `chain.rs`
+only when their effects are the same kinds in order
+([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)) with settings a Move can
+blend (`transition::effects_pair`, [ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+equal, or plain values on both sides, not a scene, source or file reference that differs.
+A pair whose settings differ carries the leaving side's (`Visual::blend_from`); the shot
+keeps one `EffectBlend` per such chain, with the item's timing and each filter's `int`
+parameters from its descriptor (`Chain::whole_params`), and the render thread
+hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
+numbers and colours linearly, every other value switching halfway, the eased progress
+clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
@@ -1724,8 +1732,8 @@ then shows the page's newest texture in place of its transparent stand-in, as a
 `Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
 sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
 anywhere else, `video.snapshot` included, it draws nothing. A page repaints on its
-own, so while a context is set a source that opens through the browser engine asks for a re-plan every
-1/30 s, painted yet or not, as an animation asks at its next frame. That is every program frame at the default rate, and every other frame when the collection runs at 60 (ADR-0119). A texture
+own, so while a context is set a source that opens through the browser engine asks for a re-plan at
+the next program frame, painted yet or not, as an animation asks at its next frame: every frame of the frame grid, at 30 or at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
 context the page shows its stand-in, transparent. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
@@ -1933,7 +1941,12 @@ the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version onl
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
 thread re-plans then, so an animated image or a video advances on the clock and a
-still one is never re-planned. A source with a `jstream_sources::Painter` (the
+still one is never re-planned. That time is rounded to the frame grid at the
+collection's base rate (`LiveSources::wake_at`): the thread re-plans a quarter period
+before the first program tick at least that long after the change, so every change due
+before a tick shares one plan, finished by the tick, and animations out of phase with
+each other plan once a frame at most, not once each (#1138). A change due in that last
+quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
 `timer`, which redraws when the value it shows changes)
@@ -3337,7 +3350,9 @@ repeats the last frame at the tick, and no push goes back in time
 behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
 ticks, frames collected in the same tick as a newer one, and frames that land behind
-a repeat are all counted in `render_ticks`. Between ticks the render thread sleeps until
+a repeat are all counted in `render_ticks`. The first tick is drawn at once; later ones fall
+on the frame grid, multiples of the base frame period on the media clock
+(`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
 the mixer thread take the host's `ThreadPriority` as they start. A mix that stops being drawn hands
 its ring to the collector; the rest drop before the compositor and the context. A

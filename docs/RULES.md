@@ -578,7 +578,10 @@ the `Origin` header when one is present. A device token is accepted only over lo
 or TLS. Listeners bind to `127.0.0.1` by default
 ([ADR-0006](adr/0006-mcp-full-access.md)). A listener beyond loopback is the user's
 opt-in, speaks TLS only, and admits device tokens, never the control token
-([ADR-0104](adr/0104-network-listener-over-tls.md)).
+([ADR-0104](adr/0104-network-listener-over-tls.md)). The JTunnel and VISCA sockets are not control
+listeners: each is opt-in, LAN only and limited to accepted peers, and runs only
+bindings or camera actions, never the protocol
+([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md)).
 
 <a id="R-SEC-003"></a>
 ### R-SEC-003: WASM plugins are sandboxed by default
@@ -780,7 +783,7 @@ Module-level `Docs:` lines are optional, but every reference on them must resolv
 ### R-DOC-009: Accepted ADRs are immutable
 <!-- @rule
 status = "active"
-enforced_by = ["ci:docs"]
+enforced_by = ["ci:governance"]
 applies_to = ["docs/adr/**"]
 -->
 After acceptance, only `status` and `superseded_by` may change. A changed decision is
@@ -799,7 +802,7 @@ recorded in a new ADR. **Two exceptions:**
 ### R-DOC-010: IDs are permanent
 <!-- @rule
 status = "active"
-enforced_by = ["ci:docs"]
+enforced_by = ["ci:governance"]
 applies_to = ["**/*.md"]
 -->
 From the first merge to `main`, anchors and rule IDs are never deleted or reused.

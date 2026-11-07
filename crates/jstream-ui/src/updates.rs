@@ -1,5 +1,5 @@
 //! Help › Check for updates, and the Settings checkbox that runs it at launch
-//! (docs/UI-FEATURES.md#header).
+//! (docs/UI-FEATURES.md#header), on the Settings dialog's General page (`settings.rs`).
 //!
 //! The desktop app serves GitHub's public releases list at [`CHECK_PATH`] (its
 //! `updates.rs`). This page reads that list and compares it with the version it was
@@ -441,46 +441,29 @@ pub fn UpdateDialog(
     }
 }
 
-/// Settings. The launch check is the first thing it holds; the dialog grows as the
-/// other application settings arrive.
+/// The Settings dialog's General page: "Check for updates at launch" (`settings.rs`).
 #[component]
-pub fn SettingsDialog(
-    /// Closes the dialog.
-    close: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+pub fn LaunchCheckSetting() -> impl IntoView {
     let on = RwSignal::new(kept_launch_check());
     view! {
-        <Modal label="Settings" class="settings-dialog" cancel=close>
-            <div class="modal-header">
-                <div class="modal-titles">
-                    <h2 class="modal-title">"Settings"</h2>
-                </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
-            </div>
-            <div class="settings-body">
-                <label class="settings-check">
-                    <input
-                        type="checkbox"
-                        aria-label="Check for updates at launch"
-                        prop:checked=move || on.get()
-                        on:change=move |event| {
-                            let checked = event_target_checked(&event);
-                            on.set(checked);
-                            keep_launch_check(checked);
-                        }
-                    />
-                    <span>
-                        <span class="settings-check-label">"Check for updates at launch"</span>
-                        <span class="settings-check-note">
-                            "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
-                        </span>
-                    </span>
-                </label>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="primary" data-primary on:click=move |_| close()>"Close"</button>
-            </div>
-        </Modal>
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Check for updates at launch"
+                prop:checked=move || on.get()
+                on:change=move |event| {
+                    let checked = event_target_checked(&event);
+                    on.set(checked);
+                    keep_launch_check(checked);
+                }
+            />
+            <span>
+                <span class="settings-check-label">"Check for updates at launch"</span>
+                <span class="settings-check-note">
+                    "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
+                </span>
+            </span>
+        </label>
     }
 }
 
