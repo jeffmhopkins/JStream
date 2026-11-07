@@ -9,6 +9,10 @@
 //! `item.toggle`, `item.show` and `item.hide` of the item (ADR-0101), which show and hide
 //! it with its own appear and disappear effects.
 //!
+//! A chord may end in the wheel (`Ctrl+WheelUp`, ADR-0112 §3): while the page has the
+//! focus, each notch of a bound wheel chord runs its action once ([`WheelNotches`]),
+//! and the browser's own use of it (Ctrl+wheel zooms the page) is prevented.
+//!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#keyboard
 
 use crate::app::SessionContext;
@@ -17,10 +21,10 @@ use jstream_control::protocol::{Action, Chord, Edit, SceneId};
 use leptos::prelude::*;
 
 /// The chord for a key press: its modifiers, in the protocol's order, then the
-/// physical key (`KeyboardEvent.code`). `None` for a modifier key alone, or a key a
-/// chord can't name.
+/// physical key (`KeyboardEvent.code`) or the wheel's direction (`WheelUp`,
+/// `WheelDown`). `None` for a modifier key alone, or a key a chord can't name.
 pub fn chord(ctrl: bool, alt: bool, shift: bool, meta: bool, code: &str) -> Option<Chord> {
-    if !Chord::KEYS.contains(&code) {
+    if !Chord::KEYS.contains(&code) && !Chord::WHEEL.contains(&code) {
         return None;
     }
     let mut parts: Vec<&str> = [
@@ -46,6 +50,49 @@ pub fn of_event(event: &leptos::ev::KeyboardEvent) -> Option<Chord> {
         event.meta_key(),
         &event.code(),
     )
+}
+
+/// How far the wheel turns for one notch, by `WheelEvent.deltaMode`: about 100 pixels
+/// in the browsers that report pixels, 3 lines in those that report lines, and one page.
+const PIXELS_PER_NOTCH: f64 = 100.0;
+const LINES_PER_NOTCH: f64 = 3.0;
+
+/// Turns wheel deltas into whole notches, carrying what's left over to the next event,
+/// so a smooth wheel or a touchpad runs a wheel chord once per notch's worth of turn.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct WheelNotches {
+    /// The turn not yet counted, in notches: negative is up.
+    carry: f64,
+}
+
+impl WheelNotches {
+    /// Adds one wheel event's vertical turn (`deltaY` in `deltaMode`'s unit) and returns
+    /// the whole notches it completes: negative turns up (away from the person),
+    /// positive down. A turn the other way drops what was carried.
+    pub fn turn(&mut self, delta_y: f64, delta_mode: u32) -> i32 {
+        let per_notch = match delta_mode {
+            0 => PIXELS_PER_NOTCH,
+            1 => LINES_PER_NOTCH,
+            _ => 1.0,
+        };
+        let turn = delta_y / per_notch;
+        if !turn.is_finite() || turn == 0.0 {
+            return 0;
+        }
+        if self.carry * turn < 0.0 {
+            self.carry = 0.0;
+        }
+        self.carry += turn;
+        let whole = self.carry.trunc();
+        self.carry -= whole;
+        // At most a few notches per event: the cast can't overflow.
+        whole.clamp(-64.0, 64.0) as i32
+    }
+
+    /// Forgets what was carried, when the wheel turns without a bound chord.
+    pub fn reset(&mut self) {
+        self.carry = 0.0;
+    }
 }
 
 /// A chord as people read it: `Ctrl+A` for `Ctrl+KeyA`, `Shift+1` for `Shift+Digit1`.
@@ -142,7 +189,83 @@ pub fn Hotkeys() -> impl IntoView {
             studio.act(&s, action);
         }
     });
-    on_cleanup(move || keys.remove());
+    let wheel = wheel_listener(move |event, notches| {
+        if event.default_prevented() || overlay_open() {
+            return;
+        }
+        let modifiers = (
+            event.ctrl_key(),
+            event.alt_key(),
+            event.shift_key(),
+            event.meta_key(),
+        );
+        let bound = |direction: &str| {
+            let chord = chord(
+                modifiers.0,
+                modifiers.1,
+                modifiers.2,
+                modifiers.3,
+                direction,
+            )?;
+            studio
+                .collection
+                .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
+        };
+        let (up, down) = (bound("WheelUp"), bound("WheelDown"));
+        if up.is_none() && down.is_none() {
+            notches.reset();
+            return;
+        }
+        // Bound with these modifiers: the page doesn't scroll or zoom too.
+        event.prevent_default();
+        let turned = notches.turn(event.delta_y(), event.delta_mode());
+        let action = if turned < 0 { up } else { down };
+        if let (Some(action), Some(s)) = (action, session.get()) {
+            for _ in 0..turned.unsigned_abs() {
+                studio.act(&s, action.clone());
+            }
+        }
+    });
+    on_cleanup(move || {
+        keys.remove();
+        wheel.remove();
+    });
+}
+
+/// A `wheel` listener on the window that may prevent the default: browsers treat a
+/// window's wheel listeners as passive unless told otherwise, and a passive one can't
+/// stop Ctrl+wheel zooming the page. `on_wheel` gets each event and the listener's
+/// [`WheelNotches`].
+fn wheel_listener(
+    on_wheel: impl Fn(&leptos::web_sys::WheelEvent, &mut WheelNotches) + 'static,
+) -> WheelListener {
+    use leptos::wasm_bindgen::{JsCast, closure::Closure};
+    let mut notches = WheelNotches::default();
+    let callback = Closure::<dyn FnMut(leptos::web_sys::WheelEvent)>::new(
+        move |event: leptos::web_sys::WheelEvent| on_wheel(&event, &mut notches),
+    )
+    .into_js_value();
+    let options = leptos::web_sys::AddEventListenerOptions::new();
+    options.set_passive(false);
+    let _ = window().add_event_listener_with_callback_and_add_event_listener_options(
+        "wheel",
+        callback.unchecked_ref(),
+        &options,
+    );
+    WheelListener(StoredValue::new_local(callback))
+}
+
+/// The window's wheel listener, until [`WheelListener::remove`].
+#[derive(Clone, Copy)]
+struct WheelListener(StoredValue<leptos::wasm_bindgen::JsValue, LocalStorage>);
+
+impl WheelListener {
+    fn remove(self) {
+        use leptos::wasm_bindgen::JsCast;
+        self.0.with_value(|callback| {
+            let _ = window().remove_event_listener_with_callback("wheel", callback.unchecked_ref());
+        });
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +289,37 @@ mod tests {
         );
         assert_eq!(chord(true, false, false, false, "ControlLeft"), None);
         assert_eq!(chord(false, false, false, false, "IntlRo"), None);
+        assert_eq!(
+            chord(true, false, false, false, "WheelUp"),
+            Some(Chord::new("Ctrl+WheelUp"))
+        );
+        assert_eq!(
+            chord(false, true, true, false, "WheelDown"),
+            Some(Chord::new("Alt+Shift+WheelDown"))
+        );
+    }
+
+    #[test]
+    fn wheel_deltas_count_whole_notches() {
+        let mut notches = WheelNotches::default();
+        // One notch in pixels, lines and pages.
+        assert_eq!(notches.turn(-100.0, 0), -1);
+        assert_eq!(notches.turn(3.0, 1), 1);
+        assert_eq!(notches.turn(1.0, 2), 1);
+        // A smooth wheel's small deltas add up to one notch, and the rest carries.
+        assert_eq!(notches.turn(40.0, 0), 0);
+        assert_eq!(notches.turn(40.0, 0), 0);
+        assert_eq!(notches.turn(40.0, 0), 1);
+        assert_eq!(notches.turn(80.0, 0), 1);
+        // Turning back drops what was carried.
+        assert_eq!(notches.turn(60.0, 0), 0);
+        assert_eq!(notches.turn(-60.0, 0), 0);
+        assert_eq!(notches.turn(-40.0, 0), -1);
+        // A fast flick is several notches.
+        notches.reset();
+        assert_eq!(notches.turn(300.0, 0), 3);
+        assert_eq!(notches.turn(0.0, 0), 0);
+        assert_eq!(notches.turn(f64::NAN, 0), 0);
     }
 
     #[test]

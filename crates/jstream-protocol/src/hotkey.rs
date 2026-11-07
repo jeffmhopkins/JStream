@@ -5,7 +5,8 @@
 //! The engine stores bindings and checks them; it never listens for keys. Who does (the
 //! desktop host for OS-global shortcuts, the web UI for in-page ones, nobody in the
 //! headless daemon) is a client decision. Every binding runs a protocol action, so a
-//! hotkey can do nothing an agent can't (R-ARCH-001).
+//! hotkey can do nothing an agent can't (R-ARCH-001). A chord may end in the wheel
+//! (ADR-0112 §3), bound only to an action that takes steps.
 
 use crate::command::Action;
 use schemars::JsonSchema;
@@ -21,6 +22,10 @@ use std::fmt;
 /// - The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the
 ///   physical key, whatever the keyboard layout, as browsers and the desktop host's
 ///   global-shortcut API both report it. Modifier keys themselves are not keys here.
+/// - Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since
+///   0.105, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,
+///   or each 120 units of high-resolution wheel delta, so it can only be bound to an
+///   action that takes one step ([`Action::takes_steps`]).
 ///
 /// On the wire it is a plain string. The protocol layer doesn't check it: the engine
 /// rejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s
@@ -34,6 +39,11 @@ pub struct Chord(String);
 impl Chord {
     /// The modifiers, in the order a chord must list them.
     pub const MODIFIERS: [&'static str; 4] = ["Ctrl", "Alt", "Shift", "Meta"];
+
+    /// The wheel's two directions, which a chord may end in instead of a key (0.105,
+    /// ADR-0112 §3): `WheelUp` turns the wheel away from the person, `WheelDown`
+    /// towards them.
+    pub const WHEEL: [&'static str; 2] = ["WheelUp", "WheelDown"];
 
     /// The keys a chord may end in: W3C UI Events `KeyboardEvent.code` values for the
     /// writing-system keys, digits, function keys, editing and navigation keys, the
@@ -163,6 +173,14 @@ impl Chord {
         &self.0
     }
 
+    /// Whether the chord ends in the wheel ([`Chord::WHEEL`]) rather than a key.
+    pub fn is_wheel(&self) -> bool {
+        self.0
+            .rsplit('+')
+            .next()
+            .is_some_and(|key| Self::WHEEL.contains(&key))
+    }
+
     /// Why this is not a valid chord, or `None` if it is. The engine rejects a chord
     /// with this reason, so every implementation gives the same one.
     pub fn problem(&self) -> Option<String> {
@@ -174,7 +192,7 @@ impl Chord {
         }
         let mut parts: Vec<&str> = self.0.split('+').collect();
         let key = parts.pop().unwrap_or_default();
-        if !Self::KEYS.contains(&key) {
+        if !Self::KEYS.contains(&key) && !Self::WHEEL.contains(&key) {
             return Some(if Self::MODIFIERS.contains(&key) {
                 "must end in a key, not a modifier".into()
             } else {
@@ -259,6 +277,9 @@ mod tests {
             "Ctrl+KeyA",
             "Ctrl+Alt+Shift+Meta+Digit1",
             "Shift+Space",
+            "WheelUp",
+            "Ctrl+WheelUp",
+            "Alt+Shift+WheelDown",
         ] {
             assert_eq!(Chord::new(chord).problem(), None, "{chord}");
         }
@@ -302,6 +323,14 @@ mod tests {
                 "` KeyA` is not a key code this engine knows, such as `KeyA` or `F1`",
             ),
             (
+                "Shift+Ctrl+WheelUp",
+                "modifiers must each appear once, in the order Ctrl, Alt, Shift, Meta",
+            ),
+            (
+                "Ctrl+Wheel",
+                "`Wheel` is not a key code this engine knows, such as `KeyA` or `F1`",
+            ),
+            (
                 "Ctrl +KeyA",
                 "`Ctrl ` is not a modifier: use Ctrl, Alt, Shift or Meta",
             ),
@@ -312,6 +341,17 @@ mod tests {
                 Some(reason),
                 "{chord:?}"
             );
+        }
+    }
+
+    #[test]
+    fn a_chord_knows_whether_it_ends_in_the_wheel() {
+        assert!(Chord::new("WheelUp").is_wheel());
+        assert!(Chord::new("Ctrl+Alt+WheelDown").is_wheel());
+        assert!(!Chord::new("Ctrl+KeyW").is_wheel());
+        assert!(!Chord::new("F1").is_wheel());
+        for wheel in Chord::WHEEL {
+            assert!(!Chord::KEYS.contains(&wheel), "{wheel} is not a key");
         }
     }
 

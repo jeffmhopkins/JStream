@@ -1,5 +1,6 @@
 //! Hotkey bindings (ADR-0024 §5): the `hotkey.*` edits, and the removal of the bindings
-//! that name a deleted object (ADR-0040 §3).
+//! that name a deleted object (ADR-0040 §3). A wheel chord binds only an action that
+//! takes steps (ADR-0112 §3).
 //!
 //! A binding names an object when its action does ([`Action::named_objects`]). Every
 //! object a binding names exists: `hotkey.set` checks it, and the delete edits remove
@@ -38,6 +39,14 @@ fn set(
     }
     if let Some((field, reason)) = action.bind_problem() {
         return Err(invalid(at, &format!("action.{field}"), reason));
+    }
+    if chord.is_wheel() && !action.takes_steps() {
+        return Err(invalid(
+            at,
+            "action.type",
+            "a wheel chord runs once per notch, so it can only be bound to an action that \
+             takes one step, such as `scene.zoom_camera` (ADR-0112)",
+        ));
     }
     for (entity, id) in action.named_objects() {
         if !exists(state, entity, id) {

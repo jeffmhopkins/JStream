@@ -4668,6 +4668,38 @@ mod hotkeys {
     }
 
     /// Rebinding is a clear then a set, in one batch.
+    /// A wheel chord binds an action that takes a step, `scene.zoom_camera`, and
+    /// nothing else (ADR-0112 §3).
+    #[test]
+    fn a_wheel_chord_binds_only_an_action_that_takes_steps() {
+        let mut graph = fixture();
+        let zoom = |steps| Action::SceneZoomCamera {
+            scene_id: SceneId::new("a"),
+            steps,
+        };
+        apply_ok(
+            &mut graph,
+            vec![
+                set("Ctrl+WheelUp", zoom(1)),
+                set("Ctrl+WheelDown", zoom(-1)),
+            ],
+        );
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("Ctrl+WheelDown")),
+            Some(&zoom(-1))
+        );
+        assert_eq!(
+            apply_err(&mut graph, vec![set("Shift+WheelUp", switch("b"))]),
+            ProtocolError::invalid_argument(
+                "edits.0.action.type",
+                "a wheel chord runs once per notch, so it can only be bound to an action \
+                 that takes one step, such as `scene.zoom_camera` (ADR-0112)",
+            )
+        );
+        // A key binds a step action too.
+        apply_ok(&mut graph, vec![set("Equal", zoom(1))]);
+    }
+
     #[test]
     fn a_bound_chord_is_rebound_by_a_clear_and_a_set() {
         let mut graph = bound();

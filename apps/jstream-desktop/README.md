@@ -216,11 +216,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   application holds already is logged and heard only while JStream has the focus. The
   UI setting `hotkeys.global` turns it off (`false`; on otherwise), read through
   `Server::ui_settings`; the UI's Settings dialog shows it in the app. Every chord is
-  let go when it is turned off and when the app stops. On a Wayland session the Linux
-  listener doesn't start (Wayland has no grab; its GlobalShortcuts portal isn't wired
-  yet), and the app has no Linux window yet ([Purpose](#purpose)), so the X11 listener
-  runs once one lands. Wheel chords (ADR-0112 §3), the Wayland portal and the macOS
-  listener aren't built yet.
+  let go when it is turned off and when the app stops. Wheel chords aren't keys, so
+  they aren't registered: the page hears them while it has the focus (ADR-0112 §3). On
+  a Wayland session the Linux listener doesn't start (Wayland has no grab; its
+  GlobalShortcuts portal isn't wired yet), and the app has no Linux window yet
+  ([Purpose](#purpose)), so the X11 listener runs once one lands. The OS wheel hooks,
+  the Wayland portal and the macOS listener aren't built yet.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin

@@ -1241,8 +1241,8 @@ mod x11_tests {
         keyboard.tap(&["F7"]);
         assert_eq!(pressed(&presses), ["F7"]);
 
-        // Num Lock moved to another modifier (as `xmodmap` can) still hears it: the
-        // listener reads the map again and grabs on the new mask.
+        // Num Lock moved from Mod2 to Mod3 (as `xmodmap` can) still hears it: the
+        // listener reads the map again and grabs on the new mask. Then back to Mod2.
         keyboard.move_num_lock(5);
         std::thread::sleep(Duration::from_millis(200));
         keyboard.tap(&["NumLock"]);
