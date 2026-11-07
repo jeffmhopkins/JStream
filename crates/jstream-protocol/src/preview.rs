@@ -97,7 +97,7 @@ impl PreviewSettings {
     /// The heights a client may ask for.
     pub const HEIGHT: std::ops::RangeInclusive<u32> = 16..=1080;
     /// The rates a client may ask for: up to the fastest base rate (ADR-0119), so a
-    /// live view can show a 60 fps program at full rate (since 0.90; 30 before).
+    /// live view can show a 60 fps program at full rate (since 0.97; 30 before).
     pub const FPS: std::ops::RangeInclusive<u32> = 1..=60;
     /// The codecs when the client lists none: H.264, then JPEG.
     pub const DEFAULT_CODECS: [PreviewCodec; 2] = [PreviewCodec::H264, PreviewCodec::Jpeg];

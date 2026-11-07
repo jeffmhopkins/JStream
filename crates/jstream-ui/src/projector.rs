@@ -800,7 +800,7 @@ mod tests {
         };
         assert_eq!(channel, 3);
         assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
-        // Up to a 60 fps base rate (protocol 0.90), and no faster.
+        // Up to a 60 fps base rate (protocol 0.97), and no faster.
         assert_eq!(fps, Some(60));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);
         assert_eq!(scene_id, Some(SceneId::new("s")));

@@ -624,10 +624,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:a44bb50d258302b4", by = "agent:claude", note = "Only the version in the schema snapshots moved to 0.90 for the widened preview fps; the protocol architecture text holds" }
+stamp = { hash = "b3:53af2ef9e4ce6f3f", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:303bd4739ad566d5", by = "agent:claude", note = "Only the version in the schema snapshots moved to 0.90 for the widened preview fps; the protocol architecture text holds" }
+stamp = { hash = "b3:0883d96ce95bdc69", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Control protocol against the PR's whole change: the queries list gained activity.list (0.51, ADR-0083), backed by the new activity.rs (ActivityEntry, MAX_ACTIVITY_ENTRIES 100, MAX_ACTIVITY_SUMMARY_CHARS 256), query.rs's variants, the snapshots and the mock's empty answer with its test; no event is added, so the events line holds. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): the events line gains stats.tick's load (#930) and the queries line keeps this PR's activity.list (0.51); the protocol versions now run 0.48, 0.49, 0.50 from main, then 0.51 for activity.list, with version.rs, the README history and both snapshots regenerated at 0.51." }
@@ -726,7 +726,7 @@ stamp = { hash = "b3:3c64becea4ed816f", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:3d7383c9443e94ef", by = "agent:grok", note = "Re-read the canvas sentence. canvas.set_frame_rate sets the base rate to 30 or 60 at protocol 0.89, beside canvas.set_size." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/preview.rs"]
-stamp = { hash = "b3:d651fd187098cadc", by = "agent:claude", note = "Only the version in the schema snapshots moved to 0.90 for the widened preview fps; the protocol architecture text holds" }
+stamp = { hash = "b3:b51434e0a246f097", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/profile.rs"]
 stamp = { hash = "b3:71caab4bc84353bd", by = "agent:profile-builder", note = "profile.get entry (protocol 0.73, ADR-0103; renumbered from 0.71 as the alpha.4 bump queue assigned) describing drawers, units, sources, planner and thread CPU matches profile.rs, query.rs and the protocol README; Class(R) in plugin.rs, fixtures for every unit, re-exported from lib.rs; the control mock answers it with an empty profile; protocol.snap and examples.snap carry the profile schema, its requests and minor 73. Merge (#1079) reference-error shapes unaffected" }
@@ -750,7 +750,7 @@ stamp = { hash = "b3:b01df98ee0af0900", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "Only the version in the schema snapshots moved to 0.90 for the widened preview fps; the protocol architecture text holds" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1704,7 +1704,7 @@ stamp = { hash = "b3:25f97d745679c9e0", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:f73791b53f864b46", by = "agent:claude", note = "Program streams on the stage: drawn every base/fps th tick, encoder opened at the resulting rate, never above the base (a 60 ask of a 30 stage encodes 30); the protocol's fps cap is now 60" }
 
 ["CRATE-jstream-core#preview-streams"."dep:crates/jstream-protocol/README.md#binary-streams"]
-stamp = { hash = "b3:660c70178c33eaff", by = "agent:claude", note = "Program streams on the stage: drawn every base/fps th tick, encoder opened at the resulting rate, never above the base (a 60 ask of a 30 stage encodes 30); the protocol's fps cap is now 60" }
+stamp = { hash = "b3:4c370c65e8f2760b", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-core#preview-streams"."file:crates/jstream-core/src/preview/draft.rs"]
 stamp = { hash = "b3:30d93f713b6abea8", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to preview/**, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#binary-streams, matching what it relies on" }
@@ -3675,10 +3675,10 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:30f131161c9b08c4", by = "agent:grok", note = "Re-read it. canvas.set_frame_rate is still one edit in a batch. The preview sentence does not change the batch rules." }
 
 ["CRATE-jstream-protocol#binary-streams"."body"]
-stamp = { hash = "b3:660c70178c33eaff", by = "agent:claude", note = "preview.subscribe's fps: default 15, at most 60 since 0.90, 30 before; matches PreviewSettings::FPS" }
+stamp = { hash = "b3:4c370c65e8f2760b", by = "agent:claude", note = "preview.subscribe's fps: default 15, at most 60 since 0.97, 30 before; matches PreviewSettings::FPS" }
 
 ["CRATE-jstream-protocol#binary-streams"."file:crates/jstream-protocol/src/preview.rs"]
-stamp = { hash = "b3:d651fd187098cadc", by = "agent:claude", note = "preview.subscribe's fps: default 15, at most 60 since 0.90, 30 before; matches PreviewSettings::FPS" }
+stamp = { hash = "b3:b51434e0a246f097", by = "agent:claude", note = "preview.subscribe's fps: default 15, at most 60 since 0.97, 30 before; matches PreviewSettings::FPS" }
 
 ["CRATE-jstream-protocol#calls"."body"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, envelope.rs, query.rs, the modules its text names; #purpose still covers all of src/**; depends_on 0013-command-model.md, RULES.md#R-ARCH-006, matching what it relies on; self-links to #design now name this anchor" }
@@ -3711,16 +3711,16 @@ stamp = { hash = "b3:ed14903859b328e5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:a44bb50d258302b4", by = "agent:claude", note = "examples.snap and protocol.snap change only the version 0.89 to 0.90 in hello, welcome, the unsupported_version example and the schema title" }
+stamp = { hash = "b3:53af2ef9e4ce6f3f", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:303bd4739ad566d5", by = "agent:claude", note = "examples.snap and protocol.snap change only the version 0.89 to 0.90 in hello, welcome, the unsupported_version example and the schema title" }
+stamp = { hash = "b3:0883d96ce95bdc69", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "examples.snap and protocol.snap change only the version 0.89 to 0.90 in hello, welcome, the unsupported_version example and the schema title" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
 stamp = { hash = "b3:3419348239df8ce7", by = "agent:claude-timelines", note = "Events list gains scene.keyframe_changed (0.88) for keyframe tracks (ADR-0116, protocol 0.88); plugin class table entry added in plugin.rs. | merge: merge: the timelines branch (#1169) now carries main (the landed wave: codec downloads and other wave text); re-read, keyframe tracks (0.88 on top of 0.87 timelines and main's 0.86) still hold, scene.set_keyframe is in the actions list beside codec.*, and no cue, plugin or MCP rule names a codec op. | kept from the merged side: The Motion contents name MotionKind::Audio, MotionMeasure and MotionCurve since 0.86 (ADR-0100), with the link to the Motion section; the camera motion entry now says check_camera_motion refuses an audio modifier (motion.N.kind), since a camera hears nothing (#1149 review B4). | merge: main into wave/alpha4 (second sync): main changed this section's text through #1041 (Cisco's OpenH264 download on Linux, LNX2). The queries list has codec.downloads beside the wave's video.frames; plugin.rs places the codec calls as never and the wave's calls in their classes. | merge: merge: wave/alpha4's final tip (now main, #1176) brought codec downloads (codec.download, codec.delete, codec.downloads) and other wave text into this section's inputs; re-read, timelines (0.87 on top of main's 0.86) still hold beside it and no cue, plugin or MCP rule names a codec op. | kept from the merged side: merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | merge: wave/alpha4 into #1080 (protocol 0.82): this section's text changed in the merge, from #1125 (item motion, item.set_motion (ADR-0099, 0.81)); #1082 (item.show, item.hide and item.toggle (ADR-0101, 0.80)); #1134 (file filters on master and output chains (0.79)). plugin.rs classes scene.switch_and_watch beside the item actions and item.set_motion; query.rs's video.frames holds. | kept from the merged side: This PR adds values.list to the query list and values.changed to the event list in this section main split out; event.rs's ValuesChanged, plugin.rs's scopes and query.rs's ValuesList match. Holds. | kept from the merged side: Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/** | kept from the merged side: merge: wave/alpha4 into #1125 (protocol 0.81): the merge changed this section's text, from #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)); #1134 (file filters such as Apply LUT on master and output chains (0.79)); #1127 (shared values values.set and values.list (ADR-0102, 0.78)); #1145 (an upright 3D camera at the poles and near-plane outlines); #1122 (camera depth of field (ADR-0108, 0.77)); #1111 (item effects over the canvas, item.set_effects_space (ADR-0106, 0.76)); #1144 (the split of the protocol and core README into topic sections). keyframe.rs's ItemOverride.motion, plugin.rs's edit class for item.set_motion beside #1082's item actions and #1127's values, and query.rs hold against this list. | kept from the merged side: Re-read against ADR-0113: added SceneInfo's camera_motion and camera_follow and a Camera motion and follow entry for camera_motion.rs; the plugin scopes table is described as before; then the release queue gave it 0.84: the camera motion and follow entry now says since 0.84. | Builds on #1125 (item motion, ADR-0099), which this branch carries from its branch and the wave. | merge: wave/alpha4 brought #1080 (frame sheets: video.frames and scene.switch_and_watch, protocol 0.82) and #1104 (an opacity above 1 is a gain on an item's light, protocol 0.83); re-read against them: this PR's camera motion, follow camera and scene.zoom_camera text still holds beside them, the merged lists keep both sides' entries, and the protocol is 0.84 over 0.83 and 0.82. | merge: wave/alpha4 into #1157 (protocol 0.85): this section's text changed in the merge, from #1156 (item.trigger_motion, the impulse kind and the triggered clock (#1107, 0.84)). plugin.rs classes the camera edits as edit, scene.zoom_camera as live and item.trigger_motion as edit; query.rs holds. | kept from the merged side: #1107: the motion bullet names check_motion_id, which lib.rs re-exports and item.trigger_motion uses | merge: wave/alpha4 into #1156 (protocol 0.84): this section's text changed in the merge, from #1104 (opacity above 1 as a gain, MAX_OPACITY (#1101, 0.83)); #1080 (frame sheets, video.frames and scene.switch_and_watch (0.82)). plugin.rs classes item.trigger_motion as edit beside #1080's scene.switch_and_watch; holds. | kept from the merged side: merge: main into #1041 (codec downloads, 0.69): this section's text changed in the merge, from #1127 (shared values, 0.78); #1144 (protocol and core README split into topic sections). The queries list holds codec.downloads beside main's values.list; plugin.rs places all three codec calls as never." }
@@ -3741,7 +3741,7 @@ stamp = { hash = "b3:fbf3d0f4b5795850", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:3d7383c9443e94ef", by = "agent:grok", note = "Re-read the call classes. canvas.set_frame_rate is an edit, class E, like canvas.set_size." }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/preview.rs"]
-stamp = { hash = "b3:d651fd187098cadc", by = "agent:claude", note = "PreviewSettings still fills defaults and range-checks; only the fps range widened to 60" }
+stamp = { hash = "b3:b51434e0a246f097", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/profile.rs"]
 stamp = { hash = "b3:71caab4bc84353bd", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -3777,7 +3777,7 @@ stamp = { hash = "b3:6eef84d0d81bd66e", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "version.rs: minor 89 to 90 only; the error types are unchanged" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:3dcd2ce5c339688e", by = "agent:release-thread", note = "merge: wave/alpha4 into #1125 (protocol 0.81): the merge changed this section's text, from #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)); #1134 (file filters such as Apply LUT on master and output chains (0.79)); #1127 (shared values values.set and values.list (ADR-0102, 0.78)); #1145 (an upright 3D camera at the poles and near-plane outlines); #1122 (camera depth of field (ADR-0108, 0.77)); #1111 (item effects over the canvas, item.set_effects_space (ADR-0106, 0.76)); #1144 (the split of the protocol and core README into topic sections). Re-read the Geometry bullet: it keeps #1125's check_drawable and MAX_LEGACY_SCALE sentence (#1130) before #1144's versions split, with no version list left in it. | kept from the merged side: merge: Re-read this section, which #1144 split out of the crate contents, against this branch: it names CameraView's blur_at, the camera's depth-of-field blur at a distance (ADR-0108), and camera.rs's focus_px, blur_px and validate match it. #1111 changed no geometry here. | kept from the merged side: Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to geometry.rs, geometry/**, the modules its text names; #purpose still covers all of src/**" }
@@ -3855,7 +3855,7 @@ stamp = { hash = "b3:3d06a39c51c5a9e4", by = "agent:release-thread", note = "Add
 stamp = { hash = "b3:4a5e45a1b79165a5", by = "agent:grok", note = "Re-read the version sentence. The protocol is 0.89. The design does not otherwise fix the frame rate." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "version.rs only bumps minor to 90 for an additive widening; the semver design text holds" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4074,7 +4074,7 @@ stamp = { hash = "b3:3c64becea4ed816f", by = "agent:grok", note = "Re-read the o
 stamp = { hash = "b3:3d7383c9443e94ef", by = "agent:grok", note = "Re-read the overview. It points at the version section, which is now 0.89 for canvas.set_frame_rate." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/preview.rs"]
-stamp = { hash = "b3:d651fd187098cadc", by = "agent:claude", note = "preview.rs widens PreviewSettings::FPS to 1..=60 and version.rs moves to 0.90; the purpose list still holds" }
+stamp = { hash = "b3:b51434e0a246f097", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/profile.rs"]
 stamp = { hash = "b3:71caab4bc84353bd", by = "agent:profile-builder", note = "Query list gains profile.get (profile.rs: ProfileInfo, drawers, units, sources, plans, threads; Class(R) in plugin.rs; fixtures for every unit; re-exported from lib.rs); version line 0.73 for profile.get, renumbered from 0.71 as the alpha.4 bump queue assigned; frame_max_ms is the exact longest frame; matches query.rs, version.rs. Merge (#1079) kind.rs reference errors unaffected" }
@@ -4098,7 +4098,7 @@ stamp = { hash = "b3:b01df98ee0af0900", by = "agent:grok", note = "Re-read the p
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "preview.rs widens PreviewSettings::FPS to 1..=60 and version.rs moves to 0.90; the purpose list still holds" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4149,13 +4149,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:c985ab65da22f57a", by = "agent:claude", note = "Added the 0.90 line: preview.subscribe's fps up to 60 (30 before), before the 0.89 frame-rate line" }
+stamp = { hash = "b3:704a24540ca61e19", by = "agent:claude", note = "The preview fps line now reads 0.97 (the queue's slot; 0.90 to 0.96 belong to other PRs, which add their own lines), before the 0.89 frame-rate line" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:300744722474bfb3", by = "agent:claude", note = "Added the 0.90 line: preview.subscribe's fps up to 60 (30 before), before the 0.89 frame-rate line" }
+stamp = { hash = "b3:b2d6bbdc24909ace", by = "agent:claude", note = "The preview fps line now reads 0.97 (the queue's slot; 0.90 to 0.96 belong to other PRs, which add their own lines), before the 0.89 frame-rate line" }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -5421,7 +5421,7 @@ stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:091a1ac0f9162e7f", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/projector.rs"]
-stamp = { hash = "b3:20ec1a69167517a3", by = "agent:claude", note = "Projectors paragraph: one picture asks for the base rate (live_fps, 30 until read) and reopens when it changes; the rest of Design holds" }
+stamp = { hash = "b3:73eb5ae6ba1c7fbf", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This PR adds item lock (canvas: no handles, drag or nudge for a locked item, '· locked' readout; Sources lock button titled 'Lock on the canvas'; item menu Lock check), screenshot.rs (a one-frame png preview stream on a canvas tap at the canvas size within 1920x1080, saved as '<name> <date> <time>.png' through a Blob link whose URL is revoked a few seconds later, toasts with the engine's reason on refusal, a native stand-in), and #1042 N1/N2 (Paste filters, replacing keeps a chain the clip has nothing for; Copy transform takes the whole placement). Paste and Duplicate scene now carry the lock. filters.rs changed only in test fixtures (locked: false). style.css adds the row lock button's style and lets a context menu taller than the window scroll; crop.rs, add_source.rs and filters.rs changed only in test fixtures (locked: false); lib.rs adds the screenshot module; scenes.rs adds Screenshot (scene) to the scene menu." }
@@ -5607,7 +5607,7 @@ stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:091a1ac0f9162e7f", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/projector.rs"]
-stamp = { hash = "b3:20ec1a69167517a3", by = "agent:claude", note = "canvas/preview.rs gains live_fps and Stream.fps; projector pictures follow the base rate; the module list holds" }
+stamp = { hash = "b3:73eb5ae6ba1c7fbf", by = "agent:claude", note = "The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/screenshot.rs"]
 stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This PR adds screenshot.rs to the module list (Screenshot (scene) and (source), a one-frame png preview saved as a file), lock handling in canvas, sources and item_menu, and clipboard changes (lock carried by Paste and Duplicate scene, Paste filters replacing keeps a chain the clip has nothing for); filters.rs changed only in test fixtures. The purpose holds. crop.rs and add_source.rs changed only in test fixtures; lib.rs adds the screenshot module; scenes.rs adds Screenshot (scene)." }
