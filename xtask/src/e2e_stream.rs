@@ -77,7 +77,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
 }
 
 /// Mesa's lavapipe manifest, if it is installed.
-fn lavapipe() -> Option<std::path::PathBuf> {
+pub(crate) fn lavapipe() -> Option<std::path::PathBuf> {
     std::fs::read_dir(ICD_DIR)
         .ok()?
         .flatten()

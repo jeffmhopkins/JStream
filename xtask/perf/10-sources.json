@@ -1,0 +1,317 @@
+[
+  {
+    "name": "colors_200",
+    "about": "200 colour sources, each placed once",
+    "edits": [
+      {
+        "each": {
+          "count": 200,
+          "cols": 20,
+          "cycle": {
+            "colour": [
+              "#e6194bff",
+              "#3cb44bff",
+              "#ffe119ff",
+              "#4363d8ff",
+              "#f58231ff",
+              "#911eb4ff",
+              "#46f0f0ff",
+              "#f032e6ff",
+              "#bcf60cff",
+              "#fabebeff",
+              "#008080ff",
+              "#e6beffff",
+              "#9a6324ff"
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "c200_{i}",
+            "name": "c200_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "color"
+            },
+            "settings": {
+              "color": "$colour",
+              "width": 64,
+              "height": 64
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "colors_200",
+            "item_id": "c200i_{i}",
+            "source_id": "c200_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "shapes_200_shared",
+    "about": "one gradient shape placed 200 times",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "sh_shared",
+        "name": "sh_shared",
+        "kind": {
+          "type": "builtin",
+          "kind": "shape"
+        },
+        "settings": {
+          "shape": "rectangle",
+          "width": 60,
+          "height": 40,
+          "radius": 8,
+          "fill": "linear",
+          "color": "#ff8800ff",
+          "color2": "#0088ffff"
+        }
+      },
+      {
+        "each": {
+          "count": 200,
+          "cols": 20
+        },
+        "edits": [
+          {
+            "type": "item.add",
+            "scene_id": "shapes_200_shared",
+            "item_id": "shs_{i}",
+            "source_id": "sh_shared",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "text_100",
+    "about": "100 text sources with outline and shadow",
+    "edits": [
+      {
+        "each": {
+          "count": 100,
+          "cols": 5
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "tx_{i}",
+            "name": "tx_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "text"
+            },
+            "settings": {
+              "text": "Line {i} the quick brown fox",
+              "size": 20,
+              "shadow_color": "#000000aa",
+              "outline_width": 1
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "text_100",
+            "item_id": "txi_{i}",
+            "source_id": "tx_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "images_50",
+    "about": "50 image sources of one 1080p still",
+    "edits": [
+      {
+        "each": {
+          "count": 50,
+          "cols": 10
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "im_{i}",
+            "name": "im_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "image"
+            },
+            "settings": {
+              "file": "$asset:still.png"
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "images_50",
+            "item_id": "imi_{i}",
+            "source_id": "im_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "gif_20",
+    "about": "one animated GIF placed 20 times",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "gif",
+        "name": "gif",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:anim.gif"
+        }
+      },
+      {
+        "each": {
+          "count": 20,
+          "cols": 5
+        },
+        "edits": [
+          {
+            "type": "item.add",
+            "scene_id": "gif_20",
+            "item_id": "gifi_{i}",
+            "source_id": "gif",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "timers_20",
+    "about": "20 running stopwatches",
+    "edits": [
+      {
+        "each": {
+          "count": 20,
+          "cols": 4
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "tm_{i}",
+            "name": "tm_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "timer"
+            },
+            "settings": {
+              "mode": "stopwatch",
+              "size": 32
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "timers_20",
+            "item_id": "tmi_{i}",
+            "source_id": "tm_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "scopes_8",
+    "about": "8 spectrum and waveform scopes on the program's sound",
+    "edits": [
+      {
+        "each": {
+          "count": 8,
+          "cols": 2,
+          "cycle": {
+            "scope": [
+              "waveform",
+              "spectrum"
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "sc_{i}",
+            "name": "sc_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "$scope"
+            },
+            "settings": {
+              "width": 640,
+              "height": 200
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "scopes_8",
+            "item_id": "sci_{i}",
+            "source_id": "sc_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "backdrop",
+    "about": "one full-canvas animated backdrop",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "bd",
+        "name": "bd",
+        "kind": {
+          "type": "builtin",
+          "kind": "backdrop"
+        },
+        "settings": {}
+      },
+      {
+        "type": "item.add",
+        "scene_id": "backdrop",
+        "item_id": "bdi",
+        "source_id": "bd",
+        "geometry": "$canvas"
+      }
+    ]
+  },
+  {
+    "name": "chat",
+    "about": "one chat message source",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "cm",
+        "name": "cm",
+        "kind": {
+          "type": "builtin",
+          "kind": "chat_message"
+        },
+        "settings": {}
+      },
+      {
+        "type": "item.add",
+        "scene_id": "chat",
+        "item_id": "cmi",
+        "source_id": "cm",
+        "geometry": {
+          "$canvas": 0.4
+        }
+      }
+    ]
+  }
+]

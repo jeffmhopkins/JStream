@@ -35,6 +35,9 @@ use jstream_platform::fake::FakeClock;
 
 /// How long the page may take to paint: a first start makes CEF's cache.
 const PAINT_TIMEOUT: Duration = Duration::from_secs(60);
+/// How long a shown page has to paint 5 distinct frames (#1277). A 30 fps page needs
+/// well under a second; the slack is for a shared runner busy with the other page tests.
+const SHOWN_WINDOW: Duration = Duration::from_secs(10);
 
 /// Left half opaque red, right half the page's own (transparent) background.
 const PAGE: &str = r#"<!doctype html>
@@ -217,32 +220,36 @@ fn a_hidden_page_stops_painting_until_shown() {
             page_api: None,
         })
         .expect("the page opened");
-    // Paints arrive while shown.
-    let paints = |page: &dyn jstream_browser::BrowserPage, within: Duration| -> usize {
-        let deadline = Instant::now() + within;
-        let mut last = page.cpu_frame();
-        let mut count = 0;
-        while Instant::now() < deadline {
-            let now = page.cpu_frame();
-            let changed = match (&last, &now) {
-                (Some(a), Some(b)) => !Arc::ptr_eq(a, b),
-                (None, Some(_)) => true,
-                _ => false,
-            };
-            if changed {
-                count += 1;
-                last = now;
+    // Counts the distinct frames that land within `within`, returning early once `enough`
+    // have. The shown checks wait up to `SHOWN_WINDOW` for 5 paints rather than asking for
+    // them in a fixed second: a loaded shared runner can start the animation slowly
+    // (#1277). The hidden check still counts a whole second and asks for none.
+    let paints =
+        |page: &dyn jstream_browser::BrowserPage, within: Duration, enough: usize| -> usize {
+            let deadline = Instant::now() + within;
+            let mut last = page.cpu_frame();
+            let mut count = 0;
+            while Instant::now() < deadline && count < enough {
+                let now = page.cpu_frame();
+                let changed = match (&last, &now) {
+                    (Some(a), Some(b)) => !Arc::ptr_eq(a, b),
+                    (None, Some(_)) => true,
+                    _ => false,
+                };
+                if changed {
+                    count += 1;
+                    last = now;
+                }
+                std::thread::sleep(Duration::from_millis(5));
             }
-            std::thread::sleep(Duration::from_millis(5));
-        }
-        count
-    };
+            count
+        };
     let deadline = Instant::now() + PAINT_TIMEOUT;
     while page.cpu_frame().is_none() && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(50));
     }
     assert!(
-        paints(&*page, Duration::from_secs(1)) >= 5,
+        paints(&*page, SHOWN_WINDOW, 5) >= 5,
         "it paints while shown"
     );
 
@@ -250,14 +257,14 @@ fn a_hidden_page_stops_painting_until_shown() {
     // Let a paint already under way land.
     std::thread::sleep(Duration::from_millis(300));
     assert_eq!(
-        paints(&*page, Duration::from_secs(1)),
+        paints(&*page, Duration::from_secs(1), usize::MAX),
         0,
         "it rests while hidden"
     );
 
     page.set_hidden(false);
     assert!(
-        paints(&*page, Duration::from_secs(2)) >= 5,
+        paints(&*page, SHOWN_WINDOW, 5) >= 5,
         "it paints again once shown"
     );
     drop(page);
