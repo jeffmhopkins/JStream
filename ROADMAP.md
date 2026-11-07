@@ -188,17 +188,17 @@ maintainer set its scope:
 It ships when all of these hold on the candidate build. The list is unranked; the
 maintainer orders it when the beta is gathered:
 
-1. **The bench passes.** `jstream bench` passes on the Windows pass machine
-   ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
-   seamless preview alpha.5 aims for.
-2. **Every Windows run passes.** Each merged item marked *Windows run* in the README's
-   What's left table passes it, in one acceptance pass on the candidate build rather
-   than one run at a time.
-3. **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
-   browser pages, media files and snapshots work, and stopping is graceful.
-4. **The security basics hold**: the threat-model follow-ups, a permission policy for
-   browser pages, a GPU-hang story for shader packs, and asking before a new agent
-   connects.
+- **The bench passes.** `jstream bench` passes on the Windows pass machine
+  ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
+  seamless preview alpha.5 aims for.
+- **Every Windows run passes.** Each merged item marked *Windows run* in the README's
+  What's left table passes it, in one acceptance pass on the candidate build rather
+  than one run at a time.
+- **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
+  browser pages, media files and snapshots work, and stopping is graceful.
+- **The security basics hold**: the threat-model follow-ups, a permission policy for
+  browser pages, a GPU-hang story for shader packs, and asking before a new agent
+  connects.
 
 Everything else, new features, Linux and macOS included, goes to the alphas before it or
 to the releases after it.
