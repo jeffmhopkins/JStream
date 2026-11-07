@@ -56,12 +56,16 @@ depends_on = ["docs/UI-FEATURES.md"]
 A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
+The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
+resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
+you type) and its frame rate, 30 or 60 fps. Each output scales from that picture.
 
 1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
    then type its name.
 2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
    Pick a type, or type in the search box to find one: display or window capture, a
-   webcam, an audio input (your microphone), a media file, an image, a browser page,
+   webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
+   or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
    backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
