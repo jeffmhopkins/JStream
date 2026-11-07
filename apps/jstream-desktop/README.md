@@ -32,7 +32,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   is, plus the virtual camera) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on); `vcam_status`, whether the camera is registered and current.
-- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows): hears the bound
+- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows and on an X11 session): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
@@ -200,22 +200,27 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `profile.get`'s threads and `WindowsThreadPriority` for the render and mixer threads'
   MMCSS tasks ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
   When the app exits, the server closes its connections and the engine stops.
-- **Hotkeys while another app has the focus.** On Windows the host hears the
+- **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
   `hotkeys.rs` opens its own session on the engine (`jstream-desktop hotkeys` in the
   audit log), reads the bindings from `state.get` and reads them again after each
   `state.changed`, so a chord bound or cleared from any client is heard or let go at
   once. `jstream_platform_windows::GlobalHotkeys` registers exactly those chords with
-  `RegisterHotKey` on its own thread, so the app never sees any other key; a press
+  `RegisterHotKey` on its own thread, and on Linux `jstream_platform_linux::GlobalHotkeys`
+  grabs them on the X root window with `xcb_grab_key`, so the app never sees any other
+  key; a press
   runs the binding's action as an `action` call from that session, and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
   application holds already is logged and heard only while JStream has the focus. The
   UI setting `hotkeys.global` turns it off (`false`; on otherwise), read through
   `Server::ui_settings`; the UI's Settings dialog shows it in the app. Every chord is
-  let go when it is turned off and when the app stops. Wheel chords (ADR-0112 §3) and
-  the macOS and Linux listeners aren't built yet.
+  let go when it is turned off and when the app stops. On a Wayland session the Linux
+  listener doesn't start (Wayland has no grab; its GlobalShortcuts portal isn't wired
+  yet), and the app has no Linux window yet ([Purpose](#purpose)), so the X11 listener
+  runs once one lands. Wheel chords (ADR-0112 §3), the Wayland portal and the macOS
+  listener aren't built yet.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin

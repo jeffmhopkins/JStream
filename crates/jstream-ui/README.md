@@ -164,7 +164,10 @@ Contents ([Design](#design) explains the choices):
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
+  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
+  custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
+  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens and
+  the line an error names tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
@@ -448,7 +451,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
   stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
-  screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
+  screen's size in device pixels, at most 1920×1080, at the collection's base rate
+  (`canvas::preview::live_fps`, 30 until the collection is read), and opens again when
+  that rate changes. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
   storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
   multiview" (in the scene Properties dialog), red-framed on program and green on preview. A double click fills the
@@ -668,6 +673,29 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
   button that sends `effect.enable` (`Studio::enable_effect`); its badge goes once
   `kind.list` no longer marks it.
+  A custom shader (#1232) is an effect pack the UI writes itself: Add filter's Custom
+  shader, last under Effect packs for an owner with a video chain, writes the template
+  with `pack.write` as the first `custom-<n>` that `pack.list` doesn't have, adds a
+  filter of its kind `custom-<n>/shader`, and opens the Filters window with the shader
+  editor over it (`FilterDialogs::shader`). If the add fails, it deletes that pack
+  again. A custom shader's filter always opens the Filters window, where its pane has
+  Edit shader…, which reads the pack with `pack.read` and opens only a pack of
+  `effect.toml` and `shader.wgsl`. The shader file is the whole of it: its `// @name`
+  line and `// @param` lines make the manifest, so one file is edited, and an agent that
+  follows the MCP guidance writes a pack the editor opens. A change compiles 400 ms after
+  the last keystroke, with `pack.write`: an annotation's problem is reported with its
+  line before anything is sent, the engine's names its line in `shader.wgsl`, and the
+  engine keeps drawing the last version that loaded. A write that loads drops the
+  kind's cached descriptor and reads it and `kind.list` again (no event reports a
+  changed kind), so the form and the name follow the shader. Closing never drops a
+  change unsaid (`closing`): Done, × or Escape sends a change still waiting and closes
+  once it loads, and text that doesn't compile keeps the editor open with Close anyway.
+  It shows a quarantine (ADR-0087) with Re-enable, since a new version doesn't lift it.
+  The Filters window's Cancel fits each settings patch to the kind as described now
+  (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
+  window sent and the engine refuses a batch with one such key. Cancel doesn't reach
+  the disk: a written pack stays. The manifest is always `version = 1` with no
+  `renames`, so a renamed setting starts from its default.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
@@ -1086,7 +1114,9 @@ browser, and `mod.rs` is the component.
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
+  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at the
+  collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
+  new stream of the same picture when the rate changes) and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe

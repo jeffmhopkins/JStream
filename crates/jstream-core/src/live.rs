@@ -61,7 +61,7 @@ use crate::filter_assets::{self, AssetKey, FilterAsset, FilterAssets, LoadError,
 use crate::lock;
 use crate::pack_source;
 use crate::profile::SourceMeters;
-use crate::runtime::{FRAME_DEN, FRAME_NUM};
+use crate::runtime::{frame_period, on_frame_grid};
 use crate::snapshot::{CaptureKey, Frame, Look};
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
@@ -1065,8 +1065,11 @@ impl LiveSources {
 
     /// Asks the thread to re-plan at `at`, or at no set time, for the plan: it also wakes
     /// for a granted page's held update ([`Self::feed_pages`]).
-    pub(crate) fn wake_at(&mut self, at: Option<MediaTime>) {
-        self.plan_wake = at;
+    ///
+    /// The time is rounded to the program's frame grid at `fps` ([`replan_time`]), so
+    /// animations out of phase with each other wake the thread once a frame at most.
+    pub(crate) fn wake_at(&mut self, at: Option<MediaTime>, fps: u32) {
+        self.plan_wake = at.map(|at| replan_time(at, fps));
         self.set_wake();
     }
 
@@ -1136,12 +1139,25 @@ fn since(now: MediaTime, start: MediaTime) -> MediaTime {
         .unwrap_or_else(|_| MediaTime::zero(Timebase::MILLIS))
 }
 
-/// One program frame after `now`, when a source that paints on the GPU is planned again.
+/// Just after `now`, when a source that paints on the GPU is planned again: the plan's
+/// wake rounds it to the next frame on the grid ([`replan_time`]).
 fn next_program_frame(now: MediaTime) -> Option<MediaTime> {
-    let period = MediaTime::new(1, Timebase::new(FRAME_NUM, FRAME_DEN).ok()?)
-        .rescale(now.timebase(), Rounding::Up)
-        .ok()?;
-    now.checked_add(period).ok()
+    now.checked_add(MediaTime::new(1, now.timebase())).ok()
+}
+
+/// When to re-plan for a frame change due at `at`, at `fps`: a quarter period before the
+/// first program tick at least that long after `at`, so every change due before a tick
+/// shares one plan, finished by the tick (#1138). A change due within that quarter
+/// before a tick is shown a tick later, as one whose plan took that long already was.
+/// `at` itself when the frame grid can't be worked out.
+fn replan_time(at: MediaTime, fps: u32) -> MediaTime {
+    let rounded = || {
+        let period = frame_period(at.timebase(), fps).ok()?;
+        let lead = MediaTime::new(period.ticks() / 4, at.timebase());
+        let tick = on_frame_grid(at.checked_add(lead).ok()?, period)?;
+        tick.checked_sub(lead).ok()
+    };
+    rounded().unwrap_or(at)
 }
 
 /// The clock time `change` after `start`, rounded up so the frame is due by then.
@@ -1477,5 +1493,35 @@ mod tests {
         assert_eq!(density_for(9.0), 2f32.powf(3.25));
         assert_eq!(density_for(33.0), jstream_sources::MAX_DENSITY);
         assert_eq!(density_for(f32::INFINITY), jstream_sources::MAX_DENSITY);
+    }
+
+    /// Changes due anywhere in one frame share one re-plan, a quarter frame before the
+    /// tick that shows them, and never before they are due (#1138).
+    #[test]
+    fn re_plans_snap_to_the_frame_grid() {
+        use super::replan_time;
+        use crate::runtime::{frame_period, on_frame_grid};
+        use jstream_media::{MediaTime, Timebase};
+
+        let at = |ns: i64| MediaTime::new(ns, Timebase::NANOS);
+        let period = frame_period(Timebase::NANOS, 30).expect("period");
+        let p = period.ticks();
+        assert_eq!(p, 33_333_333);
+        assert_eq!(on_frame_grid(at(0), period), Some(at(0)));
+        assert_eq!(on_frame_grid(at(1), period), Some(at(p)));
+        assert_eq!(on_frame_grid(at(p), period), Some(at(p)));
+        assert_eq!(on_frame_grid(at(p + 1), period), Some(at(2 * p)));
+
+        let lead = p / 4;
+        let wake = at(2 * p - lead);
+        // Out of phase: everything due after the previous frame's wake up to this one.
+        for due in [p - lead + 1, p, p + 1, p + p / 2, 2 * p - lead] {
+            assert_eq!(replan_time(at(due), 30), wake, "due at {due}");
+        }
+        // Due after the wake: planned for the next tick.
+        assert_eq!(replan_time(at(2 * p - lead + 1), 30), at(3 * p - lead));
+        // A faster base rate has a finer grid.
+        let fast = frame_period(Timebase::NANOS, 60).expect("period").ticks();
+        assert_eq!(replan_time(at(1), 60), at(fast - fast / 4));
     }
 }

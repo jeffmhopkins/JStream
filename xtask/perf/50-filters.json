@@ -1,0 +1,794 @@
+[
+  {
+    "name": "vf_aspect_ratio",
+    "about": "one 1080p still with a aspect_ratio filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_aspect_ratio_img",
+        "name": "vf_aspect_ratio_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_aspect_ratio",
+        "item_id": "vf_aspect_ratio_i",
+        "source_id": "vf_aspect_ratio_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_aspect_ratio_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "aspect_ratio"
+      }
+    ]
+  },
+  {
+    "name": "vf_blur",
+    "about": "one 1080p still with a blur filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_blur_img",
+        "name": "vf_blur_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_blur",
+        "item_id": "vf_blur_i",
+        "source_id": "vf_blur_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_blur_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "blur",
+        "settings": {
+          "radius": 12
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_chroma_key",
+    "about": "one 1080p still with a chroma_key filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_chroma_key_img",
+        "name": "vf_chroma_key_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_chroma_key",
+        "item_id": "vf_chroma_key_i",
+        "source_id": "vf_chroma_key_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_chroma_key_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "chroma_key"
+      }
+    ]
+  },
+  {
+    "name": "vf_color_correction",
+    "about": "one 1080p still with a color_correction filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_color_correction_img",
+        "name": "vf_color_correction_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_color_correction",
+        "item_id": "vf_color_correction_i",
+        "source_id": "vf_color_correction_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_color_correction_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "color_correction",
+        "settings": {
+          "saturation": 0.5
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_color_key",
+    "about": "one 1080p still with a color_key filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_color_key_img",
+        "name": "vf_color_key_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_color_key",
+        "item_id": "vf_color_key_i",
+        "source_id": "vf_color_key_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_color_key_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "color_key"
+      }
+    ]
+  },
+  {
+    "name": "vf_drop_shadow",
+    "about": "one 1080p still with a drop_shadow filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_drop_shadow_img",
+        "name": "vf_drop_shadow_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_drop_shadow",
+        "item_id": "vf_drop_shadow_i",
+        "source_id": "vf_drop_shadow_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_drop_shadow_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "drop_shadow"
+      }
+    ]
+  },
+  {
+    "name": "vf_glow",
+    "about": "one 1080p still with a glow filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_glow_img",
+        "name": "vf_glow_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_glow",
+        "item_id": "vf_glow_i",
+        "source_id": "vf_glow_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_glow_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "glow"
+      }
+    ]
+  },
+  {
+    "name": "vf_luma_key",
+    "about": "one 1080p still with a luma_key filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_luma_key_img",
+        "name": "vf_luma_key_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_luma_key",
+        "item_id": "vf_luma_key_i",
+        "source_id": "vf_luma_key_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_luma_key_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "luma_key"
+      }
+    ]
+  },
+  {
+    "name": "vf_outline",
+    "about": "one 1080p still with a outline filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_outline_img",
+        "name": "vf_outline_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_outline",
+        "item_id": "vf_outline_i",
+        "source_id": "vf_outline_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_outline_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "outline"
+      }
+    ]
+  },
+  {
+    "name": "vf_pixelate",
+    "about": "one 1080p still with a pixelate filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_pixelate_img",
+        "name": "vf_pixelate_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_pixelate",
+        "item_id": "vf_pixelate_i",
+        "source_id": "vf_pixelate_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_pixelate_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "pixelate"
+      }
+    ]
+  },
+  {
+    "name": "vf_rounded_corners",
+    "about": "one 1080p still with a rounded_corners filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_rounded_corners_img",
+        "name": "vf_rounded_corners_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_rounded_corners",
+        "item_id": "vf_rounded_corners_i",
+        "source_id": "vf_rounded_corners_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_rounded_corners_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "rounded_corners"
+      }
+    ]
+  },
+  {
+    "name": "vf_scroll",
+    "about": "one 1080p still with a scroll filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_scroll_img",
+        "name": "vf_scroll_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_scroll",
+        "item_id": "vf_scroll_i",
+        "source_id": "vf_scroll_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_scroll_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "scroll",
+        "settings": {
+          "speed_x": -120
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_sharpen",
+    "about": "one 1080p still with a sharpen filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_sharpen_img",
+        "name": "vf_sharpen_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_sharpen",
+        "item_id": "vf_sharpen_i",
+        "source_id": "vf_sharpen_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_sharpen_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "sharpen"
+      }
+    ]
+  },
+  {
+    "name": "vf_vignette",
+    "about": "one 1080p still with a vignette filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_vignette_img",
+        "name": "vf_vignette_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_vignette",
+        "item_id": "vf_vignette_i",
+        "source_id": "vf_vignette_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_vignette_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "vignette"
+      }
+    ]
+  },
+  {
+    "name": "vf_video_delay",
+    "about": "one 1080p still with a video_delay filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_video_delay_img",
+        "name": "vf_video_delay_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_video_delay",
+        "item_id": "vf_video_delay_i",
+        "source_id": "vf_video_delay_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_video_delay_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "video_delay",
+        "settings": {
+          "delay_ms": 500
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_apply_lut",
+    "about": "one 1080p still with a apply_lut filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_apply_lut_img",
+        "name": "vf_apply_lut_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_apply_lut",
+        "item_id": "vf_apply_lut_i",
+        "source_id": "vf_apply_lut_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_apply_lut_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "apply_lut",
+        "settings": {
+          "lut": "$asset:warm.cube"
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_image_mask",
+    "about": "one 1080p still with a image_mask filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_image_mask_img",
+        "name": "vf_image_mask_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_image_mask",
+        "item_id": "vf_image_mask_i",
+        "source_id": "vf_image_mask_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_image_mask_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "image_mask",
+        "settings": {
+          "image": "$asset:mask.png"
+        }
+      }
+    ]
+  },
+  {
+    "name": "vf_scene_mask",
+    "about": "one 1080p still with a scene_mask filter",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "vf_scene_mask_img",
+        "name": "vf_scene_mask_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "vf_scene_mask",
+        "item_id": "vf_scene_mask_i",
+        "source_id": "vf_scene_mask_img",
+        "geometry": {
+          "$canvas": 0.8
+        }
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "source",
+          "source_id": "vf_scene_mask_img"
+        },
+        "chain": "video",
+        "filter_id": "f",
+        "kind": "scene_mask",
+        "settings": {
+          "scene": {
+            "type": "scene",
+            "scene_id": "perf_base"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "effects_many",
+    "about": "one text placed 30 times, each with a drop shadow and an outline on the item",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "ef_t",
+        "name": "ef_t",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "FX",
+          "size": 48
+        }
+      },
+      {
+        "each": {
+          "count": 30,
+          "cols": 6
+        },
+        "edits": [
+          {
+            "type": "item.add",
+            "scene_id": "effects_many",
+            "item_id": "efi_{i}",
+            "source_id": "ef_t",
+            "geometry": "$cell"
+          },
+          {
+            "type": "filter.add",
+            "owner": {
+              "type": "item",
+              "item_id": "efi_{i}"
+            },
+            "chain": "video",
+            "filter_id": "ds",
+            "kind": "drop_shadow"
+          },
+          {
+            "type": "filter.add",
+            "owner": {
+              "type": "item",
+              "item_id": "efi_{i}"
+            },
+            "chain": "video",
+            "filter_id": "ol",
+            "kind": "outline"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "scene_chain",
+    "about": "a still under a scene filter chain: vignette and colour correction",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "sch_img",
+        "name": "sch_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "scene_chain",
+        "item_id": "sch_i",
+        "source_id": "sch_img",
+        "geometry": "$canvas"
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "scene",
+          "scene_id": "scene_chain"
+        },
+        "chain": "video",
+        "filter_id": "v",
+        "kind": "vignette"
+      },
+      {
+        "type": "filter.add",
+        "owner": {
+          "type": "scene",
+          "scene_id": "scene_chain"
+        },
+        "chain": "video",
+        "filter_id": "cc",
+        "kind": "color_correction",
+        "settings": {
+          "saturation": 0.3
+        }
+      }
+    ]
+  }
+]
