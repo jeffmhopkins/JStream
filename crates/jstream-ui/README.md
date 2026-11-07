@@ -101,7 +101,13 @@ Contents ([Design](#design) explains the choices):
   while the page has the focus and no dialog or menu is open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
-  `Collection::chords_for` lists a row's chords), tested natively.
+  `Collection::chords_for` lists a row's chords), tested natively. In the desktop app,
+  File › Settings… also holds "Hear hotkeys while another app has the focus", kept as
+  the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
+  `false`), which the desktop app reads to register the bound chords with the OS
+  ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
+  registers reaches JStream as a hotkey even while the page has the focus, so the page
+  doesn't see that key press.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
