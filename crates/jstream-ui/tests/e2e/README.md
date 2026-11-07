@@ -319,6 +319,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+- **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
+  `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
+  the test writes (the mock engine loads no packs), Add filter › Custom shader writes
+  the template as `custom-1` and opens the editor on it; the coloured copy holds exactly
+  the text, with the annotations, an attribute, a keyword, a call and a type coloured,
+  under a transparent textarea in the same box; Tab indents at the caret and the change
+  compiles ("Compiled."); a line the fake engine refuses is marked in the gutter and
+  named under the text while the colours follow the new text; and scrolling the text
+  scrolls the copy.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
