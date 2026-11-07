@@ -58,7 +58,9 @@ with a preset control for the chosen ones, then every binding and timeline with 
 checkbox that puts the label on or takes it off.
 
 **6. Compatibility.** A protocol minor bump: the edit, the query and the two `labels`
-fields are additions, each omitted when empty, so an older client ignores them. The
+fields are additions, each omitted when empty, so an older client ignores them. Writes are whole, though: an older
+client's `timeline.set` drops a timeline's labels, and its rebind (a clear, then a
+`hotkey.set`) drops a binding's, as a field left out takes its default. The
 collection file gains `hotkeys[].labels` and `scenes[].timelines[].labels` at a new
 schema version. An older file has neither: a binding's labels in one are refused, as that
 version refused them, and a timeline's are dropped, as that version ignored them.

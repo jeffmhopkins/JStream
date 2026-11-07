@@ -906,7 +906,7 @@ fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{HotkeyBinding, SceneInfo, SceneOptions};
+    use jstream_control::protocol::{HotkeyBinding, LabelId, SceneInfo, SceneOptions};
 
     fn switch(id: &str) -> Action {
         Action::SceneSwitch {
@@ -954,13 +954,15 @@ mod tests {
     fn a_new_hotkey_replaces_the_old_and_a_taken_one_is_refused() {
         let c = Collection {
             hotkeys: vec![
-                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F1"), &switch("a"))
+                    .with_labels(vec![LabelId::new("live")]),
                 HotkeyBinding::new(Chord::new("F2"), &switch("b")),
             ],
             ..Collection::default()
         };
         let a = SceneId::new("a");
         let before = draft("A", Some("F1"));
+        // A rebind keeps the old binding's labels (ADR-0133).
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
@@ -970,6 +972,10 @@ mod tests {
                 Edit::HotkeySet {
                     chord: Chord::new("F3"),
                     action: switch("a"),
+                },
+                Edit::HotkeySetLabels {
+                    chord: Chord::new("F3"),
+                    labels: vec![LabelId::new("live")],
                 },
             ])
         );

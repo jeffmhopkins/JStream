@@ -3325,7 +3325,6 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     }
 }
 
-/// A protocol variant added after this mock was written.
 /// The edits that put back a removed binding: its `hotkey.set`, then its
 /// `hotkey.set_labels` when it carried any (ADR-0133).
 fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
@@ -3345,6 +3344,7 @@ fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
     edits
 }
 
+/// A protocol variant added after this mock was written.
 fn unimplemented_by_mock(what: &str) -> ProtocolError {
     ProtocolError::Internal {
         reason: format!("the mock engine does not implement {what}"),
