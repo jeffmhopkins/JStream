@@ -26,6 +26,10 @@ pub const EFFECTS_DIR: &str = "effects";
 /// same workspace.
 pub const UI_SETTINGS_FILE: &str = "ui-settings.json";
 
+/// The file in the data folder that keeps the projects opened most recently (ADR-0121
+/// §6). Only the desktop app keeps one; the daemon opens the file it is given.
+pub const RECENT_COLLECTIONS_FILE: &str = "recent-collections.json";
+
 /// The data folder of this process: [`data_dir_for`] with the running exe's folder and
 /// the process environment. `None` when it can't be found (no usable `APPDATA` on
 /// Windows, no usable `HOME` elsewhere, and no portable marker).

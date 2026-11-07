@@ -261,9 +261,10 @@ fn new_token() -> anyhow::Result<String> {
     }))
 }
 
-/// The engine the app runs: the collection in `collection` (created the first time,
-/// holding only the four sample labels), saved on every change, with `audit` recording
-/// every batch and action.
+/// The engine the app runs: the project opened most recently (ADR-0121 §6), or else the
+/// collection in `collection` (created the first time, holding only the four sample
+/// labels), saved on every change, with `audit` recording every batch and action, and the
+/// recent list kept in `data`.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
@@ -284,10 +285,7 @@ pub fn engine(
     vcam: bool,
     secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
-    let engine = Engine::new()
-        .with_audit(audit)
-        .with_collection_file(collection)
-        .context("could not open the collection")?;
+    let engine = startup_collection(collection, data, &audit)?;
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends(vcam)?;
@@ -444,16 +442,48 @@ fn live(
     engine
 }
 
+/// The engine with the collection it starts on: the most recent project in the recent
+/// list (ADR-0121 §6) if it still loads, else `default`, which is created when missing.
+/// A recent project that doesn't load is logged and skipped, so a moved or broken file
+/// never keeps the app from starting.
+fn startup_collection(
+    default: &Path,
+    data: &Path,
+    audit: &Arc<dyn AuditSink>,
+) -> anyhow::Result<Engine> {
+    let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
+    let engine = || Engine::new().with_audit(Arc::clone(audit));
+    if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
+        && last.is_file()
+    {
+        match engine().with_collection_file(&last) {
+            Ok(engine) => return Ok(engine.with_recent_collections(recent)),
+            Err(error) => tracing::warn!(
+                error = format!("{error:#}"),
+                "the most recent project did not open; opening the default collection"
+            ),
+        }
+    }
+    Ok(engine()
+        .with_collection_file(default)
+        .context("could not open the collection")?
+        .with_recent_collections(recent))
+}
+
 /// On each `output.start`: the output's server URL from the collection, its key from
 /// `keys`, then `connect_rtmp`. No reason carries the key (R-SEC-001).
 #[cfg(windows)]
 fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) -> OpenPublish {
     Arc::new(move |output_id: &OutputId| {
-        let kind = engine
+        let engine = engine
             .get()
             .and_then(Weak::upgrade)
-            .ok_or_else(|| PublishError::new("the engine is shutting down"))?
-            .output_kind(output_id);
+            .ok_or_else(|| PublishError::new("the engine is shutting down"))?;
+        let kind = engine.output_kind(output_id);
+        // The key's name in this project (ADR-0121 §5); no strong handle is kept while
+        // the opener connects.
+        let key_name = engine.stream_key_name(output_id);
+        drop(engine);
         let url = match kind {
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Generic { url },
@@ -470,7 +500,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
             }
         };
         let key: Secret = keys
-            .get(output_id.as_str())
+            .get(&key_name)
             .map_err(|error| PublishError::new(format!("could not read the stream key: {error}")))?
             .ok_or_else(|| {
                 PublishError::new(format!(

@@ -30,12 +30,23 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, the open project with New project…, Open project…, Save
+  project as… and Open recent, Settings…, Video settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
+  `OpenProject`, the open project and the recent ones from `collection.info`, which the
+  header reads at start and again on `collection.file_changed` and `events.dropped`, so a
+  switch any client or agent makes shows at once; `None` while the engine has no
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
+  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
+  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  open project's, or the one the desktop app named at start. Its logic (names, suggested
+  paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
   the UI was built as, the engine's protocol, the licence and links, and each installed
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the

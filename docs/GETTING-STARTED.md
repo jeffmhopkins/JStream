@@ -47,6 +47,11 @@ JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them
 JStream folder instead (to run it from a USB stick), create an empty file named
 `portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
 
+Your scenes, sources and outputs are one project file. **File › Save project as…** saves
+them to a new file, **File › Open project…** and **Open recent** switch to another, and
+**File › New project…** starts an empty one. JStream opens the last project at start.
+Opening one stops any output that is running, and each project keeps its own stream keys.
+
 <a id="scene"></a>
 ## Your first scene
 <!-- @section

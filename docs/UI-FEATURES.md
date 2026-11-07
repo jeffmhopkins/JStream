@@ -55,7 +55,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
-| [Header bar](#header) | 11 | 9 | 0 | 0 | 1 | 1 |
+| [Header bar](#header) | 12 | 10 | 0 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 9 | 1 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 8 | 0 | 0 | 0 | 0 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **138** | **126** | **3** | **0** | **5** | **4** |
+| **Total** | **139** | **127** | **3** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -98,7 +98,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs", "crates/jstream-ui/src/video_settings.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs", "crates/jstream-ui/src/video_settings.rs", "crates/jstream-ui/src/project.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
@@ -116,6 +116,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 | HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then Check for updates, then About JStream. Check for updates compares the version the UI was built as with GitHub's public releases list, pre-releases included, which the desktop app fetches. It says "You're up to date" or names the newer version and links its release page. Nothing is downloaded. A page that isn't the desktop app says the check runs there, and a failure (offline, or a reply that can't be read) is shown in the dialog. File › Settings… ([HD-01](#header)) has "Check for updates at launch", off until the user turns it on, kept in the page's storage, and in the desktop app "Hear hotkeys while another app has the focus", on until the user turns it off, kept on the engine's machine as the UI setting `hotkeys.global` ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md) §6, [KB-07](#keyboard)). When it is on, the desktop app's main window checks once as the workspace opens and shows a dismissable notice under the header only when a newer release exists; a failure shows nothing. `updates.rs`. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. `about.rs`. |
 | HD-11 | Video settings | Beyond the prototype: File › Video settings… sets the base resolution and frame rate, as OBS's Video settings do. | ✅ | The base resolution is the canvas every scene is laid out on, picked from presets (1280×720 to 3840×2160, 1080×1920 vertical, 1080×1080) or typed, each side 1 to 8192. The frame rate is 30 or 60 fps ([ADR-0119](adr/0119-base-frame-rate-option.md)). Apply sends only what changed as one batch of `canvas.set_size` and `canvas.set_frame_rate`, one undo step; a refusal shows in the dialog. Each output's video mix scales from this picture and divides this rate. A running program stage keeps its rate until every output has stopped, which the dialog says. `video_settings.rs`. |
+| HD-12 | Projects | Beyond the prototype: File › New project…, Open project…, Save project as… and Open recent, with the open project's name. | ✅ | [ADR-0121](adr/0121-projects-open-new-and-save-as.md), `project.rs`. The File menu shows a PROJECT heading with the open project's name (its file name without `.json`; the full path as its tooltip), the three items, and up to five recent projects under OPEN RECENT. Each item opens a dialog with the project file's path on the engine's computer, typed or picked with Browse… where the page runs in the desktop app connected to its own engine; `.json` is added to a name without an extension. New and Save as start beside the open project (`Untitled.json`, `<name> copy.json`) and say a project is only saved to a new file; a taken path is refused. Open and New say how many running outputs they stop and that undo history is cleared for everyone connected. A recent project opens at once when no output runs, and through the Open dialog otherwise. The menu follows a switch made by any client or agent (`collection.file_changed`), and Browse… for an asset starts in the open project's folder. An engine with no collection file (the mock) shows none of this. |
 
 <a id="docking"></a>
 ## Docking and layouts
