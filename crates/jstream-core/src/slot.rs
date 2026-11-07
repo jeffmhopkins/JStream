@@ -9,6 +9,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use arc_swap::ArcSwap;
 use jstream_media::{FrameSize, PixelFormat, VideoFrame};
 
 /// The versions slot frames are uploaded under, apart from the ones plans number
@@ -20,13 +21,41 @@ fn next_version() -> u64 {
 }
 
 /// The latest frame of one live source, packed `Rgba8`.
+///
+/// A draw reads it without a lock (R-RT-003): the frame is behind an [`ArcSwap`], and
+/// a draw holds what it read as a [`Latest`] for as long as it uses it. The writers
+/// (the plan and the sources thread) take `retired`, a lock no draw takes, keep each
+/// frame they replace there until no draw holds it, and free it themselves, so the
+/// render thread never drops the last reference to a frame.
 pub(crate) struct FrameSlot {
-    latest: Mutex<Latest>,
+    latest: ArcSwap<Latest>,
+    /// The frames replaced while a draw may still hold them, freed by a later write
+    /// once only this list does.
+    retired: Mutex<Vec<Arc<Latest>>>,
 }
 
-struct Latest {
+/// One frame a slot held, and the version it is uploaded under.
+#[derive(Debug)]
+pub(crate) struct Latest {
     frame: Arc<VideoFrame>,
     version: u64,
+}
+
+impl Latest {
+    /// The frame.
+    pub(crate) fn frame(&self) -> &Arc<VideoFrame> {
+        &self.frame
+    }
+
+    /// The version it is uploaded under: a new one for each frame the slot takes.
+    pub(crate) fn version(&self) -> u64 {
+        self.version
+    }
+
+    /// Its packed bytes, `width * height * 4` of them.
+    pub(crate) fn rgba(&self) -> &[u8] {
+        rgba(&self.frame)
+    }
 }
 
 /// What [`FrameSlot::store`] did with a frame.
@@ -46,28 +75,39 @@ impl FrameSlot {
     pub(crate) fn new(frame: Arc<VideoFrame>) -> Option<Arc<Self>> {
         packed(&frame).then(|| {
             Arc::new(Self {
-                latest: Mutex::new(Latest {
+                latest: ArcSwap::from_pointee(Latest {
                     frame,
                     version: next_version(),
                 }),
+                retired: Mutex::new(Vec::new()),
             })
         })
     }
 
     /// Hands `frame` to every compositor's next draw, if it is the slot's size and
-    /// packed. Never blocks for longer than a swap.
+    /// packed. Never blocks a draw.
+    #[cfg(test)]
     pub(crate) fn store(&self, frame: Arc<VideoFrame>) -> Stored {
-        let mut latest = self.lock();
-        if Arc::ptr_eq(&latest.frame, &frame) {
+        self.store_latest(|| frame)
+    }
+
+    /// [`Self::store`] of the frame `latest` gives, read while no other write runs: the
+    /// plan and the sources thread both store a painter's frame, and whichever writes
+    /// last reads the newest, so the slot never goes back to an older one.
+    pub(crate) fn store_latest(&self, latest: impl FnOnce() -> Arc<VideoFrame>) -> Stored {
+        let mut retired = self.lock();
+        let frame = latest();
+        let held = self.latest.load_full();
+        if Arc::ptr_eq(&held.frame, &frame) {
             return Stored::Same;
         }
-        if frame.info().size != latest.frame.info().size || !packed(&frame) {
+        if frame.info().size != held.frame.info().size || !packed(&frame) {
             return Stored::Refused;
         }
-        *latest = Latest {
-            frame,
-            version: next_version(),
-        };
+        drop(held);
+        let freed = self.swap(&mut retired, frame);
+        drop(retired);
+        drop(freed);
         Stored::New
     }
 
@@ -77,38 +117,55 @@ impl FrameSlot {
         if !packed(&frame) {
             return false;
         }
-        let mut latest = self.lock();
-        if !Arc::ptr_eq(&latest.frame, &frame) {
-            *latest = Latest {
-                frame,
-                version: next_version(),
-            };
+        let mut retired = self.lock();
+        if !Arc::ptr_eq(&self.latest.load().frame, &frame) {
+            let freed = self.swap(&mut retired, frame);
+            drop(retired);
+            drop(freed);
         }
         true
     }
 
-    /// The frame the slot holds now, and its version.
-    pub(crate) fn latest(&self) -> (Arc<VideoFrame>, u64) {
-        let latest = self.lock();
-        (Arc::clone(&latest.frame), latest.version)
+    /// Puts `frame` in the slot and retires the one it held; gives back the retired
+    /// frames no draw holds any more, for the caller to free once it lets go of the lock.
+    fn swap(&self, retired: &mut Vec<Arc<Latest>>, frame: Arc<VideoFrame>) -> Vec<Arc<Latest>> {
+        let old = self.latest.swap(Arc::new(Latest {
+            frame,
+            version: next_version(),
+        }));
+        retired.push(old);
+        // A retired frame is out of the slot, so no draw can take it again: once only
+        // this list holds it, it stays that way.
+        let (freed, held) = retired
+            .drain(..)
+            .partition(|latest| Arc::strong_count(latest) == 1);
+        *retired = held;
+        freed
+    }
+
+    /// The frame the slot holds now, and its version. Lock-free. A draw keeps it while
+    /// it reads the frame; dropping it never frees the frame, which the slot's writers
+    /// do.
+    pub(crate) fn latest(&self) -> Arc<Latest> {
+        self.latest.load_full()
     }
 
     /// The size of the frame it holds.
     pub(crate) fn size(&self) -> FrameSize {
-        self.lock().frame.info().size
+        self.latest.load().frame.info().size
     }
 
-    fn lock(&self) -> MutexGuard<'_, Latest> {
-        self.latest.lock().unwrap_or_else(PoisonError::into_inner)
+    fn lock(&self) -> MutexGuard<'_, Vec<Arc<Latest>>> {
+        self.retired.lock().unwrap_or_else(PoisonError::into_inner)
     }
 }
 
 impl std::fmt::Debug for FrameSlot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let (frame, version) = self.latest();
+        let latest = self.latest();
         f.debug_struct("FrameSlot")
-            .field("size", &frame.info().size)
-            .field("version", &version)
+            .field("size", &latest.frame.info().size)
+            .field("version", &latest.version)
             .finish()
     }
 }
@@ -125,7 +182,7 @@ fn packed(frame: &VideoFrame) -> bool {
 }
 
 /// The packed bytes of `frame`, as [`FrameSlot`] keeps it: `width * height * 4`.
-pub(crate) fn rgba(frame: &VideoFrame) -> &[u8] {
+fn rgba(frame: &VideoFrame) -> &[u8] {
     let size = frame.info().size;
     let len = size.width() as usize * size.height() as usize * 4;
     frame
@@ -163,18 +220,37 @@ mod tests {
     fn a_slot_takes_frames_of_its_size_and_a_plan_takes_any() {
         let first = frame(2, 1, 1);
         let slot = FrameSlot::new(Arc::clone(&first)).expect("packed");
-        let (_, v1) = slot.latest();
+        let v1 = slot.latest().version();
         assert_eq!(slot.store(Arc::clone(&first)), Stored::Same);
         let second = frame(2, 1, 2);
         assert_eq!(slot.store(Arc::clone(&second)), Stored::New);
-        let (held, v2) = slot.latest();
-        assert!(Arc::ptr_eq(&held, &second) && v2 > v1);
+        let held = slot.latest();
+        let v2 = held.version();
+        assert!(Arc::ptr_eq(held.frame(), &second) && v2 > v1);
         let wider = frame(3, 1, 3);
         assert_eq!(slot.store(Arc::clone(&wider)), Stored::Refused);
         assert_eq!(slot.size(), FrameSize::new(2, 1).expect("size"));
         assert!(slot.replace(Arc::clone(&wider)));
-        let (held, v3) = slot.latest();
-        assert!(Arc::ptr_eq(&held, &wider) && v3 > v2);
-        assert_eq!(super::rgba(&held), &[3; 12]);
+        let held = slot.latest();
+        assert!(Arc::ptr_eq(held.frame(), &wider) && held.version() > v2);
+        assert_eq!(held.rgba(), &[3; 12]);
+    }
+
+    /// A frame a draw still holds when the slot takes another is kept, not freed by the
+    /// draw letting go of it: the next write frees it (R-RT-003).
+    #[test]
+    fn a_replaced_frame_a_draw_holds_is_freed_by_a_later_write() {
+        let first = frame(1, 1, 1);
+        let slot = FrameSlot::new(Arc::clone(&first)).expect("packed");
+        let drawing = slot.latest();
+        assert_eq!(slot.store(frame(1, 1, 2)), Stored::New);
+        drop(drawing);
+        assert_eq!(
+            Arc::strong_count(&first),
+            2,
+            "the slot still keeps it, retired"
+        );
+        assert_eq!(slot.store(frame(1, 1, 3)), Stored::New);
+        assert_eq!(Arc::strong_count(&first), 1, "freed by the write");
     }
 }

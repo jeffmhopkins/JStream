@@ -1000,10 +1000,18 @@ impl LiveSources {
             slot: slotted,
             extent,
             size,
+            source,
             ..
         } = running;
         let (slot, shown) = slotted.as_mut()?;
-        let resized = slot.store(Arc::clone(video)) == Stored::Refused;
+        // The painter's frame as it is when stored, not `video`: the sources thread may
+        // have painted and stored a newer one since it was read.
+        let painter = source.painter();
+        let resized = slot.store_latest(|| {
+            painter
+                .as_ref()
+                .map_or_else(|| Arc::clone(video), |painter| painter.frame())
+        }) == Stored::Refused;
         if resized && !slot.replace(Arc::clone(video)) {
             *slotted = None;
             return None;
@@ -1407,7 +1415,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                     let Some(slot) = &painted.slot else {
                         continue;
                     };
-                    replan |= slot.store(painted.painter.frame()) == Stored::Refused;
+                    replan |= slot.store_latest(|| painted.painter.frame()) == Stored::Refused;
                     let due = painted
                         .painter
                         .next_change(at)

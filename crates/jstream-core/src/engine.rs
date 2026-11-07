@@ -2785,6 +2785,7 @@ impl Shared {
             }
         };
         Ok(frames::Sample {
+            pinned: snapshot.shot().pin(),
             snapshot,
             live: state.render.load_live(),
             rev: state.graph.rev(),
