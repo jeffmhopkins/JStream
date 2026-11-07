@@ -1980,6 +1980,16 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// the clock: a clock that runs slow or jumps is followed within this.
 const MAX_TICK_WAIT: Duration = Duration::from_millis(4);
 
+/// How long until the mixer's next block is `due`, from `now` on the media clock. The
+/// mixer counts in its sample rate and the clock in its own time base (100 ns on
+/// Windows), so `due` is rescaled to the clock's first: [`until_due`] across two time
+/// bases would wait only its floor, and the thread would wake about 10,000 times a
+/// second. A `due` that can't be rescaled waits 1 ms, as before the first block.
+fn until_block(now: MediaTime, due: MediaTime) -> Duration {
+    due.rescale(now.timebase(), Rounding::Up)
+        .map_or(Duration::from_millis(1), |due| until_due(now, due))
+}
+
 /// How long until `due` on the media clock, from `now`, at most [`MAX_TICK_WAIT`] and
 /// never zero, so a clock that cannot say still leaves the thread asleep a moment.
 fn until_due(now: MediaTime, due: MediaTime) -> Duration {
@@ -3973,11 +3983,9 @@ fn mixer_loop(
             }
             // Asleep until the next block is due on the media clock (ADR-0117 §9), not
             // in 1 ms polls; before the first block, a short wait.
-            Ok(None) => thread::sleep(
-                mixer
-                    .next_due()
-                    .map_or(Duration::from_millis(1), |due| until_due(clock.now(), due)),
-            ),
+            Ok(None) => thread::sleep(mixer.next_due().map_or(Duration::from_millis(1), |due| {
+                until_block(clock.now(), due)
+            })),
             Err(err) => {
                 report(fail, format!("mixer poll failed: {err}"));
                 break;
@@ -4308,7 +4316,7 @@ mod tests {
     use super::{
         DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw,
         Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock,
-        open_video, output_size, push_each, stream_info, video_config,
+        open_video, output_size, push_each, stream_info, until_block, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -5379,5 +5387,20 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The mixer's due time is in its sample rate, the clock's in its own time base:
+    /// the wait is how long is left, not the floor a time-base mismatch gave (#1271 B1).
+    #[test]
+    fn the_mixer_waits_for_its_block_on_a_clock_of_another_time_base() {
+        use std::time::Duration;
+        // A Windows-like clock in 100 ns units, at 1 s; the block due 2 ms later at 48 kHz.
+        let hundred_ns = Timebase::new(1, 10_000_000).expect("time base");
+        let now = MediaTime::new(10_000_000, hundred_ns);
+        let due = MediaTime::new(48_000 + 96, Timebase::new(1, 48_000).expect("time base"));
+        assert_eq!(until_block(now, due), Duration::from_millis(2));
+        // Further off than a wait may last: the cap, so a stop is still seen soon.
+        let later = MediaTime::new(48_000 * 2, Timebase::new(1, 48_000).expect("time base"));
+        assert_eq!(until_block(now, later), super::MAX_TICK_WAIT);
     }
 }
