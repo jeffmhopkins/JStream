@@ -1114,7 +1114,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
-  countdown and grouping recipes, fitting boxes to text, animating with keyframe
+  countdown and grouping recipes, fitting boxes to text, a custom shader the UI's
+  shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
   `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
