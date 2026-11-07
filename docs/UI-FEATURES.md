@@ -89,10 +89,10 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 | WS-01 | Dark palette | Dark only: app `#0F1115`, panels `#16191E`, dock zones `#121418`, canvas area `#0A0B0E`, menus `#1F232A`, borders `#262A31`/`#2E333B`, text `#E6E8EB`/`#9AA1AC`/`#7D8590`, accent `#4C8DFF`, selected `#22324A`, danger `#C62F36`. | ✅ | The palette's CSS variables in `style.css`; panels restyle further in their own rows. The `--code-*` variables colour WGSL in the custom shader editor ([FL-12](#filters)). |
 | WS-02 | Fonts | IBM Plex Sans 13px for the UI, IBM Plex Mono for numbers and readouts. | ✅ | Bundled in `crates/jstream-ui/fonts/` under the SIL OFL 1.1, with `OFL.txt` beside the files ([ADR-0077](adr/0077-bundle-ibm-plex-fonts.md)): IBM's Latin-1 woff2 subsets, Sans at 400, 600 and 700 and Mono at 400 and 600, served from the page's own origin as its CSP requires. `font-display: swap` shows the system font until they load. |
 | WS-03 | Scrollbars, focus and selection | Thin 10px scrollbars (`#3A3F48` thumb), 2px accent focus ring, `#2B4A7A` text selection. | ✅ | |
-| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | ✅ | The prototype's icons are in `icons.rs`, its mask icon among them (the scene-reference badge, [OB-05](#objects)), with a close, a reset and a cube icon (the 3D model type's) added, and the tool bars' plus, trash, gear, sliders and arrows ([SC-11](#scenes), [OB-10](#objects)); the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Sources rows, the Filters panel, the labels (chips, tag buttons, the manager's icon picker), the Inspector's header, the output cards and the settings' reset use them. The dialogs' close buttons keep the prototype's ×. |
+| WS-04 | Icons | 24×24 stroke icons (1.8 stroke, round caps) for source types, scene kinds, labels and tools, in place of text glyphs. | ✅ | The prototype's icons are in `icons.rs`, its mask icon among them (the scene-reference badge, [OB-05](#objects)), with a close, a reset and a cube icon (the 3D model type's) added, and the tool bars' plus, trash, gear, sliders and arrows ([SC-11](#scenes), [OB-10](#objects)); the Add source, Properties and filter dialogs, the canvas tools, the Scenes and Sources rows, the Filters panel, the labels (chips, tag buttons, the manager's icon picker), the Inspector's header, the output rows and the settings' reset use them. The dialogs' close buttons keep the prototype's ×. |
 | WS-05 | Number field | Stepper with − and +, typed entry (Enter commits, Escape cancels, `−` and `,` accepted), arrow keys (Shift fine, Ctrl coarse), and pointer scrubbing (3px per step, Shift ×0.1, Ctrl ×4). | ✅ | `NumberField` (`panels/number.rs`), used by the Inspector and the mixer's channel rows (named by the row, with no label above) and strips (stacked, scrubbed up and down); the filters and dialogs take it as they are rebuilt. A drag shows its value as it goes and is sent once on release, so it is one undo step, where the prototype writes every step. |
 | WS-06 | Foldable section headers | Caret plus uppercase title; folded sections show a hint ("cropped", "in use"); fold state remembered per title. | ✅ | `Fold` in `inspector.rs`: caret, uppercase title and folded hint ("cropped", "in use", the transitions hint). `Folds` remembers each title's state across items and reloads, in the browser's storage (`jstream.folds`); 3D and Scene switches (IN-10) start folded. The mixer's Buses section uses it too. |
-| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ✅ | The Scenes and Sources rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye, a favourite's star and an open tag button stay shown; the filter rows' × (`filters.rs`). The Transitions panel's preset editor shows Make default and Delete without hover, on every preset but the default ([TR-03](#transitions)). An output card's Start, Stop, Edit and Delete are its main controls, not row tools, so they always show. |
+| WS-07 | Hover-revealed row buttons | Row tools fade in on hover or focus, and stay shown while their state is on. | ✅ | The Scenes and Sources rows (`tree.rs`): the buttons fade in over 120 ms on hover or focus, and a hidden item's eye, a favourite's star and an open tag button stay shown; the filter rows' × (`filters.rs`). The Transitions panel's preset editor shows Make default and Delete without hover, on every preset but the default ([TR-03](#transitions)). An output row's Start or Stop, FX and ⋯ are its main controls, not row tools, so they always show. |
 | WS-08 | Toasts | One toast at a time, bottom centre, hides after 4.5 s. | ✅ | `Toast` in `app.rs` (`Studio::notify`, `apply_noting`): "Added a reference…" after placing an existing source again or Duplicate as reference, "Added a clone…" after Duplicate as clone. Failed calls stay in the sticky problem bar. |
 
 <a id="header"></a>
@@ -366,15 +366,35 @@ covers = ["crates/jstream-ui/src/panels/outputs.rs"]
 
 Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel). The real
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
-prototype doesn't show; that stays ([Beyond](#beyond)). A stopped card's Edit changes an
-RTMP output's server URL or a recording's file path (`output.set_path`, #1072). In the
-desktop app a recording's path has a Browse… button that opens a save dialog.
+prototype doesn't show; that stays ([Beyond](#beyond)). Since #1206 the dock holds a
+compact, live-first list, OBS-style: the header's "Outputs" carries the pipeline's health
+as a dot and a word ("Healthy", "Dropping (N)", "No stats yet", with the detail on hover),
+then one row per output with its kind icon, ID, a one-line summary (the server's host, the
+recording's file name or "Webcam", then the encoder profile's name), a ⚠ when the engine
+says the key would cross the network unencrypted (the full warning on hover), a state
+badge (grey stopped, amber starting or stopping, red live, red outline failed), Start
+(▶, off with the reason under the name, such as "Set a stream key first.") or a red Stop
+(■), its FX button and a ⋯ menu (Settings…, Delete…, the same on a right-click). A live
+row gets a red edge. Under the rows, "+ Add output" and "Encoders & mixes…" open dialogs.
+
+An output's settings dialog (Settings…, or a double-click on its row) has General (the
+server URL or the recording's path, with Browse… in the desktop app, and the stream key),
+Video (the mix, or "Program (canvas size)"), Encoder (the profile, with "Encoders &
+mixes…") and Audio (the bus). Nothing applies until OK or Apply, which send what changed
+as one batch (`output.set_target`, `output.set_path` (#1072), `output.set_encoder`,
+`output.set_video_mix`, `output.set_audio_buses`), then the key. A set key reads
+"••••••••" with Change… and Remove; the key is write-only, so there is no Show. While the
+output runs, its target and bus are off, with a note. Delete… (bottom left) and the row's
+Delete… ask first. "+ Add output" opens the same dialog with a kind picker (Stream,
+Recording, Virtual camera); OK becomes Add and sends `output.create` with the other fields
+in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. The Encoders & mixes dialog holds the encoder profile and video mix lists
+and their forms; a new profile is named "Default H.264".
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| OU-01 | Program output row | "Program output" first, "master", with an FX button for the master chain. | ✅ | `outputs.rs`: the row above the output cards, its "FX N" button always blue, titled "Filters on everything leaving JStream", shows the master chain in the Filters panel ([FL-07](#filters)). |
-| OU-02 | Output rows | Each output indented under it with its status and "FX N". | ✅ | Each output's ID, indented, with its state ("Stopped", "Live"…) and "FX N", blue once its chain holds a filter, titled "Filters for <ID> only". The cards below keep the controls the prototype lacks ([Beyond](#beyond)). |
-| OU-03 | Footnote | "Program filters apply to every output; each output can add its own after them." | ✅ | Under the rows. |
+| OU-01 | Program output row | "Program output" first, "master", with an FX button for the master chain. | ✅ | `outputs.rs`: the first row, its "FX N" button always blue, titled "Filters on everything leaving JStream", shows the master chain in the Filters panel ([FL-07](#filters)). |
+| OU-02 | Output rows | Each output indented under it with its status and "FX N". | ✅ | Each output once, on its own row: its ID, summary, state badge, Start or Stop and "FX N", blue once its chain holds a filter, titled "Filters for <ID> only". Its settings are in its dialog ([Beyond](#beyond)). |
+| OU-03 | Footnote | "Program filters apply to every output; each output can add its own after them." | ✅ | The program row's tooltip, not a paragraph (#1206). |
 | OU-04 | YouTube output | A YouTube stream row bound to the chosen broadcast. | 🔒 | A6b and the OAuth client. |
 
 <a id="transitions"></a>
@@ -488,11 +508,12 @@ not remove them; they move into the prototype's look.
   pill under the frame reads the camera's position and distance to its target.
 - Undo and redo, with the engine's history.
 - Delete plans: deleting a scene, source or bus shows what else it takes.
-- Outputs: creating stream, recording and virtual camera outputs, the write-only stream
-  key, per-output start and stop, the encoder profile, video mix and audio bus each
-  output uses (its card's Encoder, Video and Audio selects, which a virtual camera's
-  card doesn't have; the bus only while it is stopped), virtual camera registration hints, and the pipeline's health line.
-- Encoder profiles and video mixes, under the output cards (`encoders.rs`): each listed
+- Outputs ([Outputs](#outputs)): creating stream, recording and virtual camera outputs,
+  the write-only stream key, per-output start and stop on each row, the encoder profile,
+  video mix and audio bus each output uses (its settings dialog's Encoder, Video and
+  Audio, which a virtual camera's doesn't have; the bus only while it is stopped),
+  virtual camera registration hints, and the pipeline's health in the panel's header.
+- Encoder profiles and video mixes, in the Outputs panel's Encoders & mixes dialog (`encoders.rs`): each listed
   with what it encodes or shows, made or edited in a form checked as the engine checks
   it, and deleted once no output uses it. A profile has the video codec (H.264, HEVC or
   AV1), constant or variable bit rate with its peak, the keyframe interval, the hardware
