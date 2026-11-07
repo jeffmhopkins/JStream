@@ -417,10 +417,6 @@ fn row(name: &str, about: &str, profile: &Value, process: Option<Value>, seconds
         .unwrap_or(Value::Null);
     let frames = program["frames"].as_u64().unwrap_or(0);
     let covered = profile["seconds"].as_f64().unwrap_or(f64::from(seconds));
-    #[allow(
-        clippy::cast_precision_loss,
-        reason = "frame counts over a minute are far below 2^52"
-    )]
     let fps = if covered > 0.0 {
         frames as f64 / covered
     } else {

@@ -51,14 +51,8 @@ fn mask_pixel(x: u32, y: u32) -> u8 {
     let dx = f64::from(x) - 256.0;
     let dy = f64::from(y) - 256.0;
     let d = (dx * dx + dy * dy).sqrt() / 362.0;
-    // In 0..=255 by construction.
-    #[allow(
-        clippy::cast_possible_truncation,
-        clippy::cast_sign_loss,
-        reason = "clamped to 0..=255 first"
-    )]
-    let v = ((1.0 - d).clamp(0.0, 1.0) * 255.0) as u8;
-    v
+    // In 0..=255 by construction: clamped first.
+    ((1.0 - d).clamp(0.0, 1.0) * 255.0) as u8
 }
 
 /// What a PNG's pixels are.

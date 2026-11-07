@@ -204,7 +204,6 @@ fn geometry(x: f64, y: f64, w: f64, h: f64) -> Value {
 }
 
 /// The geometry of a grid cell, 4 pixels smaller than the cell on each axis.
-#[allow(clippy::cast_precision_loss, reason = "cell counts are far below 2^52")]
 fn cell_geometry(cell: &Cell<'_>, canvas: (f64, f64)) -> Value {
     let rows = cell.count.div_ceil(cell.cols).max(1);
     let (cw, ch) = (canvas.0 / cell.cols as f64, canvas.1 / rows as f64);
