@@ -810,10 +810,10 @@ stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:cc9ecec38c66df9c", by = "agent:ui-layouts", note = "Added the UI settings bullet for protocol 0.52 (ADR-0084): ui_settings.set action and ui_settings.get query, answered by jstream-server with pairing off too, unsupported with no server; Pairing bullet unchanged and still true." }
 
 ["ARCH#repo-layout"."body"]
-stamp = { hash = "b3:80247d978168e9bb", by = "agent:browser-linux", note = "xtask gained browser-linux (the Linux browser helper's folder); added it to the xtask line." }
+stamp = { hash = "b3:6e75e4e4f450bd6d", by = "agent:claude-perf-suite", note = "xtask/ line names perf (the perf suite and its scenes, xtask/perf/); main.rs registers the perf command and its usage line and Docs: line, nothing else in the layout moved" }
 
 ["ARCH#repo-layout"."file:xtask/src/main.rs"]
-stamp = { hash = "b3:0f5529a6b5c98a89", by = "agent:browser-linux", note = "xtask gained browser-linux (the Linux browser helper's folder); added it to the xtask line." }
+stamp = { hash = "b3:719754f814054084", by = "agent:claude-perf-suite", note = "xtask/ line names perf (the perf suite and its scenes, xtask/perf/); main.rs registers the perf command and its usage line and Docs: line, nothing else in the layout moved" }
 
 ["ARCH#shape"."body"]
 stamp = { hash = "b3:7f57ebb860a14b74", by = "agent:claude", note = "jstream-desktop crate-map row now adds that --mcp gives a token file and MCP for agents, matching host.rs" }
@@ -2295,7 +2295,7 @@ stamp = { hash = "b3:669f401b1f08148c", by = "agent:claude-alpha4-nice", note = 
 stamp = { hash = "b3:4fd0939213ad84da", by = "agent:claude@session_01FGswf5tb1RYD9rNRZFDz7W", note = "OpenH264 pin: only the module doc changed, saying the harness uses OpenH264 when JSTREAM_E2E_OPENH264 is set (CI downloads it); matches the section's stand-in sentence" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:xtask/src/e2e_stream.rs"]
-stamp = { hash = "b3:517cc7668c494295", by = "agent:claude@session_01FGswf5tb1RYD9rNRZFDz7W", note = "OpenH264 pin: the xtask now takes --openh264-download (sets JSTREAM_E2E_OPENH264=download) besides --openh264 <library>, and its usage message names both; matches the encoder paragraph" }
+stamp = { hash = "b3:f942e884b91cb685", by = "agent:claude-perf-suite", note = "e2e_stream.rs only makes lavapipe() pub(crate) so cargo xtask perf points Vulkan at lavapipe the same way; the harness, its flags and CI use are unchanged" }
 
 ["CRATE-jstream-daemon#usage"."body"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "--effects-dir now also says each [[source]] table is a source kind <pack>/<source> (ADR-0093 part 2); the rest of the flag table is unchanged." }
@@ -6295,6 +6295,48 @@ stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usa
 
 ["GETTING-STARTED#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
+
+["PERF-SUITE#runner"."body"]
+stamp = { hash = "b3:2ca955e403694763", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+
+["PERF-SUITE#runner"."file:xtask/src/perf/assets.rs"]
+stamp = { hash = "b3:c71fe44b7f05248e", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+
+["PERF-SUITE#runner"."file:xtask/src/perf/client.rs"]
+stamp = { hash = "b3:4b28a45ac91e63ee", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+
+["PERF-SUITE#runner"."file:xtask/src/perf/mod.rs"]
+stamp = { hash = "b3:6295ffa08b284546", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+
+["PERF-SUITE#runner"."file:xtask/src/perf/scene.rs"]
+stamp = { hash = "b3:c0237a4aa2736572", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+
+["PERF-SUITE#scenes"."body"]
+stamp = { hash = "b3:52eeebe164331963", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/10-sources.json"]
+stamp = { hash = "b3:8badc698830eda7c", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/20-nesting.json"]
+stamp = { hash = "b3:2d83d06c61a6221d", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/30-3d.json"]
+stamp = { hash = "b3:36729f9057c63529", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/40-browser.json"]
+stamp = { hash = "b3:6d30062ba5a91233", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/50-filters.json"]
+stamp = { hash = "b3:589d29582ec531e9", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#scenes"."file:xtask/perf/60-churn.json"]
+stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
+
+["PERF-SUITE#thresholds"."body"]
+stamp = { hash = "b3:d8ee202d65c1afbb", by = "agent:claude-perf-suite", note = "new section: checked against Thresholds in perf/mod.rs (default plus per-scene override, min_fps, max_frame_ms, max_over_budget_pct, leak limits across churn and run-wide threads/handles only, unknown keys fail, didn't-run rows fail) and thresholds.toml's per-scene software limits" }
+
+["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
+stamp = { hash = "b3:3c821a9b16115f93", by = "agent:claude-perf-suite", note = "new section: checked against Thresholds in perf/mod.rs (default plus per-scene override, min_fps, max_frame_ms, max_over_budget_pct, leak limits across churn and run-wide threads/handles only, unknown keys fail, didn't-run rows fail) and thresholds.toml's per-scene software limits" }
 
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
