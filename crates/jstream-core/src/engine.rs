@@ -51,13 +51,13 @@ use jstream_platform::{
     Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
-    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
-    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
-    YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
+    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
+    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
+    VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1917,7 +1917,10 @@ impl Engine {
             }
             (captured, listed) => {
                 let targets: Vec<_> = match captured {
-                    Ok(targets) => targets.into_iter().filter_map(capture_target_info).collect(),
+                    Ok(targets) => targets
+                        .into_iter()
+                        .filter_map(capture_target_info)
+                        .collect(),
                     Err(err) => {
                         tracing::warn!(error = %err, "capture.targets lists the video devices only");
                         Vec::new()

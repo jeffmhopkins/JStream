@@ -270,8 +270,10 @@ Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). T
 Inspector shows the item's placement, then the source's settings form in a Properties
 section. The Properties dialog (DL-02) uses the same form on a draft; the section stays
 in the Inspector until the Inspector's own rows say otherwise. A display or window
-capture's target is picked from a list of the displays or open windows the engine
-reports (`capture.targets`), not typed as an ID. Beyond the prototype, as in OBS, a
+capture's target, and a webcam's device, is picked from a list of the displays, open
+windows or video devices the engine reports (`capture.targets`), not typed as an ID;
+a webcam's resolution, frame rate and video format are picked from what that device
+lists, each with "Auto" for the engine's choice. Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
 first and "Other file…" for any other file. In the desktop app, an asset path whose

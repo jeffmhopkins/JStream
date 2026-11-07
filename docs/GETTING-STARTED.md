@@ -67,7 +67,8 @@ on **program**, drawn on the canvas in the middle.
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device or the file. In the
+   display or window from the list of those open now, the device (and, for a webcam,
+   its resolution, frame rate and video format, or Auto) or the file. In the
    desktop app a file field has a **Browse…** button; a browser page keeps the path as
    text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,

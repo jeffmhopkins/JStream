@@ -41,10 +41,10 @@ use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
 use jstream_protocol::{
-    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureFormatInfo, CaptureTargetInfo,
-    CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
-    GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
+    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureFormatInfo,
+    CaptureTargetInfo, CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError,
+    GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
     IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome,
     MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo, OutputKind,
     OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult,

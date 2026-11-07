@@ -510,9 +510,11 @@ impl ParamDescriptor {
                     "type": "string",
                     "pattern": "^([1-9][0-9]{0,4}x[1-9][0-9]{0,4})?$",
                 }),
-                CaptureFormatPart::Fps => {
-                    bounded("number", Some(Value::from(0)), Some(Value::from(MAX_CAPTURE_FPS)))
-                }
+                CaptureFormatPart::Fps => bounded(
+                    "number",
+                    Some(Value::from(0)),
+                    Some(Value::from(MAX_CAPTURE_FPS)),
+                ),
                 CaptureFormatPart::PixelFormat => {
                     let mut values = vec![""];
                     values.extend(PIXEL_FORMATS);
@@ -700,7 +702,8 @@ fn check_extension(path: &str, accept: &[String]) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        EnumOption, KindCategory, KindDescriptor, KindSummary, ParamDescriptor, ParamType,
+        CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary, ParamDescriptor,
+        ParamType, parse_resolution,
     };
     use crate::query::CaptureTargetKind;
     use crate::settings::AssetRoot;
@@ -1075,5 +1078,56 @@ mod tests {
             schema["properties"]["mask"]["anyOf"][0],
             json!({"type": "null"})
         );
+    }
+
+    #[test]
+    fn capture_format_values_are_checked_by_part() {
+        let part = |part| {
+            param(
+                "p",
+                ParamType::CaptureFormat {
+                    part,
+                    target: "device".into(),
+                },
+                Value::Null,
+            )
+        };
+        let resolution = part(CaptureFormatPart::Resolution);
+        assert!(resolution.check(&json!("")).is_ok());
+        assert!(resolution.check(&json!("1920x1080")).is_ok());
+        for bad in [
+            json!("1920"),
+            json!("0x10"),
+            json!("20000x10"),
+            json!("1x1x1"),
+            json!(5),
+        ] {
+            assert!(resolution.check(&bad).is_err(), "{bad}");
+        }
+        let fps = part(CaptureFormatPart::Fps);
+        assert!(fps.check(&json!(0)).is_ok());
+        assert!(fps.check(&json!(29.97)).is_ok());
+        assert!(fps.check(&json!(-1)).is_err());
+        assert!(fps.check(&json!(1001)).is_err());
+        assert!(fps.check(&json!("30")).is_err());
+        let pixel = part(CaptureFormatPart::PixelFormat);
+        assert!(pixel.check(&json!("")).is_ok());
+        assert!(pixel.check(&json!("mjpeg")).is_ok());
+        assert!(pixel.check(&json!("h264")).is_err());
+        assert_eq!(parse_resolution(" 640x480 "), Some(Some((640, 480))));
+        assert_eq!(parse_resolution(""), Some(None));
+        assert_eq!(parse_resolution("640X480"), None);
+        // A newer server's part parses as unknown.
+        let unknown: ParamType = serde_json::from_value(
+            json!({"type": "capture_format", "part": "hdr", "target": "device"}),
+        )
+        .unwrap();
+        assert!(matches!(
+            unknown,
+            ParamType::CaptureFormat {
+                part: CaptureFormatPart::Unknown,
+                ..
+            }
+        ));
     }
 }

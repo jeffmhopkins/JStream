@@ -498,12 +498,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   restricted to audio, such as their `audio_source`, offers only the sources that
   report audio settings, less `scene` sources, as the engine accepts no other), or capture
   target list per parameter type. A `capture_target` (a `display` or `window` source's
-  `target`) lists the targets of its kind that `capture.targets` reports, each by name
-  and size, after "Primary display" or "None" for the empty value, and a target the
-  source names that isn't listed now (a closed window) as "Window not open (<ID>)". It
-  asks again each time the field gets focus, so a window opened since shows up; until
-  the first list arrives, or while the engine can't list targets, it is the ID as text,
-  and a failed refresh keeps the last list. A font setting (an `asset` that takes
+  `target`, or a `webcam`'s `device`) lists the targets of its kind that
+  `capture.targets` reports, each by name and size, after "Primary display", "First
+  device listed" or "None" for the empty value, and a target the source names that
+  isn't listed now (a closed window, an unplugged device) as "Window not open (<ID>)" or
+  "Device not connected (<ID>)". It asks again each time the field gets focus, so a
+  window opened since shows up; until the first list arrives, or while the engine can't
+  list targets, it is the ID as text, and a failed refresh keeps the last list. The
+  capture fields of one form share one answer. A `capture_format` (a `webcam`'s
+  `resolution`, `fps` and `pixel_format`) lists "Auto" and what the formats listed for
+  the chosen device offer with the other two parts chosen (sizes largest first, rates
+  fastest first), and keeps a value the device doesn't offer as "<value> (not
+  offered)". A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the

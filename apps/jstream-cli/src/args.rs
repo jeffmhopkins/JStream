@@ -42,7 +42,7 @@ Commands:
   studio get                       print the scenes on program and preview (query
                                    studio.get)
   studio set-preview <scene-id>    put a scene on preview (action studio.set_preview)
-  capture targets                  list the displays and windows a source can capture
+  capture targets                  list the displays, windows and webcams to capture
                                    (query capture.targets)
   font list                        list the installed fonts, each with its family,
                                    style and path (query font.list)

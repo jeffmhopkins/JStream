@@ -2302,7 +2302,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "CaptureFormatInfo": {
-      "description": "One format a video capture device captures in, in a `capture.targets` result: the\nvalues a `webcam` source's `capture_format` settings take to pick it (since 0.89).",
+      "description": "One format a video capture device captures in, in a `capture.targets` result: the\nvalues a `webcam` source's `capture_format` settings take to pick it (since 0.90).",
       "properties": {
         "fps": {
           "description": "Frames per second, to two decimal places (`29.97`).",
@@ -2358,7 +2358,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "One display, window or video capture device in a `capture.targets` result.",
       "properties": {
         "formats": {
-          "description": "For a device, the formats it captures in that the engine reads, in the order the\ndevice lists them (since 0.89). Omitted when empty: always for a display or a\nwindow, and for a device whose formats couldn't be read.",
+          "description": "For a device, the formats it captures in that the engine reads, in the order the\ndevice lists them (since 0.90). Omitted when empty: always for a display or a\nwindow, and for a device whose formats couldn't be read.",
           "items": {
             "$ref": "#/$defs/CaptureFormatInfo"
           },
@@ -2414,7 +2414,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "device",
-          "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.89.",
+          "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.90.",
           "type": "string"
         }
       ]
@@ -8528,7 +8528,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "One part of the format a video capture device is opened in, picked from the\nformats `capture.targets` lists for the device that parameter `target` names, so\na UI can offer those. Since 0.89. Its value is `part`'s:\n[`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),\n[`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]\none of [`PIXEL_FORMATS`]. Its default, `\"\"` or `0`, leaves that part to the\nengine.",
+          "description": "One part of the format a video capture device is opened in, picked from the\nformats `capture.targets` lists for the device that parameter `target` names, so\na UI can offer those. Since 0.90. Its value is `part`'s:\n[`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),\n[`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]\none of [`PIXEL_FORMATS`]. Its default, `\"\"` or `0`, leaves that part to the\nengine.",
           "properties": {
             "part": {
               "$ref": "#/$defs/CaptureFormatPart",
@@ -9892,7 +9892,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the displays, windows and video capture devices the engine can capture now:\nwhat a `display` or `window` source's `target` setting, or a `webcam` source's\n`device` setting (since 0.89), can name. A device comes with the formats it\ncaptures in that the engine reads, which its `capture_format` settings pick from.\nThey are runtime state, not collection state, so the result carries no `rev`, and\na window closed or a device unplugged since may still be named by a source. Fails\nwith `action_failed` when the engine has no capture backend, or the OS refuses to\nlist both the displays and windows and the devices; when only one of them lists,\nthe result holds what did.",
+          "description": "Lists the displays, windows and video capture devices the engine can capture now:\nwhat a `display` or `window` source's `target` setting, or a `webcam` source's\n`device` setting (since 0.90), can name. A device comes with the formats it\ncaptures in that the engine reads, which its `capture_format` settings pick from.\nThey are runtime state, not collection state, so the result carries no `rev`, and\na window closed or a device unplugged since may still be named by a source. Fails\nwith `action_failed` when the engine has no capture backend, or the OS refuses to\nlist both the displays and windows and the devices; when only one of them lists,\nthe result holds what did.",
           "properties": {
             "type": {
               "const": "capture.targets",
@@ -13089,5 +13089,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.89"
+  "title": "JStream protocol 0.90"
 }

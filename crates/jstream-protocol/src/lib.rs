@@ -131,8 +131,9 @@ pub use profile::{
     ThreadProfile, UnitProfile,
 };
 pub use query::{
-    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,
-    PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
+    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo,
+    ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary,
+    SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};

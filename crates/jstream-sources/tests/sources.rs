@@ -9,8 +9,8 @@
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
-    AssetRoots, AudioTarget, CaptureSpec, Context, DeviceFormatWant, Limits, Registry, SourceError, decode_still,
-    needs_restart, webcam_device,
+    AssetRoots, AudioTarget, CaptureSpec, Context, DeviceFormatWant, Limits, Registry, SourceError,
+    decode_still, needs_restart, webcam_device,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -251,7 +251,11 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
         );
         source.capture().cloned().expect("a capture source")
     };
-    assert_eq!(device(""), CaptureSpec::Device(None, DeviceFormatWant::default()), "the first device");
+    assert_eq!(
+        device(""),
+        CaptureSpec::Device(None, DeviceFormatWant::default()),
+        "the first device"
+    );
     assert_eq!(
         device("fake-webcam-0"),
         CaptureSpec::Device(Some("fake-webcam-0".into()), DeviceFormatWant::default())

@@ -1002,8 +1002,8 @@ impl Yuv {
 #[cfg(test)]
 mod tests {
     use super::{
-        Backends, DeviceFormatWant, MAX_DEVICE_PIXELS, State, device_format, rgba_from_surface, spawn, start,
-        start_on,
+        Backends, DeviceFormatWant, MAX_DEVICE_PIXELS, State, device_format, device_format_for,
+        pixel_format_name, rgba_from_surface, spawn, start, start_on,
     };
     use crate::snapshot::{CaptureKey, Captures};
     use jstream_media::{FrameSize, PixelFormat, Timebase};
@@ -1054,6 +1054,56 @@ mod tests {
         ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
             FakeCodecs.video_decoder(config)
         }
+    }
+
+    #[test]
+    fn a_device_opens_in_the_format_its_source_asks_for_else_the_engine_choice() {
+        let nv12 = CaptureEncoding::Raw(PixelFormat::Nv12);
+        let hd = format(1280, 720, 30, nv12);
+        let hd60 = format(1280, 720, 60, nv12);
+        let full = format(1920, 1080, 30, CaptureEncoding::Mjpeg);
+        let uhd = format(3840, 2160, 30, CaptureEncoding::Yuy2);
+        let all = [hd, hd60, full, uhd];
+        let want =
+            |size: Option<(u32, u32)>, fps: Option<u32>, pf: Option<&str>| DeviceFormatWant {
+                size,
+                fps_centi: fps.map(|f| f * 100),
+                pixel_format: pf.map(str::to_owned),
+            };
+        let pick = |want: &DeviceFormatWant, mjpeg| device_format_for(&all, mjpeg, want);
+        // Nothing asked: the engine's choice.
+        assert_eq!(pick(&DeviceFormatWant::default(), true), Some((full, true)));
+        // A size alone: the fastest of it.
+        assert_eq!(
+            pick(&want(Some((1280, 720)), None, None), true),
+            Some((hd60, true))
+        );
+        // Size and rate.
+        assert_eq!(
+            pick(&want(Some((1280, 720)), Some(30), None), true),
+            Some((hd, true))
+        );
+        // A size above the engine's cap, asked for, is opened.
+        assert_eq!(
+            pick(&want(Some((3840, 2160)), None, None), true),
+            Some((uhd, true))
+        );
+        // A pixel format.
+        assert_eq!(
+            pick(&want(None, None, Some("yuy2")), true),
+            Some((uhd, true))
+        );
+        // MJPEG asked without a decoder, or a size not offered: the engine's choice.
+        assert_eq!(
+            pick(&want(None, None, Some("mjpeg")), false),
+            Some((hd60, false))
+        );
+        assert_eq!(
+            pick(&want(Some((640, 480)), None, None), true),
+            Some((full, false))
+        );
+        assert_eq!(pixel_format_name(CaptureEncoding::Mjpeg), Some("mjpeg"));
+        assert_eq!(pixel_format_name(nv12), Some("nv12"));
     }
 
     #[test]
@@ -1123,7 +1173,11 @@ mod tests {
         let with: Arc<dyn Codecs> = Arc::new(FakeCodecs);
         let without: Arc<dyn Codecs> = Arc::new(NoMjpeg);
         for (codecs, spec, size) in [
-            (&with, CaptureSpec::Device(None, DeviceFormatWant::default()), (1280, 720)),
+            (
+                &with,
+                CaptureSpec::Device(None, DeviceFormatWant::default()),
+                (1280, 720),
+            ),
             (
                 &with,
                 CaptureSpec::Device(Some(FAKE_WEBCAM.into()), DeviceFormatWant::default()),
