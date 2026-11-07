@@ -38,7 +38,8 @@ preset. The preset's `stagger_ms` × the item's index still adds to the delay. T
 applies on both sides of the switch: to the item arriving or gliding in the keyframe, and
 to it leaving when the keyframe hides it. A transition into any other scene, including
 the family's parent and its other keyframes, doesn't use it. Glide, appear and disappear
-stay the item's own.
+stay the item's own. A `stinger`, `cut` or zero-duration preset ignores the timing, as it
+ignores the item's own.
 
 **2. Setting it.** `item.set_timing` writes a keyframe's timing for an item, whole. It
 takes only a keyframe scene, with the errors the placement edits give a keyframe; the
@@ -66,9 +67,9 @@ whatever their own timing.
 
 **5. Compatibility.** A protocol minor bump: `item.set_timing`, `ItemOverride.timing`,
 the `timing` override field and the three easings are additions. A client older than
-this minor can't parse a preset, item or override that uses a new easing or a timing,
-as with any new enum value (open question 8 in the protocol README). The collection
-file gains `scenes[].overrides[].timing` at a new schema version, which an older file
+this minor can't parse a preset, item or override that uses a new easing, as with any
+new enum value (open question 8 in the protocol README); it ignores a `timing` that
+uses only the older ones, as an unknown field. The collection file gains `scenes[].overrides[].timing` at a new schema version, which an older file
 never has.
 
 <a id="consequences"></a>

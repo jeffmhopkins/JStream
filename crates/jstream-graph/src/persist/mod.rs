@@ -219,12 +219,6 @@ fn v6_to_v7(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Version 8 gives each kind of data a `browser` page may read its own checkbox
-/// (ADR-0124): `page_api_shared_values` for the names in `page_api_values`, and
-/// `page_api_audio` for the bus in `page_api_bus`. Loading rebuilds each source with its
-/// kind's defaults, which would turn both off, so a version 7 source whose names or bus
-/// are set gets its checkbox on: nothing a user granted is taken away, and nothing new
-/// is granted.
 /// Version 9 adds a keyframe scene's timing for an item in transitions into it
 /// (`scenes[].overrides[].timing`, ADR-0129). A version 8 file has none, so it upgrades
 /// unchanged; one there is refused, as version 8 refused it.
@@ -243,6 +237,12 @@ fn v8_to_v9(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 8 gives each kind of data a `browser` page may read its own checkbox
+/// (ADR-0124): `page_api_shared_values` for the names in `page_api_values`, and
+/// `page_api_audio` for the bus in `page_api_bus`. Loading rebuilds each source with its
+/// kind's defaults, which would turn both off, so a version 7 source whose names or bus
+/// are set gets its checkbox on: nothing a user granted is taken away, and nothing new
+/// is granted.
 fn v7_to_v8(value: &mut Value) -> Result<(), String> {
     let sources = value.get_mut("sources").and_then(Value::as_array_mut);
     for source in sources.into_iter().flatten() {

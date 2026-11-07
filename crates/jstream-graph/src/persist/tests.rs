@@ -333,9 +333,6 @@ fn v5_graph() -> Graph {
     graph
 }
 
-/// The v5 fixture's collection, plus timeline `t_intro` in scene `a`, which switches to
-/// scene `b`, shows an item and plays itself from a range, and hotkey `F6` that plays it
-/// (ADR-0115), in one more batch: rev 7.
 /// The v8 fixture's collection, plus keyframe scene `k`'s timing for item `i3`: a
 /// 120 ms delay, a cubic-bezier easing and a 900 ms duration (ADR-0129), in one more
 /// batch: rev 8.
@@ -364,6 +361,9 @@ fn v9_graph() -> Graph {
     graph
 }
 
+/// The v5 fixture's collection, plus timeline `t_intro` in scene `a`, which switches to
+/// scene `b`, shows an item and plays itself from a range, and hotkey `F6` that plays it
+/// (ADR-0115), in one more batch: rev 7.
 fn v6_graph() -> Graph {
     use jstream_protocol::{Action, Chord, TimelineCue, TimelineId, TimelineInfo, TimelineLoop};
     let mut graph = v5_graph();

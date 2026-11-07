@@ -48,7 +48,7 @@ pub const INITIAL_PRESET: &str = "cut";
 
 /// How a value moves from its start to its end over a transition
 /// ([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and
-/// `cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-easings.md)).
+/// `cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).
 /// The named curves are strings (`"ease_out"`); a `cubic_bezier` is an object
 /// (`{"cubic_bezier": {"x1": 0.2, "y1": 0, "x2": 0, "y2": 1}}`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
