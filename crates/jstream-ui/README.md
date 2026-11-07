@@ -121,7 +121,7 @@ Contents ([Design](#design) explains the choices):
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own).
+  the tool bars' own and a cube for the 3D model type).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -396,7 +396,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
-  platform's API), plus the kinds of placed sources it didn't report, which can be
+  platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
+  with a cube icon), plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
