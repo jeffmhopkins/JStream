@@ -272,8 +272,8 @@ test('with described kinds, rows summarise, Cancel restores an unconfirmed chang
   const add = page.getByRole('dialog', { name: 'Add filter' });
   const types = add.getByRole('listbox', { name: 'Filter type' });
   // A colour has no audio chain, so Gain isn't offered.
-  await expect(types.getByRole('option')).toHaveText(['Sharpen', 'Blur']);
-  await expect(types.locator('.add-filter-group')).toHaveText(['Detail']);
+  await expect(types.getByRole('option')).toHaveText(['Sharpen', 'Blur', 'Custom shader']);
+  await expect(types.locator('.add-filter-group')).toHaveText(['Detail', 'Effect packs']);
   await add.getByRole('textbox', { name: 'Search filters' }).fill('gauss');
   await expect(types.getByRole('option')).toHaveText(['Blur']);
   await add.getByRole('textbox', { name: 'Search filters' }).fill('');

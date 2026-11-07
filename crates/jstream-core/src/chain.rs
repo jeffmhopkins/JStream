@@ -112,6 +112,16 @@ fn outset_of(kind: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
+fn whole_params(descriptor: &jstream_protocol::KindDescriptor) -> Vec<String> {
+    descriptor
+        .params
+        .iter()
+        .filter(|param| matches!(param.ty, jstream_protocol::ParamType::Int { .. }))
+        .map(|param| param.id.clone())
+        .collect()
+}
+
 /// One filter of a [`Chain`], as the collection holds it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ChainFilter {
@@ -353,6 +363,26 @@ impl Chain {
             .map(|filter| filter.kind.as_str())
     }
 
+    /// Each filter's `int` parameters, in order, which a Move keeps whole as it blends
+    /// their settings (ADR-0127): from a pack effect's descriptor, or the built-in
+    /// kind's.
+    pub(crate) fn whole_params(&self) -> Vec<Vec<String>> {
+        static BUILTIN: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .iter()
+                .map(|kind| (kind.kind_id.clone(), whole_params(kind)))
+                .collect()
+        });
+        self.filters
+            .iter()
+            .map(|filter| match &filter.effect {
+                Some(effect) => whole_params(effect.kind_descriptor()),
+                None => builtin.get(&filter.kind).cloned().unwrap_or_default(),
+            })
+            .collect()
+    }
+
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
     /// look the same, so a transition may pair them (ADR-0065 §6, as ADR-0081 amends it).
     pub(crate) fn look(&self) -> Vec<(String, Settings)> {
@@ -488,6 +518,12 @@ pub(crate) struct Chains {
     /// that nests the same scene at the same depth reads instead of drawing it again
     /// (#1070).
     drawn: BTreeSet<GpuKey>,
+    /// The 3D models this compositor draws (ADR-0107), uploaded once per version, by
+    /// the source that shows them.
+    models: BTreeMap<SourceId, (u64, jstream_render::GpuModel)>,
+    /// The models drawn since the chains last began a frame: one no frame drew is let
+    /// go when the next begins.
+    models_used: BTreeSet<SourceId>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -504,13 +540,16 @@ impl Chains {
     /// caller runs none of them again: every mix a tick draws shares one frame, and a
     /// stateful filter sees each tick once. Each chain then runs with [`Self::run_one`].
     /// `stages` are the output stage's chains (ADR-0080), kept the same way, which
-    /// [`Self::stage`] runs once each per frame.
+    /// [`Self::stage`] runs once each per frame. `blended` holds, for a chain whose item
+    /// a Move blends between two looks (ADR-0127), the settings each of its filters
+    /// draws with this frame, in place of the plan's.
     pub(crate) fn begin(
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         chains: &BTreeMap<ChainOwner, Chain>,
         stages: &BTreeMap<ChainOwner, Chain>,
+        blended: &[(&ChainOwner, Vec<Settings>)],
     ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
@@ -524,6 +563,8 @@ impl Chains {
         self.failed.clear();
         self.staged.clear();
         self.drawn.clear();
+        let used = std::mem::take(&mut self.models_used);
+        self.models.retain(|source, _| used.contains(source));
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -537,7 +578,11 @@ impl Chains {
                 self.running.insert(source.clone(), Vec::new());
             }
             if let Some(running) = self.running.get_mut(source) {
-                sync(source, running, &chain.filters, &mut self.retired);
+                let blend = blended
+                    .iter()
+                    .find(|(owner, _)| *owner == source)
+                    .map(|(_, settings)| settings.as_slice());
+                sync(source, running, &chain.filters, blend, &mut self.retired);
                 for (r, f) in running.iter_mut().zip(&chain.filters) {
                     refer(compositor, source, r, f, &mut self.retired);
                 }
@@ -738,7 +783,46 @@ impl Chains {
 
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
-        matches!(key, GpuKey::Filtered(owner) if self.failed.contains(owner))
+        match key {
+            GpuKey::Filtered(owner) => self.failed.contains(owner),
+            // A model's layer, shown as drawn when it has no effects (ADR-0107).
+            GpuKey::ItemBox(scene, item) => self
+                .failed
+                .contains(&ChainOwner::Item(scene.clone(), item.clone())),
+            _ => false,
+        }
+    }
+
+    /// Uploads the model `source` shows, unless the upload kept for it is of the same
+    /// version (ADR-0107): drawing it again then allocates nothing.
+    ///
+    /// # Errors
+    /// What the compositor reports for the upload.
+    pub(crate) fn upload_model(
+        &mut self,
+        compositor: &Compositor,
+        source: &SourceId,
+        model: &jstream_media::model::Model,
+    ) -> Result<(), RenderError> {
+        self.models_used.insert(source.clone());
+        if self
+            .models
+            .get(source)
+            .is_some_and(|(version, _)| *version == model.version())
+        {
+            return Ok(());
+        }
+        // The old upload goes first, so two versions are never held at once.
+        self.models.remove(source);
+        let uploaded = compositor.upload_model(model)?;
+        self.models
+            .insert(source.clone(), (model.version(), uploaded));
+        Ok(())
+    }
+
+    /// The upload kept for the model `source` shows.
+    pub(crate) fn model(&self, source: &SourceId) -> Option<&jstream_render::GpuModel> {
+        self.models.get(source).map(|(_, model)| model)
     }
 
     /// How many filters run, for tests.
@@ -767,35 +851,52 @@ fn sync(
     source: &ChainOwner,
     running: &mut Vec<Running>,
     filters: &[ChainFilter],
+    blended: Option<&[Settings]>,
     retired: &mut Vec<VideoFilter>,
 ) {
+    // The settings filter `at` draws with: the blend's this frame, or the plan's.
+    fn settings<'a>(
+        blended: Option<&'a [Settings]>,
+        at: usize,
+        f: &'a ChainFilter,
+    ) -> &'a Settings {
+        blended
+            .and_then(|blended| blended.get(at))
+            .unwrap_or(&f.settings)
+    }
     let same_shape = running.len() == filters.len()
         && running
             .iter()
             .zip(filters)
             .all(|(r, f)| r.id == f.id && r.kind == f.kind);
     if same_shape {
-        for (r, f) in running.iter_mut().zip(filters) {
-            update(r, f, retired);
+        for (at, (r, f)) in running.iter_mut().zip(filters).enumerate() {
+            update(r, f, settings(blended, at, f), retired);
         }
         return;
     }
     let mut old: Vec<Running> = std::mem::take(running);
-    for f in filters {
+    for (at, f) in filters.iter().enumerate() {
         let kept = old
             .iter()
             .position(|r| r.id == f.id && r.kind == f.kind)
             .map(|at| old.swap_remove(at));
         let entry = match kept {
             Some(mut r) => {
-                update(&mut r, f, retired);
+                update(&mut r, f, settings(blended, at, f), retired);
                 r
             }
             None => match f.video_filter() {
-                Some(filter) => Running {
+                Some(mut filter) => Running {
                     id: f.id.clone(),
                     kind: f.kind.clone(),
-                    settings: f.settings.clone(),
+                    settings: {
+                        let settings = settings(blended, at, f);
+                        if *settings != f.settings {
+                            filter.set_settings(settings);
+                        }
+                        settings.clone()
+                    },
                     effect: f.effect.clone(),
                     program: f.program.as_ref().map(|p| (p.source.clone(), p.shown)),
                     slots: Vec::new(),
@@ -819,26 +920,35 @@ fn sync(
     retired.extend(old.into_iter().map(|r| r.filter));
 }
 
-/// Gives `running` the settings of `filter`, the same filter as the plan has it now: in
+/// Gives `running` `settings` (`filter`'s, or a Move's blend of them, ADR-0127) and the
+/// rest of `filter`, the same filter as the plan has it now: in
 /// place, or, when its pack effect was reloaded, by making it again with the new effect
 /// and retiring the old one. A pack effect keeps no state between frames, so nothing is
 /// lost.
 ///
 /// A program is made again when its shader source was reloaded, losing its feedback,
 /// and restarted when its source showed a new frame.
-fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFilter>) {
+fn update(
+    running: &mut Running,
+    filter: &ChainFilter,
+    settings: &Settings,
+    retired: &mut Vec<VideoFilter>,
+) {
     let program = filter.program.as_ref().map(|p| (p.source.clone(), p.shown));
     let reloaded = running.program.as_ref().map(|(source, _)| source)
         != program.as_ref().map(|(source, _)| source);
     if running.effect != filter.effect || reloaded {
-        if let Some(fresh) = filter.video_filter() {
+        if let Some(mut fresh) = filter.video_filter() {
+            if *settings != filter.settings {
+                fresh.set_settings(settings);
+            }
             retired.push(std::mem::replace(&mut running.filter, fresh));
         }
         running.effect = filter.effect.clone();
         running.program = program;
         // The new filter holds no slot yet.
         running.slots.clear();
-        running.settings = filter.settings.clone();
+        running.settings = settings.clone();
         if running.meter.is_none() {
             running.meter = meter_for(filter);
         }
@@ -850,9 +960,9 @@ fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFi
         running.filter.restart();
         *shown = *now;
     }
-    if running.settings != filter.settings {
-        running.filter.set_settings(&filter.settings);
-        running.settings = filter.settings.clone();
+    if running.settings != *settings {
+        running.filter.set_settings(settings);
+        running.settings = settings.clone();
     }
     if running.meter.is_none() {
         running.meter = meter_for(filter);
@@ -2344,6 +2454,210 @@ mod tests {
             .flat_map(|line| line.chars().chain(['\n']))
             .collect();
         assert_eq!(actual, expected, "{what}\nactual:\n{actual}");
+    }
+
+    /// [`shot`], with `cam` showing an unlit white model of `shape` (ADR-0107) in place
+    /// of its frame, a transparent stand-in.
+    fn model_shot(graph: &Graph, shape: &str) -> Shot {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!(shape));
+        settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let source = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let shown = source.model().expect("a shape is a model");
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(Some(shown));
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    if id.as_str() == "cam" {
+                        stand_in.clone()
+                    } else {
+                        frame.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// A model item draws its model where its box is, posed by its geometry and moved by
+    /// its motion (ADR-0107 decision 6), with or without effects over its layer.
+    #[test]
+    fn golden_a_model_draws_in_its_box_and_moves_with_its_motion() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            ",
+            "the plane fills its box",
+        );
+        // An oscillator a quarter through its period is at its amplitude: 32 px right.
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetMotion {
+                item_id: ItemId::new("cam"),
+                scene_id: None,
+                motion: vec![
+                    serde_json::from_value(serde_json::json!({
+                        "modifier_id": "slide",
+                        "property": "x",
+                        "kind": "oscillate",
+                        "amplitude": 32,
+                        "period_ms": 3600000,
+                        "phase": 0.25,
+                    }))
+                    .expect("a modifier"),
+                ],
+            }],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ",
+            "its motion moves the model",
+        );
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Item {
+                item_id: ItemId::new("cam"),
+            })],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWBB
+            ........WWWWWWWB
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWB
+            ........WWWWWBBB
+            ",
+            "effects run over the model's layer: the canvas's ellipse, cut to the model",
+        );
+    }
+
+    /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a
+    /// plane turned 60° about its vertical axis is half as wide, about its own centre.
+    #[test]
+    fn golden_a_model_is_seen_through_the_scene_camera() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+        geometry.turn_deg = jstream_protocol::Finite32::new(60.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let expected = "
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWW........
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            expected,
+            "turned 60°, the plane is about half as wide, its near edge the longer",
+        );
+        // A flat item in the same pose covers the same pixels.
+        apply(
+            &mut graph,
+            vec![
+                hide("cam"),
+                Edit::ItemSetVisible {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    visible: true,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+            ],
+        );
+        // The flat item's edge is antialiased where the model's isn't: a cell between
+        // the two (`?`) counts as either.
+        if let Some(flat) = golden(&shot(&graph)) {
+            let model: String = expected
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .flat_map(|line| line.chars().chain(['\n']))
+                .collect();
+            assert!(
+                flat.chars()
+                    .zip(model.chars())
+                    .all(|(f, m)| f == m || f == '?')
+                    && flat.len() == model.len(),
+                "a flat item in the same pose covers the same cells\nflat:\n{flat}"
+            );
+        }
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.

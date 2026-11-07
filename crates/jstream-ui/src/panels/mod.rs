@@ -14,6 +14,7 @@ pub mod agent;
 pub mod camera_moves;
 pub mod codec_downloads;
 mod confirm;
+pub mod custom_shader;
 pub mod device_preview;
 pub mod encoders;
 pub mod filter_presets;

@@ -1,6 +1,6 @@
 //! `cargo xtask`: repository automation.
 //!
-//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#packaging, docs/adr/0095-browser-helper-on-linux.md, apps/jstream-daemon/README.md#receiver-e2e
+//! Docs: docs/ARCHITECTURE.md#repo-layout, docs/DOCS.md#bootstrap, docs/DOCS.md#governance, docs/DOCS.md#dependency-lint, docs/ARCHITECTURE.md#packaging, docs/adr/0095-browser-helper-on-linux.md, apps/jstream-daemon/README.md#receiver-e2e, xtask/perf/README.md#runner, xtask/perf/README.md#scenes, xtask/perf/README.md#thresholds
 
 #![forbid(unsafe_code)]
 #![allow(
@@ -14,6 +14,7 @@ mod docs;
 mod e2e_stream;
 mod governance;
 mod lint_deps;
+mod perf;
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -70,6 +71,14 @@ fn main() -> ExitCode {
                 ExitCode::from(2)
             }
         },
+        Some("perf") => match perf::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask perf: {e:#}");
+                ExitCode::from(2)
+            }
+        },
         _ => {
             eprintln!("usage: cargo xtask <command>\n\ncommands:");
             for (name, what) in [
@@ -111,6 +120,10 @@ fn main() -> ExitCode {
                 (
                     "lint-deps",
                     "crate layering, unsafe declarations, links= allowlist, workspace deps",
+                ),
+                (
+                    "perf",
+                    "the perf suite: stress scenes read through profile.get (xtask/perf/README.md)",
                 ),
             ] {
                 eprintln!("  {name:<15} {what}");
