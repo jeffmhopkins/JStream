@@ -727,6 +727,7 @@ pub(crate) fn descriptor(param: &ParamSection) -> ParamDescriptor {
         ParamKind::Scene => (ParamType::Scene, Value::Null),
     };
     ParamDescriptor {
+        warning: None,
         id: param.id.clone(),
         ty,
         default,

@@ -86,13 +86,29 @@ pub fn draft_patch(base: &Settings, draft: &Settings) -> Settings {
 }
 
 /// Whether a parameter is shown: always, unless its `visible_if` names another
-/// parameter whose current value differs.
+/// parameter whose current value differs, or which is itself hidden (a setting under a
+/// checkbox under a switch goes when the switch is off).
 pub fn is_visible(param: &ParamDescriptor, kind: &KindDescriptor, settings: &Settings) -> bool {
+    visible_within(param, kind, settings, kind.params.len())
+}
+
+/// [`is_visible`], following at most `depth` more rules, so a cycle of them ends.
+fn visible_within(
+    param: &ParamDescriptor,
+    kind: &KindDescriptor,
+    settings: &Settings,
+    depth: usize,
+) -> bool {
     let Some(rule) = &param.visible_if else {
         return true;
     };
     let current = match kind.param(&rule.param) {
-        Some(other) => value_of(other, settings),
+        Some(other) => {
+            if depth == 0 || !visible_within(other, kind, settings, depth - 1) {
+                return false;
+            }
+            value_of(other, settings)
+        }
         None => settings.get(&rule.param).unwrap_or(&Value::Null),
     };
     *current == rule.equals
@@ -420,6 +436,7 @@ fn Field(
                 disabled=is_default on:click=reset>
                 <Icon name="reset" size=13 />
             </button>
+            {param.warning.clone().map(|w| view! { <p class="field-warning">{w}</p> })}
             {move || error().map(|e| view! { <p class="problem">{e}</p> })}
         </div>
     }
@@ -1010,6 +1027,7 @@ mod tests {
 
     fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
         ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty,
             default,
@@ -1105,6 +1123,32 @@ mod tests {
         assert!(is_visible(&mode, &k, &settings));
         assert_eq!(value_of(&mode, &settings), &json!("image"));
         assert_eq!(value_of(&file, &settings), &Value::Null);
+    }
+
+    #[test]
+    fn a_setting_under_a_hidden_checkbox_is_hidden() {
+        let on = |id: &str| VisibleIf {
+            param: id.into(),
+            equals: json!(true),
+        };
+        let switch = param("api", ParamType::Bool, json!(false));
+        let mut check = param("audio", ParamType::Bool, json!(false));
+        check.visible_if = Some(on("api"));
+        let mut bus = param("bus", ParamType::Bus, Value::Null);
+        bus.visible_if = Some(on("audio"));
+        let k = kind(vec![switch, check, bus.clone()]);
+        let mut settings = Settings::new();
+        settings.insert("audio", json!(true));
+        assert!(!is_visible(&bus, &k, &settings), "the switch is off");
+        settings.insert("api", json!(true));
+        assert!(is_visible(&bus, &k, &settings));
+        // A cycle of rules ends.
+        let mut a = param("a", ParamType::Bool, json!(true));
+        a.visible_if = Some(on("b"));
+        let mut b = param("b", ParamType::Bool, json!(true));
+        b.visible_if = Some(on("a"));
+        let k = kind(vec![a.clone(), b]);
+        assert!(!is_visible(&a, &k, &Settings::new()));
     }
 
     #[test]

@@ -8515,6 +8515,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "UI hint: shown only while another parameter has a given value."
+        },
+        "warning": {
+          "description": "One line a client shows beside the control, not only in a tooltip: what setting\nit gives away (0.95, ADR-0124). A client that predates it ignores it.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -13008,5 +13015,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.91"
+  "title": "JStream protocol 0.95"
 }

@@ -305,7 +305,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.91 because a follow camera is a `follow_pointer` filter on a
+`PROTOCOL_VERSION` is 0.95 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
@@ -821,7 +824,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.95: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.

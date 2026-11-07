@@ -398,6 +398,7 @@ mod tests {
 
     fn param(id: &str, live: bool) -> ParamDescriptor {
         ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty: ParamType::Color { alpha: false },
             default: json!("#000000"),

@@ -58,6 +58,7 @@ fn kinds() -> Vec<KindDescriptor> {
         max_outset_px: None,
         params: vec![
             ParamDescriptor {
+                warning: None,
                 id: "color".into(),
                 ty: ParamType::Color { alpha: true },
                 default: json!("#000000ff"),
@@ -69,6 +70,7 @@ fn kinds() -> Vec<KindDescriptor> {
                 live: true,
             },
             ParamDescriptor {
+                warning: None,
                 id: "follow".into(),
                 ty: ParamType::Source { media: None },
                 default: Value::Null,
@@ -90,6 +92,7 @@ fn kinds() -> Vec<KindDescriptor> {
         audio: false,
         max_outset_px: None,
         params: vec![ParamDescriptor {
+            warning: None,
             id: "audio".into(),
             ty: ParamType::Bus,
             default: Value::Null,
@@ -110,6 +113,7 @@ fn kinds() -> Vec<KindDescriptor> {
         audio: false,
         max_outset_px: Some(4),
         params: vec![ParamDescriptor {
+            warning: None,
             id: "tint".into(),
             ty: ParamType::Source { media: None },
             default: Value::Null,

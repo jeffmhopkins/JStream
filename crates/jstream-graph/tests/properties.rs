@@ -44,6 +44,7 @@ fn config() -> Config {
 
 fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,
