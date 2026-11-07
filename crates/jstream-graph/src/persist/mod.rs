@@ -328,10 +328,6 @@ struct File {
     /// before presets existed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     transitions: Option<FileTransitions>,
-    /// The name the outputs' stream keys are stored under (ADR-0121 §5); omitted while
-    /// the collection has none, so a file from before scopes saves as it did.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    key_scope: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -844,7 +840,6 @@ impl Graph {
             master: FileMaster {
                 filters: self.file_chains(&state.master),
             },
-            key_scope: self.key_scope.clone(),
             folders: state
                 .folders
                 .iter()
@@ -897,7 +892,6 @@ impl Graph {
             rev: Rev(0),
             state: Default::default(),
             kinds: self.kinds,
-            key_scope: None,
         };
         for (object, edit) in rebuild(&graph, &file)? {
             let applied = match &edit {
@@ -940,7 +934,6 @@ impl Graph {
             })?;
         }
         graph.rev = file.rev;
-        graph.key_scope = file.key_scope;
         Ok(graph)
     }
 }

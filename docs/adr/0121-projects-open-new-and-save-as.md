@@ -43,11 +43,14 @@ Three things make a switch more than a load at startup:
    when the host named no collection file.
    - `collection.open { path }` loads the file at `path` and saves there from then on.
    - `collection.new { path }` creates an empty collection at `path` (the four sample
-     labels, the default canvas and rate) and saves there. An existing file is
-     `already_exists`.
-   - `collection.save_as { path, overwrite }` writes the current collection to `path` and
-     saves there from then on. An existing file is `already_exists` unless `overwrite`
-     is true. Saving to the open file is `invalid_argument`.
+     labels, the default canvas and rate) and saves there.
+   - `collection.save_as { path }` writes the current collection to `path` and saves
+     there from then on.
+   - **New and save as only ever make a new file.** Anything already at `path`, the
+     open file included, is `already_exists`, and the check and the create are one
+     step (`create_new`), as a recording's are. Nothing replaces a file that isn't
+     already a project: an open writes back only the file it has just loaded as a
+     collection, as every later save does.
    - `collection.info` answers the open file's `path` and up to ten `recent` paths, most
      recent first, the open one among them.
    - `collection.file_changed { path, cause, client_id, request_id }` tells every client
@@ -57,6 +60,7 @@ Three things make a switch more than a load at startup:
    (`check_asset_path`): no `..`, UNC share, device or NT object path. It is a path on the
    engine's machine. A file the engine can't read or load is refused with
    `action_failed` and its reason, and the open project stays open with nothing stopped.
+   So is an open or new while the open project can't be saved, so no change is lost.
 3. **Opening or creating replaces the collection.** The new collection is loaded and
    checked first, with no lock held. Then every output that isn't stopped stops, as an
    `output.stop` would, with its events. Then the collection is swapped:
@@ -75,13 +79,16 @@ Three things make a switch more than a load at startup:
    new folder becomes relative to it, so a project saved next to its assets is portable.
    A rewrite is a new `rev` and clears undo history, as in §3, because an inverse edit
    would bring back the old path. Assets are not copied. Nothing stops.
-5. **Stream keys belong to one project file.** The file holds a random `key_scope`, and
-   an output's key is stored under `<key_scope>/<output_id>`. A new file and a save as
-   get a fresh scope; save as copies each output's key to it. A file opened without a
-   scope gets a fresh one, so its outputs start with no key. The file the host loads at
-   startup without a scope keeps its keys: they move from the bare output ID to the new
-   scope once the engine has its key store, and the bare entries are removed. Hosts read
-   a key through the engine's name for it (`Engine::stream_key_name`).
+5. **Stream keys belong to one project path on this machine.** An output's key is stored
+   under `<scope>/<output_id>`, where the scope is a hash of the project file's path,
+   its folder resolved through links. Nothing in the file names the scope, so a project
+   someone hands over, opened from anywhere, never reaches the keys of another project,
+   whatever its output IDs and servers say. A save as copies each output's key to the
+   new path's scope, and only once the path is known to be free; a save as that fails
+   removes the copies. The file the host loads at startup keeps its keys: they move from
+   the bare output ID, where they were stored before projects, to its scope once the
+   engine has its key store, and the bare entries are removed. Hosts read a key through
+   the engine's name for it (`Engine::stream_key_name`).
 6. **The engine keeps the recent list** in a file the host names
    (`recent-collections.json` in the data folder), updated on every open, new and save
    as. The desktop app opens the most recent project at startup if it still loads, and
@@ -94,12 +101,17 @@ Three things make a switch more than a load at startup:
 
 <a id="consequences"></a>
 ## Consequences
-- This stays inside ADR-0006: a client with the control token can already read any file
-  an `absolute` asset names and write where a recording output points. A project file
-  adds one more file it can name, with the same path rules.
-- A project shared with someone carries no secret, and its outputs ask for keys again.
-  Two copies of one file made outside JStream share a scope, and so share keys.
+- This stays inside ADR-0006's trust in a control token: a client with one can already
+  read any file an `absolute` asset names and make a new file wherever a recording
+  output points, without replacing anything. Open reads one more kind of file, and new
+  and save as make new files under the same rule, with the same path rules. No path
+  grant is added or removed.
+- A project shared with someone carries no secret and no scope, and its outputs ask for
+  keys again. A project file moved or renamed outside JStream asks for its keys again
+  too; one saved over a project file outside JStream takes that project's keys, as the
+  single `collection.json` does today.
 - The UI's File menu (New project…, Open project…, Save project as…, Open recent, and
   the open project's name) builds on this in its own change.
-- An engine before 0.93 refuses a file that holds a `key_scope`, as it refuses any field
-  it doesn't know, and would not find the keys under their scoped names.
+- The file format doesn't change, so there is no `schema_version` bump. An engine
+  before 0.93 reads a project file, but finds no key under the scoped names, so its
+  outputs ask for keys again.

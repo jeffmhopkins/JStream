@@ -1888,7 +1888,8 @@ pub enum Action {
     /// there from then on (0.93, ADR-0121). The file is loaded and checked first; a file
     /// the engine can't read or load (a newer `schema_version`, a broken file) fails with
     /// `action_failed` and its reason, and the open project stays open with nothing
-    /// stopped. Then every output that isn't stopped stops, and the collection is
+    /// stopped, as it does when the open project can't be saved first. Then every
+    /// output that isn't stopped stops, and the collection is
     /// replaced: `rev` becomes the file's or one past the current one, whichever is
     /// greater, every client's undo history and idempotency keys are cleared, open
     /// gestures are cancelled, timelines stop, and the first scene goes on program and
@@ -1903,32 +1904,29 @@ pub enum Action {
     },
     /// Creates a new, empty project at `path` (the four sample labels, the default
     /// canvas and frame rate) and opens it as `collection.open` would (0.93, ADR-0121).
-    /// Fails with `already_exists` when a file is at `path`, `action_failed` when it
-    /// can't be written, and otherwise as `collection.open`.
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// `action_failed` when it can't be written, and otherwise as `collection.open`.
     #[serde(rename = "collection.new")]
     CollectionNew {
         /// The absolute path of the new collection file.
         path: String,
     },
-    /// Writes the current project to `path` and saves there from then on (0.93,
-    /// ADR-0121). Every client gets `collection.file_changed`. When the new folder
+    /// Writes the current project to a new file at `path` and saves there from then on
+    /// (0.93, ADR-0121). Every client gets `collection.file_changed`. When the new folder
     /// differs, each `collection` asset reference is rewritten to keep naming the same
     /// file: relative to the new folder when the file is under it, otherwise
     /// `absolute`; an `absolute` reference to a file under the new folder becomes
     /// relative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's
     /// undo history. Nothing stops. Each output's stream key is copied to the new file.
-    /// Fails with `already_exists` when a file is at `path` and `overwrite` isn't true,
-    /// `invalid_argument` on `path` for the open file itself or a path that breaks the
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// the open file included, `invalid_argument` on `path` for a path that breaks the
     /// `absolute` asset path rules, `action_failed` when the file can't be written (the
     /// open file stays the one saved to), and `unsupported` when the host named no
     /// collection file.
     #[serde(rename = "collection.save_as")]
     CollectionSaveAs {
-        /// The absolute path to write.
+        /// The absolute path of the new collection file.
         path: String,
-        /// Replace a file already at `path`. Default false.
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-        overwrite: bool,
     },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.

@@ -1376,11 +1376,6 @@ pub(crate) fn actions() -> Vec<Action> {
         },
         Action::CollectionSaveAs {
             path: "D:/Projects/show copy.json".into(),
-            overwrite: false,
-        },
-        Action::CollectionSaveAs {
-            path: "/home/me/shows/talk.json".into(),
-            overwrite: true,
         },
         Action::PreviewSubscribe {
             channel: 2,

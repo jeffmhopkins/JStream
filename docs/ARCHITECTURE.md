@@ -1448,9 +1448,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to
   ([ADR-0121](adr/0121-projects-open-new-and-save-as.md)), and a save as rewrites
-  asset references so they keep naming the same files. The file's `key_scope`, omitted
-  in a file from before projects, names where its outputs' stream keys are stored, so
-  two projects that share an output ID never share a key.
+  asset references so they keep naming the same files. New and save as only ever make
+  a new file. Nothing in the file says where its outputs' stream keys are stored: the
+  engine scopes them by the file's path on this machine, so two projects that share an
+  output ID never share a key, and a shared file reaches no one's keys.
 - **Recent projects:** `recent-collections.json` (version 1) in the data directory, up
   to ten project files, most recent first, which `jstream-core` updates on every open,
   new and save as. The desktop app opens the first at startup if it still loads, and

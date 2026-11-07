@@ -28,11 +28,9 @@ protocol's types (`Overrides`).
   sources against. The engine supplies them (`Graph::with_kinds`, and
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
-  (`cut`, `fade`, `move`), which every graph has. It also carries the collection's
-  `key_scope`, the name its stream keys are stored under (`Graph::key_scope`,
-  `with_key_scope`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)),
-  which the collection file saves but no edit changes and undo keeps, and
-  `Graph::with_rev` sets the `rev` of a collection the engine opens in another's place.
+  (`cut`, `fade`, `move`), which every graph has. `Graph::with_rev` sets the `rev` of a
+  collection the engine opens in another's place
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always

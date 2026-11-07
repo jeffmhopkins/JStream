@@ -77,8 +77,7 @@ Commands:
                                    cleared (action collection.open)
   collection new <path>            create an empty project and open it (action
                                    collection.new)
-  collection save-as <path> [--overwrite]
-                                   save the project to another file and keep
+  collection save-as <path>        save the project to a new file and keep
                                    saving there (action collection.save_as)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
@@ -357,13 +356,8 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["collection", "new", path] => Command::Action(Action::CollectionNew {
             path: (*path).to_owned(),
         }),
-        ["collection", "save-as", path, rest @ ..] => Command::Action(Action::CollectionSaveAs {
+        ["collection", "save-as", path] => Command::Action(Action::CollectionSaveAs {
             path: (*path).to_owned(),
-            overwrite: match rest {
-                [] => false,
-                ["--overwrite"] => true,
-                _ => return Err(usage("wrong arguments for `collection save-as`")),
-            },
         }),
         ["pair"] => Command::Action(Action::PairingStart),
         ["device", "list"] => Command::Query(Query::DeviceList),
@@ -1048,13 +1042,14 @@ mod tests {
             })
         );
         assert_eq!(
-            ok(&["collection", "save-as", "/p/copy.json", "--overwrite"]).command,
+            ok(&["collection", "save-as", "/p/copy.json"]).command,
             Command::Action(Action::CollectionSaveAs {
-                path: "/p/copy.json".into(),
-                overwrite: true
+                path: "/p/copy.json".into()
             })
         );
-        assert!(err(&["collection", "save-as", "/p/c.json", "--force"]).contains("save-as"));
+        assert!(
+            err(&["collection", "save-as", "/p/c.json", "--force"]).contains("wrong arguments")
+        );
         assert!(err(&["collection", "open"]).contains("wrong arguments"));
     }
 

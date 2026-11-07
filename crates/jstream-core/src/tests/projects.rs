@@ -247,7 +247,10 @@ fn a_new_project_is_empty_and_never_replaces_a_file() {
     let file = saved(&fresh);
     assert_eq!(file["rev"], 2);
     assert_eq!(file["labels"].as_array().map(Vec::len), Some(4));
-    assert_eq!(file["key_scope"].as_str().map(str::len), Some(32));
+    assert!(
+        file.get("key_scope").is_none(),
+        "no key scope in a project file"
+    );
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -267,9 +270,11 @@ fn paths_must_be_absolute_and_need_a_collection_file() {
     assert!(matches!(
         act(
             &control,
-            Action::CollectionSaveAs { path: text(&dir.join("a.json")), overwrite: true }
+            Action::CollectionSaveAs {
+                path: text(&dir.join("a.json"))
+            }
         ),
-        Err(ProtocolError::InvalidArgument { field, .. }) if field == "path"
+        Err(ProtocolError::AlreadyExists { .. })
     ));
     let bare = connected(&Engine::new());
     assert!(matches!(
@@ -330,14 +335,7 @@ fn save_as_keeps_assets_on_the_same_files() {
     .expect("created");
     // Beside the open file: nothing to rewrite, the history stays.
     let copy = show.join("copy.json");
-    act(
-        &control,
-        Action::CollectionSaveAs {
-            path: text(&copy),
-            overwrite: false,
-        },
-    )
-    .expect("saved");
+    act(&control, Action::CollectionSaveAs { path: text(&copy) }).expect("saved");
     assert_eq!(scenes(&control).0, Rev(1));
     assert_eq!(saved(&copy)["rev"], 1);
     assert!(undo(&control).is_ok());
@@ -350,27 +348,19 @@ fn save_as_keeps_assets_on_the_same_files() {
         ]),
     )
     .expect("created again");
-    // An existing file needs `overwrite`.
-    assert!(matches!(
-        act(
-            &control,
-            Action::CollectionSaveAs {
-                path: text(&a),
-                overwrite: false
-            }
-        ),
-        Err(ProtocolError::AlreadyExists { .. })
-    ));
+    // A save as never replaces a file, a project or anything else.
+    let other = dir.join("notes.txt");
+    fs::write(&other, "mine").expect("written");
+    for taken in [&a, &other] {
+        assert!(matches!(
+            act(&control, Action::CollectionSaveAs { path: text(taken) }),
+            Err(ProtocolError::AlreadyExists { .. })
+        ));
+    }
+    assert_eq!(fs::read_to_string(&other).expect("read"), "mine");
     // A folder above keeps it relative, through the subfolder.
     let up = dir.join("up.json");
-    act(
-        &control,
-        Action::CollectionSaveAs {
-            path: text(&up),
-            overwrite: false,
-        },
-    )
-    .expect("saved");
+    act(&control, Action::CollectionSaveAs { path: text(&up) }).expect("saved");
     assert_eq!(
         file_setting(&control),
         serde_json::json!({"type": "asset", "root": "collection", "path": "show/img/logo.png"})
@@ -379,14 +369,7 @@ fn save_as_keeps_assets_on_the_same_files() {
     fs::create_dir_all(dir.join("other")).expect("dir");
     let away = dir.join("other").join("away.json");
     let mut events = control.events();
-    act(
-        &control,
-        Action::CollectionSaveAs {
-            path: text(&away),
-            overwrite: false,
-        },
-    )
-    .expect("saved");
+    act(&control, Action::CollectionSaveAs { path: text(&away) }).expect("saved");
     let logo = text(&show.join("img").join("logo.png"));
     assert_eq!(
         file_setting(&control),
@@ -409,8 +392,7 @@ fn save_as_keeps_assets_on_the_same_files() {
     act(
         &control,
         Action::CollectionSaveAs {
-            path: text(&a),
-            overwrite: true,
+            path: text(&show.join("b.json")),
         },
     )
     .expect("saved");
@@ -452,13 +434,17 @@ fn stream_keys_belong_to_one_project_file() {
         .expect("collection")
         .with_key_store(store.clone());
     let yt = OutputId::new("yt");
-    let scope = saved(&a)["key_scope"].as_str().expect("scoped").to_owned();
-    assert_eq!(engine.stream_key_name(&yt), format!("{scope}/yt"));
-    assert_eq!(
-        key(&store, &format!("{scope}/yt")).as_deref(),
-        Some("key-a")
+    let scoped = engine.stream_key_name(&yt);
+    assert!(
+        scoped.ends_with("/yt") && scoped.len() == 32 + 3,
+        "{scoped}"
     );
+    assert_eq!(key(&store, &scoped).as_deref(), Some("key-a"));
     assert_eq!(key(&store, "yt"), None, "the bare entry is removed");
+    assert!(
+        saved(&a).get("key_scope").is_none(),
+        "the file names no scope"
+    );
     let control = connected(&engine);
     let key_set = |control: &dyn Control| match query(
         control,
@@ -470,30 +456,24 @@ fn stream_keys_belong_to_one_project_file() {
         other => panic!("not an output status: {other:?}"),
     };
     assert!(key_set(&control));
+    // A save as that finds a file at its path copies no key there.
+    let taken = dir.join("taken.json");
+    fs::write(&taken, saved(&a).to_string()).expect("written");
+    assert!(matches!(
+        act(&control, Action::CollectionSaveAs { path: text(&taken) }),
+        Err(ProtocolError::AlreadyExists { .. })
+    ));
     // A save as copies the key to the new file's scope.
     let copy = dir.join("copy.json");
-    act(
-        &control,
-        Action::CollectionSaveAs {
-            path: text(&copy),
-            overwrite: false,
-        },
-    )
-    .expect("saved");
-    let copied = saved(&copy)["key_scope"]
-        .as_str()
-        .expect("scoped")
-        .to_owned();
-    assert_ne!(copied, scope);
+    act(&control, Action::CollectionSaveAs { path: text(&copy) }).expect("saved");
+    let copied = engine.stream_key_name(&yt);
+    assert_ne!(copied, scoped);
+    assert_eq!(key(&store, &copied).as_deref(), Some("key-a"));
     assert!(key_set(&control));
-    // A file without a scope, with the same output ID, gets none of those keys.
-    let stranger = dir.join("stranger.json");
-    let mut file = saved(&a);
-    file.as_object_mut().expect("object").remove("key_scope");
-    fs::write(&stranger, file.to_string()).expect("written");
-    act(&control, open_call(&stranger)).expect("opened");
+    // The same project at another path, as a shared copy would be, gets none of those
+    // keys: the scope follows the path on this machine, not the file's contents.
+    act(&control, open_call(&taken)).expect("opened");
     assert!(!key_set(&control));
-    assert!(saved(&stranger)["key_scope"].is_string());
     // Back to the first project: its key is there.
     act(&control, open_call(&a)).expect("opened");
     assert!(key_set(&control));

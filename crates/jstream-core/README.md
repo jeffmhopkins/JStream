@@ -763,9 +763,8 @@ settings, and the CLAP kinds' parameter defaults), `png`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes), `blake3` (the digests a quarantine keeps of each blamed
-shader, ADR-0097; already in the tree through `jstream-server`), `getrandom` (a
-project's stream-key scope, ADR-0121; already in the tree for the hosts' control tokens),
-`tracing` (see *Logging*) and, on Windows only,
+shader, ADR-0097, and a project's stream-key scope, a hash of its path, ADR-0121;
+already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -3084,7 +3083,8 @@ lock. The collection file's mutex comes before every other engine lock: a save h
 while it takes the collection lock to serialize, and `collection.open`, `collection.new`
 and `collection.save_as` hold it for the whole call, the stops of the outputs an open
 stops included, which take only the locks `output.stop` takes; the recent list's mutex
-is taken alone or after it. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
+is taken alone or after it, and the stream-key scope's mutex is a leaf, set under the
+collection lock when the file changes and read alone. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
 calls take the collection lock as any session's do. The live sources' `SourceMeters`
 (a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
 takes under the collection lock and `jstream-sources` and the profiler take alone; the
@@ -3249,29 +3249,32 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 `collection.save_as` switch the file the engine saves to, and `collection.info` reports
 it; without one they answer `unsupported`. Each holds the collection file's mutex for the
 whole call. An open reads and loads the file into a graph with the engine's kinds and a
-new loads an empty one with the sample labels, and either is written to its path before
-anything stops, so a file that can't be read, loaded or written leaves everything as it
-was. Then the open file is saved, pending stale stream keys are removed under the old
-scope, every running output stops through `output.stop` (with its events and audit
+new loads an empty one with the sample labels. Then the open file is saved, and a save
+that fails refuses the call. Then the new collection is written to its path before
+anything stops (a new one with `CollectionFile::create_new`, which never replaces a file),
+so a file that can't be read, loaded or written leaves everything as it was. Then pending
+stale stream keys are removed under the old scope, every running output stops through `output.stop` (with its events and audit
 entry), and, under the collection lock, `replace_collection` swaps the graph: `rev` one
 past the old one unless the file's is later, open gestures cancelled, timelines stopped,
 every client's undo history and idempotency keys cleared, the first scene on program,
 sources rebuilt with the new folder behind `collection` assets, then what follows any
-batch (`state.changed`) and `studio.changed`. A save as checks the path (not the open
-file; an existing one only with `overwrite`), copies each output's stream key to a new
-scope, rewrites asset references for the new folder (`move_collection_assets`), and
-writes the file under the collection lock, so no batch lands between the copy and the
-switch; a rewrite is a new `rev` and clears undo. Each ends with `collection.file_changed`
+batch (`state.changed`) and `studio.changed`. A switch that fails after that removes the
+file a new made. A save as refuses a path where anything is, copies each output's stream
+key to the new path's scope, rewrites asset references for the new folder
+(`move_collection_assets`), and makes the file with `create_new` under the collection
+lock, so no batch lands between the copy and the switch; a rewrite is a new `rev` and
+clears undo, and a save as that fails removes the copied keys. Each ends with `collection.file_changed`
 and puts the file first in the recent list (`with_recent_collections`, at most ten, kept
 in a JSON file the host names; `recent_collections` reads it for a host's startup).
 
-**Stream-key scopes.** The collection file holds a random `key_scope`, and an output's
-key is stored under `<key_scope>/<output_id>` (`Engine::stream_key_name`, which hosts'
-publish openers read too). A new file and a save as get a fresh scope, as does a file
-opened without one. The collection loaded at startup without a scope keeps its keys:
-once the engine has both it and a key store, each key is copied to a new scope, the file
-is saved with it, and the bare entries are removed; a store failure leaves it unscoped
-and is logged.
+**Stream-key scopes.** An output's key is stored under `<scope>/<output_id>`
+(`Engine::stream_key_name`, which hosts' publish openers read too), where the scope is
+`projects::key_scope`, a hash of the collection file's path with its folder resolved
+through links, kept on the engine's own lock and set whenever the file changes. Nothing
+in the file names it. Without a collection file, keys stay under the bare output ID. The
+collection loaded at startup keeps the keys stored before projects: once the engine has
+both it and a key store, each bare key is copied to its scoped name, unless one is there,
+and then removed; a store failure leaves that key where it was and is logged.
 
 <a id="not-yet"></a>
 ## Not yet

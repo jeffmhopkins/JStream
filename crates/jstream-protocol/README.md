@@ -1501,9 +1501,10 @@ server stops.
 **Projects** (0.93, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 A project is one collection file on the engine's machine. `collection.open {path}` loads
 the file at `path` and saves there from then on; `collection.new {path}` creates an empty
-one there (`already_exists`, entity `file`, when a file is there); `collection.save_as
-{path, overwrite?}` writes the current collection there and saves there from then on
-(`already_exists` unless `overwrite`, `invalid_argument` for the open file itself). A
+one there; `collection.save_as {path}` writes the current collection there and saves
+there from then on. New and save as never replace a file: anything at `path`, the open
+file included, is `already_exists`, entity `file`. An open or a new is `action_failed`
+while the open project can't be saved. A
 path is absolute and follows the `absolute` asset path rules (`invalid_argument` on
 `path` otherwise). A file that can't be read or loaded, such as one from a newer engine,
 is `action_failed` with its reason, and the open project stays open. An open or a new
@@ -1512,8 +1513,9 @@ cancels open gestures, stops timelines, puts the first scene on program, and mov
 past the old collection's; every client gets `state.changed` (so an older client reads
 the state again), `studio.changed` and `collection.file_changed {path, cause}`. A save as
 to another folder rewrites asset references to keep naming the same files (a new `rev`
-that clears undo when it rewrites any). Stream keys belong to one project file
-(`key_scope` in the file), so two projects sharing an output ID never share a key. All
+that clears undo when it rewrites any). Stream keys belong to one project path on the
+engine's machine, and nothing in the file names where they are, so two projects sharing
+an output ID never share a key. All
 four answer `unsupported` when the host named no collection file, as the mock does. No
 plugin is granted them and no hotkey binds them.
 

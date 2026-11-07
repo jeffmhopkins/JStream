@@ -124,6 +124,27 @@ impl CollectionFile {
         })
     }
 
+    /// Writes `graph` to a new file at `path`, failing with `AlreadyExists` if anything
+    /// is there, so `collection.new` and `collection.save_as` never replace a file
+    /// (ADR-0121 §2). The check and the create are one step. A write that fails after
+    /// the create removes the file again.
+    pub(crate) fn create_new(path: PathBuf, graph: &Graph) -> io::Result<CollectionFile> {
+        let mut file = crate::private_file::create_new(&path)?;
+        let written = file
+            .write_all(graph.to_collection_json().as_bytes())
+            .and_then(|()| file.sync_all());
+        drop(file);
+        if let Err(err) = written {
+            let _ = fs::remove_file(&path);
+            return Err(err);
+        }
+        sync_folder(&path);
+        Ok(CollectionFile {
+            path,
+            saved: graph.rev(),
+        })
+    }
+
     /// The `rev` the file holds.
     pub(crate) fn saved(&self) -> Rev {
         self.saved
@@ -168,6 +189,13 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
         let _ = fs::remove_file(&tmp);
         return written;
     }
+    sync_folder(path);
+    Ok(())
+}
+
+/// On Unix, flushes the folder `path` is in, so a new name in it survives a power cut.
+/// The file is already written, so a failure is only logged at `warn`.
+fn sync_folder(path: &Path) {
     #[cfg(unix)]
     {
         let dir = match path.parent() {
@@ -182,7 +210,8 @@ pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> io::Result<()> {
             );
         }
     }
-    Ok(())
+    #[cfg(not(unix))]
+    let _ = path;
 }
 
 /// Writes `bytes` to a new user-only file at `path`, replacing a temporary file a

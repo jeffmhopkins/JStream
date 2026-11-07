@@ -40,16 +40,24 @@ pub(crate) fn checked_path(path: &str) -> Result<PathBuf, ProtocolError> {
     Ok(checked)
 }
 
-/// A new stream-key scope: 16 random bytes from the OS, as hex (ADR-0121 §5). An
-/// attacker who hands someone a project file can't know the scope of their own
-/// projects, so a crafted file never reaches their keys.
-///
-/// # Errors
-/// The OS refused its random source.
-pub(crate) fn new_key_scope() -> io::Result<String> {
-    let mut bytes = [0u8; 16];
-    getrandom::fill(&mut bytes).map_err(|err| io::Error::other(err.to_string()))?;
-    Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
+/// The stream-key scope of the project saved at `path` (ADR-0121 §5): a hash of the
+/// path, its folder resolved through any links, so it is the same before and after the
+/// file is made. Only the engine's machine decides it: nothing in a project file names
+/// it, so a file someone else hands over never reaches the keys of a project of one's
+/// own at another path.
+pub(crate) fn key_scope(path: &Path) -> String {
+    let path = absolute(path);
+    let resolved = match (path.parent(), path.file_name()) {
+        (Some(folder), Some(name)) => fs::canonicalize(folder)
+            .map(|folder| folder.join(name))
+            .unwrap_or(path),
+        _ => path,
+    };
+    let hash = blake3::hash(resolved.as_os_str().as_encoded_bytes());
+    hash.as_bytes()[..16]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
 }
 
 /// The name the key store holds `output_id`'s key under: `<scope>/<output_id>`, or the
@@ -69,13 +77,6 @@ pub(crate) fn absolute(path: &Path) -> PathBuf {
 /// The path as the protocol reports it.
 pub(crate) fn path_text(path: &Path) -> String {
     path.display().to_string()
-}
-
-/// Whether `a` and `b` name the same file: compared after making both absolute and,
-/// where they exist, canonical.
-pub(crate) fn same_file(a: &Path, b: &Path) -> bool {
-    let resolve = |p: &Path| fs::canonicalize(p).unwrap_or_else(|_| absolute(p));
-    resolve(a) == resolve(b)
 }
 
 /// The projects in the recent list kept at `path` (ADR-0121 §6), most recent first:
@@ -247,9 +248,10 @@ mod tests {
         let id = OutputId::new("out-1");
         assert_eq!(key_name(None, &id), "out-1");
         assert_eq!(key_name(Some("ab12"), &id), "ab12/out-1");
-        let scope = new_key_scope().expect("random");
+        let scope = key_scope(&root().join("shows").join("a.json"));
         assert_eq!(scope.len(), 32);
-        assert_ne!(scope, new_key_scope().expect("random"));
+        assert_eq!(scope, key_scope(&root().join("shows").join("a.json")));
+        assert_ne!(scope, key_scope(&root().join("shows").join("b.json")));
     }
 
     #[test]

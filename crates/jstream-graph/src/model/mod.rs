@@ -104,9 +104,6 @@ pub struct Graph {
     pub(crate) rev: Rev,
     pub(crate) state: State,
     pub(crate) kinds: BTreeMap<String, KindDescriptor>,
-    /// The name its outputs' stream keys are stored under (ADR-0121 §5), saved in the
-    /// collection file. Not collection state: no edit changes it and undo keeps it.
-    pub(crate) key_scope: Option<String>,
 }
 
 impl Default for Graph {
@@ -118,7 +115,6 @@ impl Default for Graph {
                 .into_iter()
                 .map(|k| (k.kind_id.clone(), k))
                 .collect(),
-            key_scope: None,
         }
     }
 }
@@ -175,20 +171,6 @@ impl Graph {
     #[must_use]
     pub fn with_rev(mut self, rev: Rev) -> Self {
         self.rev = rev;
-        self
-    }
-
-    /// The name the collection's stream keys are stored under (ADR-0121 §5), or `None`
-    /// for a collection that has none yet.
-    pub fn key_scope(&self) -> Option<&str> {
-        self.key_scope.as_deref()
-    }
-
-    /// This graph with `scope` as its stream keys' name, which the collection file
-    /// saves.
-    #[must_use]
-    pub fn with_key_scope(mut self, scope: impl Into<String>) -> Self {
-        self.key_scope = Some(scope.into());
         self
     }
 }
