@@ -5445,10 +5445,10 @@ stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "The shell p
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Docking names Plugins under the Inspector, and a Plugins bullet describes the section: plugin.list on open and on plugin.state_changed or events.dropped, the row texts, install with no grant and the grant dialog opened when the manifest asks for more than read, only requested classes, hosts and folders offered, and Grant and turn on for needs_grant; style.css adds the section's and dialogs' rules. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: docking paragraph: Live chat alone waits on YouTube; Stream stats reads stats.tick outputs, picks the output, keeps 120 kbps samples per output and resets on a stop or restart; Live layout has Stream stats, Outputs and Agent as tabs; style.css adds the stats panel rules" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:76fdafe34bbc674a", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+stamp = { hash = "b3:5de020df0d73199c", by = "agent:outputs-1206", note = "Re-read against #1206: the panel still talks only through dyn Control (one Batch per OK/Apply via send_edits, actions for keys), the stream key stays write-only and outside any form (the secret-field test still counts two), and pure helpers (OutputDraft, draft_edits, target_summary, encoder_name, HealthReading::short) are tested natively against MockEngine; style.css only restyles the outputs panel and adds a --warn token. | merge: #1259 added File › Video settings… (video_settings.rs) to the menu paragraph; the outputs panel text is untouched and still holds. | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:b1bd9452d9471e7f", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
+stamp = { hash = "b3:fb297e3f9f917876", by = "agent:outputs-1206", note = "Rewrote the outputs.rs and encoders.rs entries for #1206: compact rows with health in the panel header, the per-output settings dialog applying on OK/Apply, the delete confirmation, and the profiles moving into the Encoders & mixes dialog; the rest of the contents list is unchanged. | merge: #1259 added File › Video settings… (video_settings.rs) as its own Contents entry; the outputs.rs and encoders.rs entries still hold beside it. | kept from the merged side: Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -5763,7 +5763,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:d1fd904a5b5e881f", by = "agent:claude", note = "Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
+stamp = { hash = "b3:9477e0fefc9eb225", by = "agent:outputs-1206", note = "Rewrote the Outputs entry for the compact rows and the settings, add-output, delete and Encoders & mixes dialogs; Browse, Codec downloads and Program-and-output-chains entries now name the dialogs and the program row's tooltip; Stream stats only changed how it adds the recording, which its entry doesn't describe. | merge: #1259 added the video-settings spec and an exact Settings… match in menus.spec.js; the Outputs entries are untouched. | kept from the merged side: Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/browse.spec.js"]
 stamp = { hash = "b3:ad2edd557bacd7f2", by = "agent:outputs-1206", note = "Rewrote the Outputs entry for the compact rows and the settings, add-output, delete and Encoders & mixes dialogs; Browse, Codec downloads and Program-and-output-chains entries now name the dialogs and the program row's tooltip; Stream stats only changed how it adds the recording, which its entry doesn't describe." }
@@ -6240,7 +6240,7 @@ stamp = { hash = "b3:801cb2d2efc458a3", by = "agent:outputs-1206", note = "Rewro
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
+stamp = { hash = "b3:657b6de0542adf66", by = "agent:outputs-1206", note = "Round 2 only added the refused-key retry to UI-FEATURES#outputs; the steps (+ Add output with URL and key, settings by double-click, Encoders & mixes…) still hold. | merge: #1259 added a Video settings paragraph to the first-scene section only; the going-live steps are unchanged. | kept from the merged side: Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
@@ -6249,7 +6249,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the recording steps don't depend on HD-11; nothing changed" }
+stamp = { hash = "b3:657b6de0542adf66", by = "agent:outputs-1206", note = "Round 2 changed only the stream-key retry; adding a recording and changing its file in its settings still hold. | merge: #1259 changed nothing in recording; only the first-scene section gained the Video settings paragraph. | kept from the merged side: Re-read: the recording steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6267,7 +6267,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:54d5843586051feb", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
+stamp = { hash = "b3:657b6de0542adf66", by = "agent:outputs-1206", note = "Round 2's UI-FEATURES change is the Add retry note in Outputs; the first-scene steps touch no output UI. | merge: #1259 added the canvas size and frame rate paragraph (File › Video settings…), which touches no output UI and matches video_settings.rs. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6981,7 +6981,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:76fdafe34bbc674a", by = "agent:claude", note = "style.css only adds the Video settings dialog's field, size-row and error rules, using the existing --danger token; the palette and shared controls are unchanged" }
+stamp = { hash = "b3:5de020df0d73199c", by = "agent:outputs-1206", note = "WS-04 now says output rows, WS-07 names a row's Start/Stop, FX and ⋯ as always shown; the palette is unchanged apart from a new --warn amber for the starting badge and the cleartext ⚠. | merge: #1259 added five lines of video-settings dialog CSS, none overlapping the outputs or --warn rules. | kept from the merged side: style.css only adds the Video settings dialog's field, size-row and error rules, using the existing --danger token; the palette and shared controls are unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }
