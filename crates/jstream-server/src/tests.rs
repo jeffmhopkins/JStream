@@ -2924,7 +2924,7 @@ impl Harness {
     }
 
     /// Starts pairing over `control` and returns the code and where the network
-    /// listener is, as `pairing.start` answers (0.101).
+    /// listener is, as `pairing.start` answers (0.97).
     fn start_pairing_with_network(
         &self,
         control: &WsControl,

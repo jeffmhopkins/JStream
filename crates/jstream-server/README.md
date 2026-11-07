@@ -423,7 +423,7 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   certificate carries) and `network_fingerprint` give what the host shows the person:
   the addresses and the SHA-256 fingerprint, as `AB:CD:…`, the way a browser's
   certificate viewer writes it. `pairing.start`'s answer carries the same two as
-  `network` (protocol 0.101), so the host UI and the CLI show them beside the code;
+  `network` (protocol 0.97), so the host UI and the CLI show them beside the code;
   without a network listener it is absent. The listener's start is logged at `info` with its
   address and fingerprint.
 - **Where it listens.** Wherever `NetworkConfig::bind` says: the daemon binds every

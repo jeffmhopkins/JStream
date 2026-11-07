@@ -47,7 +47,7 @@ pub(crate) struct Admitted {
     /// Off, they reach `inner` like any other call.
     serves_devices: bool,
     /// Where a device on the network reaches the server, while its network listener is
-    /// on: `pairing.start` answers with it (ADR-0104, 0.101).
+    /// on: `pairing.start` answers with it (ADR-0104, 0.97).
     network: Option<NetworkAccess>,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,

@@ -310,7 +310,7 @@ fn the_pairing_page_is_served_on_the_network_listener() {
     assert_ne!(local.status, 200);
 }
 
-/// 0.101: `pairing.start` names where a device on the network reaches the listener, and
+/// 0.97: `pairing.start` names where a device on the network reaches the listener, and
 /// the certificate's fingerprint, so the host can show them beside the code; without the
 /// network listener it names nothing.
 #[test]

@@ -799,7 +799,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
   sent), which a device trades at `POST /api/v1/pair` for a device token of its own, and
-  from 0.101 the network listener's addresses and certificate fingerprint when there is
+  from 0.97 the network listener's addresses and certificate fingerprint when there is
   one ([ADR-0130](adr/0130-browsers-keep-no-certificate-pin-v2.md));
   `device.list` and the action `device.revoke` manage the paired devices. They concern
   whom a listener admits, so `jstream-server` answers them, and a session with no server
