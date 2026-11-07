@@ -1,9 +1,11 @@
 // The custom shader editor (FL-12, #1232, #1295): Add filter › Custom shader writes an
 // effect pack and opens the editor over the Filters window, which shows the shader in
 // colour, indents on Tab, compiles a moment after each change and marks the line the
-// engine names. The mock engine loads no packs and describes no kinds, so the page's
+// engine names. Save as pack… writes it under a chosen ID and moves the filter there,
+// and an `@renamed` line raises the manifest's version with its `renames`. The mock engine loads no packs and describes no kinds, so the page's
 // socket answers `kind.list`, `kind.describe`, `pack.list`, `pack.read` and `pack.write`
-// here, from the packs the test writes; every other message goes on to the mock daemon.
+// here, from the packs the test writes, and refuses a filter of a written pack with a
+// setting its kind doesn't declare; every other message goes on to the mock daemon.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
 const SHARPEN = {
@@ -11,22 +13,39 @@ const SHARPEN = {
   params: [{ id: 'amount', type: 'float', min: 0, max: 1, step: 0.05, default: 0.2, label: 'Amount', live: true }],
 };
 
-/** The kind a written custom shader pack has: the template's two settings. */
-function shaderKind(pack) {
-  return {
-    kind_id: `${pack}/shader`, category: 'video_filter', name: 'Custom shader', version: 1, video: true, audio: false,
-    params: [
-      { id: 'amount', type: 'float', min: 0, max: 1, default: 0.5, label: 'Amount', live: true },
-      { id: 'tint', type: 'color', alpha: true, default: '#ff9a3cff', label: 'Tint', live: true },
-    ],
-  };
+/** The kind a written custom shader pack has: its manifest's name and version, and a
+ * setting per `// @param` line of its shader (a colour or a float). */
+function shaderKind(pack, files) {
+  const manifest = files.find((f) => f.path === 'effect.toml')?.text ?? '';
+  const shader = files.find((f) => f.path === 'shader.wgsl')?.text ?? '';
+  const name = /^name = "(.*)"$/m.exec(manifest)?.[1] ?? 'Custom shader';
+  const version = Number(/^version = (\d+)$/m.exec(manifest)?.[1] ?? 1);
+  const params = [...shader.matchAll(/^\/\/ @param (\S+) (\S+)/gm)].map(([, id, type]) => (type === 'color'
+    ? { id, type: 'color', alpha: true, default: '#ff9a3cff', label: id, live: true }
+    : { id, type: 'float', min: 0, max: 1, default: 0.5, label: id, live: true }));
+  return { kind_id: `${pack}/shader`, category: 'video_filter', name, version, video: true, audio: false, params };
+}
+
+/** Adds a Custom shader to the Backdrop from Add filter, and returns its editor. */
+async function addCustomShader(page) {
+  await showPanel(page, 'Filters');
+  await page.locator('.sources-panel li.row .row-main').first().click();
+  await page.locator('.filters-panel').getByRole('button', { name: '+ Add filter…' }).click();
+  const add = page.getByRole('dialog', { name: 'Add filter' });
+  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Custom shader' }).click();
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(add).toBeHidden();
+  return page.getByRole('dialog', { name: 'Custom shader' });
 }
 
 /** Answers the kind and pack calls from the packs written so far. A shader holding
- * `BROKEN` fails to compile, as the engine reports it, on the line that holds it. */
+ * `BROKEN` fails to compile, as the engine reports it, on the line that holds it. A
+ * batch adding a filter of a written pack with a setting its kind doesn't declare is
+ * refused, as the engine refuses it; the others go on to the mock daemon. */
 async function fakePacks(page) {
   const packs = new Map();
   const writes = [];
+  const adds = [];
   const answer = (id, result) => JSON.stringify({ type: 'response', id, result });
   await page.routeWebSocket(/.*/, (ws) => {
     const server = ws.connectToServer();
@@ -40,9 +59,19 @@ async function fakePacks(page) {
       const call = parsed?.call;
       const query = call?.kind === 'query' ? call.query : null;
       const action = call?.kind === 'action' ? call.action : null;
-      const kinds = [SHARPEN, ...[...packs.keys()].map(shaderKind)];
+      const kinds = [SHARPEN, ...[...packs].map(([pack, files]) => shaderKind(pack, files))];
       const info = (id) => ({ id, folder: id, kinds: [`${id}/shader`], loaded: true });
-      if (query?.type === 'kind.list') {
+      const added = call?.kind === 'batch' ? call.edits.filter((e) => e.type === 'filter.add') : [];
+      const stale = added.flatMap((edit) => {
+        const kind = kinds.find((k) => k.kind_id === edit.kind && packs.has(edit.kind.split('/')[0]));
+        return kind ? Object.keys(edit.settings ?? {}).filter((id) => !kind.params.some((p) => p.id === id)) : [];
+      });
+      adds.push(...added);
+      if (stale.length > 0) {
+        const reason = `\`${stale[0]}\` is not a parameter of kind`;
+        const error = { code: 'invalid_argument', field: 'settings', reason, message: `invalid \`settings\`: ${reason}` };
+        ws.send(JSON.stringify({ type: 'error', id: parsed.id, error }));
+      } else if (query?.type === 'kind.list') {
         const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
         ws.send(answer(parsed.id, { kind: 'query', result: { type: 'kind.list', kinds: list } }));
       } else if (query?.type === 'kind.describe' && kinds.some((k) => k.kind_id === query.kind_id)) {
@@ -71,23 +100,16 @@ async function fakePacks(page) {
     });
     server.onMessage((message) => ws.send(message));
   });
-  return { writes };
+  return { writes, adds };
 }
 
 test('Custom shader writes a pack and opens an editor that colours, indents and compiles it', async ({ page, daemon }) => {
   const { writes } = await fakePacks(page);
   await connect(page, daemon);
-  await showPanel(page, 'Filters');
-  await page.locator('.sources-panel li.row .row-main').first().click();
-  await page.locator('.filters-panel').getByRole('button', { name: '+ Add filter…' }).click();
-  const add = page.getByRole('dialog', { name: 'Add filter' });
-  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Custom shader' }).click();
-  await add.getByRole('button', { name: 'Add filter' }).click();
-  await expect(add).toBeHidden();
+  const editor = await addCustomShader(page);
 
   // The template went out as the first custom pack, and the editor opened on it.
   expect(writes.map((w) => w.pack)).toEqual(['custom-1']);
-  const editor = page.getByRole('dialog', { name: 'Custom shader' });
   await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
   const code = editor.getByRole('textbox', { name: 'Shader (WGSL)' });
   await expect(code).toHaveValue(/^\/\/ @name Custom shader\n/);
@@ -124,8 +146,71 @@ test('Custom shader writes a pack and opens an editor that colours, indents and 
   await expect(editor.locator('.shader-status.problem').first()).toContainText(`line ${line}`);
   await expect(shade).toHaveText(text + ' ');
 
-  // Scrolled, the copy scrolls with the text.
-  await code.fill(text + '\n'.repeat(80) + '// the end');
+  // Scrolled, the copy scrolls with the text, to the very end of both ways, where the
+  // text's scrollbars would leave a copy with none behind.
+  await code.fill(text + '\n'.repeat(80) + `// the end ${'x'.repeat(300)}`);
   await code.evaluate((el) => { el.scrollTop = 400; });
   await expect.poll(() => shade.evaluate((el) => el.scrollTop)).toBe(await code.evaluate((el) => el.scrollTop));
+  await code.evaluate((el) => { el.scrollTop = el.scrollHeight; el.scrollLeft = el.scrollWidth; });
+  const end = await code.evaluate((el) => [el.scrollTop, el.scrollLeft]);
+  await expect.poll(() => shade.evaluate((el) => [el.scrollTop, el.scrollLeft])).toEqual(end);
+});
+
+test('Save as pack… writes the shader under a new ID and moves the filter to it', async ({ page, daemon }) => {
+  const { writes, adds } = await fakePacks(page);
+  await connect(page, daemon);
+  let editor = await addCustomShader(page);
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
+  // A value for `amount`, set in the Filters window, for the move to carry.
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toBeHidden();
+  const window = page.getByRole('dialog', { name: 'Filters', exact: true });
+  const amount = window.getByRole('spinbutton').first();
+  await amount.fill('0.25');
+  await amount.press('Tab');
+  await window.getByRole('button', { name: 'Edit shader…' }).click();
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
+  const code = editor.getByRole('textbox', { name: 'Shader (WGSL)' });
+
+  // A rename: the manifest goes to version 2 with the old ID in `renames`.
+  const renamed = (await code.inputValue())
+    .replace('// @param amount float', '// @param mix_amount float')
+    .replace('p.amount', 'p.mix_amount')
+    .replace('// @name Custom shader', '// @name Warm look\n// @renamed amount mix_amount');
+  await code.fill(renamed);
+  await expect(editor.locator('.shader-status')).toHaveText('Compiled. The picture shows this version.');
+  const manifest = writes.at(-1).files.find((f) => f.path === 'effect.toml').text;
+  expect(manifest).toContain('version = 2\n');
+  expect(manifest).toContain('renames = { amount = "mix_amount" }');
+  await expect(editor.locator('.shader-shade .hl-annotation').nth(1)).toHaveText('// @renamed amount mix_amount');
+
+  // Save as pack…: an ID already taken is refused, a new one is written and the filter
+  // moves to its kind, with the editor open on the new pack.
+  await editor.getByRole('button', { name: 'Save as pack…' }).click();
+  const id = editor.getByRole('textbox', { name: 'Pack ID' });
+  await id.fill('custom-1');
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(editor.getByRole('alert')).toHaveText('A pack called `custom-1` already exists.');
+  await id.fill('Warm');
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(editor.getByRole('alert')).toContainText('A pack ID is 1 to 32');
+  const before = writes.length;
+  await id.fill('warm-look');
+  await editor.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect.poll(() => writes.length).toBe(before + 1);
+  expect(writes.at(-1).pack).toBe('warm-look');
+  expect(writes.at(-1).files.find((f) => f.path === 'shader.wgsl').text).toBe(renamed);
+  expect(writes.at(-1).files.find((f) => f.path === 'effect.toml').text).toContain('id = "warm-look"');
+
+  editor = page.getByRole('dialog', { name: 'Custom shader' });
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “warm-look”');
+  await expect(editor.getByRole('textbox', { name: 'Shader (WGSL)' })).toHaveValue(renamed);
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toBeHidden();
+  // The Backdrop's chain holds one filter of the new kind in the old one's place.
+  const rows = page.locator('.filters-panel').getByRole('list', { name: 'Video filters' }).getByRole('listitem');
+  await expect(rows.locator('.filter-name')).toHaveText(['Sharpen', 'Blur', 'Warm look']);
+  // The new filter took the value under its new ID, and nothing the kind doesn't declare.
+  expect(adds.at(-1).kind).toBe('warm-look/shader');
+  expect(adds.at(-1).settings).toEqual({ mix_amount: 0.25 });
 });

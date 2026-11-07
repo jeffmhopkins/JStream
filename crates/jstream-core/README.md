@@ -2012,10 +2012,22 @@ quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
 `timer`, which redraws when the value it shows changes)
-is painted by that thread just before each re-plan, holding no engine
-lock, so under the collection lock the plan only takes the frame painted last;
-`install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. The thread paints only the painters the latest round of plans looked at, the
+is painted by that thread, holding no engine lock, so under the collection lock the
+plan only takes the frame painted last; `install`, `sync` and a clock swap hand the
+thread the running painters and their time zeros. A painter's frames go through a
+**frame slot** (`slot.rs`, ADR-0117 §3): a one-frame mailbox made when the source is
+installed, which the plan shows as the source's frame (`Frame::from_slot`). The thread
+paints on its own wake, the earliest `Painter::next_change` rounded to the frame grid
+like a plan's, and stores each new frame in the slot (`FrameSlot::store_latest`) with no
+re-plan; every draw uploads what the slot holds then, by the slot frame's own version,
+reading it without a lock (an `ArcSwap`). The slot's writers, the plan and this
+thread, keep each frame they replace until no draw holds it and free it themselves, so
+the render thread never frees one (R-RT-003), and each stores the painter's frame as it
+is when it writes, so the slot never goes back to an older one;
+and a preview stream that skips an unchanged picture draws one whose slots changed
+(`Shot::slot_stamp`). Only a frame of another size waits for a plan, which the thread
+asks for, since where it is placed depends on its size. A painter whose frames aren't
+packed RGBA8 has no slot and re-plans as other animations do. The thread paints only the painters the latest round of plans looked at, the
 program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
 while something else re-plans every frame; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
@@ -2091,7 +2103,9 @@ sheet gets a `jstream-frames` thread, which wakes when each picture is due (the 
 what `video.snapshot` would draw then (`Shared::sample`): the published program
 render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
 it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
-`rev` and the media clock's time. A scene sheet also follows its audio modifiers on
+`rev` and the media clock's time, and what each frame slot it shows holds then
+(`Shot::pin`), which the picture draws in place of what the slot holds when the sheet
+is drawn. A scene sheet also follows its audio modifiers on
 the way, so they hear the mix instead of staying at silence. Its envelope starts at
 silence and takes one 50 ms step before the first picture, so a modifier whose attack
 is much longer than that reads lower on the first picture or two than the same item
@@ -3152,7 +3166,9 @@ atomics the mixer thread writes and the sampler reads, with no lock. The `jstrea
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter
-a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
+a plan reaches after the thread skipped it (*Live sources*). A painter's frame slot has
+a leaf mutex its writers take, the plan under the collection lock and that thread alone;
+no draw takes it, and the render thread reads the slot with no lock at all. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while

@@ -330,7 +330,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   under a transparent textarea in the same box; Tab indents at the caret and the change
   compiles ("Compiled."); a line the fake engine refuses is marked in the gutter and
   named under the text while the colours follow the new text; and scrolling the text
-  scrolls the copy.
+  scrolls the copy, to the very end both ways. Then, on a second shader whose `amount`
+  the Filters window set to 0.25, an `@renamed amount mix_amount` line sends a manifest
+  at version 2 with its `renames` and is coloured as an annotation; Save as pack…
+  refuses a taken ID and a bad one, then writes `warm-look` with the same shader, and
+  the filter moves to its kind in the old one's place (the chain reads Sharpen, Blur,
+  Warm look) with the editor open on `warm-look`, its add carrying exactly
+  `mix_amount: 0.25`. The fake kinds declare the shader's own `@param` lines, and a
+  `filter.add` of a written pack with a setting its kind doesn't declare is refused, as
+  the engine refuses it.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain

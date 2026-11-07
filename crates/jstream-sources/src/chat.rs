@@ -224,17 +224,13 @@ impl Source for ChatSource {
     /// [`update`](Source::update) or the painter. It neither draws nor allocates, and
     /// never fails.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(Arc::clone(&lock(&self.painter.ready).frame))
+        Ok(self.painter.frame())
     }
 
     /// The featured message can change at any time, so the source is looked at again
     /// every 100 ms.
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        let ms = i64::try_from(source::millis(at)).unwrap_or(i64::MAX);
-        Some(MediaTime::new(
-            ms.saturating_add(CHECK_EVERY_MS),
-            Timebase::MILLIS,
-        ))
+        self.painter.next_change(at)
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -285,6 +281,19 @@ struct Ready {
 }
 
 impl Painter for ChatPainter {
+    fn frame(&self) -> Arc<VideoFrame> {
+        Arc::clone(&lock(&self.ready).frame)
+    }
+
+    /// Every 100 ms, as the featured message can change at any time.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        let ms = i64::try_from(source::millis(at)).unwrap_or(i64::MAX);
+        Some(MediaTime::new(
+            ms.saturating_add(CHECK_EVERY_MS),
+            Timebase::MILLIS,
+        ))
+    }
+
     /// Redraws if another message was featured since the frame drawn last. Only that
     /// redraw allocates. A message these settings and limits can't draw (too wide
     /// unwrapped, or over the memory cap) shows nothing, once, until another message is
