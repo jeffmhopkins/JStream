@@ -429,7 +429,8 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                 // trusts the certificate only if its fingerprint matches.
                 if let Some(network) = network {
                     for url in &network.urls {
-                        writeln!(out, "open on the device: {url}")?;
+                        let url = url.trim_end_matches('/');
+                        writeln!(out, "open on the device: {url}/pair")?;
                     }
                     writeln!(out, "certificate fingerprint: {}", network.fingerprint)?;
                     writeln!(

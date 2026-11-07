@@ -298,12 +298,16 @@ impl Panel {
 fn network_view(network: NetworkAccess) -> impl IntoView {
     view! {
         <div class="pairing-network">
-            <p class="pairing-help">"On another device on this network, open:"</p>
+            <p class="pairing-help">"On another device on this network, open the pairing page:"</p>
             <ul class="pairing-urls">
                 {network
                     .urls
                     .into_iter()
-                    .map(|url| view! { <li><code>{url}</code></li> })
+                    .map(|url| {
+                        // The pairing page, not the root: an unpaired browser starts there.
+                        let page = format!("{}/pair", url.trim_end_matches('/'));
+                        view! { <li><code>{page}</code></li> }
+                    })
                     .collect::<Vec<_>>()}
             </ul>
             <p class="pairing-help">
