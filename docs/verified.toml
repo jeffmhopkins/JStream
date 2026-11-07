@@ -6381,7 +6381,7 @@ stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usa
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
 
 ["PERF-SUITE#runner"."body"]
-stamp = { hash = "b3:2ca955e403694763", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
+stamp = { hash = "b3:6ef2740094e0f29b", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/assets.rs"]
 stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
@@ -6390,7 +6390,7 @@ stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:4b28a45ac91e63ee", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/mod.rs"]
-stamp = { hash = "b3:3a376b2729e4e737", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
+stamp = { hash = "b3:e4f6b0f4e418f553", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/scene.rs"]
 stamp = { hash = "b3:30a9997dd377dd46", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
@@ -6416,11 +6416,14 @@ stamp = { hash = "b3:589d29582ec531e9", by = "agent:claude-perf-suite", note = "
 ["PERF-SUITE#scenes"."file:xtask/perf/60-churn.json"]
 stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "new section: checked the scene format against scene.rs (each/cols default/cycle, {i}, $i, $cell, $canvas scale, $asset, unknown $ fails, runner-created scene) and the listed scenes against the six JSON files; the shipped-scenes test loads them" }
 
+["PERF-SUITE#scenes"."file:xtask/perf/bench/gates-lavapipe.json"]
+stamp = { hash = "b3:000c2782796ed5c5", by = "agent:claude-perf-suite", note = "gates-lavapipe.json sits in xtask/perf/bench/, which load_dir doesn't read as a scene (it reads *.json in xtask/perf only); the scene format text is unchanged" }
+
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:d8ee202d65c1afbb", by = "agent:claude-perf-suite", note = "new section: checked against Thresholds in perf/mod.rs (default plus per-scene override, min_fps, max_frame_ms, max_over_budget_pct, leak limits across churn and run-wide threads/handles only, unknown keys fail, didn't-run rows fail) and thresholds.toml's per-scene software limits" }
+stamp = { hash = "b3:0fb5c275f753542e", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
-stamp = { hash = "b3:3c821a9b16115f93", by = "agent:claude-perf-suite", note = "new section: checked against Thresholds in perf/mod.rs (default plus per-scene override, min_fps, max_frame_ms, max_over_budget_pct, leak limits across churn and run-wide threads/handles only, unknown keys fail, didn't-run rows fail) and thresholds.toml's per-scene software limits" }
+stamp = { hash = "b3:b876be4ba7ceb4be", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
 
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }

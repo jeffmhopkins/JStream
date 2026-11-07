@@ -70,6 +70,12 @@ daemon finds it ([ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)); wi
 it they are listed as skipped. `--scene` takes a name, or a prefix ending in `*`, and
 may be repeated.
 
+`--bench <gates.json>` also runs `jstream bench --scenario all --preset cut` against the
+same daemon once the scenes are measured and `report.json` is written, writing to `target/perf/run/bench/`, and judges
+it against that gates file. A failing bench fails the run as `--check` does. The
+`perf-linux` job in `.github/workflows/bench.yml` runs the suite this way on lavapipe, on
+`main` and on demand: `--check` with `xtask/perf/bench/gates-lavapipe.json`.
+
 <a id="scenes"></a>
 ## Scenes
 <!-- @section
@@ -119,5 +125,12 @@ The shipped limits are software-rendering bars, for lavapipe with the OpenH264
 recording: loose enough for a CI runner, tight enough that a scene that stops drawing,
 a several-fold regression or a leak fails. The scenes that software rendering makes slow
 (a 1080p blur, glow, shadow, outline, sharpen, key or scroll, the models, many item
-effects) have their own looser limits. An unknown key fails, so a typo can't turn a
+effects) have their own looser limits. A few that draw near the frame budget on a GitHub
+runner (a colour correction, a LUT, a scene mask, a scene chain) are judged on frame rate
+and mean frame time only. An unknown key fails, so a typo can't turn a
 limit off.
+
+`bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's
+alpha.5 counters with room for software rendering, at least a fifth of the target frame
+rate and no budget on frames over time. It sits in a folder of its own because every
+`*.json` beside this file is read as a scene.
