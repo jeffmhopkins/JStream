@@ -1594,6 +1594,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filter-dialog-tools { display: flex; align-items: center; gap: 8px; }
 .filter-dialog-body { padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .filter-hint { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.filter-preset { margin: 0 0 12px; max-width: 240px; }
 .filter-dialog-body .field label { grid-template-columns: 132px minmax(0, 1fr); align-items: center; }
 .modal-footer button.danger.secondary { background: none; border-color: var(--border); color: var(--problem); }
 .switch { position: relative; flex: 0 0 34px; width: 34px; height: 18px; padding: 0; border: 0; border-radius: 9px; background: var(--border-strong); }
