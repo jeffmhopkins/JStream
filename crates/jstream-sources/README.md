@@ -235,8 +235,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
-  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
-  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
+  `Source::model` hands the engine the model, which an item draws in the stand-in's
+  place (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -438,21 +439,30 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
   it. The **Page API** group (ADR-0102, none of it live, all off by default):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;
   `page_api_values` (at most 1 KiB) names the shared values it may read, as names or
   prefixes ending in `.*`, separated by commas, each name checked as `values.set`
-  checks one. The source sends its page only what changed (`page_api.rs`, `Feed`):
-  the visibility with the clock time each part last became true, the scenes, and the
+  checks one; `page_api_bus` (a bus, default none) gives it `jstream.levels()`, that
+  bus's post-fader peak and RMS per channel, as `meters.tick` meters them, and 64
+  log-spaced bands from 20 Hz to 20 kHz, lowest first, each 0 to 1 on the dB scale from
+  -90 to 0 dBFS, from the bus's scope (`AudioMeter`); or `null` while no mixer runs or
+  the bus is gone.
+  The source sends its page only what changed (`page_api.rs`, `Feed`):
+  the visibility with the clock time each part last became true, the scenes, the
+  levels, and the
   covered values, with a removal for one that went or left the grant's cover; and a
   clock anchor first, every 250 ms after that, and at once when the clock goes back or
   jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
   the page's latest frame when the engine looks at it. Updates go at most once per frame
   of `fps`: what changes sooner is merged (the latest visibility, scenes and anchor, and
   each value's latest), held, and sent once the frame has passed, a held anchor moved to
-  the clock's time as it goes. `youtube_chat` never sets any
+  the clock's time as it goes. While the granted bus has a reading, the next page frame
+  is always due, so the page reads the bus every frame. `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,
