@@ -305,8 +305,11 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
             program_scene: Some(("scn_1", "Main")),
             preview_scene: None,
             values,
+            buses: &NO_BUSES,
         }
     }
+    static NO_BUSES: BTreeMap<jstream_protocol::BusId, jstream_sources::BusLevels> =
+        BTreeMap::new();
 
     let browser = FakeBrowser::new();
     let ctx = ctx(&browser, None);
@@ -336,7 +339,8 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
         page.spec().page_api,
         Some(PageApi {
             scenes: false,
-            values: true
+            values: true,
+            levels: false,
         })
     );
     granted.page_view(&view(&values, 1000));

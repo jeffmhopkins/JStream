@@ -633,6 +633,19 @@ source: crates/jstream-core/src/kinds.rs
           "equals": true
         },
         "live": false
+      },
+      {
+        "id": "page_api_bus",
+        "type": "bus",
+        "default": null,
+        "label": "Levels",
+        "description": "The bus whose levels and bands the page may read, after its fader, with jstream.levels(). A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
       }
     ]
   },
