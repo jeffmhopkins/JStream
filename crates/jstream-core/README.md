@@ -483,7 +483,8 @@ state machine. Contents:
   to the CPU path in place when a CPU reader joins, its counters carried on, and
   `DeviceLost` for every reader when it doesn't open again there, one open on the
   CPU path refused by the GPU view, a device switched in place to the format a later
-  open asks for every reader, and kept in its format when it refuses the new one
+  open asks for every reader, on the CPU path when it is there even when the GPU view
+  asks, and kept in its format when it doesn't list the new one, MJPEG included
   (#1265) (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, and with the resolution, frame rate and pixel format its
   settings ask for, falling back to the engine's choice when the device offers none

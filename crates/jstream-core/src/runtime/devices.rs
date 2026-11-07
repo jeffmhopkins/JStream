@@ -30,11 +30,13 @@
 //! An open that asks another format than the one a device is open in switches the device
 //! to it in place, under its lock, the same way (#1265): its stream is closed and the
 //! device opened again in the asked format, on the path the asking view opens on (the
-//! CPU path for a compressed format), so every reader goes on reading the same device in
+//! CPU path for a compressed format, and for a device on the CPU path, whose CPU-view
+//! readers read only CPU frames), so every reader goes on reading the same device in
 //! the new format and only misses the frames of the switch. A `webcam` whose format
 //! setting changed opens its new format while its old capture still holds a reader, so
 //! the change applies at once; of two captures asking different formats of one device,
-//! the one that opened last wins. When the device doesn't open in the new format, it is
+//! the one that opened last wins. A format the device doesn't list is never switched to,
+//! and the device is shared as it is. When the device doesn't open in the new format, it is
 //! opened again in the old one and shared in that, and when that fails too it is lost.
 
 use std::collections::BTreeMap;
@@ -100,10 +102,20 @@ impl VideoDevices for SharedVideoDevices {
         open.retain(|_, weak| weak.strong_count() > 0);
         if let Some(shared) = open.get(device).and_then(Weak::upgrade) {
             let mut state = lock(&shared.state);
-            if state.lost.is_none() && state.format != *format {
-                // Switched on the CPU path from the CPU view, and for a compressed
-                // format, which only the CPU path decodes.
-                let to_cpu = self.gpu.is_none() || format.encoding.is_compressed();
+            // A format the device doesn't list is never switched to: closing the stream
+            // for an open that fails would cost every reader frames, or the device.
+            let listed = || {
+                self.inner
+                    .formats(device)
+                    .is_ok_and(|formats| formats.contains(format))
+            };
+            if state.lost.is_none() && state.format != *format && !listed() {
+                tracing::warn!(%device, open = ?state.format, asked = ?format, "the device doesn't list the asked format; sharing it in the one it has");
+            } else if state.lost.is_none() && state.format != *format {
+                // Switched on the CPU path from the CPU view, for a device on the CPU
+                // path, which CPU-view readers may hold and which must stay there, and
+                // for a compressed format, which only the CPU path decodes.
+                let to_cpu = self.gpu.is_none() || !state.on_gpu || format.encoding.is_compressed();
                 let backend = match (&self.gpu, to_cpu) {
                     (Some(gpu), false) => gpu.as_ref(),
                     _ => self.inner.as_ref(),
@@ -572,6 +584,60 @@ mod tests {
             inner: Arc::clone(&shared.inner),
             gpu: Some(Arc::clone(gpu) as Arc<dyn VideoDevices>),
             open: Arc::clone(&shared.open),
+        }
+    }
+
+    /// A format switch asked from the GPU view of a device on the CPU path switches it on
+    /// the CPU path, so the CPU view's readers keep reading CPU frames, and the GPU view's
+    /// caller shares it through the CPU view (`Unsupported`), as before.
+    #[test]
+    fn a_gpu_view_switch_of_a_device_on_the_cpu_path_stays_on_the_cpu() {
+        let (clock, fake, shared) = setup();
+        let gpu = Arc::new(OnGpu {
+            devices: fake.clone(),
+            opens: AtomicUsize::new(0),
+        });
+        let on_gpu = gpu_view(&shared, &gpu);
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let formats = shared.formats(&id).expect("formats");
+        let (nv12, yuy2) = (formats[0], formats[1]);
+        let mut preview = shared.open(&id, &nv12, None).expect("opens on the CPU");
+        assert!(matches!(
+            on_gpu.open(&id, &yuy2, None),
+            Err(PlatformError::Unsupported { .. })
+        ));
+        assert_eq!(
+            gpu.opens.load(Ordering::Relaxed),
+            0,
+            "never opened on the GPU"
+        );
+        assert_eq!(fake.open_streams(), 1);
+        let mut program = shared.open(&id, &yuy2, None).expect("shares, switched");
+        assert_eq!(fake.open_streams(), 1);
+        clock.advance(1);
+        assert!(preview.latest().expect("reads on").is_some());
+        assert!(program.latest().expect("reads").is_some());
+    }
+
+    /// A format the device doesn't list leaves it as it is, even open in MJPEG, whose
+    /// decoder a reopen in it would need.
+    #[test]
+    fn an_unlisted_format_never_closes_the_device() {
+        let (clock, fake, shared) = setup();
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let mjpeg = shared.formats(&id).expect("formats")[2];
+        let decoder = Box::new(FakeCaptureDecoder::new(jstream_media::PixelFormat::Bgra8));
+        let mut first = shared.open(&id, &mjpeg, Some(decoder)).expect("opens");
+        let odd = VideoDeviceFormat {
+            size: jstream_media::FrameSize::new(7, 7).expect("size"),
+            ..mjpeg
+        };
+        let mut second = shared.open(&id, &odd, None).expect("shares as it is");
+        assert_eq!(fake.open_streams(), 1);
+        clock.advance(1);
+        for reader in [&mut first, &mut second] {
+            let frame = reader.latest().expect("reads").expect("a frame");
+            assert_eq!(frame.info().size, mjpeg.size);
         }
     }
 
