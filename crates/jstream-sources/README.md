@@ -439,7 +439,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
   it. The **Page API** group (ADR-0102, none of it live, all off by default):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;

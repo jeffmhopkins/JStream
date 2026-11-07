@@ -1,12 +1,13 @@
 //! CEF's callbacks: the app (command-line switches), and per page a client with its
 //! render, audio, life-span, load and request handlers, each forwarding to the page's
 //! [`PageShared`], and a permission handler that refuses everything but local network
-//! access its request policy allows the requesting origin ([`crate::permission`]). Plus
-//! a task that runs a closure on CEF's UI thread.
+//! access its request policy allows the requesting origin ([`crate::permission`]). The
+//! request handler also answers a page given as HTML with its HTML ([`HtmlPage`],
+//! #1035). Plus a task that runs a closure on CEF's UI thread.
 
 use std::os::raw::c_int;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use cef::*;
 
@@ -494,6 +495,27 @@ wrap_resource_request_handler! {
             }
         }
 
+        // The page given as HTML is answered here, from the helper's own copy, so its
+        // URL never reaches the network (#1035). `on_before_resource_load` has already
+        // let only that page's main frame ask for it.
+        fn resource_handler(
+            &self,
+            _browser: Option<&mut Browser>,
+            _frame: Option<&mut Frame>,
+            request: Option<&mut Request>,
+        ) -> Option<ResourceHandler> {
+            let request = request?;
+            let html = self.page.0.html.as_ref()?;
+            let url = CefString::from(&request.url()).to_string();
+            let get = CefString::from(&request.method())
+                .to_string()
+                .eq_ignore_ascii_case("GET");
+            let page = request.resource_type() == ResourceType::MAIN_FRAME
+                && get
+                && self.page.0.policy.html_page(&url) == crate::Verdict::Allow;
+            page.then(|| HtmlPage::new(Arc::clone(html), Arc::new(AtomicUsize::new(0))))
+        }
+
         fn on_resource_redirect(
             &self,
             _browser: Option<&mut Browser>,
@@ -543,6 +565,79 @@ wrap_resource_request_handler! {
                     }
                 }
             }
+        }
+    }
+}
+
+// The page given as HTML, as the response to its URL: `200`, `text/html` in UTF-8.
+wrap_resource_handler! {
+    pub(crate) struct HtmlPage {
+        html: Arc<[u8]>,
+        // How much of it has been read. Shared by the handler's clones, as CEF holds it
+        // by reference.
+        read: Arc<AtomicUsize>,
+    }
+
+    impl ResourceHandler {
+        fn open(
+            &self,
+            _request: Option<&mut Request>,
+            handle_request: Option<&mut c_int>,
+            _callback: Option<&mut Callback>,
+        ) -> c_int {
+            if let Some(handle_request) = handle_request {
+                *handle_request = 1;
+            }
+            1
+        }
+
+        fn response_headers(
+            &self,
+            response: Option<&mut Response>,
+            response_length: Option<&mut i64>,
+            _redirect_url: Option<&mut CefString>,
+        ) {
+            if let Some(response) = response {
+                response.set_status(200);
+                response.set_status_text(Some(&"OK".into()));
+                response.set_mime_type(Some(&"text/html".into()));
+                response.set_charset(Some(&"utf-8".into()));
+                // Nothing is kept: a reload answers the URL again.
+                response.set_header_by_name(
+                    Some(&"Cache-Control".into()),
+                    Some(&"no-store".into()),
+                    1,
+                );
+            }
+            if let Some(length) = response_length {
+                *length = i64::try_from(self.html.len()).unwrap_or(-1);
+            }
+        }
+
+        fn read(
+            &self,
+            data_out: *mut u8,
+            bytes_to_read: c_int,
+            bytes_read: Option<&mut c_int>,
+            _callback: Option<&mut ResourceReadCallback>,
+        ) -> c_int {
+            let Some(bytes_read) = bytes_read else {
+                return 0;
+            };
+            *bytes_read = 0;
+            let at = self.read.load(Ordering::Acquire);
+            let left = self.html.get(at..).unwrap_or_default();
+            let n = left.len().min(usize::try_from(bytes_to_read).unwrap_or(0));
+            if n == 0 || data_out.is_null() {
+                // The whole page was read: the response is complete.
+                return 0;
+            }
+            // SAFETY: CEF passes a buffer of `bytes_to_read` bytes, valid for this call,
+            // and `n` is no more than that.
+            unsafe { std::ptr::copy_nonoverlapping(left.as_ptr(), data_out, n) };
+            self.read.store(at + n, Ordering::Release);
+            *bytes_read = c_int::try_from(n).unwrap_or(0);
+            1
         }
     }
 }

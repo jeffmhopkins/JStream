@@ -98,14 +98,14 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs", "crates/jstream-ui/src/video_settings.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs", "crates/jstream-ui/src/video_settings.rs", "crates/jstream-ui/src/settings.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details, Settings… and Disconnect, and Undo and Redo. Settings… is the application settings dialog, which starts with Check for updates at launch ([HD-10](#header)). The accent square is the app icon (the desktop app's `icons/icon.png`, copied into the bundle as `icon.png`, also the favicon), and beyond the prototype a Help menu ends the bar ([HD-10](#header)). The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
+| HD-01 | Brand and menu row | Accent square and "JStream", then File, Edit, View and Layout menus; one top menu open at a time, closed by any outside press. | ✅ | The prototype leaves File and Edit empty; the real ones hold the connection details, Settings…, Video settings… ([HD-11](#header)), Plugins… and Disconnect, and Undo and Redo. Settings… is the application settings dialog (`settings.rs`), one dialog with its pages listed on the left as OBS's Settings has them, Up and Down moving between them: General (Check for updates at launch, [HD-10](#header)), Plugins (the WASM automation plugins, [beyond the prototype](#beyond)) and Devices (pairing, [beyond the prototype](#beyond)). Plugins… opens it on Plugins. Application-wide settings live there rather than in a panel, so the Inspector shows only the selected item; the plugins' install and permissions dialogs open over it. The accent square is the app icon (the desktop app's `icons/icon.png`, copied into the bundle as `icon.png`, also the favicon), and beyond the prototype a Help menu ends the bar ([HD-10](#header)). The menus behave as a desktop menu bar: a click opens or closes one; while one is open, pointing at another menu opens it instead; Escape closes it. From the keyboard, Down, Enter or Space opens the focused menu at its first item (Up at its last), Up, Down, Home and End move through it, Left and Right move along the bar (opening the next menu while one is open), and Tab closes it. Keys with Ctrl, Alt or Meta are left to the hotkeys. |
 | HD-02 | View menu | Lists all 11 panels with "shown" or "add"; clicking hides a shown panel or adds a hidden one to its home zone. | ✅ | All eleven, in the prototype's order. Live chat waits on YouTube sign-in ([live panels](#live-panels)), so for now it says what it waits on; Stream stats shows an output's own stats without it. Beyond the prototype, a Projectors group under them opens the program or the multiview in a window or full screen ([DL-07](#dialogs)). |
 | HD-03 | Layout menu | "Layout: <name>", saved layouts with "current", "Save current layout as new", "Reset to default". | ✅ | |
 | HD-04 | Stats readout | Mono "60 fps · 0 dropped · CPU 3%". | ✅ | Built from `stats.tick`: the frame rate is the program's over the last tick's interval, and shows only while an output runs, since the program stage draws nothing otherwise; "N dropped" counts video frames dropped since the page connected; CPU is the engine process's share of every logical CPU, as Task Manager counts it, "<1%" below half a percent (protocol 0.48's `load`). The daemon and the desktop app tick about once a second while idle too. CPU shows on Windows and macOS; elsewhere the engine can't read it and the readout leaves it out. |
@@ -125,7 +125,7 @@ covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/dock.rs", "crat
 
 Spec: [workspace › dock zones and docking](../design/ui-prototype/spec-workspace.md#dock-zones-and-docking).
 The dock is built (`dock.rs`, `workspace.rs`) with the prototype's eleven panels: Scenes,
-Sources (the prototype's Scene objects), Inspector (with the pairing panel and the Plugins section under the properties), Transform,
+Sources (the prototype's Scene objects), Inspector (the selected item only), Transform,
 Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and Transitions
 (studio mode and the presets). Live chat says what it waits on until its rows are built,
 and Stream stats shows the half of its row that needs no YouTube sign-in
@@ -449,12 +449,12 @@ not remove them; they move into the prototype's look.
   dialog for the app's own engine; a browser page has none, and another engine leaves
   the button disabled.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
-  one-time code for a remote browser and lists and revokes paired devices. In the
-  workspace it sits under the properties in the Inspector panel, since it hides itself
-  where the server pairs nothing.
+  one-time code for a remote browser and lists and revokes paired devices. It is the
+  Settings dialog's Devices page ([HD-01](#header)), which says no device can pair where
+  the server pairs nothing.
 - WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),
-  [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Plugins section
-  under the pairing panel in the Inspector lists the installed plugins with why one is
+  [ADR-0076](adr/0076-saved-wasm-plugins-and-manifest-requests.md)): the Settings dialog's
+  Plugins page ([HD-01](#header)), also opened by File › Plugins…, lists the installed plugins with why one is
   off and what it asks for that isn't granted, installs one from its package folder
   (a folder dialog in the desktop app), and
   turns a disabled one back on. Its grant dialog offers only what the plugin's manifest
