@@ -1,0 +1,87 @@
+[
+  {
+    "name": "churn",
+    "about": "creates, shows and deletes a busy scene 12 times",
+    "cycles": 12,
+    "edits": [
+      {
+        "each": {
+          "count": 10,
+          "cols": 5
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "ch_t{i}",
+            "name": "ch_t{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "text"
+            },
+            "settings": {
+              "text": "churn {i}",
+              "size": 40
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "churn",
+            "item_id": "ch_ti{i}",
+            "source_id": "ch_t{i}",
+            "geometry": "$cell"
+          },
+          {
+            "type": "filter.add",
+            "owner": {
+              "type": "item",
+              "item_id": "ch_ti{i}"
+            },
+            "chain": "video",
+            "filter_id": "ds",
+            "kind": "drop_shadow"
+          }
+        ]
+      },
+      {
+        "type": "source.create",
+        "source_id": "ch_im",
+        "name": "ch_im",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "churn",
+        "item_id": "ch_imi",
+        "source_id": "ch_im",
+        "geometry": {
+          "$canvas": 0.3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "ch_sp",
+        "name": "ch_sp",
+        "kind": {
+          "type": "builtin",
+          "kind": "spectrum"
+        },
+        "settings": {}
+      },
+      {
+        "type": "item.add",
+        "scene_id": "churn",
+        "item_id": "ch_spi",
+        "source_id": "ch_sp",
+        "geometry": {
+          "$canvas": 0.2
+        }
+      }
+    ]
+  }
+]

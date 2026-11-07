@@ -539,6 +539,12 @@ impl Engine {
         }
     }
 
+    /// The rate of each live preview stream.
+    #[cfg(test)]
+    pub(crate) fn preview_rates(&self) -> Vec<u32> {
+        self.shared.previews.rates()
+    }
+
     /// Installs a pack update as the watcher, a blame or `effect.enable` does.
     #[cfg(test)]
     pub(crate) fn install_effects(&self, update: crate::effect_packs::Update) {
@@ -2008,7 +2014,7 @@ impl Engine {
                 source,
                 source_id,
             } => {
-                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let mut settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
                 // `source_id` first, so the error names the later field however many
                 // of the three are given.
                 if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
@@ -2041,6 +2047,9 @@ impl Engine {
                             id: source_id.as_str().to_owned(),
                         });
                     }
+                    // No faster than the program: a 60 fps ask of a 30 fps collection
+                    // gets 30, on the hub as on the program stage.
+                    settings.fps = settings.fps.min(state.graph.state().base_fps().max(1));
                     // Only the kinds and the canvas: the draft is planned unlocked.
                     let kinds = source
                         .as_ref()
@@ -5519,7 +5528,7 @@ impl State {
         }
         // Every mix and preview has looked at what it draws: the rest can rest.
         live.rest_undrawn();
-        live.wake_at(wake);
+        live.wake_at(wake, graph.state().base_fps());
         live.meters().planned(started.elapsed());
         planning.end_ms
     }
