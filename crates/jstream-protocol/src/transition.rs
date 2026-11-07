@@ -320,12 +320,12 @@ impl ItemTransition {
 
     /// Why an engine refuses these settings, as the field (`delay_ms`) and the reason,
     /// or `None` when they are valid.
-    pub fn problem(&self) -> Option<(&'static str, String)> {
+    pub fn problem(&self) -> Option<(String, String)> {
         if self.delay_ms > MAX_DELAY_MS {
-            return Some(("delay_ms", format!("must be at most {MAX_DELAY_MS}")));
+            return Some(("delay_ms".into(), format!("must be at most {MAX_DELAY_MS}")));
         }
-        if let Some((_, reason)) = self.easing.problem() {
-            return Some(("easing", reason));
+        if let Some((field, reason)) = self.easing.problem() {
+            return Some((format!("easing.{field}"), reason));
         }
         None
     }
@@ -579,7 +579,10 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Easing, ItemTransition, TransitionEffect, builtin_kinds};
+    use super::{
+        Bezier, Easing, ItemEasing, ItemTransition, KeyframeTiming, TransitionEffect, builtin_kinds,
+    };
+    use crate::Finite32;
     use serde_json::json;
 
     /// #1209: the preset a new collection starts with is an instant cut.
@@ -597,8 +600,20 @@ mod tests {
     /// transition must draw (ADR-0029 §5).
     #[test]
     fn easing_golden_values() {
-        let cases: [(Easing, [f32; 5]); 4] = [
+        let cases: [(Easing, [f32; 5]); 7] = [
             (Easing::Linear, [0.0, 0.25, 0.5, 0.75, 1.0]),
+            (Easing::EaseIn, [0.0, 0.015625, 0.125, 0.421875, 1.0]),
+            (Easing::Hold, [0.0, 0.0, 0.0, 0.0, 1.0]),
+            // CSS's `ease-in-out` curve is symmetric about the middle.
+            (
+                Easing::CubicBezier(Bezier {
+                    x1: Finite32::const_new(0.42),
+                    y1: Finite32::ZERO,
+                    x2: Finite32::const_new(0.58),
+                    y2: Finite32::ONE,
+                }),
+                [0.0, 0.129_164, 0.5, 0.870_836, 1.0],
+            ),
             (Easing::EaseOut, [0.0, 0.578125, 0.875, 0.984375, 1.0]),
             (Easing::EaseInOut, [0.0, 0.0625, 0.5, 0.9375, 1.0]),
             (Easing::Spring, [0.0, 1.206_24, 0.964_717, 1.004_285, 1.0]),
@@ -621,11 +636,60 @@ mod tests {
             Easing::EaseOut,
             Easing::EaseInOut,
             Easing::Spring,
+            Easing::EaseIn,
+            Easing::Hold,
+            Easing::CubicBezier(Bezier::BACK_OUT),
         ] {
             assert_eq!(easing.apply(-1.0), 0.0);
             assert_eq!(easing.apply(f32::NAN), 0.0);
             assert_eq!(easing.apply(2.0), 1.0);
         }
+    }
+
+    /// A curve's points out of range are refused by field, on an easing, an item and a
+    /// keyframe's timing (ADR-0129), and the back-out curve overshoots and settles.
+    #[test]
+    fn a_curve_is_checked_and_may_overshoot() {
+        let f = Finite32::const_new;
+        let wide = Bezier {
+            x1: f(1.2),
+            ..Bezier::BACK_OUT
+        };
+        let high = Bezier {
+            y2: f(3.5),
+            ..Bezier::BACK_OUT
+        };
+        assert_eq!(Bezier::BACK_OUT.problem(), None);
+        assert_eq!(wide.problem().map(|(field, _)| field), Some("x1"));
+        assert_eq!(high.problem().map(|(field, _)| field), Some("y2"));
+        assert_eq!(
+            Easing::CubicBezier(wide).problem().map(|(field, _)| field),
+            Some("cubic_bezier.x1".into())
+        );
+        let item = ItemTransition {
+            easing: ItemEasing::CubicBezier(high),
+            ..ItemTransition::default()
+        };
+        assert_eq!(
+            item.problem().map(|(field, _)| field),
+            Some("easing.cubic_bezier.y2".into())
+        );
+        let timing = KeyframeTiming {
+            easing: Some(ItemEasing::CubicBezier(wide)),
+            ..KeyframeTiming::default()
+        };
+        assert_eq!(
+            timing.problem().map(|(field, _)| field),
+            Some("easing.cubic_bezier.x1".into())
+        );
+        let peak = (1..100)
+            .map(|n| Easing::CubicBezier(Bezier::BACK_OUT).apply(n as f32 / 100.0))
+            .fold(0.0, f32::max);
+        assert!(peak > 1.05, "it overshoots: {peak}");
+        assert_eq!(
+            serde_json::to_string(&Easing::CubicBezier(Bezier::BACK_OUT)).ok(),
+            Some(r#"{"cubic_bezier":{"x1":0.34,"y1":1.56,"x2":0.64,"y2":1.0}}"#.into())
+        );
     }
 
     #[test]
@@ -646,7 +710,10 @@ mod tests {
             delay_ms: 60_001,
             ..ItemTransition::default()
         };
-        assert_eq!(late.problem().map(|(field, _)| field), Some("delay_ms"));
+        assert_eq!(
+            late.problem().map(|(field, _)| field),
+            Some("delay_ms".into())
+        );
     }
 
     #[test]
