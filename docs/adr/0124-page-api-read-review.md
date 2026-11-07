@@ -62,10 +62,12 @@ records the review #1228 asks for, which this ADR's own decisions follow from.
 
    Granting a microphone bus thus takes a checkbox and a bus, never a bus picked in
    passing.
-3. **Existing grants carry over.** A source saved before this change has no
-   `page_api_shared_values` or `page_api_audio`. When the setting is absent, it counts
-   as on if its names or bus are set, so nothing a user granted is silently taken away,
-   and nothing new is granted. The first edit of such a source writes the settings out.
+3. **Existing grants carry over.** A collection saved before this change has no
+   `page_api_shared_values` or `page_api_audio`. Loading it rebuilds each source with its
+   kind's defaults, which would turn both off, so the collection file's schema goes to
+   version 8. Its migration turns each checkbox on in a `browser` source whose names or
+   bus are set. Nothing a user granted is silently taken away, and nothing new is
+   granted.
 4. **The warning is visible.** Protocol 0.95 adds `warning` to a parameter's descriptor:
    one line that a client shows beside the control, not only in a tooltip. Each setting
    in the table above carries its warning there. A client that predates `warning`
@@ -92,7 +94,8 @@ records the review #1228 asks for, which this ADR's own decisions follow from.
   each with its warning in plain sight, and in the Sources panel's badge.
 - Two settings are added to the `browser` kind, and protocol 0.95 adds `warning` to
   parameter descriptors. The `kinds.snap` diff reviews both.
-- Grants made before this change keep working (decision 3).
+- Grants made before this change keep working (decision 3). The schema-8 migration
+  follows lane D's version 7 (#1270).
 - The threat model's browser section records these controls.
 - Tempo and MIDI can't reach a page by being added to `window.jstream` alone: each
   needs its own checkbox first (decision 7).
