@@ -1602,10 +1602,14 @@ An item's effects (ADR-0065 §5, in v1 under
 as the scene that draws the item draws it: a keyframe scene's items have chains of
 their own, at their effective values, with the keyframe's own effects where it
 overrides them (ADR-0088). The chain phase draws the item into
-`GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
-every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
-built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
-down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
+`GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
+outset is the sum of their kinds' `max_outset_px`: drop shadow, outline, glow and bloom
+declare one (render › Filters). The chain grows the layer by it where the first effect
+that declares one runs (`Chain::pad_at`, that effect's `VideoFilter::set_pad`), so the
+effects before it frame the box itself
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)). A box
+longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
+drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
@@ -1650,7 +1654,9 @@ clamped to `[0, 1]`), which updates the running filters in place. Goldens in `ch
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
-item turned 90°, whose ellipse stands with its box. Each `stats.tick` reports what
+item turned 90°, whose ellipse stands with its box. Another draws a glow and a drop shadow
+on an opaque item, which show past its box in the outset (#1226), and a vignette
+before a glow, which still frames the box. Each `stats.tick` reports what
 they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
 steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
 plus one layer and pass per filter, and each item's effects as its box layer and pass
