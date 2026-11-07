@@ -12,6 +12,7 @@
 //! [`ItemTransition::problem`]) and the easing curves ([`Easing::apply`]) live here, so
 //! the engine, the mock and any UI that previews a transition agree.
 
+use crate::finite::Finite32;
 use crate::id::TransitionPresetId;
 use crate::kind::{EnumOption, KindCategory, KindDescriptor, ParamDescriptor, ParamType};
 use crate::settings::Settings;
@@ -38,12 +39,18 @@ pub const MAX_DURATION_MS: u32 = 60_000;
 pub const MAX_DELAY_MS: u32 = 60_000;
 /// The largest `stagger_ms` setting of `fade` and `move`.
 pub const MAX_STAGGER_MS: i64 = 10_000;
+/// The farthest a `cubic_bezier` easing's `y1` or `y2` may be from `[0, 1]`: they lie in
+/// `[-MAX_BEZIER_OVERSHOOT, 1 + MAX_BEZIER_OVERSHOOT]` (ADR-0129).
+pub const MAX_BEZIER_OVERSHOOT: f32 = 2.0;
 
 /// The ID of the preset every new collection starts with, which is its default.
 pub const INITIAL_PRESET: &str = "cut";
 
 /// How a value moves from its start to its end over a transition
-/// ([ADR-0029](../../../docs/adr/0029-transitions.md) §5).
+/// ([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and
+/// `cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-easings.md)).
+/// The named curves are strings (`"ease_out"`); a `cubic_bezier` is an object
+/// (`{"cubic_bezier": {"x1": 0.2, "y1": 0, "x2": 0, "y2": 1}}`).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum Easing {
@@ -52,16 +59,96 @@ pub enum Easing {
     EaseInOut,
     /// Cubic ease-out: fast at the start, slow at the end.
     EaseOut,
+    /// Cubic ease-in: slow at the start, fast at the end.
+    EaseIn,
     /// Constant speed.
     Linear,
     /// `1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.
     Spring,
+    /// A step: the value holds its start until the end, then takes its end at once.
+    Hold,
+    /// The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.
+    CubicBezier(Bezier),
+}
+
+/// The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`
+/// and `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in
+/// `[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Bezier {
+    /// The first control point's time.
+    pub x1: Finite32,
+    /// The first control point's progress.
+    pub y1: Finite32,
+    /// The second control point's time.
+    pub x2: Finite32,
+    /// The second control point's progress.
+    pub y2: Finite32,
+}
+
+// A `Finite32` is never NaN, so equality is total. `-0.0` and `0.0` compare equal and
+// hash alike, since the hash uses each value with its sign of zero removed.
+impl Eq for Bezier {}
+
+impl std::hash::Hash for Bezier {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for v in [self.x1, self.y1, self.x2, self.y2] {
+            (v.get() + 0.0).to_bits().hash(state);
+        }
+    }
+}
+
+impl Bezier {
+    /// Why an engine refuses these points, as the field (`x1`) and the reason, or
+    /// `None` when they are valid.
+    pub fn problem(&self) -> Option<(&'static str, String)> {
+        for (field, x) in [("x1", self.x1), ("x2", self.x2)] {
+            if !(0.0..=1.0).contains(&x.get()) {
+                return Some((field, "must be between 0 and 1".into()));
+            }
+        }
+        let (low, high) = (-MAX_BEZIER_OVERSHOOT, 1.0 + MAX_BEZIER_OVERSHOOT);
+        for (field, y) in [("y1", self.y1), ("y2", self.y2)] {
+            if !(low..=high).contains(&y.get()) {
+                return Some((field, format!("must be between {low} and {high}")));
+            }
+        }
+        None
+    }
+
+    /// The curve's progress at time `t` in `[0, 1]`: the `y` of the point whose `x` is
+    /// `t`, found by bisection, which needs no derivative and always converges since `x`
+    /// rises with the curve's parameter while `x1` and `x2` lie in `[0, 1]`.
+    pub fn at(&self, t: f32) -> f32 {
+        let (x1, y1, x2, y2) = (
+            f64::from(self.x1.get()),
+            f64::from(self.y1.get()),
+            f64::from(self.x2.get()),
+            f64::from(self.y2.get()),
+        );
+        let cubic = |a: f64, b: f64, u: f64| {
+            let v = 1.0 - u;
+            3.0 * v * v * u * a + 3.0 * v * u * u * b + u * u * u
+        };
+        let t = f64::from(t);
+        let (mut lo, mut hi) = (0.0_f64, 1.0_f64);
+        for _ in 0..40 {
+            let mid = (lo + hi) * 0.5;
+            if cubic(x1, x2, mid) < t {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        cubic(y1, y2, (lo + hi) * 0.5) as f32
+    }
 }
 
 impl Easing {
     /// The eased progress for linear progress `p`. `p` at or below 0 is 0, and at or
-    /// above 1 is 1; in between, every curve but `spring` stays within `[0, 1]`, and
-    /// `spring` overshoots 1 by design. Clients that preview a transition call this, so
+    /// above 1 is 1; in between, the named curves but `spring` stay within `[0, 1]`,
+    /// `spring` overshoots 1 by design, `hold` is 0, and a `cubic_bezier` goes where
+    /// its control points take it. Clients that preview a transition call this, so
     /// they draw what the engine renders.
     pub fn apply(self, p: f32) -> f32 {
         if p.is_nan() || p <= 0.0 {
@@ -73,6 +160,9 @@ impl Easing {
         match self {
             Easing::Linear => p,
             Easing::EaseOut => 1.0 - (1.0 - p).powi(3),
+            Easing::EaseIn => p * p * p,
+            Easing::Hold => 0.0,
+            Easing::CubicBezier(bezier) => bezier.at(p),
             Easing::Spring => 1.0 - (-6.0 * p).exp() * (11.0 * p).cos(),
             Easing::EaseInOut => {
                 if p < 0.5 {
@@ -81,6 +171,17 @@ impl Easing {
                     1.0 - (-2.0 * p + 2.0).powi(3) / 2.0
                 }
             }
+        }
+    }
+
+    /// Why an engine refuses this easing, as the field (`cubic_bezier.x1`) and the
+    /// reason, or `None` when it is valid: only a `cubic_bezier` can be refused.
+    pub fn problem(&self) -> Option<(String, String)> {
+        match self {
+            Easing::CubicBezier(bezier) => bezier
+                .problem()
+                .map(|(field, reason)| (format!("cubic_bezier.{field}"), reason)),
+            _ => None,
         }
     }
 }
@@ -100,6 +201,12 @@ pub enum ItemEasing {
     Linear,
     /// [`Easing::Spring`].
     Spring,
+    /// [`Easing::EaseIn`] (since 0.99).
+    EaseIn,
+    /// [`Easing::Hold`] (since 0.99).
+    Hold,
+    /// [`Easing::CubicBezier`] (since 0.99).
+    CubicBezier(Bezier),
 }
 
 impl ItemEasing {
@@ -111,7 +218,15 @@ impl ItemEasing {
             ItemEasing::EaseOut => Easing::EaseOut,
             ItemEasing::Linear => Easing::Linear,
             ItemEasing::Spring => Easing::Spring,
+            ItemEasing::EaseIn => Easing::EaseIn,
+            ItemEasing::Hold => Easing::Hold,
+            ItemEasing::CubicBezier(bezier) => Easing::CubicBezier(bezier),
         }
+    }
+
+    /// Why an engine refuses this easing, as for [`Easing::problem`].
+    pub fn problem(&self) -> Option<(String, String)> {
+        self.resolve(Easing::Linear).problem()
     }
 }
 
@@ -200,7 +315,63 @@ impl ItemTransition {
         if self.delay_ms > MAX_DELAY_MS {
             return Some(("delay_ms", format!("must be at most {MAX_DELAY_MS}")));
         }
+        if let Some((_, reason)) = self.easing.problem() {
+            return Some(("easing", reason));
+        }
         None
+    }
+}
+
+/// A keyframe scene's timing for one item in transitions into it (ADR-0129, since
+/// 0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's
+/// (`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that
+/// keyframe. An omitted field follows the item and the preset. A transition into any
+/// other member of the family doesn't use it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct KeyframeTiming {
+    /// Milliseconds before the item starts moving, in place of its own `delay_ms`; the
+    /// preset's `stagger_ms` × its index still adds to it. At most 60000.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delay_ms: Option<u32>,
+    /// Its easing in place of its own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub easing: Option<ItemEasing>,
+    /// How long the item takes, in place of the preset's `duration_ms`. At most 60000.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u32>,
+}
+
+impl KeyframeTiming {
+    /// Whether no field is set, which a keyframe stores as no override.
+    pub fn is_empty(&self) -> bool {
+        *self == KeyframeTiming::default()
+    }
+
+    /// Why an engine refuses this timing, as the field (`delay_ms`) and the reason, or
+    /// `None` when it is valid.
+    pub fn problem(&self) -> Option<(String, String)> {
+        if self.delay_ms.is_some_and(|ms| ms > MAX_DELAY_MS) {
+            return Some(("delay_ms".into(), format!("must be at most {MAX_DELAY_MS}")));
+        }
+        if self.duration_ms.is_some_and(|ms| ms > MAX_DURATION_MS) {
+            return Some((
+                "duration_ms".into(),
+                format!("must be at most {MAX_DURATION_MS}"),
+            ));
+        }
+        if let Some((field, reason)) = self.easing.and_then(|easing| easing.problem()) {
+            return Some((format!("easing.{field}"), reason));
+        }
+        None
+    }
+
+    /// `settings` with this timing's delay and easing in place of the item's own.
+    pub fn apply(&self, settings: ItemTransition) -> ItemTransition {
+        ItemTransition {
+            delay_ms: self.delay_ms.unwrap_or(settings.delay_ms),
+            easing: self.easing.unwrap_or(settings.easing),
+            ..settings
+        }
     }
 }
 

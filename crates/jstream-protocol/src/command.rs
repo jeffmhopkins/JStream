@@ -33,7 +33,7 @@ use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::query::SceneOptions;
 use crate::settings::Settings;
 use crate::timeline::TimelineInfo;
-use crate::transition::{Easing, ItemTransition};
+use crate::transition::{Easing, ItemTransition, KeyframeTiming};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -135,6 +135,25 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// The modifiers, first first.
         motion: Vec<MotionModifier>,
+    },
+    /// Writes a keyframe scene's timing for an item in transitions into that keyframe
+    /// (ADR-0129, since 0.99): its delay, easing and duration there, each in place of the
+    /// item's own or the preset's. `scene_id` must name a keyframe scene whose tree holds
+    /// the item, with the errors of the placement edits addressed to a keyframe; any other
+    /// scene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000
+    /// is `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or
+    /// `x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3
+    /// (`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the
+    /// override. Inverse: `item.set_timing` with the old timing, or with none when the
+    /// keyframe didn't override it.
+    #[serde(rename = "item.set_timing")]
+    ItemSetTiming {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in the parent's tree.
+        item_id: ItemId,
+        /// Its timing in transitions into the keyframe.
+        timing: KeyframeTiming,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -1205,6 +1224,7 @@ impl Edit {
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
             Edit::ItemSetMotion { .. } => "item.set_motion",
+            Edit::ItemSetTiming { .. } => "item.set_timing",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
