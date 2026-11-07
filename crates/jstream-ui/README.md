@@ -443,7 +443,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
   stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
-  screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
+  screen's size in device pixels, at most 1920×1080, at the collection's base rate
+  (`canvas::preview::live_fps`, 30 until the collection is read), and opens again when
+  that rate changes. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
   storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
   multiview" (in the scene Properties dialog), red-framed on program and green on preview. A double click fills the
@@ -1079,7 +1081,9 @@ browser, and `mod.rs` is the component.
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
+  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at the
+  collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
+  new stream of the same picture when the rate changes) and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe

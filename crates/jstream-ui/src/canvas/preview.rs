@@ -18,10 +18,20 @@ use jstream_control::protocol::{Action, PreviewCodec, PreviewSettings, SceneId};
 /// The channel the canvas's first preview stream is opened on. The canvas is the only
 /// stream this session opens, so any number does; each later stream takes the next.
 pub const CHANNEL: u32 = 1;
-/// Pictures per second asked for: the engine's maximum, so the preview follows a drag
-/// smoothly. The engine only encodes when the mix changes, so a still scene costs
-/// little.
+/// Pictures per second asked for while the collection's base rate is not known yet: the
+/// default base rate (ADR-0119).
 pub const FPS: u32 = 30;
+
+/// Pictures per second the canvas asks for at a base rate of `base_fps`: the program's
+/// own rate, so the live view is full quality and follows a drag smoothly, within what
+/// `preview.subscribe` takes. The engine only encodes when the mix changes, so a still
+/// scene costs little.
+pub fn live_fps(base_fps: u32) -> u32 {
+    if base_fps == 0 {
+        return FPS;
+    }
+    base_fps.clamp(*PreviewSettings::FPS.start(), *PreviewSettings::FPS.end())
+}
 /// How many chunks may wait in the decoder before the canvas stops feeding it and
 /// waits for the next keyframe, so a slow decoder shows a late picture instead of a
 /// growing backlog.
@@ -31,9 +41,10 @@ pub const MAX_BACKLOG: u32 = 3;
 /// `pixel_ratio` device pixels per CSS pixel: a picture as sharp as the stage, kept
 /// between 320×180 and the largest the engine sends (1920×1080), so a tiny window still
 /// shows something and a large one shows the canvas at full resolution (#1203: at the
-/// old 1280×720 cap a window capture's text was unreadable). H.264 is asked
-/// for first when `h264` (the browser can decode it), with JPEG as the fallback.
-pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Action {
+/// old 1280×720 cap a window capture's text was unreadable), at `fps` pictures a
+/// second. H.264 is asked for first when `h264` (the browser can decode it), with JPEG
+/// as the fallback.
+pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool, fps: u32) -> Action {
     let side = |css: f32, low: u32, high: u32| {
         let device = (css * pixel_ratio.max(1.0)).round();
         if device.is_finite() && device > 0.0 {
@@ -51,7 +62,7 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool) -> Actio
         channel: CHANNEL,
         max_width: Some(side(width, 320, *PreviewSettings::WIDTH.end())),
         max_height: Some(side(height, 180, *PreviewSettings::HEIGHT.end())),
-        fps: Some(FPS),
+        fps: Some(fps.clamp(*PreviewSettings::FPS.start(), *PreviewSettings::FPS.end())),
         codecs,
         scene_id: None,
         source: None,
@@ -95,17 +106,30 @@ pub struct Stream {
     pub stage: (f32, f32, f32),
     /// Whether H.264 is still asked for.
     pub h264: bool,
+    /// Pictures per second asked for ([`live_fps`]).
+    pub fps: u32,
 }
 
 impl Stream {
     /// The first stream: the program mix on [`CHANNEL`].
-    pub fn first(stage: (f32, f32, f32), h264: bool) -> Stream {
+    pub fn first(stage: (f32, f32, f32), h264: bool, fps: u32) -> Stream {
         Stream {
             channel: CHANNEL,
             scene: None,
             stage,
             h264,
+            fps,
         }
+    }
+
+    /// The same stream at `fps`, on the next channel, or `None` when it is at `fps`
+    /// already: a new base rate opens a new stream.
+    pub fn at_fps(&self, fps: u32) -> Option<Stream> {
+        (self.fps != fps).then(|| Stream {
+            channel: self.channel.wrapping_add(1).max(1),
+            fps,
+            ..self.clone()
+        })
     }
 
     /// The stream that shows `scene` next, on the next channel.
@@ -120,7 +144,7 @@ impl Stream {
     /// Its `preview.subscribe`.
     pub fn subscribe(&self) -> Action {
         let (width, height, ratio) = self.stage;
-        match subscribe(width, height, ratio, self.h264) {
+        match subscribe(width, height, ratio, self.h264, self.fps) {
             Action::PreviewSubscribe {
                 max_width,
                 max_height,
@@ -412,7 +436,7 @@ mod tests {
         assert_eq!(stream_scene(None, Some(&main)), None);
         assert_eq!(stream_scene(Some(&other), Some(&main)), Some(other.clone()));
         assert_eq!(stream_scene(Some(&other), None), Some(other.clone()));
-        let first = Stream::first((800.0, 450.0, 1.0), true);
+        let first = Stream::first((800.0, 450.0, 1.0), true, FPS);
         let next = first.showing(Some(other.clone()));
         assert_eq!(
             (next.channel, next.scene.as_ref()),
@@ -432,11 +456,31 @@ mod tests {
         assert_eq!(wrapped.showing(None).channel, 1, "0 is skipped");
     }
 
+    /// A collection at 60 fps gets a 60 fps live view, on a new stream of the same
+    /// scene; one already at its rate stays.
+    #[test]
+    fn the_live_view_follows_the_base_rate() {
+        assert_eq!(live_fps(30), 30);
+        assert_eq!(live_fps(60), 60);
+        assert_eq!(live_fps(0), FPS, "not known yet");
+        assert_eq!(live_fps(240), *PreviewSettings::FPS.end());
+        let scene = Some(SceneId::new("a"));
+        let first = Stream::first((800.0, 450.0, 1.0), true, live_fps(30)).showing(scene.clone());
+        assert_eq!(first.at_fps(30), None);
+        let fast = first.at_fps(live_fps(60)).expect("a new stream");
+        assert_eq!((fast.scene.clone(), fast.fps), (scene, 60));
+        assert_ne!(fast.channel, first.channel);
+        let Action::PreviewSubscribe { fps, .. } = fast.subscribe() else {
+            panic!("a subscribe");
+        };
+        assert_eq!(fps, Some(60));
+    }
+
     /// #1205: a scene switch's moment of wanting the new scene on its own, before the
     /// program follows, doesn't switch streams; a change that holds does, once.
     #[test]
     fn only_a_settled_change_switches_streams() {
-        let program = Stream::first((800.0, 450.0, 1.0), true);
+        let program = Stream::first((800.0, 450.0, 1.0), true, FPS);
         let b = Some(SceneId::new("b"));
         // Wanted B, then the program again before B settled: the program stream stays.
         assert_eq!(settled_switch(&program, &b, &None), None);
@@ -460,7 +504,7 @@ mod tests {
             codecs,
             scene_id,
             ..
-        } = subscribe(800.0, 450.0, 2.0, true)
+        } = subscribe(800.0, 450.0, 2.0, true, FPS)
         else {
             panic!("a subscribe");
         };
@@ -474,7 +518,7 @@ mod tests {
             max_height,
             codecs,
             ..
-        } = subscribe(100.0, f32::NAN, 1.0, false)
+        } = subscribe(100.0, f32::NAN, 1.0, false, FPS)
         else {
             panic!("a subscribe");
         };
@@ -485,15 +529,16 @@ mod tests {
             max_width,
             max_height,
             ..
-        } = subscribe(1600.0, 900.0, 1.5, true)
+        } = subscribe(1600.0, 900.0, 1.5, true, 60)
         else {
             panic!("a subscribe");
         };
         assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
         // Each request resolves on the engine's side.
         for action in [
-            subscribe(1.0, 1.0, 1.0, true),
-            subscribe(9e9, 9e9, 3.0, true),
+            subscribe(1.0, 1.0, 1.0, true, 0),
+            subscribe(9e9, 9e9, 3.0, true, 999),
+            subscribe(800.0, 450.0, 1.0, true, live_fps(60)),
         ] {
             let Action::PreviewSubscribe {
                 max_width,

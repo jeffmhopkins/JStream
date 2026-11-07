@@ -2159,8 +2159,11 @@ under the start lock but never waiting for a start, asking again 200 ms later wh
 output is starting and 5 s later after a stage that failed to open) and holds it while
 such a stream is open. It opens the stream's encoder session (as above) and hands its
 input to the stage (`Program::attach_preview`). The stage's render thread then draws
-the program at the stream's picture size, every base tick divided by the stream's rate,
-on the stage's compositor, with the stage's captures. At the stage's own size it is the
+the program at the stream's picture size, on every `base / fps`th base tick (at least
+every tick), on the stage's compositor, with the stage's captures. The encoder is opened
+at the rate that gives, never above the base rate, so a 60 fps ask of a 30 fps stage
+encodes 30. `preview.subscribe` already caps every stream at the collection's base
+rate when it opens, so a hub-drawn stream doesn't pace faster than the program either. At the stage's own size it is the
 program's frame itself, drawn once for every consumer. The render thread reads it back
 without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
 sends each packet as it comes, timed from the stream's first one, with the collection's
