@@ -182,10 +182,11 @@ maintainer set its scope:
 - **Windows only.** Linux and macOS stay in [M3](#m3) and their hardware runs don't gate
   it.
 - **Unsigned**, like the alphas. A code-signing certificate isn't part of it.
-- **No compatibility promise.** A beta build need not load projects, collections or
-  settings saved by an earlier build, and the protocol keeps changing as it does now.
+- **No promise that past projects load.** A beta build need not load a project saved by
+  an earlier build.
 
-It ships when all of these hold on the candidate build:
+It ships when all of these hold on the candidate build. The list is unranked; the
+maintainer orders it when the beta is gathered:
 
 1. **The bench passes.** `jstream bench` passes on the Windows pass machine
    ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
