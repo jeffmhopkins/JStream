@@ -1,0 +1,9 @@
+{
+  "render_ticks": 100000,
+  "encode_frames": 1000,
+  "encode_blocks": 1000,
+  "recording_dropped_frames": 1000,
+  "recording_dropped_packets": 1000,
+  "min_fps_ratio": 0.2,
+  "max_over_budget_pct": 100
+}

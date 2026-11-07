@@ -69,6 +69,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   (or the directory `JSTREAM_E2E_DIST` names). It does not run trunk.
 - **The browser** is Playwright's Chromium, or the executable `JSTREAM_E2E_CHROMIUM`
   names. `@playwright/test` is pinned exactly in `package.json` and `package-lock.json`.
+  Headless Chromium can hold a page that is not in front to about one animation frame a
+  second, so a test with a second client calls `bringToFront()` on the page it drives
+  with drags or clicks that wait on frames.
 
 <a id="tests"></a>
 ## What the tests cover
