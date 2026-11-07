@@ -44,7 +44,8 @@ Contents (a first cut; [Design](#design) explains the choices):
   approves its client: allow once, always allow (kept in the user-only approved agents
   file), deny, or no answer in `approval_timeout` (2 minutes). Every session hears
   `agent.approval_requested` and `agent.approval_resolved`, and `Admitted` answers
-  `agent.approve`, `agent.forget` and `agent.approved`. The request belongs to the
+  `agent.approve`, `agent.forget` and `agent.approved` (with `ask_agents` off they reach
+  the engine, which answers `unsupported`). The request belongs to the
   session, so a `hello` sent again (an MCP client's retry) waits on the same one, and
   its timer stops when the session goes. A session's events start only once its
   `hello` succeeds, so a held client, even one whose transport subscribed early (MCP

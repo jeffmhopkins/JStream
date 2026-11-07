@@ -774,7 +774,7 @@ stamp = { hash = "b3:e6531b7a015e685c", by = "agent:claude-settings", note = "Re
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:3affaeb0059bca8f", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds" }
+stamp = { hash = "b3:52bfd1c268b45950", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; no wire change" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds" }
@@ -819,7 +819,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:a166559124f816f5", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); server-side only, no wire change; section holds" }
+stamp = { hash = "b3:a61a6c09e12feae9", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; no wire change" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -5022,7 +5022,7 @@ stamp = { hash = "b3:fbe7c61707faa7bd" }
 stamp = { hash = "b3:ad5aebeceee47ce7", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "CL2 (ADR-0074), whole change: Sessions' new Message size bullet (4 MiB request limit advertised in welcome, too_large with the request ID read from the envelope only, never in flight, 16 MiB frame limit closing with 1009 and a 2 s unread hold), Slow clients' memory bound, and the MCP table's -32000 too_large row and 413 over 16 MiB all match session.rs, lib.rs and mcp.rs; the serde dep is the envelope-only read." }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:3affaeb0059bca8f", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); re-read the design section, nothing it states changes" }
+stamp = { hash = "b3:52bfd1c268b45950", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; nothing the design section states changes" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); re-read the design section, nothing it states changes" }
@@ -5067,7 +5067,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); re-read the design section, nothing it states changes" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:a166559124f816f5", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); re-read the design section, nothing it states changes" }
+stamp = { hash = "b3:a61a6c09e12feae9", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; nothing the design section states changes" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -5079,13 +5079,13 @@ stamp = { hash = "b3:09e0cbba67fc2339", by = "agent:claude", note = "ADR-0047: t
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added 'The host reads them' to UI settings: Server::ui_settings returns a read-only UiSettingsView with a watch of changes, used by the desktop's hotkeys.global." }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:edfd964942622354", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
+stamp = { hash = "b3:4deee65636652e08", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; the Agent approval bullet says so; matches admitted.rs and the test" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:3affaeb0059bca8f", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
+stamp = { hash = "b3:52bfd1c268b45950", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; the Agent approval bullet says so; matches admitted.rs and the test" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/approvals.rs"]
 stamp = { hash = "b3:5163ee43accac1b4", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
@@ -5130,7 +5130,7 @@ stamp = { hash = "b3:cb3df7c66df12162", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/tests.rs"]
-stamp = { hash = "b3:a166559124f816f5", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1); the Agent approval and Session bullets now say so; matches admitted.rs, session.rs and approvals.rs" }
+stamp = { hash = "b3:a61a6c09e12feae9", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; the Agent approval bullet says so; matches admitted.rs and the test" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/token_file.rs"]
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, server parts or gate credentials)" }
@@ -6840,7 +6840,7 @@ stamp = { hash = "b3:5670e6a5758601b2" }
 stamp = { hash = "b3:8042c8d8d5117226" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/admitted.rs"]
-stamp = { hash = "b3:3affaeb0059bca8f", by = "agent:claude-settings", note = "#1334 review r1: events gated on a successful hello (B1), one hello at a time (B2), timer aborted with the ticket (N1): admitted.rs gates events on hello; device sessions are never held and are unaffected" }
+stamp = { hash = "b3:52bfd1c268b45950", by = "agent:claude-settings", note = "#1338 review N4: with ask_agents off the agent calls reach the engine, which answers unsupported; device sessions unaffected" }
 
 ["THREAT-MODEL#pairing"."file:crates/jstream-server/src/devices.rs"]
 stamp = { hash = "b3:739310d00b34178c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }
