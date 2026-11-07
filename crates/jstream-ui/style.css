@@ -1325,6 +1325,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .curve-guide { stroke: var(--border-strong); stroke-width: 0.5; stroke-dasharray: 2 2; }
 .curve-handle { stroke: var(--muted); stroke-width: 1; fill: none; }
 .curve-line { stroke: var(--accent); stroke-width: 2; fill: none; }
+/* A keyframe's timing of an item (ADR-0129): a field not set reads dim, beside its reset. */
+.timing-field { display: grid; gap: 2px; }
+.timing-field.unset input { color: var(--dim); }
 .overrides { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 .overrides th { text-align: left; color: var(--muted); font-weight: 600; }
 .overrides td, .overrides th { padding: 0.25rem 0.4rem 0.25rem 0; }
