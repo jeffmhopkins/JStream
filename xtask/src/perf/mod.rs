@@ -232,10 +232,6 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         .mcp
         .output(json!({"type": "output.stop", "output_id": RECORDING}));
     let rows = run.rows;
-    let bench = match &o.bench {
-        Some(gates) => Some(bench(&cli_bin, &daemon, &run_dir, gates)?),
-        None => None,
-    };
 
     std::io::stdout().write_all(table(&rows).as_bytes())?;
     let verdict = thresholds.as_ref().map(|t| t.judge(&rows));
@@ -256,26 +252,30 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     std::fs::write(&out, serde_json::to_string_pretty(&report)?)
         .with_context(|| format!("writing {}", out.display()))?;
     eprintln!("xtask perf: report in {}", out.display());
-    if bench == Some(false) {
+    // After the report is written, so a bench that can't run doesn't lose the scenes'.
+    let mut pass = match &o.bench {
+        Some(gates) => bench(&cli_bin, &daemon, &run_dir, gates)?,
+        None => true,
+    };
+    if !pass {
         eprintln!(
             "xtask perf: FAIL jstream bench: a gate failed (see {})",
             run_dir.join("bench").join("summary.md").display()
         );
-        return Ok(false);
     }
     match verdict {
-        None => Ok(true),
+        None => {}
         Some(failures) if failures.is_empty() => {
             eprintln!("xtask perf: every row within its thresholds");
-            Ok(true)
         }
         Some(failures) => {
             for f in &failures {
                 eprintln!("xtask perf: FAIL {f}");
             }
-            Ok(false)
+            pass = false;
         }
     }
+    Ok(pass)
 }
 
 /// Runs `jstream-cli bench` on `daemon`, judged by `gates`, writing to `run_dir/bench`.

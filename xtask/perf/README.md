@@ -125,7 +125,9 @@ The shipped limits are software-rendering bars, for lavapipe with the OpenH264
 recording: loose enough for a CI runner, tight enough that a scene that stops drawing,
 a several-fold regression or a leak fails. The scenes that software rendering makes slow
 (a 1080p blur, glow, shadow, outline, sharpen, key or scroll, the models, many item
-effects) have their own looser limits. An unknown key fails, so a typo can't turn a
+effects) have their own looser limits. A few that draw near the frame budget on a GitHub
+runner (a colour correction, a LUT, a scene mask, a scene chain) are judged on frame rate
+and mean frame time only. An unknown key fails, so a typo can't turn a
 limit off.
 
 `bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's

@@ -6408,10 +6408,10 @@ stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:000c2782796ed5c5", by = "agent:claude-perf-suite", note = "gates-lavapipe.json sits in xtask/perf/bench/, which load_dir doesn't read as a scene (it reads *.json in xtask/perf only); the scene format text is unchanged" }
 
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:9da48473da89130e", by = "agent:claude-perf-suite", note = "Added the bench/gates-lavapipe.json paragraph: its keys are jstream bench Gates fields (render_ticks, encode_*, recording_dropped_*, min_fps_ratio 0.2, max_over_budget_pct 100), checked by a local lavapipe run that passed" }
+stamp = { hash = "b3:0fb5c275f753542e", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
-stamp = { hash = "b3:3c821a9b16115f93", by = "agent:claude-perf-suite", note = "new section: checked against Thresholds in perf/mod.rs (default plus per-scene override, min_fps, max_frame_ms, max_over_budget_pct, leak limits across churn and run-wide threads/handles only, unknown keys fail, didn't-run rows fail) and thresholds.toml's per-scene software limits" }
+stamp = { hash = "b3:b876be4ba7ceb4be", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
 
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
