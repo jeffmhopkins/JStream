@@ -6471,7 +6471,7 @@ stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:4b28a45ac91e63ee", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/mod.rs"]
-stamp = { hash = "b3:e4f6b0f4e418f553", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
+stamp = { hash = "b3:70c6f49c4657f791", by = "agent:claude-perf-suite", note = "mod.rs only names the base rows (BASE_ROWS: baseline, baseline_after) so [scene.baseline] can set limits; the runner's steps (base scene first and last) are unchanged" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/scene.rs"]
 stamp = { hash = "b3:30a9997dd377dd46", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
@@ -6501,10 +6501,10 @@ stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:000c2782796ed5c5", by = "agent:claude-perf-suite", note = "gates-lavapipe.json sits in xtask/perf/bench/, which load_dir doesn't read as a scene (it reads *.json in xtask/perf only); the scene format text is unchanged" }
 
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:0fb5c275f753542e", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
+stamp = { hash = "b3:378bd1207f89d385", by = "agent:claude-perf-suite", note = "Recalibrated to hosted-runner runs of #1340, #1264 and #1359: default min_fps 10, max_frame_ms 100, over-budget share 100 (it flipped for vf_color_key, vf_luma_key, vf_video_delay and vf_image_mask between runs); baseline rows max_frame_ms 40 (measured ~9 ms); scene_chain 5 fps / 250 ms (measured 37 and 106 ms). The text says the bars are for perf-linux and why over-budget share judges nothing" }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
-stamp = { hash = "b3:b876be4ba7ceb4be", by = "agent:claude-perf-suite", note = "First CI run (bench.yml perf-linux, 4-CPU runner): vf_color_correction, vf_apply_lut, vf_scene_mask and scene_chain drew 24-30 fps at 34-46 ms a frame, so 89-100% of frames were over the 33 ms budget. They now get max_over_budget_pct = 100 and keep the default min_fps 15 and max_frame_ms 60; the paragraph names them" }
+stamp = { hash = "b3:dd59bbd38a1fa27a", by = "agent:claude-perf-suite", note = "Recalibrated to hosted-runner runs of #1340, #1264 and #1359: default min_fps 10, max_frame_ms 100, over-budget share 100 (it flipped for vf_color_key, vf_luma_key, vf_video_delay and vf_image_mask between runs); baseline rows max_frame_ms 40 (measured ~9 ms); scene_chain 5 fps / 250 ms (measured 37 and 106 ms). The text says the bars are for perf-linux and why over-budget share judges nothing" }
 
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
