@@ -117,8 +117,14 @@ folder, and its log `logs\cef.log`.
   a USB stick ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Both
   hosts find it through `jstream-platform`'s `paths` module
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
-- **The collection** is `collection.json` in the data folder, created the first time
-  with nothing in it but the prototype's four sample labels, and saved on every change, so the next start opens where the last one stopped.
+- **The collection** is the project opened most recently, from
+  `recent-collections.json` in the data folder, if it still loads, and otherwise
+  `collection.json` there, created the first time with nothing in it but the
+  prototype's four sample labels. It is saved on every change, so the next start opens
+  where the last one stopped. A client switches projects with `collection.open`,
+  `collection.new` and `collection.save_as`
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)); the publish opener
+  reads a stream key under the open project's name for it (`Engine::stream_key_name`).
 - **Effect packs** are the pack folders in the data folder's `effects`, the folder the
   daemon watches by default: the engine loads them at start and reloads them when they
   change (`Engine::watch_effect_packs`,

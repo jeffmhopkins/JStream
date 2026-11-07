@@ -144,41 +144,54 @@ impl BrowserKind {
                     description: Some(
                         "Give the page window.jstream: the engine's clock, so it moves in step \
                          with native motion and other pages, and whether this source is \
-                         shown on program and preview. A page from the web can send what \
-                         it reads anywhere."
+                         shown on program and preview. Each kind of data below is its own \
+                         checkbox."
                             .into(),
                     ),
+                    warning: Some("A page from the web can send what it reads anywhere.".into()),
                     group: Some(PAGE_API_GROUP.into()),
                     ..param("page_api", "Page API", ParamType::Bool, json!(false))
                 },
                 ParamDescriptor {
                     description: Some(
-                        "Also give the page the program and preview scenes' names. A \
-                         preview scene's name can say what hasn't been shown yet."
-                            .into(),
+                        "Also give the page the program and preview scenes' names.".into(),
                     ),
+                    warning: Some("Preview scene names can say what hasn't been shown yet.".into()),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
+                    visible_if: Some(page_api_on("page_api")),
                     ..param("page_api_scenes", "Scenes", ParamType::Bool, json!(false))
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The shared values the page may read, set with values.set: names \
-                         or prefixes ending in .*, separated by commas (status.text, \
-                         counter.*). Empty gives it none."
+                        "Also give the page the shared values named below, set with \
+                         values.set."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "The page can read these values, and a page from the web can send \
+                         them anywhere."
                             .into(),
                     ),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param(
+                        "page_api_shared_values",
+                        "Shared values",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The shared values the page may read: names or prefixes ending in \
+                         .*, separated by commas (status.text, counter.*)."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_shared_values")),
                     ..param(
                         "page_api_values",
-                        "Shared values",
+                        "Value names",
                         text(
                             u32::try_from(MAX_VALUES_GRANT_BYTES).unwrap_or(u32::MAX),
                             false,
@@ -188,22 +201,41 @@ impl BrowserKind {
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The bus whose levels and bands the page may read, after its \
-                         fader, with jstream.levels(). A page given a bus can follow the \
-                         shape of its sound, and a page from the web can send that \
-                         anywhere. Give it only the bus it shows."
+                        "Also give the page one bus's levels and spectrum bands, after its \
+                         fader, with jstream.levels(). Never its samples."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given a bus can follow the shape of its sound, and a page \
+                         from the web can send that anywhere. Give it only the bus it shows."
                             .into(),
                     ),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
-                    ..param("page_api_bus", "Levels", ParamType::Bus, Value::Null)
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param(
+                        "page_api_audio",
+                        "Audio levels",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some("The bus whose levels the page may read.".into()),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_audio")),
+                    ..param("page_api_bus", "Bus", ParamType::Bus, Value::Null)
                 },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
+    }
+}
+
+/// Shown only while the checkbox `param` is on.
+fn page_api_on(param: &str) -> VisibleIf {
+    VisibleIf {
+        param: param.into(),
+        equals: json!(true),
     }
 }
 

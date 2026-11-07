@@ -128,6 +128,8 @@ title = "Save and load projects: File › New, Open, Save As and Open recent"
 priority = 4
 status = "planned"
 issues = [1218]
+prs = [1269]
+note = "#1269 is the protocol and engine part (ADR-0121); the File menu follows"
 
 [[target]]
 release = "alpha.5"
@@ -1498,12 +1500,21 @@ prs = [1146,  1178]
 note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
 
 [[item]]
+id = "PA4"
+milestone = "M3"
+title = "Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124)"
+status = "planned"
+release = "alpha.5"
+prs = [1287]
+
+[[item]]
 id = "PA3"
 milestone = "M3"
 title = "Page API part 3: a bus's levels and bands for pages (jstream.levels)"
-status = "planned"
+status = "hardware"
 release = "alpha.5"
 prs = [1263]
+note = "Merged; the Windows run's page API step (#1147) checks a granted bus with real audio"
 
 [[item]]
 id = "PF1"

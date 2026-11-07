@@ -310,7 +310,8 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Page API",
-        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. A page from the web can send what it reads anywhere.",
+        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. Each kind of data below is its own checkbox.",
+        "warning": "A page from the web can send what it reads anywhere.",
         "group": "Page API",
         "live": false
       },
@@ -319,7 +320,22 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Scenes",
-        "description": "Also give the page the program and preview scenes' names. A preview scene's name can say what hasn't been shown yet.",
+        "description": "Also give the page the program and preview scenes' names.",
+        "warning": "Preview scene names can say what hasn't been shown yet.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_shared_values",
+        "type": "bool",
+        "default": false,
+        "label": "Shared values",
+        "description": "Also give the page the shared values named below, set with values.set.",
+        "warning": "The page can read these values, and a page from the web can send them anywhere.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
@@ -333,8 +349,22 @@ source: crates/jstream-sources/tests/kinds.rs
         "multiline": false,
         "max_len": 1024,
         "default": "",
-        "label": "Shared values",
-        "description": "The shared values the page may read, set with values.set: names or prefixes ending in .*, separated by commas (status.text, counter.*). Empty gives it none.",
+        "label": "Value names",
+        "description": "The shared values the page may read: names or prefixes ending in .*, separated by commas (status.text, counter.*).",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_shared_values",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_audio",
+        "type": "bool",
+        "default": false,
+        "label": "Audio levels",
+        "description": "Also give the page one bus's levels and spectrum bands, after its fader, with jstream.levels(). Never its samples.",
+        "warning": "A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
@@ -346,11 +376,11 @@ source: crates/jstream-sources/tests/kinds.rs
         "id": "page_api_bus",
         "type": "bus",
         "default": null,
-        "label": "Levels",
-        "description": "The bus whose levels and bands the page may read, after its fader, with jstream.levels(). A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
+        "label": "Bus",
+        "description": "The bus whose levels the page may read.",
         "group": "Page API",
         "visible_if": {
-          "param": "page_api",
+          "param": "page_api_audio",
           "equals": true
         },
         "live": false

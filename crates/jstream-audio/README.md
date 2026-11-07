@@ -111,8 +111,9 @@ stamped on the clock, and no device is the master.
   its `Block` (first
   frame, length, and `pts` in ticks of `1 / rate`: the media time of the input in the
   block, so the first frame minus the chains' latency). The first call starts the time line
-  at `now` minus the latency. `Mixer::mix(frame, out)` mixes a given block regardless of
-  the clock. A mixer that falls more than half a ring behind the clock jumps to the
+  at `now` minus the latency; after it, `Mixer::next_due()` is the clock time `poll`
+  mixes next, which a real-time loop sleeps until. `Mixer::mix(frame, out)` mixes a
+  given block regardless of the clock. A mixer that falls more than half a ring behind the clock jumps to the
   newest due block and counts the skipped frames. `Mixer::bus_block(bus)` reads any
   bus's output for the last block mixed, before the master chain: what a monitor
   hears. `Mixer::input_block(input)` reads one input's signal in the last block mixed,

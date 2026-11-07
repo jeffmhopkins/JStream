@@ -20,6 +20,7 @@ pub(crate) fn kind(id: &str, name: &str, video: bool, audio: bool) -> KindDescri
 /// A parameter that restarts the source when it changes; callers mark live ones.
 pub(crate) fn param(id: &str, label: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,

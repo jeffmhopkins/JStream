@@ -46,6 +46,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             audio: true,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "device".into(),
                 ty: ParamType::String {
                     multiline: false,
@@ -74,6 +75,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             max_outset_px: None,
             params: vec![
                 ParamDescriptor {
+                    warning: None,
                     id: "target".into(),
                     ty: ParamType::CaptureTarget {
                         kind: crate::CaptureTargetKind::Display,
@@ -92,6 +94,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
                     live: false,
                 },
                 ParamDescriptor {
+                    warning: None,
                     id: "show_cursor".into(),
                     ty: ParamType::Bool,
                     default: serde_json::Value::from(true),
@@ -133,6 +136,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             audio: true,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "gain_db".into(),
                 ty: ParamType::Float {
                     min: Some(-96.0),

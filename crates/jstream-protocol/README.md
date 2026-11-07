@@ -79,7 +79,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
   `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`), with
+  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `collection.save_as`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
@@ -147,7 +148,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -227,7 +228,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
-  and `timeline.cue_fired` (0.87), and `scene.keyframe_changed` (0.88).
+  and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
+  `collection.file_changed` (with `CollectionCause`, 0.94).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -305,9 +307,18 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.97 because `preview.subscribe` takes an `fps` up to 60, so a
-live view can show a 60 fps program at its full rate (30 before; a placeholder number
-the release queue sets); 0.91 because a follow camera is a `follow_pointer` filter on a
+`PROTOCOL_VERSION` is 0.95 because `preview.subscribe` takes an `fps` up to 60, so a
+live view can show a 60 fps program at its full rate (30 before; a number the release
+queue set); 0.94 because of projects: the actions `collection.open`,
+`collection.new` and `collection.save_as`, the query `collection.info`, the event
+`collection.file_changed` and the `file` entity kind
+([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
+queue set); 0.93 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.92 because `profile.get` reports past the drawers: each
+encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
+mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
@@ -823,7 +834,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.93: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
@@ -1369,8 +1382,22 @@ Queries read and never change `rev`. Those that read the collection state carry 
   process's CPU; and its threads by name, as a percentage of one core (JStream's own
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
   cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
-  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
-  0.73.
+  `gpu_timing` are reserved for GPU timestamps. Since 0.92 it also reports past the
+  drawers. `streams` lists each running output's program feed and each H.264 preview
+  stream (a `ProfileStream`: `output` with its `output_id`, or `preview` with its
+  `channel` and the `scene_id` or `source_id` it shows) as a `StreamProfile`: its
+  encoded `fps`, the video frames handed to its encoder (`frames_in`), taken by it
+  (`encoded`), sent on (`frames_out`, to the muxer or publish target, or to the
+  client) and `dropped` on the way, the frames its encoder took more than a frame
+  period after they were handed over (`late`), the encoder's average time per frame
+  (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
+  video and audio for an output, video for a preview stream). Most frames lost come
+  first; a stream that ran in none of the window, or has ended, is left out. `mixer`
+  (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
+  `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
+  mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
+  inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1405,6 +1432,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
+- `collection.info`: the project file the engine saves to (`path`) and up to ten
+  `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.94
+  (see *Projects* below).
 - `codec.downloads`: the codec libraries the engine can download on a person's request,
   ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
   downloads* below).
@@ -1490,6 +1520,27 @@ the engine answers them and keeps them in its settings file, with pairing off to
 `Control` with no server in front answers `unsupported`. `ui_settings.set` fails with
 `action_failed` when the file can't be written, and the value is then kept until the
 server stops.
+
+**Projects** (0.94, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
+A project is one collection file on the engine's machine. `collection.open {path}` loads
+the file at `path` and saves there from then on; `collection.new {path}` creates an empty
+one there; `collection.save_as {path}` writes the current collection there and saves
+there from then on. New and save as never replace a file: anything at `path`, the open
+file included, is `already_exists`, entity `file`. An open or a new is `action_failed`
+while the open project can't be saved. A
+path is absolute and follows the `absolute` asset path rules (`invalid_argument` on
+`path` otherwise). A file that can't be read or loaded, such as one from a newer engine,
+is `action_failed` with its reason, and the open project stays open. An open or a new
+stops every running output, clears every client's undo history and idempotency keys,
+cancels open gestures, stops timelines, puts the first scene on program, and moves `rev`
+past the old collection's; every client gets `state.changed` (so an older client reads
+the state again), `studio.changed` and `collection.file_changed {path, cause}`. A save as
+to another folder rewrites asset references to keep naming the same files (a new `rev`
+that clears undo when it rewrites any). Stream keys belong to one project path on the
+engine's machine, and nothing in the file names where they are, so two projects sharing
+an output ID never share a key. All
+four answer `unsupported` when the host named no collection file, as the mock does. No
+plugin is granted them and no hotkey binds them.
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
@@ -2128,6 +2179,8 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
   answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
+  0.94 adds `file` the same way: only an error answering `collection.new` or
+  `collection.save_as` names it.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
@@ -2465,7 +2518,7 @@ the JSON text messages of the same connection (0.20,
   apart in the frame header). The picture is the canvas scaled down to fit
   `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
   so it follows `canvas.set_size`. A picture is sent when what the stream shows
-  changes, at most `fps` times a second (default 15, at most 60 since 0.97, 30 before; the engine
+  changes, at most `fps` times a second (default 15, at most 60 since 0.95, 30 before; the engine
   runs it no faster than the collection's base rate), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall

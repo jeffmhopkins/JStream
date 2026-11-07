@@ -51,13 +51,13 @@ use jstream_platform::{
     Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
-    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
-    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
-    YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, CollectionCause,
+    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
+    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
+    VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -113,6 +113,13 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The projects opened most recently, once the host names their file (ADR-0121 §6).
+    /// Taken after the collection file's lock, never with the collection lock.
+    recent: Mutex<Option<crate::projects::Recent>>,
+    /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
+    /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
+    /// or last.
+    key_scope: Mutex<Option<String>>,
     /// The latest audio of the program mix and of every bus a source draws: the mixer
     /// thread pushes each block, and the `waveform` and `spectrum` sources draw it.
     audio_scopes: Arc<AudioScopes>,
@@ -196,6 +203,8 @@ impl Default for Engine {
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
+                    recent: Mutex::new(None),
+                    key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
                     previews: PreviewHub::default(),
@@ -277,7 +286,77 @@ impl Engine {
     #[must_use]
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
+        self.scope_startup_keys();
         self
+    }
+
+    /// Keeps the projects opened most recently in the file at `path` (ADR-0121 §6):
+    /// `collection.info` lists them, and every `collection.open`, `collection.new` and
+    /// `collection.save_as` puts its file first. The open collection file goes first now.
+    /// A file that can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_recent_collections(self, path: impl Into<PathBuf>) -> Self {
+        *lock(&self.shared.recent) = Some(crate::projects::Recent::load(path.into()));
+        self.note_recent();
+        self
+    }
+
+    /// The name the key store holds `output_id`'s stream key under in the open
+    /// collection (ADR-0121 §5): `<scope>/<output_id>`, where the scope is derived from
+    /// the collection file's path, or the bare output ID when the host named no file. A
+    /// host's publish opener reads the key under it.
+    pub fn stream_key_name(&self, output_id: &OutputId) -> String {
+        crate::projects::key_name(lock(&self.shared.key_scope).as_deref(), output_id)
+    }
+
+    /// Moves the startup collection's stream keys from their bare output IDs, where they
+    /// were stored before projects, to its scope once the engine has both a collection
+    /// file and a key store (ADR-0121 §5). Each bare key is copied to its scoped name,
+    /// unless one is there already, and then removed. A store failure leaves that key
+    /// where it was and is logged; the next start tries again.
+    fn scope_startup_keys(&self) {
+        let Some(store) = self.key_store() else {
+            return;
+        };
+        let Some(scope) = lock(&self.shared.key_scope).clone() else {
+            return;
+        };
+        let outputs: Vec<OutputId> = lock(&self.shared.state)
+            .graph
+            .state()
+            .outputs()
+            .map(|o| o.id().clone())
+            .collect();
+        for output_id in outputs {
+            let scoped = crate::projects::key_name(Some(&scope), &output_id);
+            let moved = store.get(output_id.as_str()).and_then(|bare| match bare {
+                None => Ok(false),
+                Some(_) if store.is_set(&scoped)? => Ok(true),
+                Some(key) => store.set(&scoped, &key).map(|()| true),
+            });
+            match moved {
+                Ok(true) => {
+                    if let Err(err) = store.clear(output_id.as_str()) {
+                        tracing::warn!(output_id = %output_id, "an unscoped stream key was not removed: {err}");
+                    }
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    tracing::warn!(output_id = %output_id, "a stream key was not scoped: {err}");
+                }
+            }
+        }
+    }
+
+    /// Puts the open collection file first in the recent list, when the host named
+    /// both.
+    fn note_recent(&self) {
+        let path = lock(&self.shared.collection_file)
+            .as_ref()
+            .map(|file| crate::projects::path_text(&crate::projects::absolute(file.path())));
+        if let (Some(path), Some(recent)) = (path, lock(&self.shared.recent).as_mut()) {
+            recent.push(path);
+        }
     }
 
     /// Scans the CLAP search directories with `hosts` (ADR-0035) and adds each audio
@@ -606,8 +685,11 @@ impl Engine {
             // No client is connected yet, so nobody is woken.
             state.sync_sizes(&mut Vec::new());
             state.feed_pages();
+            *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(opened.path()));
             *file = Some(opened);
         }
+        self.scope_startup_keys();
+        self.note_recent();
         Ok(self)
     }
 
@@ -620,21 +702,344 @@ impl Engine {
         let Some(file) = file.as_mut() else {
             return;
         };
+        if let Err(err) = self.save_to(file) {
+            tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
+        }
+    }
+
+    /// [`save_collection`](Self::save_collection) to `file`, whose lock the caller holds.
+    ///
+    /// # Errors
+    /// The file could not be written.
+    fn save_to(&self, file: &mut CollectionFile) -> std::io::Result<()> {
         let (rev, json) = {
             let state = lock(&self.shared.state);
             if state.graph.rev() <= file.saved() {
-                return;
+                return Ok(());
             }
             (state.graph.rev(), state.graph.to_collection_json())
         };
-        if let Err(err) = file.save(rev, &json) {
-            tracing::error!(
-                path = %file.path().display(),
-                rev = %rev,
-                error = %err,
-                "collection not saved"
-            );
+        file.save(rev, &json)
+    }
+
+    /// `collection.open`, `collection.new`, `collection.save_as` and `collection.info`
+    /// (ADR-0121), or `None` for any other call. They run with the collection file's lock
+    /// held for the whole call, so no save lands between the switch's steps.
+    fn collection_call(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: &Call,
+        previews: &SessionPreviews,
+    ) -> Option<Result<CallResult, ProtocolError>> {
+        Some(match call {
+            Call::Action {
+                action: action @ (Action::CollectionOpen { path } | Action::CollectionNew { path }),
+            } => {
+                let cause = if matches!(action, Action::CollectionNew { .. }) {
+                    CollectionCause::New
+                } else {
+                    CollectionCause::Open
+                };
+                self.collection_switch(client_id, request_id, path, cause, previews)
+                    .map(|()| CallResult::action())
+            }
+            Call::Action {
+                action: Action::CollectionSaveAs { path },
+            } => self
+                .collection_save_as(client_id, request_id, path)
+                .map(|()| CallResult::action()),
+            Call::Query {
+                query: Query::CollectionInfo,
+            } => self.collection_info(),
+            _ => return None,
+        })
+    }
+
+    /// `collection.info`: the open file and the recent list.
+    fn collection_info(&self) -> Result<CallResult, ProtocolError> {
+        let path = lock(&self.shared.collection_file)
+            .as_ref()
+            .map(|file| crate::projects::path_text(&crate::projects::absolute(file.path())))
+            .ok_or_else(|| unsupported("collection.info"))?;
+        let recent = lock(&self.shared.recent)
+            .as_ref()
+            .map(|recent| recent.list().to_vec())
+            .unwrap_or_default();
+        Ok(CallResult::Query {
+            result: QueryResult::CollectionInfo { path, recent },
+        })
+    }
+
+    /// `collection.open` and `collection.new` (ADR-0121 §3): loads the new collection,
+    /// saves the open one and writes the new file before anything stops, so a file that
+    /// can't be read, loaded or written, or an open project that can't be saved, leaves
+    /// the open project as it was. Then every output that isn't stopped stops, and the
+    /// collection is replaced. `collection.new` only ever makes a new file, and removes
+    /// it again if the switch fails after that.
+    fn collection_switch(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        path: &str,
+        cause: CollectionCause,
+        previews: &SessionPreviews,
+    ) -> Result<(), ProtocolError> {
+        let new = cause == CollectionCause::New;
+        let name = if new {
+            "collection.new"
+        } else {
+            "collection.open"
+        };
+        let target = crate::projects::checked_path(path)?;
+        let mut file = lock(&self.shared.collection_file);
+        let Some(current) = file.as_mut() else {
+            return Err(unsupported(name));
+        };
+        let empty = Graph::new().with_kinds(lock(&self.shared.state).graph.kinds().cloned());
+        let graph = if new {
+            if fs_exists(&target) {
+                return Err(file_exists(path));
+            }
+            empty.with_sample_labels()
+        } else {
+            CollectionFile::read(&target, empty).map_err(|err| ProtocolError::ActionFailed {
+                reason: err.to_string(),
+            })?
+        };
+        // The open project keeps every change made before the switch, or stays open.
+        self.save_to(current)
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!(
+                    "the open project could not be saved to {}, so it stays open: {err}",
+                    current.path().display()
+                ),
+            })?;
+        // Written now so a path that can't be written fails before anything stops; it
+        // is written again below if the switch gives it a later `rev`. An open writes
+        // back the project file it just read; a new project never replaces a file.
+        let created = if new {
+            CollectionFile::create_new(target.clone(), &graph)
+        } else {
+            CollectionFile::create(target.clone(), &graph)
+        };
+        let mut opened = created.map_err(|err| written_error(&err, path, &target))?;
+        // Removed under the old project's scope, which names them.
+        let stale: Vec<OutputId> = lock(&self.shared.state)
+            .stale_keys
+            .iter()
+            .cloned()
+            .collect();
+        self.remove_stale_keys(stale);
+        self.stop_every_output(client_id, request_id, previews);
+        let mut wake = Vec::new();
+        let swapped = {
+            let mut state = lock(&self.shared.state);
+            let running = state.outputs.running();
+            if let Some(output_id) = running.first() {
+                Err(ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` did not stop, so the project was not switched: \
+                         stop it and try again"
+                    ),
+                })
+            } else {
+                state.replace_collection(client_id, request_id, graph, opened.folder(), &mut wake);
+                *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(&target));
+                Ok((state.graph.rev(), state.graph.to_collection_json()))
+            }
+        };
+        wake_all(wake);
+        let (rev, json) = match swapped {
+            Ok(saved) => saved,
+            Err(err) => {
+                if new && let Err(removed) = std::fs::remove_file(opened.path()) {
+                    tracing::warn!(path = %opened.path().display(), error = %removed, "a new project file was not removed");
+                }
+                return Err(err);
+            }
+        };
+        if rev > opened.saved()
+            && let Err(err) = opened.save(rev, &json)
+        {
+            tracing::error!(path = %opened.path().display(), error = %err, "collection not saved");
         }
+        *current = opened;
+        drop(file);
+        self.switched(client_id, request_id, &target, cause);
+        Ok(())
+    }
+
+    /// Stops every output that isn't stopped, as an `output.stop` from this client
+    /// would, with its events and audit entry. A stop that fails is logged; the switch
+    /// then finds the output still running and refuses.
+    fn stop_every_output(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        previews: &SessionPreviews,
+    ) {
+        let running = lock(&self.shared.state).outputs.running();
+        for output_id in running {
+            let stop = Call::Action {
+                action: Action::OutputStop {
+                    output_id: output_id.clone(),
+                },
+            };
+            if let Executed::Ready(result) = self.execute(client_id, request_id, stop, previews)
+                && let Err(error) = *result
+            {
+                tracing::warn!(output_id = %output_id, %error, "output not stopped for a project switch");
+            }
+        }
+    }
+
+    /// `collection.save_as` (ADR-0121 §4). It only ever makes a new file.
+    fn collection_save_as(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<(), ProtocolError> {
+        let target = crate::projects::checked_path(path)?;
+        let mut file = lock(&self.shared.collection_file);
+        let Some(current) = file.as_mut() else {
+            return Err(unsupported("collection.save_as"));
+        };
+        if fs_exists(&target) {
+            return Err(file_exists(path));
+        }
+        let scope = crate::projects::key_scope(&target);
+        let copied = self.copy_keys(&scope)?;
+        let from = crate::projects::absolute(current.folder().unwrap_or(Path::new(".")));
+        let to = target
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let mut wake = Vec::new();
+        let saved = {
+            // The file is written under the collection lock, so no batch lands between
+            // the copy written and the one kept: a save as is rare, and the real-time
+            // threads never take this lock.
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let mut json: serde_json::Value =
+                serde_json::from_str(&state.graph.to_collection_json())
+                    .expect("invariant: the collection serializes to JSON");
+            let moved = crate::projects::move_collection_assets(&mut json, &from, &to);
+            let graph = if moved == 0 {
+                Ok(state.graph.clone())
+            } else {
+                let rev = state.graph.rev().next().unwrap_or(state.graph.rev());
+                Graph::new()
+                    .with_kinds(state.graph.kinds().cloned())
+                    .with_collection_json(&json.to_string())
+                    .map(|graph| graph.with_rev(rev))
+                    .map_err(|err| ProtocolError::Internal {
+                        reason: format!("the moved asset references did not load: {err}"),
+                    })
+            };
+            graph.and_then(|graph| {
+                let opened = CollectionFile::create_new(target.clone(), &graph)
+                    .map_err(|err| written_error(&err, path, &target))?;
+                state.rebase_collection(
+                    client_id,
+                    request_id,
+                    graph,
+                    moved > 0,
+                    opened.folder(),
+                    &mut wake,
+                );
+                *lock(&self.shared.key_scope) = Some(scope);
+                Ok(opened)
+            })
+        };
+        wake_all(wake);
+        match saved {
+            Ok(saved) => *current = saved,
+            Err(err) => {
+                // No file holds the copies, so they must not wait for one at that path.
+                self.clear_keys(&copied);
+                return Err(err);
+            }
+        }
+        drop(file);
+        self.switched(client_id, request_id, &target, CollectionCause::SaveAs);
+        Ok(())
+    }
+
+    /// Copies each output's stream key from the open collection's scope to `scope`, for
+    /// a save as (ADR-0121 §5), and returns the names it wrote. Without a key store
+    /// there is nothing to copy. A failure removes the copies made so far.
+    fn copy_keys(&self, scope: &str) -> Result<Vec<String>, ProtocolError> {
+        let Some(store) = self.key_store() else {
+            return Ok(Vec::new());
+        };
+        let outputs: Vec<OutputId> = lock(&self.shared.state)
+            .graph
+            .state()
+            .outputs()
+            .map(|o| o.id().clone())
+            .collect();
+        let mut copied = Vec::new();
+        for output_id in outputs {
+            let name = crate::projects::key_name(Some(scope), &output_id);
+            let result = store
+                .get(&self.stream_key_name(&output_id))
+                .and_then(|key| match key {
+                    Some(key) => store.set(&name, &key).map(|()| true),
+                    None => Ok(false),
+                });
+            match result {
+                Ok(true) => copied.push(name),
+                Ok(false) => {}
+                Err(err) => {
+                    self.clear_keys(&copied);
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not copy the stream keys: {err}"),
+                    });
+                }
+            }
+        }
+        Ok(copied)
+    }
+
+    /// Removes the stream keys stored under `names`, logging any the store keeps.
+    fn clear_keys(&self, names: &[String]) {
+        let Some(store) = self.key_store() else {
+            return;
+        };
+        for name in names {
+            if let Err(err) = store.clear(name) {
+                tracing::warn!(key = %name, "a copied stream key was not removed: {err}");
+            }
+        }
+    }
+
+    /// After a switch or save as: the file goes first in the recent list, and every
+    /// client gets `collection.file_changed`.
+    fn switched(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        target: &Path,
+        cause: CollectionCause,
+    ) {
+        let path = crate::projects::path_text(&crate::projects::absolute(target));
+        if let Some(recent) = lock(&self.shared.recent).as_mut() {
+            recent.push(path.clone());
+        }
+        let mut wake = Vec::new();
+        lock(&self.shared.state).subscribers.emit(
+            &Event::CollectionFileChanged {
+                path,
+                cause,
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            &mut wake,
+        );
+        wake_all(wake);
+        tracing::info!(path = %target.display(), cause = ?cause, "collection file changed");
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -1367,6 +1772,8 @@ impl Engine {
             result
         } else if let Some(result) = self.pack_call(client_id, &call) {
             result
+        } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
+            result
         } else if let Call::Action {
             action: Action::EffectEnable { kind_id },
         } = &call
@@ -1404,9 +1811,10 @@ impl Engine {
         {
             // Outside the collection lock: reading the threads makes system calls.
             let cpu = self.shared.load.cpu_time();
+            let inputs = drops::lock_ledger(&self.drops).input_totals();
             Ok(CallResult::Query {
                 result: QueryResult::ProfileGet {
-                    profile: self.shared.profile.profile(*seconds, *top, cpu),
+                    profile: self.shared.profile.profile(*seconds, *top, cpu, inputs),
                 },
             })
         } else if let Call::Action {
@@ -1671,6 +2079,7 @@ impl Engine {
                         scene: scene_id.clone(),
                         source_id: source_id.clone(),
                         draft,
+                        streams: Some(self.shared.profile.stream_registry()),
                     },
                 )?;
                 if scene_id.is_some() || source_id.is_some() {
@@ -1729,7 +2138,10 @@ impl Engine {
                 }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
-                    .set(output_id.as_str(), &Secret::new(key.expose()))
+                    .set(
+                        &self.stream_key_name(&output_id),
+                        &Secret::new(key.expose()),
+                    )
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
@@ -1739,7 +2151,7 @@ impl Engine {
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
-                    .clear(output_id.as_str())
+                    .clear(&self.stream_key_name(&output_id))
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
@@ -1764,7 +2176,7 @@ impl Engine {
         let store = self.key_store();
         for output_id in stale {
             let removed = match &store {
-                Some(store) => store.clear(output_id.as_str()),
+                Some(store) => store.clear(&self.stream_key_name(&output_id)),
                 None => Ok(()),
             };
             match removed {
@@ -1803,13 +2215,11 @@ impl Engine {
         };
         let (encoder, encoder_sessions, hardware_sessions) = self.encoder_status(&output_id);
         let key_set = match self.key_store() {
-            Some(store) => {
-                store
-                    .is_set(output_id.as_str())
-                    .map_err(|err| ProtocolError::Internal {
-                        reason: format!("reading the credential store: {err}"),
-                    })?
-            }
+            Some(store) => store
+                .is_set(&self.stream_key_name(&output_id))
+                .map_err(|err| ProtocolError::Internal {
+                    reason: format!("reading the credential store: {err}"),
+                })?,
             None => false,
         };
         Ok(CallResult::Query {
@@ -3214,7 +3624,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     // And the outputs' meters, whose lock is never taken with the collection's.
     let outputs = lock(&shared.output_meters).sample(Instant::now());
     // A profile reading too (ADR-0103), whose locks are its own.
-    shared.profile.sample(cpu);
+    let inputs = drops::lock_ledger(ledger).input_totals();
+    shared.profile.sample(cpu, inputs);
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);
@@ -3709,6 +4120,107 @@ impl State {
         // After `state.changed`, so a deleted source's size goes after its deletion.
         self.sync_sizes(wake);
         self.feed_pages();
+    }
+
+    /// Puts `graph`, a collection opened or created in place of this one, in its place
+    /// (ADR-0121 §3). Its `rev` becomes one past the current one when the file's is not
+    /// later, so no `expected_rev` from before matches. Open gestures are cancelled and
+    /// playing timelines stop, each with its event; every client's undo history and
+    /// idempotency keys go; the first scene goes on program and preview; and sources
+    /// restart from the new collection, with `folder` behind `collection` assets. Then
+    /// what follows any change runs, with `state.changed`, and `studio.changed` follows.
+    fn replace_collection(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        graph: Graph,
+        folder: Option<&Path>,
+        wake: &mut Vec<Waker>,
+    ) {
+        let next = self.graph.rev().next().unwrap_or(self.graph.rev());
+        let rev = graph.rev().max(next);
+        let graph = graph.with_rev(rev);
+        for open in self.gestures.list() {
+            self.end_gesture(
+                &open.client_id,
+                &open.gesture_id,
+                LiveOutcome::Cancelled,
+                None,
+                wake,
+            );
+        }
+        for timeline_id in self.timelines.ids() {
+            if let Some(playing) = self.timelines.stop(&timeline_id) {
+                self.subscribers.emit(
+                    &Event::TimelineChanged {
+                        timeline_id,
+                        scene_id: playing.scene_id,
+                        change: jstream_protocol::TimelineChange::Stopped,
+                        playing: false,
+                        position_ms: 0,
+                        pass: playing.pass,
+                    },
+                    wake,
+                );
+            }
+        }
+        let old: Vec<SourceId> = self
+            .graph
+            .state()
+            .sources()
+            .map(|s| s.id().clone())
+            .collect();
+        self.graph = graph;
+        for source_id in old {
+            if self.graph.state().source(&source_id).is_none() {
+                self.frames.remove(&source_id);
+                if let Some(forget) = &self.forget {
+                    forget.forget(source_id);
+                }
+            }
+        }
+        self.history.clear();
+        self.applied.clear();
+        self.stale_keys.clear();
+        self.source_copies.clear();
+        self.camera_zooms.clear();
+        self.shown_since = crate::motion::ShownSince::default();
+        self.fired = crate::motion::Fired::default();
+        self.studio = Studio::default();
+        self.live
+            .set_collection_folder(folder.map(Path::to_path_buf));
+        let rev = self.graph.rev();
+        self.changed(client_id, request_id, &[], rev, None, wake);
+        if self.studio.program().is_none() {
+            // `changed` reported no move: the new collection has no scene.
+            self.emit_studio(client_id, request_id, None, wake);
+        }
+    }
+
+    /// Keeps `graph`, the same collection saved as another file, in this one's place
+    /// (ADR-0121 §4), with `folder` behind `collection` assets. When `rewritten`, its
+    /// asset references moved and its `rev` is new: every client's undo history and
+    /// idempotency keys go, since an inverse would bring back an old relative path, and
+    /// what follows any change runs, with `state.changed`.
+    fn rebase_collection(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        graph: Graph,
+        rewritten: bool,
+        folder: Option<&Path>,
+        wake: &mut Vec<Waker>,
+    ) {
+        self.graph = graph;
+        self.live
+            .set_collection_folder(folder.map(Path::to_path_buf));
+        if rewritten {
+            self.history.clear();
+            self.applied.clear();
+            self.source_copies.clear();
+            let rev = self.graph.rev();
+            self.changed(client_id, request_id, &[], rev, None, wake);
+        }
     }
 
     /// Fires `item_id`'s `triggered` motion modifiers (#1107): the one `modifier_id`
@@ -5618,6 +6130,38 @@ fn action_field(error: ProtocolError) -> ProtocolError {
 /// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
+}
+
+/// `unsupported` for `call`: the host named no collection file (ADR-0121).
+fn unsupported(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
+/// Whether anything is at `path`, a dangling link included.
+fn fs_exists(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
+/// `already_exists` for the file at `path`: a project is only ever made as a new file.
+fn file_exists(path: &str) -> ProtocolError {
+    ProtocolError::AlreadyExists {
+        entity: EntityKind::File,
+        id: path.to_owned(),
+    }
+}
+
+/// The error for a project file at `target` that could not be written: `already_exists`
+/// when another file took the path first.
+fn written_error(err: &std::io::Error, path: &str, target: &Path) -> ProtocolError {
+    if err.kind() == std::io::ErrorKind::AlreadyExists {
+        return file_exists(path);
+    }
+    ProtocolError::ActionFailed {
+        reason: format!(
+            "cannot write the collection file {}: {err}",
+            target.display()
+        ),
+    }
 }
 
 fn not_implemented(what: &str) -> ProtocolError {

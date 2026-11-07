@@ -567,6 +567,12 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                 writeln!(out)?;
             }
         }
+        QueryResult::CollectionInfo { path, recent } => {
+            writeln!(out, "{path}")?;
+            for project in recent.iter().filter(|p| *p != path) {
+                writeln!(out, "  recent: {project}")?;
+            }
+        }
         QueryResult::FontList { fonts } => {
             if fonts.is_empty() {
                 writeln!(out, "no fonts found")?;
