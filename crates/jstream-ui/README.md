@@ -41,6 +41,11 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Video settings** (`video_settings.rs`): File › Video settings… sets the
+  collection's base resolution (the canvas, from presets or typed) and its base frame
+  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
+  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
@@ -768,7 +773,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
   system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  File › Settings… are [`updates.rs`](src/updates.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), both described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its

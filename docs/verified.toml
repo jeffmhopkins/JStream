@@ -5277,7 +5277,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:73e43cf969a47357", by = "agent:lane-d", note = "Edited: CameraMoves description, duplicate text and tests match ADR-0120's UI (decision 7); the control mock note changes nothing here." }
+stamp = { hash = "b3:fe104bd63b7dd096", by = "agent:lane-d", note = "Edited: CameraMoves description, duplicate text and tests match ADR-0120's UI (decision 7); the control mock note changes nothing here. | merge: #1259 adds File › Video settings… (video_settings.rs, HD-11, its styles and e2e spec) and #1274 adds ADR-0124; merged beside this wave's Follow pointer filter (ADR-0120) and global hotkeys Settings check, which still hold | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:6cda240ee013017b", by = "agent:lane-d", note = "Edited: CameraMoves description, duplicate text and tests match ADR-0120's UI (decision 7); the control mock note changes nothing here." }
@@ -5337,7 +5337,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the d
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the design section's only Editing-layout detail (Transitions beside Outputs under the canvas) is unchanged, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read the shell, header and styles paragraphs against app.rs, header.rs, updates.rs and style.css: the notice sits under the header, Help lists Check for updates then About, and Settings is described under Purpose. Styles stay classes with no style attribute. Other paragraphs describe modules this change does not alter." }
+stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
@@ -5352,7 +5352,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Blending submenu line now names its amount entries (item.set_opacity at 100/75/50/25%), matching item_menu.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:12c360ed66987ef4", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields. | merge: merge #1249: the shell can show an update notice under the header, and Help's Check for updates is updates.rs. The Browse paragraphs are unchanged. | kept from the merged side: Re-read the shell, header and styles paragraphs against app.rs, header.rs, updates.rs and style.css: the notice sits under the header, Help lists Check for updates then About, and Settings is described under Purpose. Styles stay classes with no style attribute. Other paragraphs describe modules this change does not alter." }
+stamp = { hash = "b3:bcb66f78dde4cf09", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5448,7 +5448,7 @@ stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:baa15ecc4242adff", by = "agent:claude-timelines", note = "Re-read against keyframe tracks (ADR-0116, protocol 0.88): only upstream docs or a test fixture (store.rs StudioGet keyframes: empty) changed; the UI shows no tracks yet and nothing here changes." }
+stamp = { hash = "b3:a9d07a49d5064388", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
@@ -5456,14 +5456,17 @@ stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "Hotkeys par
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:e413d256438ca8c8", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/video_settings.rs"]
+stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/workspace.rs"]
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Docking names Plugins under the Inspector, and a Plugins bullet describes the section: plugin.list on open and on plugin.state_changed or events.dropped, the row texts, install with no grant and the grant dialog opened when the manifest asks for more than read, only requested classes, hosts and folders offered, and Grant and turn on for needs_grant; style.css adds the section's and dialogs' rules. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: docking paragraph: Live chat alone waits on YouTube; Stream stats reads stats.tick outputs, picks the output, keeps 120 kbps samples per output and resets on a stop or restart; Live layout has Stream stats, Outputs and Agent as tabs; style.css adds the stats panel rules" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:6da92bafd90eb612", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
+stamp = { hash = "b3:2ddd933c41f976d7", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks. | merge: #1259 adds File › Video settings… (video_settings.rs, HD-11, its styles and e2e spec) and #1274 adds ADR-0124; merged beside this wave's Follow pointer filter (ADR-0120) and global hotkeys Settings check, which still hold | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:518d8f341970b84d", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
+stamp = { hash = "b3:cda8b9a4ae3b8f72", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds. | merge: #1259 adds File › Video settings… (video_settings.rs, HD-11, its styles and e2e spec) and #1274 adds ADR-0124; merged beside this wave's Follow pointer filter (ADR-0120) and global hotkeys Settings check, which still hold | kept from the merged side: Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -5520,7 +5523,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the purpose section's account of dock.rs (Dock, zones, groups, saved layouts with Editing and Live built in) names no group layout, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read: the header bullet names Settings and Check for updates; the new Updates bullet matches updates.rs (compare with the desktop app's releases list, launch check off until turned on, quiet on failure, nothing downloaded); app.rs mounts LaunchNotice, header.rs opens both dialogs, lib.rs lists the module." }
+stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
@@ -5535,7 +5538,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Re-read: crate purpose unchanged by the Blending submenu's amount entries" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:12c360ed66987ef4", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules. | merge: merge #1249: Help has Check for updates and File has Settings. The Browse bullet is unchanged. app.rs mounts the launch notice. | kept from the merged side: Re-read: the header bullet names Settings and Check for updates; the new Updates bullet matches updates.rs (compare with the desktop app's releases list, launch check off until turned on, quiet on failure, nothing downloaded); app.rs mounts LaunchNotice, header.rs opens both dialogs, lib.rs lists the module." }
+stamp = { hash = "b3:bcb66f78dde4cf09", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5631,13 +5634,16 @@ stamp = { hash = "b3:d716abf82a2b0e44", by = "agent:obs-ui-thread", note = "This
 stamp = { hash = "b3:076299ee126c849d" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:baa15ecc4242adff", by = "agent:claude-timelines", note = "Re-read against keyframe tracks (ADR-0116, protocol 0.88): only upstream docs or a test fixture (store.rs StudioGet keyframes: empty) changed; the UI shows no tracks yet and nothing here changes." }
+stamp = { hash = "b3:a9d07a49d5064388", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/ui_settings.rs"]
 stamp = { hash = "b3:afa85b441efa5c99", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:e413d256438ca8c8", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/video_settings.rs"]
+stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/workspace.rs"]
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Contents gains plugins.rs (Plugins section, install and grant dialogs, GrantForm, suggested_id, not_granted), and lib.rs's module doc lists it; workspace.rs puts Plugins under Pairing in the Inspector. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: Panels list adds stats.rs (StreamStats, its figures, chart and choice of output tested natively); dock.rs Live layout, mod.rs and workspace.rs wiring fit the contents" }
@@ -5712,7 +5718,7 @@ stamp = { hash = "b3:19989d6feaf666bb", by = "agent:obs-ui-thread", note = "Spec
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, so the harness holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:20ea9fbf5379cb31", by = "agent:cursor", note = "Re-read: menus.spec.js only changes which Close button the new Check for updates and Settings case presses. The mock daemon, fixtures, console-error rule and CSP description are unchanged." }
+stamp = { hash = "b3:9816e296b06dddf3", by = "agent:claude", note = "Re-read: menus.spec.js only narrows a locator; the harness is unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:c564a6cf6337a77c", by = "agent:mx05-monitoring", note = "This PR: the monitoring test uses only connect, showPanel and rev against the seed's master bus. Merge of wave/m1-6 at ec32e95: #864's FX check in the first mixer test clicks FX 0 and reads the Filters panel's title, with the existing fixtures; no fixture, daemon or setup change. | kept from the merged side: mixer.spec.js now clicks the master card's FX button; the harness itself (mock daemon seed, fixtures, describeKinds) is unchanged, and the seed still has no outputs, which output-chains.spec.js adds through the form. | merge: wave/m1-6 brought #809's vertical master strip; this PR now gives it the same FX N button (MasterFx, shared with the card); mixer.spec.js now expects the strip's FX 0 enabled; harness unchanged; all 65 browser tests pass locally. | kept from the merged side: mixer.spec.js uses only the existing fixtures (connect, showPanel, meterTicks, rev) plus page.mouse drags and tab clicks; nothing in the mock daemon, fixtures or setup changes." }
@@ -5762,6 +5768,9 @@ stamp = { hash = "b3:08df4ff63f955950", by = "agent:obs-ui-thread", note = "With
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:48bc8bdf021bdf82", by = "agent:ui-parity", note = "Re-read: the harness (mock engine, fixtures, how to run) is unchanged by the checks added to transitions.spec.js; the mock stores scene options, background included." }
 
+["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
+stamp = { hash = "b3:bcb42039d847df1c", by = "agent:claude", note = "Re-read: the new spec uses the existing connect and rev fixtures and the seed's 1920×1080 canvas; the harness is unchanged" }
+
 ["CRATE-jstream-ui-e2e#running"."body"]
 stamp = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 
@@ -5772,7 +5781,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:355e5ba8b62b6ff5", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged." }
+stamp = { hash = "b3:f2260ebaef5a0b09", by = "agent:lane-d", note = "scene-cameras.spec.js no longer turns a Follow pointer check on (ADR-0120 made it a filter): it checks the Add Follow pointer… button and measures the Roll field instead of From the right; the tests list says so, the harness is unchanged. | merge: #1259 adds File › Video settings… (video_settings.rs, HD-11, its styles and e2e spec) and #1274 adds ADR-0124; merged beside this wave's Follow pointer filter (ADR-0120) and global hotkeys Settings check, which still hold | kept from the merged side: Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/browse.spec.js"]
 stamp = { hash = "b3:e0371ebeeed2d0c2", by = "agent:cursor", note = "Re-read the Browse bullet and the 3D scenes bullet. merge #1256: the camera fit spec targets the From the right textbox, the same locator this branch had. merge #1249: the update check does not change those specs. The Browse bullet still matches browse.spec.js." }
@@ -5823,7 +5832,7 @@ stamp = { hash = "b3:19989d6feaf666bb", by = "agent:obs-ui-thread", note = "Adde
 stamp = { hash = "b3:9ecee40f1fed87c4", by = "agent:obs-ui-thread", note = "labels.spec.js: the funnel is found by name 'Filter' with exact: true, since the tool bars add 'Filters' and 'Scene filters' buttons; doc comments say Sources. Fixtures unchanged, and the Tests list, which names no Scene objects any more, holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/menus.spec.js"]
-stamp = { hash = "b3:20ea9fbf5379cb31", by = "agent:cursor", note = "Re-read the menus paragraph against menus.spec.js: Help lists Check for updates before About, this page says the check runs in the desktop app, and File's first item is Settings. The dialogs close with the footer Close, because the header × is also named Close. Arriving at File from the keyboard focuses Settings." }
+stamp = { hash = "b3:9816e296b06dddf3", by = "agent:claude", note = "menus.spec.js now matches File › Settings… exactly, since Video settings… also contains the name; the Menus and Video settings bullets still hold" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/mixer.spec.js"]
 stamp = { hash = "b3:c564a6cf6337a77c", by = "agent:mx05-monitoring", note = "This PR: the monitoring test and the Hear button enabled on the card and strip. Merge of wave/m1-6 at ec32e95: #864's FX 0 click into the Filters panel and the strip's enabled FX are kept beside them; the bullet names both. | kept from the merged side: Added the output-chains.spec.js bullet (Outputs rows, footnote, FX into the Filters panel, master and output Gain chains counted separately) and changed the Mixer bullet: FX 0 now shows the program output's chain instead of being disabled. | merge: wave/m1-6 brought #809's vertical master strip; this PR now gives it the same FX N button (MasterFx, shared with the card); the Mixer bullet keeps #809's tooltip and vertical-strip text and says the strip's FX 0 is enabled. | kept from the merged side: Mixer bullet matches mixer.spec.js's seven tests: the fold's tooltip (N3), N1's U+2212 aria-valuetext, N2's status count, the vertical flip, side-column default and upward meters; review round 1 adds the dock-change test (Routing stays open after tab clicks, B1) and the strip's status appearing only over 0 dBTP (N1)." }
@@ -5872,6 +5881,9 @@ stamp = { hash = "b3:08df4ff63f955950", by = "agent:obs-ui-thread", note = "Only
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/transitions.spec.js"]
 stamp = { hash = "b3:48bc8bdf021bdf82", by = "agent:ui-parity", note = "Scene transitions bullet: the Properties test sets a background with alpha and unchecks Show in multiview and Include its audio when nested, then reads all three back after OK, the swatch without the alpha, as transitions.spec.js does. Merged main's #974 (plugin.list, 0.58), which main's text covers." }
+
+["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/video-settings.spec.js"]
+stamp = { hash = "b3:bcb42039d847df1c", by = "agent:claude", note = "Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
 
 ["CRATE-jstream-vcam-proto#purpose"."body"]
 stamp = { hash = "b3:242314833cdc02eb", by = "agent:claude", note = "#548 (#344): names.rs adds sddl_user_only (SYSTEM and the user) beside sddl_objects, sharing one builder and the SID check, exported from lib.rs; the object-names bullet says so; no contract layout or version change" }
@@ -6246,7 +6258,7 @@ stamp = { hash = "b3:302d01fa61544c5e", by = "agent:claude", note = "Added the L
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:60e14e0f81c03a19", by = "agent:lane-d", note = "This branch's UI-FEATURES edits (FL-11 Follow pointer, the global hotkeys check in HD-10 and KB-07) and the merged HD-11 Video settings from #1259 don't touch what this guide's steps describe, so it holds. | kept from the merged side: Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read recording: the desktop app's Browse opens a save dialog on add and on Edit, and a browser still types the path. Record and Stop recording are unchanged." }
@@ -6255,7 +6267,7 @@ stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read rec
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:60e14e0f81c03a19", by = "agent:lane-d", note = "This branch's UI-FEATURES edits (FL-11 Follow pointer, the global hotkeys check in HD-10 and KB-07) and the merged HD-11 Video settings from #1259 don't touch what this guide's steps describe, so it holds. | kept from the merged side: Re-read: the recording steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6270,10 +6282,10 @@ stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usa
 stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read against ARCH#packaging's change, which only adds jstream-plugin-host.exe to the zip (#1187); nothing here lists that binary or depends on its absence" }
 
 ["GETTING-STARTED#scene"."body"]
-stamp = { hash = "b3:bdf415d0b5f0a0d5", by = "agent:cursor", note = "Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged." }
+stamp = { hash = "b3:54d5843586051feb", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:60e14e0f81c03a19", by = "agent:lane-d", note = "This branch's UI-FEATURES edits (FL-11 Follow pointer, the global hotkeys check in HD-10 and KB-07) and the merged HD-11 Video settings from #1259 don't touch what this guide's steps describe, so it holds. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6798,7 +6810,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "CV-03 holds
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: CV-04, CV-08 and CV-11 are done, and their notes match the code; CV-08 now says the box's handles resize as usual with no size (review N1). crop.rs gives the picture, the crop gesture, Clear crop's uncropped extent and the readout; mod.rs the crop mode, Alt crop, the amber chrome and ghost, the Crop tool and the pill texts; model.rs commits box and crop as one batch; live.rs streams item.set_crop live; store.rs supplies sizes from source.sizes and source.size_changed, with the canvas size for a nested scene, and leaves crop mode on a scene switch; transform.rs only makes rotate and from_local pub(crate)." }
 
 ["UI-FEATURES#canvas"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:baa15ecc4242adff", by = "agent:claude-timelines", note = "Re-read against keyframe tracks (ADR-0116, protocol 0.88): only upstream docs or a test fixture (store.rs StudioGet keyframes: empty) changed; the UI shows no tracks yet and nothing here changes." }
+stamp = { hash = "b3:a9d07a49d5064388", by = "agent:claude", note = "store.rs's Collection gains base_fps from state.get; the canvas reads none of it, so the canvas rows hold" }
 
 ["UI-FEATURES#dialogs"."body"]
 stamp = { hash = "b3:188a8f438c231b7d", by = "agent:lane-d", note = "Edited DL-03: the camera section shows the Follow pointer note with Open its filter or Add Follow pointer, per camera_moves.rs and ADR-0120; Camera motion stays part of the draft." }
@@ -6837,7 +6849,7 @@ stamp = { hash = "b3:7052d5d7b0a120f9", by = "agent:lane-d", note = "Added FL-11
 stamp = { hash = "b3:be994279d933063d", by = "agent:lane-d", note = "Re-read after cargo fmt reformatted the ADR-0120 / #1216 code: formatting only, the section still holds as noted." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:a45af348d85ae372", by = "agent:lane-d", note = "HD-10 now names the desktop-only Hear hotkeys while another app has the focus check, on by default, kept as hotkeys.global (ADR-0112 §6)." }
+stamp = { hash = "b3:6fca0ec6c0f08de6", by = "agent:lane-d", note = "HD-10 keeps this wave's desktop-only Hear hotkeys while another app has the focus check (hotkeys.global, ADR-0112 §6), and the merge adds main's HD-11 Video settings (#1259) beside it; the conflict was the two rows, both kept. | kept from the merged side: Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: HD-10 now lists each installed third-party codec in About (OpenH264 on Linux with notice, licence link and folded full text), matching about.rs and InstalledCodecs" }
@@ -6846,13 +6858,16 @@ stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: HD-1
 stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read HD-01 through HD-10. Shell now also provides DialogPlaces. None of these rows describe where a dialog sits: the brand and menus, stats, studio mode, Record, Go Live and About still match. About still opens from Help. | merge: #1249 puts LaunchNotice in the shell and adds Check for updates and Settings… to HD-01 and HD-10. #1252 gives App the connected-engine URL for Browse. DialogPlaces is still provided beside them. The header rows match those additions. | kept from the merged side: Re-read the header rows against app.rs and outputs.rs: app.rs now provides the connected-engine URL for Browse, and outputs.rs adds Browse on recording paths. The header menus, Record, Go Live and About are unchanged. | merge: merge #1249: File has Settings and Help has Check for updates, matching header.rs and updates.rs. app.rs shows the launch notice. Record and Go Live are unchanged. | kept from the merged side: Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
+stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:fc1faebd6f633620", by = "agent:cursor", note = "Re-read the header rows against app.rs and outputs.rs: app.rs now provides the connected-engine URL for Browse, and outputs.rs adds Browse on recording paths. The header menus, Record, Go Live and About are unchanged." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:e413d256438ca8c8", by = "agent:lane-d", note = "HD-10 now names the desktop-only Hear hotkeys while another app has the focus check, on by default, kept as hotkeys.global (ADR-0112 §6)." }
+
+["UI-FEATURES#header"."file:crates/jstream-ui/src/video_settings.rs"]
+stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#inspector"."body"]
 stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the inspector intro and rows against properties.rs: an asset path in the desktop app has Browse, and a file under the collection folder is stored relative to it. The placement, crop, blend and hotkey rows are unchanged." }
@@ -6903,7 +6918,7 @@ stamp = { hash = "b3:67b9fe5cdfa58653", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/store.rs"]
-stamp = { hash = "b3:baa15ecc4242adff", by = "agent:claude-timelines", note = "Re-read against keyframe tracks (ADR-0116, protocol 0.88): only upstream docs or a test fixture (store.rs StudioGet keyframes: empty) changed; the UI shows no tracks yet and nothing here changes." }
+stamp = { hash = "b3:a9d07a49d5064388", by = "agent:claude", note = "store.rs's Collection gains base_fps only; no object-panel behaviour changed" }
 
 ["UI-FEATURES#outputs"."body"]
 stamp = { hash = "b3:c0e862c92f5a5c75", by = "agent:cursor", note = "Re-read the outputs intro and rows against outputs.rs: a recording path has Browse opening a save dialog, on add and on Edit. The program row, FX buttons and footnote are unchanged." }
@@ -6921,7 +6936,7 @@ stamp = { hash = "b3:ff4277dd64b296d5", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:682467b9425c97d7", by = "agent:lane-d", note = "Filters count raised to 11 (FL-11 Follow pointer), total 134/122." }
+stamp = { hash = "b3:93e6566552991bcb", by = "agent:lane-d", note = "This wave added FL-11 (Filters 11/11) and the merge brings HD-11 (Header bar 11/9), so the total is 135/123. | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:d8d9054ffde9ad73", by = "agent:cursor", note = "Re-read Summary. CV-04 is still built, so the Canvas row stays 18 rows, 17 built and 1 paused, and the total stays 133, 121, 3, 0, 5, 4. The extra clause about a mirrored name does not change a status." }
@@ -6936,7 +6951,7 @@ stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-0
 stamp = { hash = "b3:7052d5d7b0a120f9", by = "agent:lane-d", note = "Filters count raised to 11 (FL-11 Follow pointer), total 134/122." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:a45af348d85ae372", by = "agent:lane-d", note = "Counts unchanged: HD-10 and KB-07 only gained text." }
+stamp = { hash = "b3:6fca0ec6c0f08de6", by = "agent:lane-d", note = "This wave added FL-11 (Filters 11/11) and the merge brings HD-11 (Header bar 11/9), so the total is 135/123. | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the counts against the inspector and outputs tables: no status cell changed, so the row counts and the total still match. Browse is prose in those sections, not a new row." }
@@ -6984,7 +6999,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:6da92bafd90eb612", by = "agent:lane-d", note = "style.css adds a column gap to .settings-body for its two checks; theme tokens unchanged." }
+stamp = { hash = "b3:2ddd933c41f976d7", by = "agent:lane-d", note = "style.css adds a column gap to .settings-body for its two checks; theme tokens unchanged. | merge: #1259 adds File › Video settings… (video_settings.rs, HD-11, its styles and e2e spec) and #1274 adds ADR-0124; merged beside this wave's Follow pointer filter (ADR-0120) and global hotkeys Settings check, which still hold | kept from the merged side: style.css only adds the Video settings dialog's field, size-row and error rules, using the existing --danger token; the palette and shared controls are unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }

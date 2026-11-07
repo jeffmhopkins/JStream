@@ -362,7 +362,7 @@ test('the header menus behave like a menu bar', async ({ page, daemon }) => {
   await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…' })).toBeFocused();
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…', exact: true })).toBeFocused();
   // Left from File wraps to Help, the bar's last menu.
   await page.keyboard.press('ArrowLeft');
   await expect(dropdown('Help')).toBeVisible();
@@ -440,7 +440,7 @@ test('Check for updates reports from this page, and Settings keeps the launch ch
   await expect(check).toHaveCount(0);
 
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
-  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
   const box = settings.getByRole('checkbox', { name: 'Check for updates at launch' });
   await expect(box).not.toBeChecked();
@@ -450,13 +450,13 @@ test('Check for updates reports from this page, and Settings keeps the launch ch
   await expect(settings).toHaveCount(0);
 
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
-  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeChecked();
   await settings.getByRole('checkbox', { name: 'Check for updates at launch' }).uncheck();
   await page.keyboard.press('Escape');
   await expect(settings).toHaveCount(0);
   await header.locator('.top-menu[data-menu="file"] > .menu-button').click();
-  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).not.toBeChecked();
 });
 
@@ -480,7 +480,7 @@ test('an arrow key pressed before the next menu is drawn still moves along the b
   await expect(dropdown('View').getByRole('menuitemcheckbox').first()).toBeFocused();
   await page.keyboard.press('ArrowLeft');
   await page.keyboard.press('ArrowLeft');
-  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…' })).toBeFocused();
+  await expect(dropdown('File').getByRole('menuitem', { name: 'Settings…', exact: true })).toBeFocused();
   await expect(dropdown('Edit')).toHaveCount(0);
 });
 
