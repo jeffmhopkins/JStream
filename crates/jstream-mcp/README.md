@@ -184,7 +184,9 @@ a countdown or clock (`timer`, one size whatever it shows), grouping a multi-par
 effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
-keyframe variants and blend modes (`item.set_blend`), layering by role
+keyframe variants and blend modes (`item.set_blend`), the light and framing filters
+(`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
+and the `vignette`'s blends, shapes and three looks, #1226), layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy

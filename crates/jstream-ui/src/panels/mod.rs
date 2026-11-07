@@ -16,6 +16,7 @@ pub mod codec_downloads;
 mod confirm;
 pub mod device_preview;
 pub mod encoders;
+pub mod filter_presets;
 pub mod filters;
 pub mod inspector;
 pub mod labels;
