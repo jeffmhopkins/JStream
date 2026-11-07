@@ -31,7 +31,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
-  on); `vcam_status`, whether the camera is registered and current.
+  on, the window on a token of its own, and a new agent held until the person answers);
+  `vcam_status`, whether the camera is registered and current.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -181,7 +182,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   default), takes the token from
   the data folder's token file through `jstream_server::token_file`, the daemon's
   code, so it has the same checks (user-only, refused otherwise), and turns MCP on
-  (`ServerConfig::mcp`), so agents and the CLI connect with that file. The server accepts the
+  (`ServerConfig::mcp`), so agents and the CLI connect with that file. The window does
+  not use that file's token: it gets a second token, made at each start and kept only in
+  memory (`ServerConfig::ui_token`), so the server can tell the person's window from an
+  agent. The server asks before a new agent connects (`ServerConfig::ask_agents`, the
+  General page's "Ask before a new agent connects", on unless turned off): an agent's
+  first hello waits until the window's prompt is answered, and the agents the person
+  always allows are kept in a user-only file beside the token file
+  (`jstream_server::token_file::approvals_file`), listed and removed on the Settings
+  dialog's Devices page. It is a notice with a veto, not a control: anything that can
+  read the token file can still act as the person
+  ([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
   token. The window needs no pairing and pairing remote browsers isn't offered yet
   ([Purpose](#purpose)), so the server pairs no device

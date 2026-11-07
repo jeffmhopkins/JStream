@@ -219,14 +219,20 @@ can look at the program with snapshots. Agents can't connect until you turn this
 
    Other MCP clients that speak streamable HTTP can use `http://127.0.0.1:4455/mcp`
    with the token file's contents as a bearer token.
-3. **Restart the agent's app** with JStream running. It lists JStream's tools, such as
-   `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
+3. **Restart the agent's app** with JStream running. The first time it connects,
+   JStream's window asks **Agent wants to connect**: choose **Always allow** (or **Allow
+   once** to be asked again next time). If nobody answers within two minutes, the agent
+   is turned away. **File › Settings…** lists the agents you always allow on its
+   **Devices** page, and its **General** page can turn asking off. The agent then lists
+   JStream's tools, such as `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
    changes shows there, and **Agent activity** lists each change. Your agent may ask
    before going live, changing a stream key or other steps undo can't take back. It can
    undo its own edits, and asking it to is the way back: your **Undo** steps through
    your edits only.
 
-Treat the `token` file like a password: anyone with it controls JStream. To change it,
+Treat the `token` file like a password: anyone with it controls JStream. Asking before
+an agent connects lets you notice and turn away one you didn't expect, but a program
+that can read the file can still get in. To change it,
 close JStream, delete the file and start JStream again, then restart the agent's app.
 
 <a id="trouble"></a>

@@ -197,6 +197,15 @@ Contents ([Design](#design) explains the choices):
   Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
+  `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
+  holds a new agent's hello (Deny, Allow once, Always allow), on
+  `agent.approval_requested` and gone on `agent.approval_resolved`;
+  `AskAgentsSetting`, the General page's "Ask before a new agent connects" (the UI
+  setting `agents.ask`); and `ApprovedAgents`, the Devices page's list of always-allowed
+  agents with Remove. Each shows only where the server asks (`agent.approved`'s
+  `asking`, answered `unsupported` elsewhere). The calls behind them and the texts are
+  tested natively; the flow end to end in `tests/e2e/specs/agents.spec.js`.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
   Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
   page's top level), the calls behind

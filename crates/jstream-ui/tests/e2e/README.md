@@ -30,11 +30,15 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
   audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
-  when its standard input closes. It is a crate of its own because `jstream-ui` (layer
+  when its standard input closes. Given `--agent-token <token>`, it serves as the
+  desktop app does with agents on: the page's `--token` is the window's token, the
+  agent token is the one an agent presents, and the server asks before a new agent
+  connects, keeping the always-allowed ones in memory. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
 - **One daemon per test** (`fixtures.js`): each test starts its own, with a random
-  token, so tests share no state and run in parallel. The browser signs in with HTTP
+  token, so tests share no state and run in parallel. A spec passes the daemon extra
+  arguments with `test.use({ daemonArgs: [...] })`. The browser signs in with HTTP
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
   and connects; `disconnect` disconnects through the header's File menu;
@@ -73,6 +77,13 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 -->
 
+- **Agents** (`agents.spec.js`, the mock daemon with `--agent-token`): an agent's hello,
+  sent over its own WebSocket with the agent token, waits while the page shows "Agent
+  wants to connect" naming it; Always allow lets it in, and a second connection is
+  welcomed without asking. The General page shows "Ask before a new agent connects"
+  ticked, and the Devices page lists the agent under "Approved agents" until Remove.
+  Deny turns the agent away with `not_allowed`. The two-minute timeout is tested in
+  `jstream-server`, not here.
 - **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
   Browse… stores a path under the collection folder as a collection path and a path
   outside it as absolute, hides the button for app assets, and leaves the field when
