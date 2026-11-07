@@ -834,7 +834,7 @@ stamp = { hash = "b3:a0092f39030c74c7", by = "agent:browser-linux", note = "The 
 stamp = { hash = "b3:dbacb2dd7907964d" }
 
 ["ARCH#shape"."file:apps/jstream-cli/src/main.rs"]
-stamp = { hash = "b3:fe92cdacb6278716" }
+stamp = { hash = "b3:5aafaf1567b2b8d5", by = "agent:perf-thread", note = "main.rs only gains mod bench; jstream-cli is still a remote client that does not link the engine" }
 
 ["ARCH#shape"."file:apps/jstream-daemon/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:287db211f8b59ef6", by = "agent:claude-linux-daemon", note = "Re-read the daemon row: now names jstream-platform-linux on 64-bit Linux beside Windows and macOS; the diagram already shows the Linux platform crate" }
@@ -1344,7 +1344,7 @@ stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:a0092f39030c74c7", by = "agent:browser-linux", note = "Added the Linux executable (src/main.rs, run_helper), its $ORIGIN rpath build.rs, the cef-gated bin and why the zip builds --lib; Windows DLL text unchanged and still true (ADR-0095)." }
 
 ["CRATE-jstream-cli#design"."body"]
-stamp = { hash = "b3:cd070fd8dbcfb8ca", by = "agent:claude", note = "New bullet on fitting capture items matches run.rs fit_captures (CAPTURE_KINDS, one lazy state.get, unknown source and zero canvas left to the engine) and the tests in run/tests.rs; other bullets unaffected by args.rs's help-text line." }
+stamp = { hash = "b3:7e00f611411240d5", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read fit_captures. It still sizes a new capture from canvas.set_size, and a frame-rate edit does not change that box." }
@@ -1353,67 +1353,76 @@ stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read fit_c
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:a515e94e20e81fbb", by = "agent:grok", note = "Re-read fit_captures. It still sizes a new capture from canvas.set_size, and a frame-rate edit does not change that box." }
+stamp = { hash = "b3:56c0a2c61676ff2a", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
+
+["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
+stamp = { hash = "b3:2c159139b5031e19", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/exit.rs"]
-stamp = { hash = "b3:16e79b530b6f8e0a" }
+stamp = { hash = "b3:369631028c389ede", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/main.rs"]
-stamp = { hash = "b3:fe92cdacb6278716" }
+stamp = { hash = "b3:5aafaf1567b2b8d5", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/mcp.rs"]
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:267d1254d100ab8d", by = "agent:claude-timelines", note = "Re-read: the studio.get pattern gains .. for the new timelines field; the design holds." }
+stamp = { hash = "b3:8564e596da640d25", by = "agent:perf-thread", note = "New bullet on the bench's design (protocol-only measurement, no-op-waker event drain, hand-rolled base64, mock tests with synthetic stats.tick); open question 4 lists exit 4 as provisional too" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
 stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the design: it does not quote the state.get golden; that fixture's Cut duration is now 0, matching initial_preset, and the parser and session design are unchanged." }
 
 ["CRATE-jstream-cli#purpose"."body"]
-stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
+stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
 
 ["CRATE-jstream-cli#purpose"."dep:docs/ARCHITECTURE.md#crate-map/apps/*"]
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps changed only the browser helper's row and the daemon's cef-on-Linux note; nothing in the CLI's purpose refers to either." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:a515e94e20e81fbb", by = "agent:grok", note = "Re-read Purpose. It does not name a frame rate. The parser accepts canvas.set_frame_rate, which Usage lists." }
+stamp = { hash = "b3:56c0a2c61676ff2a", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
+
+["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
+stamp = { hash = "b3:2c159139b5031e19", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/exit.rs"]
-stamp = { hash = "b3:16e79b530b6f8e0a" }
+stamp = { hash = "b3:369631028c389ede", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/main.rs"]
-stamp = { hash = "b3:fe92cdacb6278716" }
+stamp = { hash = "b3:5aafaf1567b2b8d5", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/mcp.rs"]
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:267d1254d100ab8d", by = "agent:claude-timelines", note = "Re-read: run.rs only gains .. in its studio.get pattern for the new timelines field; the CLI's purpose and contents are unchanged." }
+stamp = { hash = "b3:8564e596da640d25", by = "agent:perf-thread", note = "Contents now lists bench.rs, the jstream-cli bench command (#1220); it is still a client through Control and the protocol types only" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
 stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:32053818bc3077e4", by = "agent:grok", note = "Re-read the canvas sentence. It now names canvas.set_frame_rate 30 or 60 beside canvas.set_size." }
+stamp = { hash = "b3:c5d641ffc2e677b2", by = "agent:perf-thread", note = "New Bench paragraph matches bench.rs: scenarios, window from the first recorded tick, switch_and_watch sheets, cleanup, the gates file fields and defaults, report.json and summary.md, exit 4; exit table and the JSON error codes gain 4 and gates_failed per exit.rs and run.rs report()" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:a515e94e20e81fbb", by = "agent:grok", note = "Re-read the canvas sentence. It now names canvas.set_frame_rate 30 or 60 beside canvas.set_size." }
+stamp = { hash = "b3:56c0a2c61676ff2a", by = "agent:perf-thread", note = "New Bench paragraph matches bench.rs: scenarios, window from the first recorded tick, switch_and_watch sheets, cleanup, the gates file fields and defaults, report.json and summary.md, exit 4; exit table and the JSON error codes gain 4 and gates_failed per exit.rs and run.rs report()" }
+
+["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
+stamp = { hash = "b3:2c159139b5031e19", by = "agent:perf-thread", note = "New Bench paragraph matches bench.rs: scenarios, window from the first recorded tick, switch_and_watch sheets, cleanup, the gates file fields and defaults, report.json and summary.md, exit 4; exit table and the JSON error codes gain 4 and gates_failed per exit.rs and run.rs report()" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
-stamp = { hash = "b3:16e79b530b6f8e0a" }
+stamp = { hash = "b3:369631028c389ede", by = "agent:perf-thread", note = "New Bench paragraph matches bench.rs: scenarios, window from the first recorded tick, switch_and_watch sheets, cleanup, the gates file fields and defaults, report.json and summary.md, exit 4; exit table and the JSON error codes gain 4 and gates_failed per exit.rs and run.rs report()" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/mcp.rs"]
 stamp = { hash = "b3:27f4505ffe21a4f8" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/run.rs"]
-stamp = { hash = "b3:267d1254d100ab8d", by = "agent:claude-timelines", note = "Re-read: run.rs only gains .. in its studio.get pattern for studio.get's new timelines; no command, flag or output changed." }
+stamp = { hash = "b3:8564e596da640d25", by = "agent:perf-thread", note = "New Bench paragraph matches bench.rs: scenarios, window from the first recorded tick, switch_and_watch sheets, cleanup, the gates file fields and defaults, report.json and summary.md, exit 4; exit table and the JSON error codes gain 4 and gates_failed per exit.rs and run.rs report()" }
 
 ["CRATE-jstream-control#design"."body"]
 stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read the undo list. canvas.set_frame_rate undoes to the previous rate, beside canvas.set_size." }
@@ -6207,7 +6216,7 @@ stamp = { hash = "b3:cbc148f78a6a98ff" }
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:32053818bc3077e4", by = "agent:grok", note = "Re-read the agents section against the CLI usage dependency. It does not list canvas commands. The new canvas.set_frame_rate command does not change those steps." }
+stamp = { hash = "b3:c5d641ffc2e677b2", by = "agent:perf-thread", note = "The CLI usage change only adds the bench command and exit 4; the MCP proxy steps and its command line are unchanged" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
@@ -6381,7 +6390,7 @@ stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-r
 stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:32053818bc3077e4", by = "agent:grok", note = "Re-read the smoke checks against the CLI usage dependency. They do not assert a frame rate. The default collection stays 30 fps." }
+stamp = { hash = "b3:c5d641ffc2e677b2", by = "agent:perf-thread", note = "The CLI usage change only adds bench and exit 4; the smoke script's build and mcp use are unchanged" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }
@@ -6393,7 +6402,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:32053818bc3077e4", by = "agent:grok", note = "Re-read the steps against the CLI usage dependency. They do not set a frame rate. The new command is not part of go-live." }
+stamp = { hash = "b3:c5d641ffc2e677b2", by = "agent:perf-thread", note = "The CLI usage change only adds bench and exit 4; the mcp command line and the exit 3 meaning the steps use are unchanged" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }
