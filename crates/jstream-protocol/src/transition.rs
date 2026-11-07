@@ -99,6 +99,15 @@ impl std::hash::Hash for Bezier {
 }
 
 impl Bezier {
+    /// A curve that overshoots its end a little and settles back, CSS's
+    /// `cubic-bezier(0.34, 1.56, 0.64, 1)`: what a client offers first as a custom curve.
+    pub const BACK_OUT: Bezier = Bezier {
+        x1: Finite32::const_new(0.34),
+        y1: Finite32::const_new(1.56),
+        x2: Finite32::const_new(0.64),
+        y2: Finite32::ONE,
+    };
+
     /// Why an engine refuses these points, as the field (`x1`) and the reason, or
     /// `None` when they are valid.
     pub fn problem(&self) -> Option<(&'static str, String)> {
