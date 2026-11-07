@@ -1458,7 +1458,7 @@ mod tests {
             ("page_api_bus", bus.clone()),
         ]);
         assert_eq!(
-            page_api_grant(&unchecked, &[mic.clone()]).as_deref(),
+            page_api_grant(&unchecked, std::slice::from_ref(&mic)).as_deref(),
             Some("Page API: clock, visibility")
         );
         let all = page(&[
