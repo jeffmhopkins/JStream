@@ -170,7 +170,7 @@ test('plugins and devices live in the Settings dialog, not the Inspector', async
 
   // File › Settings… opens on General; a click or an arrow key moves between pages.
   await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
-  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…' }).click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
   const tab = (name) => settings.getByRole('tab', { name });
   await expect(tab('General')).toHaveAttribute('aria-selected', 'true');

@@ -5712,7 +5712,7 @@ stamp = { hash = "b3:28caa09ec9764fd5", by = "agent:obs-ui-thread", note = "The 
 stamp = { hash = "b3:8638d2422f6bd12a", by = "agent:ui-parity", note = "Re-read against outputs.spec.js's new test: it uses the seeded High quality profile and adds its own profile and mix through the page, so the mock daemon's seed and fixtures stay as described." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/plugins.spec.js"]
-stamp = { hash = "b3:10f6ca72bb9a8b9d", by = "agent:claude-settings", note = "Only plugins.spec.js and browse.spec.js changed, to open File › Plugins… instead of showing the Inspector; the harness, fixtures and mock daemon are unchanged" }
+stamp = { hash = "b3:7164434a70e49474", by = "agent:claude-settings", note = "plugins.spec.js's Settings… locator now matches exactly, so a later Video settings… item can't collide; harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
 stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "polish.spec.js: the expected panel names list Sources for Scene objects; no fixture change, so the harness holds." }
@@ -5823,7 +5823,7 @@ stamp = { hash = "b3:28caa09ec9764fd5", by = "agent:obs-ui-thread", note = "Chec
 stamp = { hash = "b3:8638d2422f6bd12a", by = "agent:ui-parity", note = "Re-read the Outputs bullet and added the new test: an AV1 VBR profile (a peak under the average is named in the form), a vertical mix, both picked by a recording and undeletable, read back by a fresh page, the mix resized and deleted." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/plugins.spec.js"]
-stamp = { hash = "b3:10f6ca72bb9a8b9d", by = "agent:claude-settings", note = "Plugins entry says the spec opens the Settings dialog's Plugins page via File › Plugins…, and adds the new test: no plugins or pairing in the Inspector, page switching by click and arrows, the install dialog centred over a moved Settings dialog and closing alone on Escape; Browse's Install plugin text still holds" }
+stamp = { hash = "b3:7164434a70e49474", by = "agent:claude-settings", note = "plugins.spec.js's Settings… locator matches exactly (review N1); the Plugins bullet's described steps are unchanged" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/polish.spec.js"]
 stamp = { hash = "b3:b0e705b8e53f1e79", by = "agent:obs-ui-thread", note = "polish.spec.js: the expected panel names list Sources for Scene objects; no fixture change, and the Tests list, which names no Scene objects any more, holds." }
