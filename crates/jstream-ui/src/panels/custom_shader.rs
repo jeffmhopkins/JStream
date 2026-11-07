@@ -632,6 +632,216 @@ pub fn status_text(status: &Status) -> String {
     }
 }
 
+/// What a run of the shader's text is, for its colour in the editor (#1295).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tok {
+    /// Anything without a colour of its own: names, operators, spaces.
+    Plain,
+    /// A `//` or `/* */` comment.
+    Comment,
+    /// A `// @name` or `// @param` line, which the editor reads.
+    Annotation,
+    /// A WGSL keyword (`fn`, `let`, `return`, …).
+    Keyword,
+    /// A built-in type (`f32`, `vec4`, `texture_2d`, …).
+    Type,
+    /// A number.
+    Number,
+    /// An attribute (`@fragment`, `@location`, …).
+    Attribute,
+    /// A name followed by `(`: a function call or declaration.
+    Call,
+}
+
+impl Tok {
+    /// The class of the span the editor draws this run in; `None` for plain text.
+    pub fn class(self) -> Option<&'static str> {
+        match self {
+            Tok::Plain => None,
+            Tok::Comment => Some("hl-comment"),
+            Tok::Annotation => Some("hl-annotation"),
+            Tok::Keyword => Some("hl-keyword"),
+            Tok::Type => Some("hl-type"),
+            Tok::Number => Some("hl-number"),
+            Tok::Attribute => Some("hl-attribute"),
+            Tok::Call => Some("hl-call"),
+        }
+    }
+}
+
+const KEYWORDS: &[&str] = &[
+    "alias",
+    "break",
+    "case",
+    "const",
+    "const_assert",
+    "continue",
+    "continuing",
+    "default",
+    "diagnostic",
+    "discard",
+    "else",
+    "enable",
+    "false",
+    "fn",
+    "for",
+    "if",
+    "let",
+    "loop",
+    "override",
+    "requires",
+    "return",
+    "struct",
+    "switch",
+    "true",
+    "var",
+    "while",
+    "function",
+    "private",
+    "storage",
+    "uniform",
+    "workgroup",
+    "read",
+    "write",
+    "read_write",
+];
+
+const TYPES: &[&str] = &[
+    "bool",
+    "f16",
+    "f32",
+    "i32",
+    "u32",
+    "array",
+    "atomic",
+    "ptr",
+    "sampler",
+    "sampler_comparison",
+    "texture_1d",
+    "texture_2d",
+    "texture_2d_array",
+    "texture_3d",
+    "texture_cube",
+    "texture_cube_array",
+    "texture_multisampled_2d",
+    "texture_depth_2d",
+    "texture_storage_2d",
+    "texture_external",
+];
+
+/// A built-in type name: one of [`TYPES`], or a vector or matrix (`vec4`, `vec3f`,
+/// `mat4x4`, `mat3x3f`).
+fn is_type(word: &str) -> bool {
+    if TYPES.contains(&word) {
+        return true;
+    }
+    let shape = |rest: &str| {
+        let rest = rest.strip_suffix(['f', 'h', 'i', 'u']).unwrap_or(rest);
+        matches!(rest, "2" | "3" | "4")
+    };
+    if let Some(rest) = word.strip_prefix("vec") {
+        return shape(rest);
+    }
+    if let Some(rest) = word.strip_prefix("mat") {
+        let rest = rest.strip_suffix(['f', 'h']).unwrap_or(rest);
+        let b = rest.as_bytes();
+        return b.len() == 3
+            && matches!(b[0], b'2'..=b'4')
+            && b[1] == b'x'
+            && matches!(b[2], b'2'..=b'4');
+    }
+    false
+}
+
+/// `text` split into runs and what each is, in order: their concatenation is `text`.
+/// A small WGSL tokenizer for the editor's colours, not a parser; the engine reports
+/// what doesn't compile.
+pub fn highlight(text: &str) -> Vec<(Tok, &str)> {
+    let bytes = text.as_bytes();
+    // Runs as `(tok, start, end)`; plain runs next to each other join.
+    let mut runs: Vec<(Tok, usize, usize)> = Vec::new();
+    let word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+    let mut at = 0;
+    while at < bytes.len() {
+        let b = bytes[at];
+        let start = at;
+        let tok = if bytes[at..].starts_with(b"//") {
+            at = text[at..].find('\n').map_or(bytes.len(), |n| at + n);
+            let line = text[start..at].trim_start_matches('/').trim_start();
+            if line.starts_with("@name") || line.starts_with("@param") {
+                Tok::Annotation
+            } else {
+                Tok::Comment
+            }
+        } else if bytes[at..].starts_with(b"/*") {
+            // WGSL block comments nest.
+            let mut depth = 0usize;
+            while at < bytes.len() {
+                if bytes[at..].starts_with(b"/*") {
+                    depth += 1;
+                    at += 2;
+                } else if bytes[at..].starts_with(b"*/") {
+                    depth -= 1;
+                    at += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    at += 1;
+                }
+            }
+            Tok::Comment
+        } else if b == b'@' {
+            at += 1;
+            while at < bytes.len() && word(bytes[at]) {
+                at += 1;
+            }
+            Tok::Attribute
+        } else if b.is_ascii_digit()
+            || (b == b'.' && bytes.get(at + 1).is_some_and(u8::is_ascii_digit))
+        {
+            let hex = bytes[at..].starts_with(b"0x") || bytes[at..].starts_with(b"0X");
+            at += if hex { 2 } else { 1 };
+            while at < bytes.len() {
+                let c = bytes[at];
+                let exponent =
+                    !hex && matches!(c, b'+' | b'-') && matches!(bytes[at - 1], b'e' | b'E');
+                if word(c) || c == b'.' || exponent {
+                    at += 1;
+                } else {
+                    break;
+                }
+            }
+            Tok::Number
+        } else if word(b) {
+            while at < bytes.len() && word(bytes[at]) {
+                at += 1;
+            }
+            let name = &text[start..at];
+            if KEYWORDS.contains(&name) {
+                Tok::Keyword
+            } else if is_type(name) {
+                Tok::Type
+            } else if text[at..].trim_start_matches([' ', '\t']).starts_with('(') {
+                Tok::Call
+            } else {
+                Tok::Plain
+            }
+        } else {
+            // One character, whole even when it isn't ASCII.
+            at += text[at..].chars().next().map_or(1, char::len_utf8);
+            Tok::Plain
+        };
+        match runs.last_mut() {
+            Some((Tok::Plain, _, end)) if tok == Tok::Plain => *end = at,
+            _ => runs.push((tok, start, at)),
+        }
+    }
+    runs.into_iter()
+        .map(|(tok, start, end)| (tok, &text[start..end]))
+        .collect()
+}
+
 /// The custom shader editor over the Filters window: the shader of pack `pack`, as
 /// [`open`] read it. Undimmed, so the canvas shows each version as it compiles.
 #[component]
@@ -752,10 +962,32 @@ pub fn ShaderEditor(
         _ = el.set_selection_range(caret, caret);
         changed(next);
     };
+    let shade = NodeRef::<leptos::html::Pre>::new();
     let on_scroll = move |_| {
-        if let (Some(el), Some(g)) = (area.get(), gutter.get()) {
-            g.set_scroll_top(el.scroll_top());
+        if let Some(el) = area.get() {
+            if let Some(g) = gutter.get() {
+                g.set_scroll_top(el.scroll_top());
+            }
+            if let Some(p) = shade.get() {
+                p.set_scroll_top(el.scroll_top());
+                p.set_scroll_left(el.scroll_left());
+            }
         }
+    };
+    // The text in colour, under a textarea whose own text is transparent (#1295).
+    let coloured = move || {
+        text.with(|t| {
+            let mut runs = highlight(t)
+                .into_iter()
+                .map(|(tok, run)| match tok.class() {
+                    Some(class) => view! { <span class=class>{run.to_owned()}</span> }.into_any(),
+                    None => run.to_owned().into_any(),
+                })
+                .collect::<Vec<_>>();
+            // A last empty line still takes its height, as in the textarea.
+            runs.push(" ".into_any());
+            runs
+        })
     };
     let bad_line = Memo::new(move |_| match status.get() {
         Status::Problem { line, .. } => line,
@@ -805,9 +1037,11 @@ pub fn ShaderEditor(
                 })}
                 <div class="shader-code">
                     <div class="shader-gutter" node_ref=gutter aria-hidden="true">{numbers}</div>
+                    <div class="shader-stack">
+                    <pre class="shader-text shader-shade" node_ref=shade aria-hidden="true">{coloured}</pre>
                     <textarea
                         node_ref=area
-                        class="shader-text"
+                        class="shader-text shader-input"
                         aria-label="Shader (WGSL)"
                         spellcheck="false"
                         autocomplete="off"
@@ -817,6 +1051,7 @@ pub fn ShaderEditor(
                         on:keydown=on_key
                         on:scroll=on_scroll
                     ></textarea>
+                    </div>
                 </div>
                 <p class="shader-status" class:problem=problem role="status">
                     {move || status.with(status_text)}
@@ -856,6 +1091,61 @@ pub fn ShaderEditor(
 
 #[cfg(test)]
 mod tests {
+
+    /// The runs of `text` that have a colour, as `(tok, run)`.
+    fn coloured(text: &str) -> Vec<(Tok, &str)> {
+        highlight(text)
+            .into_iter()
+            .filter(|(tok, _)| *tok != Tok::Plain)
+            .collect()
+    }
+
+    #[test]
+    fn highlighting_keeps_every_character_of_the_text() {
+        for text in [TEMPLATE, "", "a", "/* open", "é → ü\n", "1e-3f + 0x1Fu"] {
+            let joined: String = highlight(text).into_iter().map(|(_, run)| run).collect();
+            assert_eq!(joined, text);
+        }
+    }
+
+    #[test]
+    fn highlighting_colours_wgsl_by_what_it_is() {
+        let text = "// @param amount float 0..1 = 0.5 \"Amount\"\n// a note\n\
+                    @fragment fn main(uv: vec2<f32>, m: mat4x4f) -> vec4f {\n\
+                    \x20 let x = mix(1.5e-2, 0x1Fu, .5); /* a /* nested */ one */ return vec4f(x);\n}";
+        assert_eq!(
+            coloured(text),
+            vec![
+                (
+                    Tok::Annotation,
+                    "// @param amount float 0..1 = 0.5 \"Amount\""
+                ),
+                (Tok::Comment, "// a note"),
+                (Tok::Attribute, "@fragment"),
+                (Tok::Keyword, "fn"),
+                (Tok::Call, "main"),
+                (Tok::Type, "vec2"),
+                (Tok::Type, "f32"),
+                (Tok::Type, "mat4x4f"),
+                (Tok::Type, "vec4f"),
+                (Tok::Keyword, "let"),
+                (Tok::Call, "mix"),
+                (Tok::Number, "1.5e-2"),
+                (Tok::Number, "0x1Fu"),
+                (Tok::Number, ".5"),
+                (Tok::Comment, "/* a /* nested */ one */"),
+                (Tok::Keyword, "return"),
+                (Tok::Type, "vec4f"),
+            ]
+        );
+    }
+
+    #[test]
+    fn names_that_only_look_like_types_are_plain() {
+        assert!(coloured("vec5 vec mat2x5 matrix vec4x").is_empty());
+        assert_eq!(coloured("vec3h"), vec![(Tok::Type, "vec3h")]);
+    }
+
     use super::*;
 
     fn line(message: &str, wgsl: &str) {
