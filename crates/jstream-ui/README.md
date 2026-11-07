@@ -30,12 +30,23 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, the open project with New project…, Open project…, Save
+  project as… and Open recent, Settings…, Video settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
+  `OpenProject`, the open project and the recent ones from `collection.info`, which the
+  header reads at start and again on `collection.file_changed` and `events.dropped`, so a
+  switch any client or agent makes shows at once; `None` while the engine has no
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
+  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
+  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  open project's, or the one the desktop app named at start. Its logic (names, suggested
+  paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
   the UI was built as, the engine's protocol, the licence and links, and each installed
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
@@ -260,7 +271,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
   with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
   filters, one step up and one down), which stays at the panel's foot while the rows
-  scroll. The scene list shows each
+  scroll. A `browser` source whose page is granted the page API has an "API" badge on
+  its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
+  The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -528,7 +541,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`place_asset`, tested natively). App assets have no button. A browser page renders
   none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
-  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  ones collapsed, and hidden while their `visible_if` doesn't hold or names a field that
+  is itself hidden. A field's `warning` (protocol 0.93) shows as a line under it, not only
+  in its tooltip. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A

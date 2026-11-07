@@ -258,6 +258,10 @@ pub enum EntityKind {
     /// command, or a `hotkey.set` or `timeline.set` naming one, names it, so a client
     /// that sends none never reads it.
     Timeline,
+    /// A file on the engine's machine, named by its path (0.94, ADR-0121). Only an
+    /// error answering `collection.new` or `collection.save_as` names it, so a client
+    /// that sends neither never reads it.
+    File,
 }
 
 impl fmt::Display for EntityKind {
@@ -279,6 +283,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Plugin => "plugin",
             EntityKind::Pack => "pack",
             EntityKind::Timeline => "timeline",
+            EntityKind::File => "file",
         })
     }
 }

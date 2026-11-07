@@ -11,7 +11,8 @@
 //! light by role, mask, and build reflections on glossy surfaces (#1062), how
 //! to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
 //! which transition to use (including a `stinger`), and when to build a graphic as HTML
-//! in a `browser` source, animated on one clock. Numbers are for a 1920×1080 canvas and scale with it.
+//! in a `browser` source, animated on one clock, or an audio visualiser on
+//! `jstream.levels()` (ADR-0124). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -196,7 +197,16 @@ instead of a page that fakes the beat: it follows the program mix (or a bus, `au
 a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`high_hz`, \
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
 to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
-40% between beats. It hears only while an output runs. Keep continuous motion \
+40% between beats. It hears only while an output runs. \
+For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
+scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
+`browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \
+never a microphone bus it doesn't), and in the page listen for `levels` events, each \
+`{peak: [l, r], rms: [l, r], bands}` with 64 bands from 20 Hz to 20 kHz, lowest first, \
+each 0 to 1. A spectrogram draws each reading as one column of a canvas, shifting the \
+canvas left by a column first; on a `null` reading (no output runs, or the bus is gone) \
+it draws nothing. The page gets at most one reading per frame of its `fps`, and only \
+while an output runs. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. \

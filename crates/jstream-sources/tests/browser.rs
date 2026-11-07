@@ -79,7 +79,9 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("local_network", false),
             ("page_api", false),
             ("page_api_scenes", false),
+            ("page_api_shared_values", false),
             ("page_api_values", false),
+            ("page_api_audio", false),
             ("page_api_bus", false),
         ]
     );
@@ -330,6 +332,7 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
         &settings(&[
             ("url", json!("https://example.com/")),
             ("page_api", json!(true)),
+            ("page_api_shared_values", json!(true)),
             ("page_api_values", json!("status.*")),
         ]),
     )
@@ -373,6 +376,7 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
         &settings(&[
             ("url", json!("https://example.com/")),
             ("page_api", json!(true)),
+            ("page_api_shared_values", json!(true)),
             ("page_api_values", json!("Not a name")),
         ]),
     );

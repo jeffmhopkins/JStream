@@ -301,7 +301,10 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   server URL, then `output.set_key` (stored in Windows Credential Manager, the login
   keychain on macOS, or on Linux the Secret Service, else the `0600` file
   `~/.config/jstream/secrets`, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)),
-  then `output.start` connects and streams. A start fails with `action_failed` and a
+  then `output.start` connects and streams. The publish opener reads the key under the
+  name the engine gives it (`Engine::stream_key_name`, scoped to the open collection
+  file, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)). The daemon
+  keeps no recent-projects list. A start fails with `action_failed` and a
   reason that says what to fix when the output has no target (a `--output`
   placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
   both ways to get one, when the machine has no H.264 encoder: neither VA-API nor

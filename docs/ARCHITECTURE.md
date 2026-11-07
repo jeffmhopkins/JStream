@@ -794,6 +794,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
+  the actions `collection.open`, `collection.new` and `collection.save_as` switch the
+  collection file the engine saves to, the query `collection.info` reports it and the
+  recent ones, and the event `collection.file_changed` tells every client. An open or a
+  new stops every output, clears every client's undo and moves `rev` past the old
+  collection's, with `state.changed` so an older client reads the state again. A path is
+  absolute and follows the `absolute` asset path rules. They answer `unsupported` when
+  the host named no collection file; no plugin is granted them and no hotkey binds them.
 - **UI settings** (protocol 0.52, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)):
   the action `ui_settings.set` keeps an opaque JSON value under a key and the query
   `ui_settings.get` reads it back, so the web UI's dock follows the person from the
@@ -1029,7 +1037,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1073,7 +1081,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
-  action undo can't take back or a history call, today `device`, `history`, `output`,
+  action undo can't take back or a history call, today `collection` (an open stops
+  every output and clears undo, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)),
+  `device`, `history`, `output`,
   `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
   may set a shared value a page may send off the machine,
   [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
@@ -1435,8 +1445,22 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
   migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
-  scene's `camera_follow` onto its item as a `follow_pointer` effect. `jstream-core`
-  loads the file the host names and replaces it atomically after every change.
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
+  (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
+  settings already grant names or a bus, since loading rebuilds sources with their
+  kind's defaults. `jstream-core`
+  loads the file the host names and replaces it atomically after every change. A
+  project is one such file: `collection.open`, `collection.new` and
+  `collection.save_as` switch the file it saves to
+  ([ADR-0121](adr/0121-projects-open-new-and-save-as.md)), and a save as rewrites
+  asset references so they keep naming the same files. New and save as only ever make
+  a new file. Nothing in the file says where its outputs' stream keys are stored: the
+  engine scopes them by the file's path on this machine, so two projects that share an
+  output ID never share a key, and a shared file reaches no one's keys.
+- **Recent projects:** `recent-collections.json` (version 1) in the data directory, up
+  to ten project files, most recent first, which `jstream-core` updates on every open,
+  new and save as. The desktop app opens the first at startup if it still loads, and
+  `collection.json` otherwise.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor

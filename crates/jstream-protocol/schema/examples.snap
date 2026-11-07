@@ -43,19 +43,22 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r44","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
 {"type":"request","id":"r45","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
 {"type":"request","id":"r46","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
-{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
-{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
-{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
-{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
-{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
-{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
-{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
-{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
-{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
-{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
-{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
+{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"collection.open","path":"C:/Users/me/Videos/Show/show.json"}}}
+{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"collection.new","path":"/home/me/shows/talk.json"}}}
+{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"collection.save_as","path":"D:/Projects/show copy.json"}}}
+{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
+{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
+{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
+{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
+{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
+{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
+{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
+{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
+{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r60","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
+{"type":"request","id":"r61","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r62","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -97,9 +100,10 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r58","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
 {"type":"request","id":"r59","call":{"kind":"query","query":{"type":"plugin.list"}}}
 {"type":"request","id":"r60","call":{"kind":"query","query":{"type":"codec.downloads"}}}
-{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"youtube.stats"}}}
-{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"source.sizes"}}}
-{"type":"request","id":"r63","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
+{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"collection.info"}}}
+{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"youtube.stats"}}}
+{"type":"request","id":"r63","call":{"kind":"query","query":{"type":"source.sizes"}}}
+{"type":"request","id":"r64","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
 {"type":"request","id":"r30","call":{"kind":"history","op":{"type":"history.undo"}}}
 {"type":"request","id":"r31","call":{"kind":"history","op":{"type":"history.redo"},"expected_rev":15,"idempotency_key":"k-2"}}
 # server -> client
@@ -152,6 +156,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"activity.list","now_ms":1790000120000,"entries":[{"seq":42,"time_ms":1790000000042,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”"},{"seq":41,"time_ms":1790000000041,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”","error":"rev_conflict"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"ui_settings.get","key":"workspace.dock","value":{"current":"Live","version":1}}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"plugin.list","plugins":[{"plugin_id":"chat_switcher","state":"enabled","remote_name":"Chat switcher","path":"/home/me/plugins/chat-switcher","request":{"classes":["live"],"hosts":["https://api.example.com:443"]},"grant":{"classes":["live"]}},{"plugin_id":"scene_timer","state":"disabled","reason":"needs_grant","path":"/home/me/plugins/scene-timer","request":{"classes":["edit","live"],"folders":true},"grant":{}}]}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"collection.info","path":"C:/Users/me/Videos/Show/show.json","recent":["C:/Users/me/Videos/Show/show.json","C:/Users/me/AppData/Roaming/JStream/collection.json"]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"codec.downloads","downloads":[{"download_id":"openh264","name":"Cisco's OpenH264 (software H.264)","codec":"h264","version":"2.6.0","notice":"OpenH264 Video Codec provided by Cisco Systems, Inc.","license_url":"https://www.openh264.org/BINARY_LICENSE.txt","license_text":"About The Cisco-Provided Binary of OpenH264 Video Codec…","installed":false,"hardware_encoder":false}]}}}
 {"type":"error","id":"r1","error":{"code":"unsupported_version","client":{"major":9,"minor":0},"server":{"major":0,"minor":104},"message":"protocol version 9.0 is not supported; this server speaks 0.104"}}
 {"type":"error","id":"r1","error":{"code":"handshake_required","message":"send `hello` before any request"}}
@@ -193,6 +198,8 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"plugin","id":"x","message":"plugin `x` already exists"}}
 {"type":"error","id":"r1","error":{"code":"not_found","entity":"pack","id":"x","message":"pack `x` does not exist"}}
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"pack","id":"x","message":"pack `x` already exists"}}
+{"type":"error","id":"r1","error":{"code":"not_found","entity":"file","id":"x","message":"file `x` does not exist"}}
+{"type":"error","id":"r1","error":{"code":"already_exists","entity":"file","id":"x","message":"file `x` already exists"}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
 {"type":"event","event":{"type":"state.changed","rev":14,"client_id":"cli_8"}}
 {"type":"event","event":{"type":"state.changed","rev":15,"client_id":"cli_7","request_id":"r30","cause":"undo"}}
@@ -218,6 +225,9 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"timeline.changed","timeline_id":"tl_volley","scene_id":"scn_1","change":"removed","playing":false,"position_ms":0,"pass":0}}
 {"type":"event","event":{"type":"timeline.cue_fired","timeline_id":"tl_volley","cue":1,"pass":0,"at_ms":1500}}
 {"type":"event","event":{"type":"timeline.cue_fired","timeline_id":"tl_volley","cue":1,"pass":1,"at_ms":1500,"error":{"code":"not_found","entity":"timeline","id":"tl_other"}}}
+{"type":"event","event":{"type":"collection.file_changed","path":"C:/Users/me/Videos/Show/show.json","cause":"open","client_id":"c1","request_id":"r7"}}
+{"type":"event","event":{"type":"collection.file_changed","path":"/home/me/shows/talk.json","cause":"new","client_id":"c1","request_id":"r7"}}
+{"type":"event","event":{"type":"collection.file_changed","path":"D:/Projects/show copy.json","cause":"save_as","client_id":"c1","request_id":"r7"}}
 {"type":"event","event":{"type":"events.dropped","count":1500}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"enabled","remote_name":"Chat scenes"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"cpu_limit"}}

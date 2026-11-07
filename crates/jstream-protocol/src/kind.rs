@@ -133,6 +133,10 @@ pub struct ParamDescriptor {
     /// A longer explanation for UIs and agents.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// One line a client shows beside the control, not only in a tooltip: what setting
+    /// it gives away (0.93, ADR-0124). A client that predates it ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
     /// UI hint: the group to show it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
@@ -597,6 +601,7 @@ mod tests {
 
     fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
         ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty,
             default,
