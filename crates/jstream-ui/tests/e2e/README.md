@@ -66,6 +66,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   (or the directory `JSTREAM_E2E_DIST` names). It does not run trunk.
 - **The browser** is Playwright's Chromium, or the executable `JSTREAM_E2E_CHROMIUM`
   names. `@playwright/test` is pinned exactly in `package.json` and `package-lock.json`.
+  Headless Chromium can hold a page that is not in front to about one animation frame a
+  second, so a test with a second client calls `bringToFront()` on the page it drives
+  with drags or clicks that wait on frames.
 
 <a id="tests"></a>
 ## What the tests cover
@@ -135,14 +138,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
   it out of About. With hardware, nothing is offered until the encoder form asks for software
   H.264 (and not for HEVC), and a saved software profile brings the section's offer.
-- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+- **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
+  Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
   sends the folder and the ID suggested from its name with no grant, and, since the
   manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
   and fixed and only the classes and host asked for, and sends just what was ticked; the
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
-  granted a class and a folder and turned on in one step.
+  granted a class and a folder and turned on in one step. The Inspector holds neither
+  plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
+  between General, Plugins and Devices, and the install dialog opens centred over a
+  moved Settings dialog and closes alone on Escape.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
@@ -312,6 +319,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+- **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
+  `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
+  the test writes (the mock engine loads no packs), Add filter › Custom shader writes
+  the template as `custom-1` and opens the editor on it; the coloured copy holds exactly
+  the text, with the annotations, an attribute, a keyword, a call and a type coloured,
+  under a transparent textarea in the same box; Tab indents at the caret and the change
+  compiles ("Compiled."); a line the fake engine refuses is marked in the gutter and
+  named under the text while the colours follow the new text; and scrolling the text
+  scrolls the copy.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain

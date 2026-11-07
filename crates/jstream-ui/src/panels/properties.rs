@@ -968,6 +968,7 @@ fn asset_input(
     };
     let hint = (!accept.is_empty()).then(|| accept.join(", "));
     let extensions = accept.to_vec();
+    let open_project = use_context::<crate::project::OpenProject>();
     let dialog_title = param.label.clone();
     let p = param.clone();
     let send = send.clone();
@@ -991,7 +992,7 @@ fn asset_input(
             {
                 let path = path.clone();
                 move || {
-                    let collection = crate::host::desktop_host().and_then(|host| host.collection);
+                    let collection = crate::project::collection_folder(open_project);
                     crate::browse::start_folder(
                         root.get_untracked(),
                         &path(),
@@ -1000,7 +1001,7 @@ fn asset_input(
                 }
             },
             move |picked: String| {
-                let collection = crate::host::desktop_host().and_then(|host| host.collection);
+                let collection = crate::project::collection_folder(open_project);
                 let (picked_root, path) = crate::browse::place_asset(collection.as_deref(), &picked);
                 let value = asset_value(&p, picked_root, &path);
                 if value.is_ok() {

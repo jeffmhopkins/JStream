@@ -5,6 +5,10 @@
 # touches those crates only runs each benchmark once (`--test`), so a bench that panics
 # fails here. Not required (R-GIT-003): shared runners are noisy, and lavapipe numbers are
 # CPU rasterisation, so these record a trend, never a pass/fail budget.
+# The `perf-linux` job runs `cargo xtask perf` (xtask/perf/README.md) on lavapipe with its
+# `--check` thresholds and the `--bench` gates in xtask/perf/bench/gates-lavapipe.json:
+# software-rendering bars that catch a scene that stops drawing, a leak or a several-fold
+# regression. It is not required either; its report is uploaded as an artifact.
 # Editing this file is a governance change (R-GOV-001).
 
 # Third-party actions are pinned to full commit SHAs, with the release in a trailing comment.
@@ -25,6 +29,8 @@ on:
       - "crates/jstream-media/**"
       - "Cargo.toml"
       - "Cargo.lock"
+      - "xtask/src/perf/**"
+      - "xtask/perf/**"
       - ".github/workflows/bench.yml"
 
 permissions:
@@ -94,3 +100,53 @@ jobs:
             target/criterion
             ${{ runner.temp }}/bench.txt
           retention-days: 90
+
+  perf-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: Software Vulkan (lavapipe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+          icd=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          if [ -z "$icd" ]; then
+            echo "::error::lavapipe ICD not found after installing mesa-vulkan-drivers"
+            exit 1
+          fi
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+      # Cisco's pinned OpenH264 (OPENH264_PIN in crates/jstream-platform-linux/src/openh264.rs):
+      # the recording that makes the program stage draw. Both hashes are the pin's.
+      - name: OpenH264
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/openh264"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 -o "$dir/lib.so.bz2" \
+            https://ciscobinary.openh264.org/libopenh264-2.6.0-linux64.8.so.bz2
+          echo "27ab53323c110b76214c1c72222f459d17febbcd1e252136cadc292b0308d75b  $dir/lib.so.bz2" | sha256sum -c -
+          bunzip2 -c "$dir/lib.so.bz2" > "$dir/libopenh264-2.6.0-linux64.8.so"
+          echo "2f0cde7c6a6abcf5cae76942894ea42897fa677bce4ed6c91a24dd1b041d5f04  $dir/libopenh264-2.6.0-linux64.8.so" | sha256sum -c -
+          echo "OPENH264_LIB=$dir/libopenh264-2.6.0-linux64.8.so" >> "$GITHUB_ENV"
+      - name: Perf suite and bench gates
+        run: cargo xtask perf --check --bench xtask/perf/bench/gates-lavapipe.json --openh264 "$OPENH264_LIB"
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f target/perf/run/bench/summary.md ]; then
+            cat target/perf/run/bench/summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Record the results
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: perf-linux-${{ github.sha }}
+          path: |
+            target/perf/report.json
+            target/perf/run/bench
+            target/perf/run/logs
+          if-no-files-found: ignore
+          retention-days: 30

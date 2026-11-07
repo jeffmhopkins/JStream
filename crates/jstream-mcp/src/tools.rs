@@ -707,8 +707,9 @@ enum Effect {
 
 /// A group tool's [`Effect`], from its ops (ADR-0098, amending ADR-0059 §1). Only an
 /// action outside [`REVERSIBLE_ACTIONS`], or a history call, makes a tool destructive:
-/// `device`, `history`, `output`, `pack`, `pairing`, `timeline`, `ui_settings` and
-/// `values`. `timeline` is here because a cue may set a shared value a page may send
+/// `collection`, `device`, `history`, `output`, `pack`, `pairing`, `timeline`,
+/// `ui_settings` and `values`. `collection` is here because an open stops every output
+/// and clears every client's undo (ADR-0121). `timeline` is here because a cue may set a shared value a page may send
 /// off the machine (ADR-0115); `values.set` is an action, not an undoable edit, and
 /// that value may leave the machine (ADR-0102). Deletes are undoable edits.
 fn effect(ops: &[(Op, Value)]) -> Effect {
@@ -1101,6 +1102,7 @@ mod tests {
         assert_eq!(
             destructive,
             [
+                "collection",
                 "device",
                 "history",
                 "output",

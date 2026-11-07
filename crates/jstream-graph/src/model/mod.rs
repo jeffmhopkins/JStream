@@ -52,7 +52,8 @@
 //! - Every send's source is an audio source that is not a `scene` source, and its bus
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
-//!   its action names exists (ADR-0024 §5, ADR-0040 §3).
+//!   its action names exists (ADR-0024 §5, ADR-0040 §3). So does every controller
+//!   binding's, with a valid trigger in place of the chord (ADR-0122).
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
@@ -74,8 +75,8 @@ use jstream_protocol::{
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
     OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
     SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
-    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
-    builtin_transition_kinds, initial_preset,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, Trigger, VideoMix as MixSpec,
+    VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -165,6 +166,14 @@ impl Graph {
     pub fn state(&self) -> &State {
         &self.state
     }
+
+    /// This graph at revision `rev`, with its state unchanged: a collection the engine
+    /// opens in place of another keeps its revisions increasing (ADR-0121 §3).
+    #[must_use]
+    pub fn with_rev(mut self, rev: Rev) -> Self {
+        self.rev = rev;
+        self
+    }
 }
 
 /// The largest canvas side this engine accepts, in pixels. ADR-0022 asks for at least
@@ -195,6 +204,8 @@ pub struct State {
     /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// The controller bindings (ADR-0122), ordered by trigger.
+    pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -224,6 +235,7 @@ impl Default for State {
             sends: BTreeMap::new(),
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
@@ -379,6 +391,12 @@ impl State {
     /// The action bound to this chord.
     pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
         self.hotkeys.get(chord)
+    }
+
+    /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the
+    /// action it runs.
+    pub fn bindings(&self) -> impl ExactSizeIterator<Item = (&Trigger, &Action)> {
+        self.bindings.iter()
     }
 
     /// Every folder of the scene list, in folder order.

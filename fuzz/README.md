@@ -10,7 +10,8 @@ review_every = "180d"
 
 [cargo-fuzz](https://rust-fuzz.github.io/book/cargo-fuzz.html) targets (libFuzzer) for the
 code that reads input JStream doesn't control: protocol messages, kind settings, the
-collection file, image and font files, and what encoders and RTMP servers send.
+collection file, image and font files, what encoders and RTMP servers send, and JTunnel's
+datagrams from the LAN.
 
 The crate is not a workspace member. It has its own `[workspace]` table and its own
 `Cargo.lock`, so `cargo test --workspace`, clippy and `cargo deny` never build it, and its
@@ -38,6 +39,7 @@ property of what they accept:
 | `av1` | Low-overhead AV1 OBUs, and the `AV1CodecConfigurationRecord` | An OBU rebuilt with its size field parses the same; a temporal unit's sample keeps every OBU except temporal delimiters and padding |
 | `aac` | An `AudioSpecificConfig` | It keeps its bytes, and they parse to the same config |
 | `mux` | A container, tracks, a time base and origin, then packets (keyframe flag, track, PTS, DTS offset, payload) | The fMP4 muxer and the FLV tagger (H.264, HEVC and AV1 through enhanced RTMP) end bad packets and timestamp jumps in errors |
+| `jtunnel` | A datagram from the LAN, read as a JTunnel packet (frames' events walked, PCM decoded, SysEx joined) and as an mDNS answer about JTunnel senders | An audio packet that parses writes back from its raw events and audio, and parses to the same packet |
 | `image_decode` | An image file, read as a `collection` asset and decoded by the `image` kind's `Registry::create` (PNG, JPEG, WebP or GIF, picked by its first bytes) | A created source draws at several times, and each change it announces is later than the time asked. The limits are lower than the defaults (4096 px a side, 256 MiB decoded), to stay inside libFuzzer's memory limit |
 | `font_load` | A font file or collection, read as a `collection` asset, parsed and drawn by the `text` kind's `Registry::create` | A font that loads draws its text, and draws again on a live update with wrapping and an outline. The limits are lower, as for `image_decode` |
 

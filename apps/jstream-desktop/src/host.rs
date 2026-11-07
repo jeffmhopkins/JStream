@@ -60,7 +60,7 @@ pub struct Host {
     ws_url: String,
     token: String,
     mcp_url: Option<String>,
-    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows.
+    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows and on X11.
     hotkeys: Option<JoinHandle<()>>,
 }
 
@@ -110,7 +110,7 @@ impl Host {
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
         config.ui_settings_file = ui_settings;
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         let listening = Arc::clone(&engine);
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
@@ -126,9 +126,9 @@ impl Host {
             })?;
         let ws_url = server.ws_url();
         let mcp_url = server.mcp_url();
-        #[cfg(windows)]
+        #[cfg(any(windows, target_os = "linux"))]
         let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
-        #[cfg(not(windows))]
+        #[cfg(not(any(windows, target_os = "linux")))]
         let hotkeys = None;
         if let (Some(agents), Some(mcp_url)) = (agents, &mcp_url) {
             tracing::info!(
@@ -202,30 +202,22 @@ impl Host {
     }
 }
 
-/// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: a
-/// `RegisterHotKey` listener thread and a session on `engine` that keeps it in step with
+/// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: the
+/// OS listener ([`hotkey_listener`]) and a session on `engine` that keeps it in step with
 /// the bindings and the `hotkeys.global` UI setting. `None`, logged, when the listener
 /// can't start: the page still hears hotkeys while it has the focus.
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "linux"))]
 fn global_hotkeys(
     runtime: &Runtime,
     engine: &Arc<Engine>,
     settings: jstream_server::UiSettingsView,
 ) -> Option<JoinHandle<()>> {
-    use crate::hotkeys::{self, GLOBAL_KEY, Registrar, Switch};
-    use jstream_platform_windows::GlobalHotkeys;
-
-    struct Windows(GlobalHotkeys);
-    impl Registrar for Windows {
-        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
-            self.0.set(chords)
-        }
-    }
+    use crate::hotkeys::{self, GLOBAL_KEY, Switch};
 
     let (press, presses) = tokio::sync::mpsc::unbounded_channel();
-    let listener = match GlobalHotkeys::start(move |chord| {
+    let listener = match hotkey_listener(Box::new(move |chord| {
         let _ = press.send(chord.to_owned());
-    }) {
+    })) {
         Ok(listener) => listener,
         Err(error) => {
             tracing::warn!(
@@ -241,12 +233,53 @@ fn global_hotkeys(
     };
     let session = engine.connect();
     Some(runtime.spawn(async move {
-        if let Err(error) =
-            hotkeys::run(session, Arc::new(Windows(listener)), switch, presses).await
-        {
+        if let Err(error) = hotkeys::run(session, listener, switch, presses).await {
             tracing::warn!(%error, "global hotkeys stopped");
         }
     }))
+}
+
+/// What a global hotkey listener calls with each chord pressed.
+#[cfg(any(windows, target_os = "linux"))]
+type OnPress = Box<dyn Fn(&str) + Send>;
+
+/// Windows' listener: `RegisterHotKey` on its own thread.
+#[cfg(windows)]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_windows::GlobalHotkeys;
+
+    struct Windows(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for Windows {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+    }
+
+    GlobalHotkeys::start(on_press)
+        .map(|listener| Arc::new(Windows(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+        .map_err(|error| error.to_string())
+}
+
+/// Linux's listener: X11 key grabs on their own connection, on an X11 session. Wayland
+/// has no grab (its GlobalShortcuts portal isn't wired yet), so there it doesn't start.
+#[cfg(target_os = "linux")]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_linux::{GlobalHotkeys, Session, SessionKind};
+
+    struct X11(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for X11 {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+    }
+
+    match Session::from_env().kind {
+        SessionKind::X11 => GlobalHotkeys::start(on_press)
+            .map(|listener| Arc::new(X11(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+            .map_err(|error| error.to_string()),
+        SessionKind::Wayland => Err("a Wayland session has no global key grabs".into()),
+        SessionKind::Headless => Err("there is no graphical session".into()),
+    }
 }
 
 /// A new control token: 32 random bytes from the OS, as lowercase hex, which is valid
@@ -261,9 +294,10 @@ fn new_token() -> anyhow::Result<String> {
     }))
 }
 
-/// The engine the app runs: the collection in `collection` (created the first time,
-/// holding only the four sample labels), saved on every change, with `audit` recording
-/// every batch and action.
+/// The engine the app runs: the project opened most recently (ADR-0121 §6), or else the
+/// collection in `collection` (created the first time, holding only the four sample
+/// labels), saved on every change, with `audit` recording every batch and action, and the
+/// recent list kept in `data`.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
@@ -284,10 +318,7 @@ pub fn engine(
     vcam: bool,
     secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
-    let engine = Engine::new()
-        .with_audit(audit)
-        .with_collection_file(collection)
-        .context("could not open the collection")?;
+    let engine = startup_collection(collection, data, &audit)?;
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends(vcam)?;
@@ -444,16 +475,48 @@ fn live(
     engine
 }
 
+/// The engine with the collection it starts on: the most recent project in the recent
+/// list (ADR-0121 §6) if it still loads, else `default`, which is created when missing.
+/// A recent project that doesn't load is logged and skipped, so a moved or broken file
+/// never keeps the app from starting.
+fn startup_collection(
+    default: &Path,
+    data: &Path,
+    audit: &Arc<dyn AuditSink>,
+) -> anyhow::Result<Engine> {
+    let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
+    let engine = || Engine::new().with_audit(Arc::clone(audit));
+    if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
+        && last.is_file()
+    {
+        match engine().with_collection_file(&last) {
+            Ok(engine) => return Ok(engine.with_recent_collections(recent)),
+            Err(error) => tracing::warn!(
+                error = format!("{error:#}"),
+                "the most recent project did not open; opening the default collection"
+            ),
+        }
+    }
+    Ok(engine()
+        .with_collection_file(default)
+        .context("could not open the collection")?
+        .with_recent_collections(recent))
+}
+
 /// On each `output.start`: the output's server URL from the collection, its key from
 /// `keys`, then `connect_rtmp`. No reason carries the key (R-SEC-001).
 #[cfg(windows)]
 fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) -> OpenPublish {
     Arc::new(move |output_id: &OutputId| {
-        let kind = engine
+        let engine = engine
             .get()
             .and_then(Weak::upgrade)
-            .ok_or_else(|| PublishError::new("the engine is shutting down"))?
-            .output_kind(output_id);
+            .ok_or_else(|| PublishError::new("the engine is shutting down"))?;
+        let kind = engine.output_kind(output_id);
+        // The key's name in this project (ADR-0121 §5); no strong handle is kept while
+        // the opener connects.
+        let key_name = engine.stream_key_name(output_id);
+        drop(engine);
         let url = match kind {
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Generic { url },
@@ -470,7 +533,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
             }
         };
         let key: Secret = keys
-            .get(output_id.as_str())
+            .get(&key_name)
             .map_err(|error| PublishError::new(format!("could not read the stream key: {error}")))?
             .ok_or_else(|| {
                 PublishError::new(format!(

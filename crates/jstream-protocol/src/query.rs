@@ -2,6 +2,7 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
+use crate::binding::Binding;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
@@ -296,6 +297,11 @@ pub enum Query {
     /// whose platform downloads no codec, or that has no codec backend, lists none.
     #[serde(rename = "codec.downloads")]
     CodecDownloads,
+    /// Reads which project (collection file) the engine saves to, and the projects
+    /// opened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails
+    /// with `unsupported` when the host named no collection file.
+    #[serde(rename = "collection.info")]
+    CollectionInfo,
     /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
     /// drawing thread, per unit of drawing work and its owner (a source's upload or
     /// chain, a scene's chain or pass, an item's effects, an output's chain), per
@@ -386,6 +392,7 @@ impl Query {
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
             Query::CodecDownloads => "codec.downloads",
+            Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
         }
     }
@@ -504,6 +511,11 @@ pub enum QueryResult {
         /// 0.25) parses as empty.
         #[serde(default)]
         hotkeys: Vec<HotkeyBinding>,
+        /// Every controller binding (ADR-0122), ordered by trigger. Kept apart from
+        /// `hotkeys`, which lists key chords only. Omitted when there are none, and
+        /// missing (from a server older than 0.96) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -667,6 +679,11 @@ pub enum QueryResult {
         /// are none, and missing (from a server older than 0.25) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
+        /// The controller bindings the batch removes the same way, ordered by trigger.
+        /// Omitted when there are none, and missing (from a server older than 0.96)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
     },
     /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
     #[serde(rename = "source.sizes")]
@@ -732,6 +749,17 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// The result of `collection.info` (0.94). Not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "collection.info")]
+    CollectionInfo {
+        /// The absolute path of the collection file the engine saves to.
+        path: String,
+        /// Up to ten collection files opened, created or saved as, most recent first,
+        /// `path` among them. A file may have moved or gone since.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        recent: Vec<String>,
+    },
     /// The result of `plugin.list` (0.58). Installed plugins are not collection state, so
     /// it carries no `rev`.
     #[serde(rename = "plugin.list")]
@@ -790,6 +818,7 @@ impl QueryResult {
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
             QueryResult::CodecDownloads { .. } => "codec.downloads",
+            QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
         }
     }

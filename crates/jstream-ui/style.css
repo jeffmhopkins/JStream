@@ -68,6 +68,13 @@
   --danger-dark: #7a1e23;
   --problem: #ff8a8f;
   --ok: #3fb27f;
+  /* Code colours, for the shader editor's highlighting. */
+  --code-keyword: #c792ea;
+  --code-type: #7fd1c7;
+  --code-number: #f2a07b;
+  --code-attribute: #e6c07b;
+  --code-call: #82aaff;
+  --code-annotation: #d7a65f;
   --bg: var(--app);
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   font-size: 13px;
@@ -201,6 +208,7 @@ a.menuitem:focus-visible { outline: none; }
 .connection { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 8px 6px; font-size: 12px; }
 .connection dt { color: var(--dim); }
 .connection dd { margin: 0; white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.project-name { margin: 0 8px 6px; font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
 .header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }
@@ -1128,7 +1136,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 }
 
 /* The pairing panel (pairing.rs). */
-.pairing { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.pairing { display: grid; gap: 0.6rem; justify-items: start; }
 
 .pairing .problem { margin: 0; }
 .pairing-open { display: grid; gap: 0.25rem; }
@@ -1145,7 +1153,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }
 
 /* The Plugins section and its install and grant dialogs (plugins.rs). */
-.plugins { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.plugins { display: grid; gap: 0.6rem; justify-items: start; }
 .plugins .problem { margin: 0; }
 .plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; width: 100%; }
 .plugin { display: grid; gap: 0.2rem; min-width: 0; }
@@ -1160,11 +1168,27 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* The About dialog (about.rs). */
 .modal.about-dialog { width: 400px; }
 /* Check for updates and Settings (updates.rs). */
-.modal.update-dialog, .modal.settings-dialog { width: 420px; }
+.modal.update-dialog { width: 420px; }
+/* The Settings dialog (settings.rs): its pages listed on the left, the page on the right. */
+.modal.settings-dialog { width: 720px; height: min(520px, 100%); }
+.settings-main { display: flex; flex: 1; min-height: 0; }
+.settings-pages { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; padding: 10px 8px; border-right: 1px solid var(--line); }
+.settings-page-tab { text-align: left; padding: 7px 10px; border: 0; border-radius: 5px; background: none; color: var(--muted); }
+.settings-page-tab:hover { color: var(--text); }
+.settings-page-tab.on { background: var(--hover); color: var(--text); }
+.settings-dialog .settings-body { flex: 1; min-width: 0; overflow: auto; display: grid; gap: 12px; align-content: start; }
+.settings-page-title { margin: 0; font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
-.settings-body { display: flex; flex-direction: column; gap: 14px; }
 .update-body p, .settings-check-note { margin: 0; }
 .update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.modal.project-dialog { width: 480px; }
+.project-body { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; font-size: 13px; }
+.project-path { display: flex; flex-direction: column; gap: 6px; }
+.project-path-row { display: flex; gap: 8px; }
+.project-path-row input { flex: 1; min-width: 0; }
+.project-note, .project-problem { margin: 0; font-size: 12px; color: var(--muted); }
+.project-warning { color: var(--text); }
+.project-problem { color: var(--danger); }
 .update-body a { color: var(--link); }
 .settings-check { display: flex; gap: 10px; align-items: flex-start; }
 .settings-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
@@ -1581,6 +1605,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .filter-dialog-tools { display: flex; align-items: center; gap: 8px; }
 .filter-dialog-body { padding: 14px 16px; overflow: auto; max-height: 60vh; }
 .filter-hint { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.filter-preset { margin: 0 0 12px; max-width: 240px; }
 .filter-dialog-body .field label { grid-template-columns: 132px minmax(0, 1fr); align-items: center; }
 .modal-footer button.danger.secondary { background: none; border-color: var(--border); color: var(--problem); }
 .switch { position: relative; flex: 0 0 34px; width: 34px; height: 18px; padding: 0; border: 0; border-radius: 9px; background: var(--border-strong); }
@@ -1856,3 +1881,31 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .activity-log li { display: flex; flex-direction: column; gap: 2px; }
 .activity-meta { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 11px; color: var(--dim); }
 .activity-log li.failed .activity-meta { color: var(--problem); }
+
+/* The custom shader editor (#1232). */
+.shader-editor { width: 760px; height: 600px; }
+.shader-body { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-height: 0; padding: 12px 16px; }
+.shader-body .add-note { margin: 0; }
+.shader-code { display: flex; flex: 1 1 auto; min-height: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--sunken, rgba(0, 0, 0, 0.25)); overflow: hidden; }
+.shader-gutter { flex: 0 0 auto; padding: 8px 6px; overflow: hidden; text-align: right; color: var(--dim); user-select: none; border-right: 1px solid var(--line); }
+.shader-line, .shader-text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 18px; }
+.shader-line { min-width: 2.5em; padding: 0 4px; }
+.shader-line.bad { color: var(--problem); background: rgba(255, 80, 80, 0.15); border-radius: 3px; }
+.shader-text { flex: 1 1 auto; margin: 0; padding: 8px; border: 0; border-radius: 0; background: none; color: var(--text); resize: none; white-space: pre; overflow: auto; tab-size: 4; }
+.shader-text:focus { outline: none; }
+/* The coloured copy of the text under a transparent textarea (#1295): same box, font and padding, scrolled with it. */
+.shader-stack { position: relative; flex: 1 1 auto; min-width: 0; display: flex; }
+.shader-stack .shader-text { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; }
+.shader-shade { overflow: hidden; pointer-events: none; }
+.shader-input { color: transparent; caret-color: var(--text); }
+.shader-input::selection { color: transparent; background: var(--selection); }
+.hl-comment { color: var(--dim); }
+.hl-annotation { color: var(--code-annotation); }
+.hl-keyword { color: var(--code-keyword); }
+.hl-type { color: var(--code-type); }
+.hl-number { color: var(--code-number); }
+.hl-attribute { color: var(--code-attribute); }
+.hl-call { color: var(--code-call); }
+.shader-status { margin: 0; font-size: 12px; color: var(--muted); }
+.shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
+.shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }

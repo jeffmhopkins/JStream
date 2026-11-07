@@ -61,11 +61,15 @@ fn opener(
     connect: Connect,
 ) -> OpenPublish {
     Arc::new(move |output_id: &OutputId| {
-        let kind = engine
+        let engine = engine
             .get()
             .and_then(Weak::upgrade)
-            .ok_or_else(|| PublishError::new("the engine is shutting down"))?
-            .output_kind(output_id);
+            .ok_or_else(|| PublishError::new("the engine is shutting down"))?;
+        let kind = engine.output_kind(output_id);
+        // The key's name in this project (ADR-0121 §5); no strong handle is kept while
+        // the opener connects.
+        let key_name = engine.stream_key_name(output_id);
+        drop(engine);
         let url = match kind {
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Generic { url },
@@ -82,7 +86,7 @@ fn opener(
             }
         };
         let key = keys
-            .get(output_id.as_str())
+            .get(&key_name)
             .map_err(|error| PublishError::new(format!("could not read the stream key: {error}")))?
             .ok_or_else(|| {
                 PublishError::new(format!(

@@ -14,6 +14,7 @@ use crate::{
 };
 
 mod blend;
+mod minified;
 mod three_d;
 
 /// A compositor whose device drops before the WARP lock.

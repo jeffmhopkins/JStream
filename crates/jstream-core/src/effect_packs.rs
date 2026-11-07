@@ -35,6 +35,11 @@ impl PackEffect {
     pub(crate) fn video_filter(&self, settings: &Settings) -> VideoFilter {
         self.0.video_filter(settings)
     }
+
+    /// The effect's kind descriptor.
+    pub(crate) fn kind_descriptor(&self) -> &jstream_protocol::KindDescriptor {
+        self.0.descriptor()
+    }
 }
 
 impl PartialEq for PackEffect {

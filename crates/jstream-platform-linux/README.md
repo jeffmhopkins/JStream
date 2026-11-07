@@ -26,8 +26,8 @@ of the crates allowed `unsafe` ([R-UNSAFE-001](../../docs/RULES.md#R-UNSAFE-001)
 system call is wrapped here behind safe APIs, with RAII types for what the system hands
 back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
-**System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva and
-libasound are opened with `dlopen` through `libloading` when a backend first needs them, and only the
+**System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva,
+libasound and libxcb are opened with `dlopen` through `libloading` when a backend first needs them, and only the
 functions the crate calls are declared, each with its C signature in a `SAFETY` comment.
 Nothing is linked, so the crate builds and tests on any machine, CI included, without
 their headers. The Vulkan loader is loaded the same way, by wgpu-hal through `ash`. This departs from [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)'s
@@ -109,6 +109,23 @@ It has:
   buffers of the messages it encodes and decodes, spare capacity included, before
   freeing them, since the secret store's carry secrets; copies left when its receive
   buffer grows are not reached.
+- **`GlobalHotkeys`** (X11; [ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md)
+  §5 and §6) lets the desktop app hear the collection's bound chords while another
+  application has the focus. A thread with its own X connection (libxcb, loaded at run
+  time) grabs exactly the bound chords on the root window with `xcb_grab_key`, so it
+  never sees any other key, and hands each press to a callback. Each chord is grabbed
+  with and without Caps Lock and Num Lock. Caps Lock is always `LockMask`; Num Lock's
+  mask, like Alt's and Super's, is read from the server's modifier map, and read again
+  when the map changes (`MappingNotify`), when the chords are grabbed again on the new
+  masks. Requests are handled before queued events are read, so a press that arrives
+  while the chords are being grabbed again isn't held back. Auto-repeat's press (the one with the same timestamp
+  as the release before it) is dropped, so a held chord runs once. A chord another
+  client holds (`BadAccess`) is returned with the reason; `set` swaps the whole set, and
+  dropping the listener lets every grab go. Keys go by keycode, a chord key's evdev code
+  plus 8 (`x11_key_code`), so a binding is the physical key the page names. Wayland has no
+  grab, so the host doesn't start it there. The key table, the chord parsing and the
+  modifier map are tested on every platform; the grabs themselves by an `#[ignore]`d test
+  that presses keys through XTEST on an X server (Xvfb will do).
 - **`LinuxSecrets`** (`StreamKeyStore`, `OAuthTokenStore`;
   [ADR-0071](../../docs/adr/0071-linux-secret-store.md),
   [R-SEC-001](../../docs/RULES.md#R-SEC-001)) keeps stream keys and OAuth refresh tokens

@@ -10,6 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::binding::Trigger;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -942,6 +943,30 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
+    /// Binds a controller trigger, such as a MIDI note, to an action (since 0.96,
+    /// ADR-0122 decision 1). The engine runs the action itself when an input it reads
+    /// sends the trigger, on the first frame at or after the message's time; running it
+    /// never adds to an undo history. Rejected with `invalid_argument` at
+    /// `trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at
+    /// `action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with
+    /// `already_exists` (entity `binding`) for a trigger that is already bound
+    /// (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
+    /// for an object the action names that doesn't exist. Deleting that object later
+    /// removes the binding with it, as for hotkeys. Inverse: `binding.clear`.
+    #[serde(rename = "binding.set")]
+    BindingSet {
+        /// What fires it.
+        trigger: Trigger,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that
+    /// isn't bound. Inverse: `binding.set` with its action.
+    #[serde(rename = "binding.clear")]
+    BindingClear {
+        /// The trigger to unbind.
+        trigger: Trigger,
+    },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
     /// an action (ADR-0099 decision 4). Rejected with `not_found` for a scene that doesn't
@@ -1271,6 +1296,8 @@ impl Edit {
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::BindingSet { .. } => "binding.set",
+            Edit::BindingClear { .. } => "binding.clear",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
@@ -1885,6 +1912,50 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// Opens the project (collection file) at `path` on the engine's machine and saves
+    /// there from then on (0.94, ADR-0121). The file is loaded and checked first; a file
+    /// the engine can't read or load (a newer `schema_version`, a broken file) fails with
+    /// `action_failed` and its reason, and the open project stays open with nothing
+    /// stopped, as it does when the open project can't be saved first. Then every
+    /// output that isn't stopped stops, and the collection is
+    /// replaced: `rev` becomes the file's or one past the current one, whichever is
+    /// greater, every client's undo history and idempotency keys are cleared, open
+    /// gestures are cancelled, timelines stop, and the first scene goes on program and
+    /// preview. Every client gets `state.changed`, `studio.changed` and
+    /// `collection.file_changed`. Fails with `invalid_argument` on `path` for a path
+    /// that breaks the `absolute` asset path rules, and `unsupported` when the host
+    /// named no collection file. Not an edit: undo can't take it back.
+    #[serde(rename = "collection.open")]
+    CollectionOpen {
+        /// The absolute path of the collection file.
+        path: String,
+    },
+    /// Creates a new, empty project at `path` (the four sample labels, the default
+    /// canvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// `action_failed` when it can't be written, and otherwise as `collection.open`.
+    #[serde(rename = "collection.new")]
+    CollectionNew {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
+    /// Writes the current project to a new file at `path` and saves there from then on
+    /// (0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder
+    /// differs, each `collection` asset reference is rewritten to keep naming the same
+    /// file: relative to the new folder when the file is under it, otherwise
+    /// `absolute`; an `absolute` reference to a file under the new folder becomes
+    /// relative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's
+    /// undo history. Nothing stops. Each output's stream key is copied to the new file.
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// the open file included, `invalid_argument` on `path` for a path that breaks the
+    /// `absolute` asset path rules, `action_failed` when the file can't be written (the
+    /// open file stays the one saved to), and `unsupported` when the host named no
+    /// collection file.
+    #[serde(rename = "collection.save_as")]
+    CollectionSaveAs {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1938,6 +2009,9 @@ impl Action {
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
             Action::ValuesSet { .. } => "values.set",
+            Action::CollectionOpen { .. } => "collection.open",
+            Action::CollectionNew { .. } => "collection.new",
+            Action::CollectionSaveAs { .. } => "collection.save_as",
         }
     }
 
@@ -2025,7 +2099,10 @@ impl Action {
             | Action::CodecDelete { .. }
             | Action::PackWrite { .. }
             | Action::PackDelete { .. }
-            | Action::ValuesSet { .. } => vec![],
+            | Action::ValuesSet { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => vec![],
         }
     }
 
@@ -2082,6 +2159,13 @@ impl Action {
                 "type",
                 "a codec action can't be bound: a person downloads or deletes a codec \
                  through the UI, after reading its licence (ADR-0061)",
+            )),
+            Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => Some((
+                "type",
+                "a collection action can't be bound: it replaces or moves the project a key \
+                 press would run in (ADR-0121)",
             )),
             Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
                 "type",

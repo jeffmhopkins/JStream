@@ -814,7 +814,7 @@ impl Studio {
 
     /// Re-reads the kinds with `kind.list`. A failure shows in the problem bar and keeps
     /// the kinds read before.
-    async fn relist_kinds(&self, session: &Session) {
+    pub async fn relist_kinds(&self, session: &Session) {
         match list_kinds(session).await {
             Ok(kinds) => self.kinds.set(Some(kinds)),
             Err(error) => self.report(&error),

@@ -347,6 +347,22 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<ProtocolError>,
     },
+    /// The engine saves the collection to another file (0.94, ADR-0121): a
+    /// `collection.open`, `collection.new` or `collection.save_as` succeeded. After an
+    /// open or a new, `state.changed` and `studio.changed` come first, and the client
+    /// reads the new collection with `state.get`.
+    #[serde(rename = "collection.file_changed")]
+    CollectionFileChanged {
+        /// The absolute path of the collection file the engine saves to now.
+        path: String,
+        /// Which call changed it.
+        cause: CollectionCause,
+        /// The client whose request caused it.
+        client_id: ClientId,
+        /// That client's request ID, so it can match the event to its own response.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        request_id: Option<RequestId>,
+    },
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -378,9 +394,24 @@ impl Event {
             Event::ValuesChanged { .. } => Some("values.changed"),
             Event::TimelineChanged { .. } => Some("timeline.changed"),
             Event::TimelineCueFired { .. } => Some("timeline.cue_fired"),
+            Event::CollectionFileChanged { .. } => Some("collection.file_changed"),
             Event::Unknown => None,
         }
     }
+}
+
+/// Which call made the engine save the collection to another file
+/// ([`Event::CollectionFileChanged`], 0.94).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum CollectionCause {
+    /// `collection.open`: another collection was loaded.
+    Open,
+    /// `collection.new`: an empty collection was created.
+    New,
+    /// `collection.save_as`: the same collection, saved to another file.
+    SaveAs,
 }
 
 /// The engine's load at one `stats.tick` (0.48): running totals since the engine

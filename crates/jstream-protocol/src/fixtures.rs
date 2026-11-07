@@ -31,9 +31,9 @@ use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
 };
+use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
 use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
-use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
     Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
@@ -568,6 +568,16 @@ pub(crate) fn edits() -> Vec<Edit> {
         },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+        },
+        Edit::BindingSet {
+            trigger: pad_trigger(),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        },
+        Edit::BindingClear {
+            trigger: pad_trigger(),
         },
         // A timeline, then its delete (ADR-0115).
         Edit::TimelineSet {
@@ -1115,6 +1125,39 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
     ]
 }
 
+/// The controller bindings the fixtures report: a pad's note switching scene, and a
+/// footswitch's CC starting the stream.
+fn controller_bindings() -> Vec<Binding> {
+    vec![
+        Binding::new(
+            pad_trigger(),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        ),
+        Binding::new(
+            Trigger::MidiCc {
+                controller: 64,
+                channel: None,
+                input: None,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+    ]
+}
+
+/// Note 36 on channel 10 from the "Pads" input: a drum pad.
+fn pad_trigger() -> Trigger {
+    Trigger::MidiNote {
+        note: 36,
+        channel: Some(10),
+        input: Some("Pads".into()),
+    }
+}
+
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
 fn recording_profile() -> EncoderProfile {
     EncoderProfile {
@@ -1368,6 +1411,15 @@ pub(crate) fn actions() -> Vec<Action> {
             value: None,
         },
         Action::PrivacySet { on: true },
+        Action::CollectionOpen {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+        },
+        Action::CollectionNew {
+            path: "/home/me/shows/talk.json".into(),
+        },
+        Action::CollectionSaveAs {
+            path: "D:/Projects/show copy.json".into(),
+        },
         Action::PreviewSubscribe {
             channel: 2,
             max_width: None,
@@ -1663,6 +1715,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::PluginList,
         Query::CodecDownloads,
+        Query::CollectionInfo,
         Query::YoutubeStats,
         Query::SourceSizes,
         Query::VideoFrames {
@@ -2351,6 +2404,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             }),
             hotkeys: hotkey_bindings(),
+            bindings: controller_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -2602,6 +2656,17 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     preset_id: None,
                 },
             )],
+            bindings: vec![Binding::new(
+                Trigger::MidiProgram {
+                    program: 4,
+                    channel: Some(1),
+                    input: None,
+                },
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                    preset_id: None,
+                },
+            )],
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {
@@ -2651,6 +2716,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     },
                     grant: crate::PluginGrant::default(),
                 },
+            ],
+        },
+        QueryResult::CollectionInfo {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+            recent: vec![
+                "C:/Users/me/Videos/Show/show.json".into(),
+                "C:/Users/me/AppData/Roaming/JStream/collection.json".into(),
             ],
         },
         QueryResult::CodecDownloads {
@@ -2802,6 +2874,21 @@ pub(crate) fn events() -> Vec<Event> {
             id: "tl_other".into(),
         }),
     });
+    for (path, cause) in [
+        (
+            "C:/Users/me/Videos/Show/show.json",
+            crate::CollectionCause::Open,
+        ),
+        ("/home/me/shows/talk.json", crate::CollectionCause::New),
+        ("D:/Projects/show copy.json", crate::CollectionCause::SaveAs),
+    ] {
+        events.push(Event::CollectionFileChanged {
+            path: path.into(),
+            cause,
+            client_id: ClientId::new("c1"),
+            request_id: Some(RequestId::new("r7")),
+        });
+    }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),
@@ -3091,8 +3178,10 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Bus,
         EntityKind::Device,
         EntityKind::Hotkey,
+        EntityKind::Binding,
         EntityKind::Plugin,
         EntityKind::Pack,
+        EntityKind::File,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -3180,6 +3269,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 dropped_overrides: Vec::new(),
                 rev: Rev(13),
                 removed_hotkeys: vec![],
+                removed_bindings: vec![],
             },
         }),
         ServerMessage::Response(Response {
@@ -3194,6 +3284,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                     .collect(),
                 rev: Rev(14),
                 removed_hotkeys: hotkey_bindings(),
+                removed_bindings: controller_bindings(),
             },
         }),
         ServerMessage::Response(Response {
