@@ -48,7 +48,7 @@ use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
 use crate::profile::{DrawMeter, Phase};
-use crate::runtime::RenderSnapshot;
+use crate::runtime::{RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
@@ -3548,13 +3548,23 @@ enum Work {
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
-/// compositor. Dropping this closes the queue and joins the thread.
-#[derive(Default)]
+/// compositor, opened on the engine's GPU context when there is one (ADR-0117 §5), so it
+/// draws the browser pages and GPU captures painted on it. Dropping this closes the queue
+/// and joins the thread.
 pub(crate) struct SnapshotWorker {
     queue: Mutex<Option<(Sender<Job>, JoinHandle<()>)>>,
+    gpu: Arc<SharedGpu>,
 }
 
 impl SnapshotWorker {
+    /// A worker whose compositor opens on `gpu`'s context.
+    pub(crate) fn new(gpu: Arc<SharedGpu>) -> Self {
+        Self {
+            queue: Mutex::default(),
+            gpu,
+        }
+    }
+
     /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
     /// with `rev`. The returned future resolves when the thread has drawn it.
     pub(crate) fn request(
@@ -3588,9 +3598,10 @@ impl SnapshotWorker {
         let mut queue = lock(&self.queue);
         if queue.is_none() {
             let (tx, rx) = mpsc::channel();
+            let gpu = Arc::clone(&self.gpu);
             match thread::Builder::new()
                 .name("jstream-snapshot".into())
-                .spawn(move || worker(rx))
+                .spawn(move || worker(rx, &gpu))
             {
                 Ok(handle) => *queue = Some((tx, handle)),
                 Err(err) => {
@@ -3632,12 +3643,19 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
-fn worker(jobs: Receiver<Job>) {
+fn worker(jobs: Receiver<Job>, shared: &SharedGpu) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
     for Job { work, reply } in jobs {
+        // A compositor whose device is gone draws nothing again: it reopens, on the
+        // engine's context as it is now.
+        if let Some((compositor, ..)) = &gpu
+            && compositor.lost().is_some()
+        {
+            gpu = None;
+        }
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
-            let (compositor, cache, chains) = open(&mut gpu, &mut backoff)?;
+            let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
             match &work {
                 Work::Picture {
                     snapshot,
@@ -3666,19 +3684,28 @@ fn worker(jobs: Receiver<Job>) {
     }
 }
 
+/// The snapshot compositor, opened now if there is none: on the engine's GPU context
+/// when it has one, else on a device of its own, hardware first.
 fn open<'a>(
     gpu: &'a mut Option<Gpu>,
     backoff: &mut OpenBackoff,
+    shared: &SharedGpu,
 ) -> Result<&'a mut Gpu, ProtocolError> {
     if gpu.is_none() {
         let now = Instant::now();
         if let Some(error) = backoff.cached(now) {
             return Err(error);
         }
-        match Compositor::open(OpenOptions::hardware()) {
+        let context = shared.context();
+        let opened = match &context {
+            Some(context) => Ok(Compositor::on_context(context)),
+            None => Compositor::open(OpenOptions::hardware()),
+        };
+        match opened {
             Ok(compositor) => {
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
+                    shared = context.is_some(),
                     "snapshot compositor opened"
                 );
                 backoff.opened();

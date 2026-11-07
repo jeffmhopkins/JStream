@@ -674,10 +674,11 @@ impl jstream_browser::BrowserPage for PaintedPage {
     }
 }
 
-/// On the GPU path a browser page paints on the program stage's device, and the render
-/// thread samples its texture there as premultiplied sRGB: half-transparent red over
-/// the black canvas reads back as linear red one half, not the darker red reading it
-/// as straight alpha would give. The stage takes the device away when it stops.
+/// On the GPU path a browser page paints on the engine's GPU context, which the program
+/// stage draws on (ADR-0117 §5), and the render thread samples its texture there as
+/// premultiplied sRGB: half-transparent red over the black canvas reads back as linear
+/// red one half, not the darker red reading it as straight alpha would give. The browser
+/// gets the context once, when it is set, and keeps it when the stage stops.
 #[test]
 fn a_browser_page_is_composited_from_its_gpu_frames() {
     let _gpu = one_gpu_test_at_a_time();
@@ -726,7 +727,14 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
             .lock()
             .unwrap_or_else(PoisonError::into_inner),
         [true],
-        "the browser got the stage's device"
+        "the browser got the engine's context once, which the stage drew on"
+    );
+    assert_eq!(
+        seen.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .on_context,
+        Some(true),
+        "the compositor opened on the engine's context"
     );
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -737,8 +745,54 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
             .given
             .lock()
             .unwrap_or_else(PoisonError::into_inner),
-        [true, false],
-        "the stage took the device away when it stopped"
+        [true],
+        "the page keeps the engine's context when the stage stops"
+    );
+}
+
+/// #1194: with no output running, `video.snapshot` draws a browser page's GPU frames,
+/// because the snapshot compositor opens on the engine's GPU context, the one the page
+/// paints on. It drew the page as nothing on a device of its own.
+#[test]
+fn a_snapshot_draws_a_browser_pages_gpu_frames() {
+    use crate::snapshot::{decode_base64, decode_png};
+    use jstream_protocol::{Query, QueryResult};
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    let browser = PaintingBrowser::default();
+    let engine = Engine::new()
+        .with_backends(backends)
+        .with_browser(Arc::new(browser.clone()));
+    let control = connected(&engine);
+    show_a_page(&control);
+
+    let half = 128.0_f32 / 255.0;
+    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut pixel = None;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        let result = super::query(&control, Query::VideoSnapshot).expect("video.snapshot");
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+        let [r, g, b, a] = [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]];
+        pixel = Some([r, g, b, a]);
+        if (f32::from(r) - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255 {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let got = pixel.map(|[r, g, b, a]| (f32::from(r), g, b, a));
+    assert!(
+        got.is_some_and(|(r, g, b, a)| (r - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255),
+        "the snapshot did not draw the page: {pixel:?}, expected red {red:.0}"
     );
 }
 
@@ -935,11 +989,12 @@ fn an_output_falls_back_from_the_gpu_path_mid_run() {
     }
 }
 
-/// A fallback from the GPU path takes the context away from the browser pages painting
-/// on it, while the output runs on, since the compositor can no longer sample them
-/// there (#451).
+/// A fallback from the GPU path, on a context that isn't lost, leaves the browser pages
+/// on the engine's context, while the output runs on: the preview and snapshots still
+/// draw them there (ADR-0117 §5). Before one shared context the pages lost their device
+/// (#451).
 #[test]
-fn the_gpu_fallback_takes_the_context_from_browser_pages() {
+fn a_gpu_fallback_leaves_browser_pages_on_the_engines_context() {
     let _gpu = one_gpu_test_at_a_time();
     if !have_software_gpu() {
         return;
@@ -965,16 +1020,15 @@ fn the_gpu_fallback_takes_the_context_from_browser_pages() {
             .output_stats()
             .is_some_and(|stats| stats.gpu_fallbacks == 1)
     };
-    let released = tick_until(&clock, || given() == [true, false] && fell_back());
     assert!(
-        released,
-        "the browser still has the device: {:?}, {:?}",
-        given(),
+        tick_until(&clock, fell_back),
+        "no fallback: {:?}",
         engine.output_stats()
     );
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert_eq!(given(), [true], "the pages keep the engine's context");
     block_on(control.call(output_call("yt", false))).expect("output.stop");
-    assert_eq!(given(), [true, false], "taken away once");
+    assert_eq!(given(), [true], "and keep it once the stage stops");
 }
 
 /// A fallback that cannot open the compositor on a device of its own fails the output,
