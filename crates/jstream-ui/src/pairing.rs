@@ -15,7 +15,9 @@
 //! - **Allow devices on my network** (ADR-0104), in the desktop app only: a switch above
 //!   the panel that asks the app to save the setting (`host::allow_network`, the app's own
 //!   command, which no engine client reaches). It applies when the app next starts, and
-//!   says so while the saved choice differs from the one the app started with.
+//!   says so while the saved choice differs from the one the app started with. When the
+//!   setting is on but the listener didn't open (its port taken), it says devices can't
+//!   connect.
 //! - **The network listener** (ADR-0130). When the server also listens on the local
 //!   network, `pairing.start` names its addresses and its certificate's fingerprint, and
 //!   the panel shows both, with when to continue past the browser's certificate warning:
@@ -324,6 +326,7 @@ pub fn NetworkAccessSetting() -> impl IntoView {
     let Some(started) = crate::host::desktop_network() else {
         return ().into_any();
     };
+    let open = crate::host::desktop_network_open();
     let on = RwSignal::new(started);
     let problem = RwSignal::new(None::<&'static str>);
     let save = move |allow: bool| {
@@ -348,8 +351,11 @@ pub fn NetworkAccessSetting() -> impl IntoView {
             <span>
                 <span class="settings-check-label">"Allow devices on my network"</span>
                 <span class="settings-check-note">
-                    "When on, a phone, tablet or other computer on this network can pair with a code and control JStream, over HTTPS on port 4456. Only paired devices get in. Off until you turn it on."
+                    "When on, a phone, tablet or other computer on this network can pair with a code and control JStream, over HTTPS on port 4456. Only paired devices get in. Windows may ask to allow JStream through its firewall, and on a network marked Public it blocks other devices. Off until you turn it on."
                 </span>
+                {(started && !open).then(|| view! {
+                    <span class="problem" role="alert">"Port 4456 could not be opened (another program, such as the JStream daemon, may use it), so devices can't connect. The log says why."</span>
+                })}
                 {move || (on.get() != started).then(|| view! {
                     <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
                 })}

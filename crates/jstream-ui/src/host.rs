@@ -3,9 +3,10 @@
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
-//! browse, allowNetwork }`: its in-process engine's WebSocket URL and control token,
+//! networkOpen, browse, allowNetwork }`: its in-process engine's WebSocket URL and control token,
 //! whether its virtual camera can be used, the data folder `collection` asset paths are
-//! relative to, whether "Allow devices on my network" was on at start, `browse`, which
+//! relative to, whether "Allow devices on my network" was on at start and its listener
+//! opened, `browse`, which
 //! opens a native file dialog, and `allowNetwork`, which saves that setting. In a browser the global is absent and the UI shows
 //! the connect form.
 //!
@@ -117,6 +118,15 @@ pub fn desktop_network() -> Option<bool> {
     Reflect::get(&global, &JsValue::from_str("network"))
         .ok()?
         .as_bool()
+}
+
+/// Whether the desktop app's network listener opened at start: `false` when the
+/// setting was on but its port was taken, and when the setting was off.
+pub fn desktop_network_open() -> bool {
+    global()
+        .and_then(|global| Reflect::get(&global, &JsValue::from_str("networkOpen")).ok())
+        .and_then(|value| value.as_bool())
+        == Some(true)
 }
 
 /// Asks the desktop app to save "Allow devices on my network", which applies when it

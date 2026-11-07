@@ -176,7 +176,11 @@ folder, and its log `logs\cef.log`.
   certificate's fingerprint to compare. The certificate (`token.tls`, made the
   first time) and the paired devices (`token.devices`) are kept beside the `token` file, the daemon's
   files, so the two share them. When the port is in use (a daemon with `--lan`), the
-  app starts without network access and the log says why.
+  app starts without network access, the log says why, and Settings › Devices says
+  devices can't connect. Windows may ask to let JStream through its firewall the first
+  time, and on a network marked Public it blocks other devices. Turning the setting off
+  applies at the next start and keeps the paired devices, which work again if it is
+  turned back on: revoke them on the same page to end their access for good.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager) and start it.
 - **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
@@ -232,7 +236,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   silently), `device_file` beside the token file, and pairing on, so the loopback
   listener (which the window uses) opens codes and `pairing.start` names the network
   listener's addresses and fingerprint (protocol 0.101). A certificate that can't be
-  used, or a port in use, is logged and the app starts without network access.
+  used is logged and the app starts without network access. Any other failed start with
+  the listener (most likely its port in use) is logged and retried without it; a cause
+  that isn't the listener's fails the retry too, with its own error. The page is told
+  whether the listener opened (`networkOpen`), so Settings › Devices says when the
+  setting is on but devices can't connect.
 - **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
@@ -277,11 +285,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
   (not Windows). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
-  folder, `network`, whether "Allow devices on my network" was on at start, and two
-  functions. `browse` calls the app's command `pick_path` and resolves to the
+  folder, `network`, whether "Allow devices on my network" was on at start,
+  `networkOpen`, whether its listener then opened, and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
-  saved (see *Network access*).
+  saved, false when the command fails too (see *Network access*).
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no

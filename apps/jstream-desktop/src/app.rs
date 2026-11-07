@@ -146,11 +146,12 @@ pub fn start(
             network.as_ref(),
         ) {
             Err(error) if network.is_some() => {
-                // The network listener's port may be in use (a daemon with `--lan`): the
-                // app still starts, for this machine only.
+                // Most likely the network listener's port is in use (a daemon with
+                // `--lan`): the app still starts, for this machine only. Any other cause
+                // fails the retry the same way, with its own error.
                 tracing::error!(
                     error = format!("{error:#}"),
-                    "could not open the network listener; starting without network access"
+                    "could not start with network access; trying again without it"
                 );
                 Host::start(
                     engine,
@@ -191,6 +192,7 @@ pub fn start(
         vcam.as_str(),
         collection.as_ref(),
         network::allowed(&network::setting_file(data)),
+        host.network().is_some(),
     );
     Startup {
         ui,

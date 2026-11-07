@@ -237,7 +237,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `browse` and `allowNetwork`) before the page loads,
+  `network`, `networkOpen`, `browse` and `allowNetwork`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -911,7 +911,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shown only when the global has `network` and `allowNetwork`. It saves through
   `allowNetwork`, the app's own command, not `ui_settings.set`, so no engine client can
   turn it on; a failed save puts the box back and says so, and while the box differs
-  from the setting the app started with it says to restart JStream. The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+  from the setting the app started with it says to restart JStream. When the setting
+  was on but the listener didn't open (`networkOpen` false: its port taken), it says
+  devices can't connect. Its note says Windows may ask about its firewall. The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
   no device can pair with this session. "Pair a device"
