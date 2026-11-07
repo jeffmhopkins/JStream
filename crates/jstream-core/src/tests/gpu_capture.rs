@@ -1910,3 +1910,123 @@ fn an_output_started_after_a_gpu_fallback_reads_back_and_fails_nothing() {
     block_on(control.call(output_call("yt", false))).expect("yt stop");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A display that captures solid green CPU frames, in BGRA.
+struct GreenCapture {
+    clock: FakeClock,
+    size: FrameSize,
+    /// How many captures were started.
+    starts: Arc<AtomicU64>,
+}
+
+impl Capture for GreenCapture {
+    fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
+        FakeCapture::new(self.clock.clone(), self.size).targets()
+    }
+
+    fn start(&self, _target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.starts.fetch_add(1, Ordering::Relaxed);
+        Ok(Box::new(GreenStream {
+            clock: self.clock.clone(),
+            size: self.size,
+            last: None,
+        }))
+    }
+}
+
+struct GreenStream {
+    clock: FakeClock,
+    size: FrameSize,
+    last: Option<MediaTime>,
+}
+
+impl CaptureStream for GreenStream {
+    fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+        let now = self.clock.now();
+        if self.last == Some(now) {
+            return Ok(None);
+        }
+        self.last = Some(now);
+        let (width, height) = (self.size.width() as usize, self.size.height() as usize);
+        let data = [0, 255, 0, 255].repeat(width * height);
+        let info = VideoFrameInfo {
+            size: self.size,
+            format: PixelFormat::Bgra8,
+            color: ColorInfo {
+                range: ColorRange::Full,
+                ..ColorInfo::default()
+            },
+            pts: now,
+        };
+        let frame =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(data, width * 4)])
+                .expect("a green frame");
+        Ok(Some(VideoSurface::Cpu(frame)))
+    }
+
+    fn stats(&self) -> CaptureStats {
+        CaptureStats::default()
+    }
+}
+
+/// #1184: `video.snapshot` draws a display the program shows, with no output running:
+/// the snapshot thread captures it itself and waits for its first frame. It drew it as
+/// nothing, with no captures at all. The capture keeps running between snapshots.
+#[test]
+fn a_snapshot_draws_a_display_capture() {
+    use crate::snapshot::{decode_base64, decode_png};
+    use jstream_protocol::{Query, QueryResult};
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let starts = Arc::new(AtomicU64::new(0));
+    let mut backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    backends.capture = Arc::new(GreenCapture {
+        clock: clock.clone(),
+        size: FrameSize::new(64, 36).expect("size"),
+        starts: Arc::clone(&starts),
+    });
+    let engine = Engine::new().with_backends(backends);
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("screen"),
+                    name: "Screen".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                add("main", "item", "screen"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene showing the display");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+
+    let green = || {
+        let result = super::query(&control, Query::VideoSnapshot).expect("video.snapshot");
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        rgba.chunks_exact(4)
+            .filter(|px| px[1] > 200 && px[0] < 40 && px[2] < 40)
+            .count()
+    };
+    // The first snapshot waits for the capture's first frame rather than drawing none.
+    assert!(green() > 0, "the first snapshot did not draw the display");
+    clock.advance(50_000);
+    assert!(green() > 0, "the second snapshot did not draw the display");
+    assert_eq!(starts.load(Ordering::Relaxed), 1, "started once for both");
+}

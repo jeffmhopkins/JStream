@@ -735,14 +735,21 @@ impl Engine {
                 .preview_stage()
             })
         };
-        self.shared.previews.set_capture(PreviewCapture {
+        let capture = PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
             codecs: Arc::clone(&backends.codecs),
             clock: backends.clock.timebase(),
             stage: Some(stage),
             gpu: Arc::clone(&self.shared.gpu),
+        };
+        // Snapshots capture what they show the same way as the preview, on their own
+        // thread (#1184). The stage opener is the preview's alone.
+        self.shared.snapshots.set_capture(PreviewCapture {
+            stage: None,
+            ..capture.clone()
         });
+        self.shared.previews.set_capture(capture);
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;

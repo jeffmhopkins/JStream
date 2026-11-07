@@ -812,7 +812,7 @@ impl PreviewCapture {
     /// Starts the `jstream-capture` thread, on the CPU path: the hub's compositor is not
     /// on the platform's GPU context. The sizes it reports go nowhere; the program stage
     /// reports the sizes `source.sizes` shows.
-    fn spawn(&self) -> Result<RenderCaptures, String> {
+    pub(crate) fn spawn(&self) -> Result<RenderCaptures, String> {
         let (sizes, _) = std::sync::mpsc::channel();
         spawn_captures(
             CaptureBackends {

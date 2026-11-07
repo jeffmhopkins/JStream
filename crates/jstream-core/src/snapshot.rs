@@ -47,8 +47,9 @@ use crate::follow::{CameraMotion, CameraMoves, FollowPlan};
 use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
+use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
-use crate::runtime::{RenderSnapshot, SharedGpu};
+use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
@@ -3554,6 +3555,9 @@ enum Work {
 pub(crate) struct SnapshotWorker {
     queue: Mutex<Option<(Sender<Job>, JoinHandle<()>)>>,
     gpu: Arc<SharedGpu>,
+    /// The engine's capture backends, once it has them, which the thread captures the
+    /// displays, windows and video devices a snapshot shows with (#1184).
+    capture: Arc<Mutex<Option<PreviewCapture>>>,
 }
 
 impl SnapshotWorker {
@@ -3562,7 +3566,13 @@ impl SnapshotWorker {
         Self {
             queue: Mutex::default(),
             gpu,
+            capture: Arc::default(),
         }
+    }
+
+    /// Gives the thread the engine's capture backends, from its next job on.
+    pub(crate) fn set_capture(&self, capture: PreviewCapture) {
+        *lock(&self.capture) = Some(capture);
     }
 
     /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
@@ -3599,9 +3609,10 @@ impl SnapshotWorker {
         if queue.is_none() {
             let (tx, rx) = mpsc::channel();
             let gpu = Arc::clone(&self.gpu);
+            let capture = Arc::clone(&self.capture);
             match thread::Builder::new()
                 .name("jstream-snapshot".into())
-                .spawn(move || worker(rx, &gpu))
+                .spawn(move || worker(&rx, &gpu, &capture))
             {
                 Ok(handle) => *queue = Some((tx, handle)),
                 Err(err) => {
@@ -3643,10 +3654,21 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
-fn worker(jobs: Receiver<Job>, shared: &SharedGpu) {
+fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<PreviewCapture>>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
-    for Job { work, reply } in jobs {
+    let mut captures = SnapshotCaptures::default();
+    loop {
+        let Job { work, reply } = match jobs.recv_timeout(CAPTURE_IDLE) {
+            Ok(job) => job,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // No snapshot for a while: the captures stop until the next one.
+                captures.stop();
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        let shown = captures.prepare(&work, capture);
         // A compositor whose device is gone draws nothing again: it reopens, on the
         // engine's context as it is now.
         if let Some((compositor, ..)) = &gpu
@@ -3669,9 +3691,10 @@ fn worker(jobs: Receiver<Job>, shared: &SharedGpu) {
                     *at,
                     compositor,
                     (cache, chains),
+                    shown,
                 )
                 .map(|result| CallResult::Query { result }),
-                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains)),
+                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -3681,6 +3704,83 @@ fn worker(jobs: Receiver<Job>, shared: &SharedGpu) {
             })
         });
         reply.send(result);
+    }
+}
+
+/// How long the snapshot thread keeps its captures after its last job: an agent taking
+/// snapshots one after another doesn't wait for each capture to start again.
+const CAPTURE_IDLE: Duration = Duration::from_secs(10);
+
+/// How long a snapshot waits for the captures it shows to deliver a first frame, or fail
+/// to start. One still starting after that draws as nothing.
+const CAPTURE_WAIT: Duration = Duration::from_millis(1500);
+
+/// How often the wait for captures looks at them again.
+const CAPTURE_POLL: Duration = Duration::from_millis(10);
+
+/// The displays, windows and video devices the snapshot thread captures for the
+/// snapshots it draws (#1184), on a `jstream-capture` thread of its own on the CPU path,
+/// as the preview hub does: it can't read the program stage's captures, and a snapshot
+/// draws with no stage running too. Started by the first snapshot that shows one, and
+/// stopped after [`CAPTURE_IDLE`] without a job.
+#[derive(Default)]
+struct SnapshotCaptures {
+    running: Option<RenderCaptures>,
+}
+
+impl SnapshotCaptures {
+    /// Starts what `work` shows and stops the rest, then waits until each has a frame or
+    /// has failed, for at most [`CAPTURE_WAIT`]. Returns the captures to draw with:
+    /// none when it shows none or the engine has no capture backends.
+    fn prepare(&mut self, work: &Work, capture: &Mutex<Option<PreviewCapture>>) -> &dyn Captures {
+        let (wanted, now) = match work {
+            Work::Picture { snapshot, at, .. } => (snapshot.shot().captures().clone(), *at),
+            Work::Sheet(sheet) => (
+                sheet
+                    .samples
+                    .iter()
+                    .flat_map(|sample| sample.snapshot.shot().captures())
+                    .cloned()
+                    .collect(),
+                sheet.start,
+            ),
+        };
+        if wanted.is_empty() {
+            return &NoCaptures;
+        }
+        if self.running.is_none() {
+            let Some(capture) = lock(capture).clone() else {
+                return &NoCaptures;
+            };
+            match capture.spawn() {
+                Ok(running) => self.running = Some(running),
+                Err(err) => {
+                    tracing::warn!(error = %err, "snapshots capture nothing");
+                    return &NoCaptures;
+                }
+            }
+        }
+        let Some(running) = self.running.as_mut() else {
+            return &NoCaptures;
+        };
+        let by = Instant::now() + CAPTURE_WAIT;
+        running.tick(&wanted, now);
+        while !running.settled(&wanted) && Instant::now() < by {
+            thread::sleep(CAPTURE_POLL);
+            running.tick(&wanted, now);
+        }
+        if !running.settled(&wanted) {
+            tracing::info!(
+                waited_ms = CAPTURE_WAIT.as_millis(),
+                "a capture the snapshot shows had no frame yet; it draws as nothing"
+            );
+        }
+        running
+    }
+
+    /// Stops every capture.
+    fn stop(&mut self) {
+        self.running = None;
     }
 }
 
@@ -3809,8 +3909,9 @@ fn draw(
     at: MediaTime,
     compositor: &mut Compositor,
     caches: (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<QueryResult, ProtocolError> {
-    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches)?;
+    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches, captures)?;
     let (width, height) = fit(full_w, full_h);
     let rgba = scale_down(full_w, full_h, &rgba, width, height);
     let png =
@@ -3829,6 +3930,7 @@ fn draw_sheet(
     sheet: &Sheet,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Answer {
     let mut layout = None;
     let mut tiles = Vec::with_capacity(sheet.samples.len());
@@ -3839,6 +3941,7 @@ fn draw_sheet(
             sample.at,
             compositor,
             (&mut *cache, &mut *chains),
+            captures,
         )?;
         let count = u32::try_from(sheet.samples.len()).unwrap_or(u32::MAX);
         let layout = *layout.get_or_insert_with(|| frames::Layout::new(count, (width, height)));
@@ -3867,6 +3970,7 @@ fn render(
     at: MediaTime,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<(u32, u32, Vec<u8>), ProtocolError> {
     cache.begin_frame();
     let output = compose(
@@ -3875,7 +3979,7 @@ fn render(
         (shot, at),
         View::default(),
         live,
-        &NoCaptures,
+        captures,
         DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
@@ -6025,6 +6129,7 @@ pub(crate) mod tests {
             zero(),
             &mut compositor,
             (&mut cache, &mut Chains::default()),
+            &super::NoCaptures,
         )
         .expect("draw");
         let QueryResult::VideoSnapshot { png, .. } = result else {
