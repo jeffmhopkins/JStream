@@ -307,8 +307,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.92 because `profile.get` reports past the drawers: each
 encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
-mixer's blocks (`mixer`, `MixerProfile`) (#1220, a placeholder number the release
-queue sets); 0.91 because a follow camera is a `follow_pointer` filter on a
+mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
