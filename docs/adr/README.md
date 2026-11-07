@@ -133,4 +133,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
 | [ADR-0118](0118-placed-keyframes-on-the-graph.md) | Placed keyframes live on the engine's graph, not on a copy rebuilt each batch | accepted | agent |  |
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
+| [ADR-0121](0121-projects-open-new-and-save-as.md) | Projects: open, new and save as, over the protocol | accepted | agent |  |
 <!-- @generated end adr-index -->
