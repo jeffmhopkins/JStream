@@ -4667,7 +4667,6 @@ mod hotkeys {
         assert!(chords(&graph).is_empty());
     }
 
-    /// Rebinding is a clear then a set, in one batch.
     /// A wheel chord binds an action that takes a step, `scene.zoom_camera`, and
     /// nothing else (ADR-0112 §3).
     #[test]
@@ -4700,6 +4699,7 @@ mod hotkeys {
         apply_ok(&mut graph, vec![set("Equal", zoom(1))]);
     }
 
+    /// Rebinding is a clear then a set, in one batch.
     #[test]
     fn a_bound_chord_is_rebound_by_a_clear_and_a_set() {
         let mut graph = bound();

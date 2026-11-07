@@ -120,8 +120,10 @@ Contents ([Design](#design) explains the choices):
   `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
   (`Ctrl+WheelUp`, ADR-0112 §3) runs once per notch while the page has the focus:
   `WheelNotches` turns `WheelEvent` deltas into notches (100 pixels, 3 lines or a page
-  each, carrying the rest), and the window's non-passive wheel listener prevents the
-  browser's own use of a bound chord, such as Ctrl+wheel zooming the page. The desktop
+  each, carrying the rest; whether other webviews report 100 pixels a notch is #1346),
+  with Shift held reading the sideways delta browsers report then (`wheel_delta`). The
+  window's non-passive wheel listener prevents the browser's own use of a bound chord,
+  such as Ctrl+wheel zooming the page, only when the direction turned is bound. The desktop
   app doesn't register wheel chords with the OS yet. In the desktop app,
   the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
   the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is

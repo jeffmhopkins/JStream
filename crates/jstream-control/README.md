@@ -174,7 +174,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
     `BusMonitor::problem` refuses (on `monitor.<field>`, after the bus), sends from a `scene` source or a
     source with no audio, removing a missing send, and gains outside −100 to +24 dB;
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
-    `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
+    `Action::bind_problem` refuses, a wheel chord bound to an action that takes no
+    steps (ADR-0112 §3) and a missing named scene, output or preset (only `cut`
     exists), in that order, and
     `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
     profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.

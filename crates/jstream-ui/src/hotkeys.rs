@@ -66,7 +66,7 @@ pub struct WheelNotches {
 }
 
 impl WheelNotches {
-    /// Adds one wheel event's vertical turn (`deltaY` in `deltaMode`'s unit) and returns
+    /// Adds one wheel event's vertical turn ([`wheel_delta`], in `deltaMode`'s unit) and returns
     /// the whole notches it completes: negative turns up (away from the person),
     /// positive down. A turn the other way drops what was carried.
     pub fn turn(&mut self, delta_y: f64, delta_mode: u32) -> i32 {
@@ -92,6 +92,17 @@ impl WheelNotches {
     /// Forgets what was carried, when the wheel turns without a bound chord.
     pub fn reset(&mut self) {
         self.carry = 0.0;
+    }
+}
+
+/// The vertical turn of a wheel event, in its `deltaMode`'s unit. Browsers report a
+/// turn with Shift held as a sideways scroll, in `deltaX` with `deltaY` 0 (macOS
+/// converts it too), so with Shift held and no vertical turn the sideways one counts.
+pub fn wheel_delta(delta_x: f64, delta_y: f64, shift: bool) -> f64 {
+    if shift && delta_y == 0.0 {
+        delta_x
+    } else {
+        delta_y
     }
 }
 
@@ -211,16 +222,23 @@ pub fn Hotkeys() -> impl IntoView {
                 .collection
                 .with_untracked(|c| c.as_ref().and_then(|c| c.hotkey(&chord)))
         };
-        let (up, down) = (bound("WheelUp"), bound("WheelDown"));
-        if up.is_none() && down.is_none() {
+        let delta = wheel_delta(event.delta_x(), event.delta_y(), modifiers.2);
+        let direction = if delta < 0.0 {
+            "WheelUp"
+        } else if delta > 0.0 {
+            "WheelDown"
+        } else {
+            return;
+        };
+        let Some(action) = bound(direction) else {
+            // Not bound this way: the page scrolls or zooms as it would.
             notches.reset();
             return;
-        }
-        // Bound with these modifiers: the page doesn't scroll or zoom too.
+        };
+        // Bound with these modifiers, this way: the page doesn't scroll or zoom too.
         event.prevent_default();
-        let turned = notches.turn(event.delta_y(), event.delta_mode());
-        let action = if turned < 0 { up } else { down };
-        if let (Some(action), Some(s)) = (action, session.get()) {
+        let turned = notches.turn(delta, event.delta_mode());
+        if let Some(s) = session.get() {
             for _ in 0..turned.unsigned_abs() {
                 studio.act(&s, action.clone());
             }
@@ -297,6 +315,17 @@ mod tests {
             chord(false, true, true, false, "WheelDown"),
             Some(Chord::new("Alt+Shift+WheelDown"))
         );
+    }
+
+    /// With Shift held, browsers report the wheel sideways: that turn counts.
+    #[test]
+    fn a_shift_wheel_turn_reads_the_sideways_delta() {
+        assert_eq!(wheel_delta(0.0, -100.0, false), -100.0);
+        assert_eq!(wheel_delta(0.0, -100.0, true), -100.0);
+        assert_eq!(wheel_delta(100.0, 0.0, true), 100.0);
+        assert_eq!(wheel_delta(-100.0, 0.0, true), -100.0);
+        // Without Shift, a sideways scroll isn't a turn of the wheel.
+        assert_eq!(wheel_delta(100.0, 0.0, false), 0.0);
     }
 
     #[test]

@@ -2453,7 +2453,8 @@ impl Collection {
             | Edit::FilterSetSettings { .. }
             | Edit::FilterReorder { .. }) => self.apply_filter(edit, at)?,
             // The graph's checks, in its order: the chord, whether it is bound, whether
-            // the action can be bound, then the objects it names.
+            // the action can be bound, whether a wheel chord's action takes steps, then
+            // the objects it names.
             Edit::HotkeySet { chord, action } => {
                 if let Some(reason) = chord.problem() {
                     return Err(invalid(at, "chord", reason));
@@ -2463,6 +2464,14 @@ impl Collection {
                 }
                 if let Some((field, reason)) = action.bind_problem() {
                     return Err(invalid(at, &format!("action.{field}"), reason));
+                }
+                if chord.is_wheel() && !action.takes_steps() {
+                    return Err(invalid(
+                        at,
+                        "action.type",
+                        "a wheel chord runs once per notch, so it can only be bound to an \
+                         action that takes one step, such as `scene.zoom_camera` (ADR-0112)",
+                    ));
                 }
                 for (entity, id) in action.named_objects() {
                     let exists = match entity {
@@ -5065,6 +5074,43 @@ mod tests {
         };
         let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
         assert_eq!(chords, ["F1", "F9"]);
+    }
+
+    /// A wheel chord binds only an action that takes steps, as the graph checks it
+    /// (ADR-0112 §3), before the objects the action names.
+    #[test]
+    fn a_wheel_chord_binds_only_an_action_that_takes_steps() {
+        let (_engine, control) = parity_engine();
+        let bind = |action| {
+            batch(
+                &*control,
+                Batch::single(Edit::HotkeySet {
+                    chord: jstream_protocol::Chord::new("Ctrl+WheelUp"),
+                    action,
+                }),
+            )
+        };
+        let refused = bind(Action::SceneSwitch {
+            scene_id: SceneId::new("missing"),
+            preset_id: None,
+        })
+        .expect_err("a switch takes no steps");
+        assert!(
+            matches!(
+                refused.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.action.type"
+            ),
+            "{refused:?}"
+        );
+        let refused = bind(Action::SceneZoomCamera {
+            scene_id: SceneId::new("missing"),
+            steps: 1,
+        })
+        .expect_err("the scene is missing");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::NotFound { .. })),
+            "{refused:?}"
+        );
     }
 
     #[test]
