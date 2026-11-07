@@ -847,6 +847,18 @@ impl PreviewHub {
         self.inner.next_id.fetch_add(1, Ordering::Relaxed)
     }
 
+    /// The rate of each live stream, for tests of the engine's cap.
+    #[cfg(test)]
+    pub(crate) fn rates(&self) -> Vec<u32> {
+        lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.live())
+            .map(|stream| stream.settings.fps)
+            .collect()
+    }
+
     /// The scenes the live streams show, which the engine plans for them.
     pub(crate) fn scenes(&self) -> BTreeSet<SceneId> {
         lock(&self.inner.state)

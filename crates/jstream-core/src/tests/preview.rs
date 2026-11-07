@@ -1026,3 +1026,24 @@ fn the_program_stage_draws_an_h264_program_stream() {
     drop(ticking);
     pump.join().expect("pump");
 }
+
+/// A stream is never faster than the collection's base rate (ADR-0119): 60 fps asked of
+/// a 30 fps collection is 30, and of a 60 fps one is 60.
+#[test]
+fn a_stream_runs_no_faster_than_the_base_rate() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    act(&control, subscribe(1, Some(60), Vec::new())).expect("subscribed");
+    assert_eq!(engine.preview_rates(), vec![30]);
+    batch(
+        &control,
+        Batch::single(Edit::CanvasSetFrameRate { fps: 60 }),
+    )
+    .expect("60 fps");
+    act(&control, subscribe(2, Some(60), Vec::new())).expect("subscribed");
+    act(&control, subscribe(3, Some(15), Vec::new())).expect("subscribed");
+    let mut rates = engine.preview_rates();
+    rates.sort_unstable();
+    assert_eq!(rates, vec![15, 30, 60]);
+}
