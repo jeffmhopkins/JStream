@@ -1,13 +1,15 @@
-//! The outputs panel: the program output and each output with its FX button, which
-//! shows that chain in the Filters panel (spec-panels.md 9, ADR-0080); create, edit and
-//! delete outputs (streams, recordings and the virtual camera), set or clear their stream
-//! keys, choose each one's encoder profile, video mix and the audio bus it carries,
-//! edit the encoder profiles and video mixes ([`encoders`](super::encoders)), start and
-//! stop them, and the pipeline's health from `stats.tick`. It also holds the logic behind the header's
-//! Go Live (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
+//! The outputs panel (#1206): a header with the pipeline's health from `stats.tick`,
+//! then one compact row for the program output and for each output, with its state,
+//! Start or Stop, its FX button, which shows that chain in the Filters panel
+//! (spec-panels.md 9, ADR-0080), and a ⋯ menu. An output's settings (its server URL or
+//! path, stream key, video mix, encoder profile and audio bus) are in its own dialog,
+//! which applies nothing until OK or Apply; adding an output opens the same dialog. The
+//! encoder profiles and video mixes are edited in the Encoders & mixes dialog
+//! ([`encoders`](super::encoders)). It also holds the logic behind the header's Go Live
+//! (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
 //!
 //! The stream key is write-only (R-SEC-001). It is read from its password field only
-//! when the user saves it, wrapped in a [`SecretString`] at once, sent with
+//! when OK or Apply sends it, wrapped in a [`SecretString`] at once, sent with
 //! `output.set_key`, and the field is emptied. It never goes into a signal, the page's
 //! storage, the console or an error message, and the engine never sends it back: the
 //! panel only learns `key_set` from `output.status`.
@@ -15,8 +17,10 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/RULES.md#R-SEC-001
 
 use crate::app::SessionContext;
+use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::menu::{Entry, Menus};
 use crate::panels::encoders::Profiles;
 use crate::panels::filters::FilterDialogs;
 use crate::session::Session;
@@ -148,6 +152,24 @@ pub async fn status(control: &dyn Control, output_id: &OutputId) -> Result<Statu
 pub async fn edit(control: &dyn Control, edit: Edit) -> Result<(), String> {
     control
         .call(Call::Batch(Batch::single(edit)))
+        .await
+        .map(drop)
+        .map_err(|error| describe(&error))
+}
+
+/// Sends `edits` as one batch, one undo step. Nothing to send sends nothing.
+pub async fn send_edits(control: &dyn Control, edits: Vec<Edit>) -> Result<(), String> {
+    if edits.is_empty() {
+        return Ok(());
+    }
+    let batch = Batch {
+        edits,
+        expected_rev: None,
+        idempotency_key: None,
+        ends_gesture: None,
+    };
+    control
+        .call(Call::Batch(batch))
         .await
         .map(drop)
         .map_err(|error| describe(&error))
@@ -429,7 +451,7 @@ pub fn kind_icon(kind: &OutputKind) -> &'static str {
     }
 }
 
-/// The warning an output's card shows when the engine says its server is plain
+/// The warning an output's row and settings show when the engine says its server is plain
 /// `rtmp://` to another machine (`output.status`'s `cleartext`): the stream key would
 /// cross the network unencrypted (#353). The rule is the engine's
 /// (`OutputKind::sends_key_in_cleartext`), so `rtmps://` and a loopback relay get none.
@@ -560,6 +582,226 @@ impl HealthReading {
     }
 }
 
+impl HealthReading {
+    /// The reading in a word or two, for the panel's header: "Healthy", "Dropping (N)"
+    /// with everything dropped over the window, or "No stats yet". [`summary`] is the
+    /// detail, on hover.
+    ///
+    /// [`summary`]: HealthReading::summary
+    pub fn short(&self) -> String {
+        if !self.sampled {
+            return "No stats yet".into();
+        }
+        let d = self.drops;
+        let total = [
+            d.output_packets,
+            d.encode_frames,
+            d.encode_blocks,
+            d.render_ticks,
+            d.capture_frames,
+            d.audio_frames,
+        ]
+        .into_iter()
+        .fold(0_u64, u64::saturating_add);
+        if total == 0 {
+            "Healthy".into()
+        } else {
+            format!("Dropping ({total})")
+        }
+    }
+}
+
+/// The kind an existing output is, as the settings dialog edits it, or `None` for a
+/// kind (or an RTMP target) this page doesn't know.
+pub fn new_kind(kind: &OutputKind) -> Option<NewKind> {
+    match kind {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { .. },
+        } => Some(NewKind::Rtmp),
+        OutputKind::Record { .. } => Some(NewKind::Record),
+        OutputKind::VirtualCam => Some(NewKind::VirtualCam),
+        _ => None,
+    }
+}
+
+/// An output's target as its field shows it: the server URL, the recording's path, or
+/// nothing.
+pub fn target_of(kind: &OutputKind) -> String {
+    match kind {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url },
+        } => url.clone(),
+        OutputKind::Record { path, .. } => path.clone(),
+        _ => String::new(),
+    }
+}
+
+/// Where an output sends, short enough for its row: the server's host, the
+/// recording's file name, or "Webcam" for the virtual camera. The full URL or path is
+/// in the row's tooltip and its settings.
+pub fn target_summary(kind: &OutputKind) -> String {
+    match kind {
+        OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url },
+        } => {
+            let rest = url.split_once("://").map_or(url.as_str(), |(_, rest)| rest);
+            let host = rest.split('/').next().unwrap_or_default();
+            if host.is_empty() {
+                url.clone()
+            } else {
+                host.to_owned()
+            }
+        }
+        OutputKind::Rtmp { .. } => "Stream".into(),
+        OutputKind::Record { path, .. } => path
+            .rsplit(['/', '\\'])
+            .find(|part| !part.is_empty())
+            .unwrap_or(path)
+            .to_owned(),
+        OutputKind::VirtualCam => "Webcam".into(),
+        _ => "Unknown kind".into(),
+    }
+}
+
+/// The name of the encoder profile an output uses, or "Engine default".
+pub fn encoder_name(encoders: &[EncoderProfileInfo], chosen: Option<&EncoderProfileId>) -> String {
+    chosen.map_or_else(
+        || "Engine default".to_owned(),
+        |id| {
+            encoders
+                .iter()
+                .find(|e| &e.profile_id == id)
+                .map_or_else(|| id.to_string(), |e| e.name.clone())
+        },
+    )
+}
+
+/// What the output settings dialog edits. Nothing in it reaches the engine until OK or
+/// Apply, which send only what changed ([`draft_edits`]). The stream key isn't here: it
+/// is read from its password field only when it is sent (R-SEC-001).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputDraft {
+    /// What it is. Only a new output picks it.
+    pub kind: NewKind,
+    /// The server URL or the recording's path, as typed.
+    pub target: String,
+    /// The encoder profile, or the engine's default.
+    pub encoder: Option<EncoderProfileId>,
+    /// The video mix, or the program at the canvas size.
+    pub mix: Option<VideoMixId>,
+    /// The audio bus it carries.
+    pub bus: BusId,
+}
+
+impl OutputDraft {
+    /// A new output of `kind`: no target yet, the engine's encoder, the program and the
+    /// master bus.
+    pub fn new(kind: NewKind) -> OutputDraft {
+        OutputDraft {
+            kind,
+            target: String::new(),
+            encoder: None,
+            mix: None,
+            bus: BusId::master(),
+        }
+    }
+
+    /// The output `info` as it is, or `None` for a kind this page doesn't edit.
+    pub fn of(info: &OutputInfo) -> Option<OutputDraft> {
+        Some(OutputDraft {
+            kind: new_kind(&info.kind)?,
+            target: target_of(&info.kind),
+            encoder: info.encoder_profile.clone(),
+            mix: info.video_mix.clone(),
+            bus: info
+                .audio_buses
+                .first()
+                .cloned()
+                .unwrap_or_else(BusId::master),
+        })
+    }
+
+    /// Whether OK can send it: a stream or a recording needs its target.
+    pub fn ready(&self) -> bool {
+        !self.kind.needs_target() || !self.target.trim().is_empty()
+    }
+}
+
+/// The edits that make `before` (or, with `None`, a new output) what `draft` says, in
+/// one batch: `output.create` first for a new one, then each field that differs. A
+/// virtual camera carries no target. Nothing changed is an empty list.
+pub fn draft_edits(
+    output_id: &OutputId,
+    before: Option<&OutputInfo>,
+    draft: &OutputDraft,
+) -> Vec<Edit> {
+    let mut edits = Vec::new();
+    let (encoder, mix, bus) = match before {
+        None => {
+            edits.push(create_edit(output_id.clone(), draft.kind, &draft.target));
+            (None, None, Some(BusId::master()))
+        }
+        Some(info) => {
+            let target = draft.target.trim();
+            if draft.kind.needs_target() && target != target_of(&info.kind) {
+                edits.push(match draft.kind {
+                    NewKind::Record => Edit::OutputSetPath {
+                        output_id: output_id.clone(),
+                        path: target.to_owned(),
+                    },
+                    NewKind::Rtmp | NewKind::VirtualCam => Edit::OutputSetTarget {
+                        output_id: output_id.clone(),
+                        target: RtmpTarget::Generic {
+                            url: target.to_owned(),
+                        },
+                    },
+                });
+            }
+            (
+                info.encoder_profile.clone(),
+                info.video_mix.clone(),
+                info.audio_buses.first().cloned(),
+            )
+        }
+    };
+    if draft.encoder != encoder {
+        edits.push(Edit::OutputSetEncoder {
+            output_id: output_id.clone(),
+            profile_id: draft.encoder.clone(),
+        });
+    }
+    if draft.mix != mix {
+        edits.push(Edit::OutputSetVideoMix {
+            output_id: output_id.clone(),
+            mix_id: draft.mix.clone(),
+        });
+    }
+    if bus.as_ref() != Some(&draft.bus) {
+        edits.push(bus_edit(output_id.clone(), draft.bus.as_str()));
+    }
+    edits
+}
+
+/// What OK or Apply does to the stream key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KeyChange {
+    /// Keeps the key the engine holds, or none.
+    Keep,
+    /// Sends the key typed in the field.
+    Replace,
+    /// Removes the key.
+    Clear,
+}
+
+/// The dialog the panel has open over an output.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Editing {
+    /// The settings of a new output.
+    New,
+    /// The settings of this output.
+    Output(OutputId),
+}
+
 /// The panel's state, shared by its parts. Every field is `Copy`.
 #[derive(Clone, Copy)]
 struct Panel {
@@ -590,6 +832,14 @@ struct Panel {
     /// What an FX button picks the Filters panel's chains through, and the dock that
     /// shows that panel.
     fx: Option<(FilterDialogs, Option<DockState>)>,
+    /// The page's one pop-up menu, for a row's ⋯ button and right-click.
+    menus: Option<Menus>,
+    /// The output settings dialog, when it is open.
+    settings: RwSignal<Option<Editing>>,
+    /// The output whose delete waits for a confirmation.
+    deleting: RwSignal<Option<OutputId>>,
+    /// Whether the Encoders & mixes dialog is open.
+    libraries: RwSignal<bool>,
 }
 
 impl Panel {
@@ -658,30 +908,80 @@ impl Panel {
 
     /// Re-reads one output's status: after its stream key changed, which no event
     /// reports.
-    fn refresh_status(self, output_id: OutputId) {
-        self.run(move |session| async move {
-            let Status {
-                state,
-                key_set,
-                cleartext,
-            } = status(&*session.control, &output_id).await?;
-            self.rows.try_update(|rows| {
-                if let Some(row) = rows.get_mut(&output_id) {
-                    row.state = state;
-                    row.key_set = key_set;
-                    row.cleartext = cleartext;
-                }
-            });
-            if let Some(keys_changed) = self.keys_changed {
-                keys_changed.try_update(|n| *n += 1);
+    async fn refresh_status(self, session: &Session, output_id: OutputId) -> Result<(), String> {
+        let Status {
+            state,
+            key_set,
+            cleartext,
+        } = status(&*session.control, &output_id).await?;
+        self.rows.try_update(|rows| {
+            if let Some(row) = rows.get_mut(&output_id) {
+                row.state = state;
+                row.key_set = key_set;
+                row.cleartext = cleartext;
             }
-            Ok(())
         });
+        if let Some(keys_changed) = self.keys_changed {
+            keys_changed.try_update(|n| *n += 1);
+        }
+        Ok(())
+    }
+
+    /// Starts an output. A refused virtual camera start says how to fix it.
+    fn start(self, output_id: OutputId) {
+        let kind = self
+            .rows
+            .with_untracked(|rows| rows.get(&output_id).map(|row| row.info.kind.clone()));
+        self.run(move |session| async move {
+            action(&*session.control, Action::OutputStart { output_id })
+                .await
+                .map_err(|reason| match &kind {
+                    Some(kind) => explain_start_failure(kind, reason),
+                    None => reason,
+                })
+        });
+    }
+
+    /// Stops an output.
+    fn stop(self, output_id: OutputId) {
+        self.run(move |session| async move {
+            action(&*session.control, Action::OutputStop { output_id }).await
+        });
+    }
+
+    /// Opens the pop-up menu of `output_id`'s row at the pointer: Settings…, then
+    /// Delete…, which asks first and is off while the output runs. Without the page's
+    /// menu, its settings open instead.
+    fn open_menu(self, event: &leptos::ev::MouseEvent, output_id: OutputId) {
+        let Some(menus) = self.menus else {
+            self.settings.set(Some(Editing::Output(output_id)));
+            return;
+        };
+        let running = self.rows.with_untracked(|rows| {
+            rows.get(&output_id)
+                .is_some_and(|row| is_running(row.state))
+        });
+        let open = output_id.clone();
+        menus.open(
+            event,
+            vec![
+                Entry::item("Settings…", move || {
+                    self.settings.set(Some(Editing::Output(open.clone())));
+                }),
+                Entry::Sep,
+                Entry::item("Delete…", move || {
+                    self.deleting.set(Some(output_id.clone()))
+                })
+                .disabled_if(running),
+            ],
+        );
     }
 }
 
-/// The outputs panel, with the pipeline's health (Go Live is in the header). Reads the
-/// open session from [`SessionContext`] context.
+/// The outputs panel: a header with the pipeline's health, then a compact row for the
+/// program and for each output, and the buttons that open the add-output and Encoders &
+/// mixes dialogs. An output's settings are in its own dialog (#1206). Go Live is in the
+/// header. Reads the open session from [`SessionContext`] context.
 #[component]
 pub fn Outputs() -> impl IntoView {
     let Some(session) = use_context::<SessionContext>() else {
@@ -700,6 +1000,10 @@ pub fn Outputs() -> impl IntoView {
         keys_changed: use_context::<crate::store::Studio>().map(|studio| studio.keys_changed),
         studio: use_context(),
         fx: use_context::<FilterDialogs>().map(|dialogs| (dialogs, use_context())),
+        menus: use_context(),
+        settings: RwSignal::new(None),
+        deleting: RwSignal::new(None),
+        libraries: RwSignal::new(false),
     };
     let health = RwSignal::new(Health::default());
 
@@ -753,13 +1057,23 @@ pub fn Outputs() -> impl IntoView {
     let send = Callback::new(move |change: Edit| {
         panel.run(move |session| async move { edit(&*session.control, change).await });
     });
+    let close_libraries = move || panel.libraries.set(false);
 
     view! {
         <section class="outputs">
-            <h2>"Outputs"</h2>
-            <p class="health" class:dropping=move || reading().dropping() role="status">
-                {move || reading().summary()}
-            </p>
+            <div class="outputs-head">
+                <h2>"Outputs"</h2>
+                <span
+                    class="health"
+                    class:dropping=move || reading().dropping()
+                    class:idle=move || !reading().sampled
+                    role="status"
+                    title=move || reading().summary()
+                >
+                    <span class="health-dot" aria-hidden="true"></span>
+                    {move || reading().short()}
+                </span>
+            </div>
             {move || {
                 panel
                     .problem
@@ -776,32 +1090,78 @@ pub fn Outputs() -> impl IntoView {
                         }
                     })
             }}
-            <ChainRows panel=panel ids=ids />
-            <ul class="output-list">
+            <ul class="output-rows" aria-label="Outputs">
+                <ProgramRow panel=panel />
                 <For each=ids key=|id| id.clone() let:output_id>
-                    <OutputCard panel=panel output_id=output_id />
+                    <OutputLine panel=panel output_id=output_id />
                 </For>
             </ul>
-            <NewOutputForm panel=panel />
-            <Profiles
-                encoders=panel.encoders
-                mixes=panel.mixes
-                outputs=infos
-                scenes=panel.scenes.into()
-                send=send
-            />
+            <div class="outputs-foot">
+                <button type="button" on:click=move |_| panel.settings.set(Some(Editing::New))>
+                    "+ Add output"
+                </button>
+                <button type="button" class="secondary" on:click=move |_| panel.libraries.set(true)>
+                    "Encoders & mixes…"
+                </button>
+            </div>
+            {move || {
+                panel
+                    .settings
+                    .get()
+                    .map(|editing| view! { <OutputDialog panel=panel editing=editing /> })
+            }}
+            {move || {
+                panel
+                    .deleting
+                    .get()
+                    .map(|output_id| view! { <DeleteDialog panel=panel output_id=output_id /> })
+            }}
+            <Show when=move || panel.libraries.get()>
+                <Modal label="Encoders & mixes" class="libraries-dialog" cancel=close_libraries>
+                    <div class="modal-header">
+                        <div class="modal-titles">
+                            <h2 class="modal-title">"Encoders & mixes"</h2>
+                            <span class="modal-sub">"What an output can encode with and show"</span>
+                        </div>
+                        <button
+                            type="button"
+                            class="modal-close"
+                            aria-label="Close"
+                            on:click=move |_| close_libraries()
+                        >
+                            "×"
+                        </button>
+                    </div>
+                    <div class="libraries-body">
+                        <Profiles
+                            encoders=panel.encoders
+                            mixes=panel.mixes
+                            outputs=infos
+                            scenes=panel.scenes.into()
+                            send=send
+                        />
+                    </div>
+                    <div class="modal-footer">
+                        <button
+                            type="button"
+                            class="primary"
+                            data-primary
+                            on:click=move |_| close_libraries()
+                        >
+                            "Close"
+                        </button>
+                    </div>
+                </Modal>
+            </Show>
         </section>
     }
     .into_any()
 }
 
-/// The program output, then each output under it, each with its status and FX button
-/// (spec-panels.md U1, U2), and the footnote (U2).
+/// The program's row, first: "master" and the FX button of the master chain
+/// (spec-panels.md U1). What the program filters do is its tooltip.
 #[component]
-fn ChainRows(
-    panel: Panel,
-    ids: impl Fn() -> Vec<OutputId> + Send + Sync + 'static,
-) -> impl IntoView {
+fn ProgramRow(panel: Panel) -> impl IntoView {
     let master = move || {
         panel.studio.map_or_else(
             || fx_label(&FilterChains::default()),
@@ -813,535 +1173,687 @@ fn ChainRows(
         )
     };
     view! {
-        <ul class="output-chains" aria-label="Output filters">
-            <li class="output-chain program">
-                <span class="output-chain-name">"Program output"</span>
-                <span class="output-chain-status">"master"</span>
-                <button
-                    type="button"
-                    class="fx-button on"
-                    title="Filters on everything leaving JStream"
-                    aria-label="Program output filters"
-                    disabled=panel.fx.is_none()
-                    on:click=move |_| panel.show_chains(FilterOwner::Master)
-                >
-                    {master}
-                </button>
-            </li>
-            <For each=ids key=|id| id.clone() let:output_id>
-                {
-                    let id = output_id.clone();
-                    let row = Memo::new(move |_| panel.rows.with(|rows| rows.get(&id).cloned()));
-                    let label = move || row.with(|r| r.as_ref().map(|r| fx_label(&r.info.filters)));
-                    let filtered = move || row.with(|r| r.as_ref().is_some_and(|r| !r.info.filters.is_empty()));
-                    let status = move || row.with(|r| r.as_ref().map_or("Gone", |r| state_label(r.state)));
-                    let name = output_id.to_string();
-                    let owner = FilterOwner::Output { output_id };
-                    view! {
-                        <li class="output-chain">
-                            <span class="output-chain-name">{name.clone()}</span>
-                            <span class="output-chain-status">{status}</span>
-                            <button
-                                type="button"
-                                class="fx-button"
-                                class:on=filtered
-                                title=format!("Filters for {name} only")
-                                aria-label=format!("{name} filters")
-                                disabled=panel.fx.is_none()
-                                on:click=move |_| panel.show_chains(owner.clone())
-                            >
-                                {label}
-                            </button>
-                        </li>
-                    }
-                }
-            </For>
-        </ul>
-        <p class="output-foot">"Program filters apply to every output; each output can add its own after them."</p>
-    }
-}
-
-/// One output: its state, target, encoder, stream key and buttons.
-#[component]
-fn OutputCard(panel: Panel, output_id: OutputId) -> impl IntoView {
-    let row = {
-        let output_id = output_id.clone();
-        Memo::new(move |_| panel.rows.with(|rows| rows.get(&output_id).cloned()))
-    };
-    let editing = RwSignal::new(false);
-    let target = RwSignal::new(String::new());
-    let key_field = NodeRef::<html::Input>::new();
-    let id = StoredValue::new(output_id.clone());
-
-    let running = move || row.with(|row| row.as_ref().is_some_and(|row| is_running(row.state)));
-    let blocker =
-        move || row.with(|row| row.as_ref().and_then(|row| start_blocker(row, panel.vcam)));
-    let is_rtmp = move || {
-        row.with(|row| {
-            row.as_ref()
-                .is_some_and(|row| matches!(row.info.kind, OutputKind::Rtmp { .. }))
-        })
-    };
-    let is_record = move || {
-        row.with(|row| {
-            row.as_ref()
-                .is_some_and(|row| matches!(row.info.kind, OutputKind::Record { .. }))
-        })
-    };
-    let is_vcam = move || {
-        row.with(|row| {
-            row.as_ref()
-                .is_some_and(|row| matches!(row.info.kind, OutputKind::VirtualCam))
-        })
-    };
-    let key_set = move || row.with(|row| row.as_ref().is_some_and(|row| row.key_set));
-
-    let start = move |_| {
-        let output_id = id.get_value();
-        let kind = row.with_untracked(|row| row.as_ref().map(|row| row.info.kind.clone()));
-        panel.run(move |session| async move {
-            action(&*session.control, Action::OutputStart { output_id })
-                .await
-                .map_err(|reason| match &kind {
-                    Some(kind) => explain_start_failure(kind, reason),
-                    None => reason,
-                })
-        });
-    };
-    let stop = move |_| {
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            action(&*session.control, Action::OutputStop { output_id }).await
-        });
-    };
-    let delete = move |_| {
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            edit(&*session.control, Edit::OutputDelete { output_id }).await
-        });
-    };
-    let begin_edit = move |_| {
-        let url = row.with(|row| match row.as_ref().map(|row| &row.info.kind) {
-            Some(OutputKind::Rtmp {
-                target: RtmpTarget::Generic { url },
-            }) => url.clone(),
-            // A recording's file (#1072).
-            Some(OutputKind::Record { path, .. }) => path.clone(),
-            _ => String::new(),
-        });
-        target.set(url);
-        editing.set(true);
-    };
-    let save_target = move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        let output_id = id.get_value();
-        let url = target.get_untracked().trim().to_owned();
-        let record = is_record();
-        panel.run(move |session| async move {
-            let set = if record {
-                Edit::OutputSetPath {
-                    output_id,
-                    path: url,
-                }
-            } else {
-                Edit::OutputSetTarget {
-                    output_id,
-                    target: RtmpTarget::Generic { url },
-                }
-            };
-            edit(&*session.control, set).await?;
-            editing.try_set(false);
-            Ok(())
-        });
-    };
-    // The key goes from the field straight into a `SecretString`, and the field is
-    // emptied before the call is sent. A button click or Enter saves it, not a form
-    // submit, so the browser has no form submission to offer saving as a password.
-    let save_key = move || {
-        let Some(field) = key_field.get_untracked() else {
-            return;
-        };
-        let typed = field.value();
-        field.set_value("");
-        let Some(key) = take_key(typed) else {
-            panel
-                .problem
-                .set(Some("Type or paste a stream key first.".into()));
-            return;
-        };
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            let set = Action::OutputSetKey {
-                output_id: output_id.clone(),
-                key,
-            };
-            action(&*session.control, set).await?;
-            panel.refresh_status(output_id);
-            Ok(())
-        });
-    };
-    let clear_key = move |_| {
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            let clear = Action::OutputClearKey {
-                output_id: output_id.clone(),
-            };
-            action(&*session.control, clear).await?;
-            panel.refresh_status(output_id);
-            Ok(())
-        });
-    };
-    let choose_encoder = move |event: leptos::ev::Event| {
-        let chosen = event_target_value(&event);
-        let profile_id = (!chosen.is_empty()).then(|| EncoderProfileId::new(chosen));
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            let set = Edit::OutputSetEncoder {
-                output_id,
-                profile_id,
-            };
-            edit(&*session.control, set).await
-        });
-    };
-    let chosen_encoder = move || {
-        row.with(|row| {
-            row.as_ref()
-                .and_then(|row| row.info.encoder_profile.clone())
-        })
-    };
-    let choose_mix = move |event: leptos::ev::Event| {
-        let chosen = event_target_value(&event);
-        let mix_id = (!chosen.is_empty()).then(|| VideoMixId::new(chosen));
-        let output_id = id.get_value();
-        panel.run(move |session| async move {
-            let set = Edit::OutputSetVideoMix { output_id, mix_id };
-            edit(&*session.control, set).await
-        });
-    };
-    let chosen_mix =
-        move || row.with(|row| row.as_ref().and_then(|row| row.info.video_mix.clone()));
-    let choose_bus = move |event: leptos::ev::Event| {
-        let output_id = id.get_value();
-        let set = bus_edit(output_id, &event_target_value(&event));
-        panel.run(move |session| async move { edit(&*session.control, set).await });
-    };
-    let chosen_bus = move || {
-        row.with(|row| {
-            row.as_ref()
-                .and_then(|row| row.info.audio_buses.first().cloned())
-        })
-    };
-
-    view! {
-        <li class="output">
-            <div class="output-head">
-                {move || {
-                    row.with(|row| row.as_ref().map(|row| kind_icon(&row.info.kind)))
-                        .map(|icon| view! { <span class="output-icon"><Icon name=icon size=15 /></span> })
-                }}
-                <strong>{output_id.to_string()}</strong>
-                <span
-                    class="badge"
-                    class:live=move || {
-                        row.with(|row| row.as_ref().map(|row| row.state))
-                            == Some(OutputState::Active)
-                    }
-                    class:failed=move || {
-                        row.with(|row| row.as_ref().map(|row| row.state))
-                            == Some(OutputState::Failed)
-                    }
-                >
-                    {move || row.with(|row| row.as_ref().map_or("Gone", |row| state_label(row.state)))}
-                </span>
-            </div>
-            <p class="target">
-                {move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)))}
-            </p>
-            {move || {
-                row.with(|row| row.as_ref().and_then(cleartext_warning))
-                    .map(|warning| view! { <p class="warning" role="note">{warning}</p> })
-            }}
-            <Show when=move || editing.get()>
-                <form class="inline" on:submit=save_target>
-                    <input
-                        type="text"
-                        aria-label=move || if is_record() { "File path" } else { "Server URL" }
-                        bind:value=target
-                    />
-                    <Show when=move || is_record()>
-                        {crate::browse::browse_button(
-                            crate::browse::BrowseKind::Save,
-                            vec!["mp4".into()],
-                            "Save the recording".into(),
-                            || true,
-                            move || crate::browse::file_name(&target.get()),
-                            move || crate::browse::start_folder(
-                                jstream_control::protocol::AssetRoot::Absolute,
-                                &target.get(),
-                                None,
-                            ),
-                            move |picked| target.set(picked),
-                        )}
-                    </Show>
-                    <button type="submit">"Save"</button>
-                    <button type="button" on:click=move |_| editing.set(false)>
-                        "Cancel"
-                    </button>
-                </form>
-            </Show>
-            <Show when=is_vcam>
-                <p class="vcam-status" class:unregistered=move || panel.vcam.hint().is_some()>
-                    {panel.vcam.status()}
-                </p>
-                {panel.vcam.hint().map(|hint| view! { <p class="hint">{hint}</p> })}
-            </Show>
-            <Show when=move || !is_vcam()>
-            <label class="encoder">
-                "Video"
-                <select
-                    on:change=choose_mix
-                    title=move || {
-                        if running() {
-                            "A new mix applies when the output starts again"
-                        } else {
-                            "What the output shows"
-                        }
-                    }
-                >
-                    <option value="" prop:selected=move || chosen_mix().is_none()>
-                        "Program, canvas size"
-                    </option>
-                    <For
-                        each=move || panel.mixes.get()
-                        key=|mix| (mix.mix_id.clone(), mix.name.clone())
-                        let:mix
-                    >
-                        {
-                            let mix_id = mix.mix_id.clone();
-                            view! {
-                                <option
-                                    value=mix.mix_id.to_string()
-                                    prop:selected=move || chosen_mix().as_ref() == Some(&mix_id)
-                                >
-                                    {mix.name}
-                                </option>
-                            }
-                        }
-                    </For>
-                </select>
-            </label>
-            <label class="encoder">
-                "Encoder"
-                <select on:change=choose_encoder>
-                    <option value="" prop:selected=move || chosen_encoder().is_none()>
-                        "Engine default"
-                    </option>
-                    <For
-                        each=move || panel.encoders.get()
-                        key=|encoder| (encoder.profile_id.clone(), encoder.name.clone())
-                        let:encoder
-                    >
-                        {
-                            let profile_id = encoder.profile_id.clone();
-                            view! {
-                                <option
-                                    value=encoder.profile_id.to_string()
-                                    prop:selected=move || {
-                                        chosen_encoder().as_ref() == Some(&profile_id)
-                                    }
-                                >
-                                    {encoder.name}
-                                </option>
-                            }
-                        }
-                    </For>
-                </select>
-            </label>
-            <label class="encoder">
-                "Audio"
-                <select
-                    on:change=choose_bus
-                    disabled=running
-                    title=move || {
-                        if running() { "Stop the output to change its bus" } else { "The bus it carries" }
-                    }
-                >
-                    <For
-                        each=move || panel.buses.get()
-                        key=|bus| (bus.bus_id.clone(), bus.name.clone())
-                        let:bus
-                    >
-                        {
-                            let bus_id = bus.bus_id.clone();
-                            view! {
-                                <option
-                                    value=bus.bus_id.to_string()
-                                    prop:selected=move || chosen_bus().as_ref() == Some(&bus_id)
-                                >
-                                    {bus.name}
-                                </option>
-                            }
-                        }
-                    </For>
-                </select>
-            </label>
-            </Show>
-            <Show when=is_rtmp>
-                <div class="key">
-                    <span class="key-status">
-                        {move || if key_set() { "Stream key: set" } else { "Stream key: not set" }}
-                    </span>
-                    <input
-                        type="password"
-                        name="stream-key-entry"
-                        node_ref=key_field
-                        autocomplete="off"
-                        spellcheck="false"
-                        aria-label="Stream key"
-                        placeholder=move || {
-                            if key_set() { "Type a new key to replace it" } else { "Paste the stream key" }
-                        }
-                        on:keydown=move |event| {
-                            if event.key() == "Enter" {
-                                event.prevent_default();
-                                save_key();
-                            }
-                        }
-                    />
-                    <button type="button" class="primary" on:click=move |_| save_key()>
-                        "Save key"
-                    </button>
-                    <button type="button" disabled=move || !key_set() on:click=clear_key>
-                        "Clear"
-                    </button>
-                </div>
-            </Show>
-            <div class="buttons">
-                <Show
-                    when=running
-                    fallback=move || {
-                        view! {
-                            <button
-                                class="primary"
-                                disabled=move || blocker().is_some()
-                                title=move || blocker().unwrap_or_default()
-                                on:click=start
-                            >
-                                "Start"
-                            </button>
-                        }
-                    }
-                >
-                    <button on:click=stop>"Stop"</button>
-                </Show>
-                <Show when=move || is_rtmp() || is_record()>
-                    <button disabled=running on:click=begin_edit>
-                        "Edit"
-                    </button>
-                </Show>
-                <button disabled=running title="Stop it before deleting it" on:click=delete>
-                    "Delete"
-                </button>
-            </div>
-            {move || blocker().filter(|_| !running()).map(|why| view! { <p class="hint">{why}</p> })}
+        <li class="output-row program" title=PROGRAM_NOTE>
+            <span class="output-row-icon"><Icon name="layers" size=15 /></span>
+            <span class="output-row-main">
+                <span class="output-row-name">"Program output"</span>
+            </span>
+            <span class="output-row-status">"master"</span>
+            <button
+                type="button"
+                class="fx-button on"
+                title="Filters on everything leaving JStream"
+                aria-label="Program output filters"
+                disabled=panel.fx.is_none()
+                on:click=move |_| panel.show_chains(FilterOwner::Master)
+            >
+                {master}
+            </button>
         </li>
     }
 }
 
-/// The form that adds an output: a stream to an RTMP(S) server, or a recording.
+/// What the program's filters do: its row's tooltip (spec-panels.md U2).
+pub const PROGRAM_NOTE: &str =
+    "Program filters apply to every output; each output can add its own after them.";
+
+/// One output's row: its kind, name and where it sends, its state, Start or Stop, its
+/// FX button and its ⋯ menu. A double-click opens its settings. A live row is marked,
+/// and a stopped one that can't start says why under its name.
 #[component]
-fn NewOutputForm(panel: Panel) -> impl IntoView {
-    let kind = RwSignal::new(NewKind::Rtmp);
-    let target = RwSignal::new(String::new());
-    let submit = move |event: leptos::ev::SubmitEvent| {
-        event.prevent_default();
-        let output_id = panel
-            .rows
-            .with_untracked(|rows| next_output_id(rows.keys()));
-        let create = create_edit(output_id, kind.get_untracked(), &target.get_untracked());
-        panel.run(move |session| async move {
-            edit(&*session.control, create).await?;
-            target.try_set(String::new());
-            Ok(())
-        });
+fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
+    let row = {
+        let output_id = output_id.clone();
+        Memo::new(move |_| panel.rows.with(|rows| rows.get(&output_id).cloned()))
     };
+    let id = StoredValue::new(output_id.clone());
+    let state = move || row.with(|row| row.as_ref().map(|row| row.state));
+    let running = move || state().is_some_and(is_running);
+    let blocker =
+        move || row.with(|row| row.as_ref().and_then(|row| start_blocker(row, panel.vcam)));
+    let summary = move || {
+        row.with(|row| {
+            row.as_ref().map(|row| {
+                let target = target_summary(&row.info.kind);
+                if matches!(row.info.kind, OutputKind::VirtualCam) {
+                    target
+                } else {
+                    let encoder = panel
+                        .encoders
+                        .with(|e| encoder_name(e, row.info.encoder_profile.as_ref()));
+                    format!("{target} · {encoder}")
+                }
+            })
+        })
+    };
+    let full = move || row.with(|row| row.as_ref().map(|row| describe_kind(&row.info.kind)));
+    let warning = move || row.with(|row| row.as_ref().and_then(cleartext_warning));
+    let label = move || row.with(|r| r.as_ref().map(|r| fx_label(&r.info.filters)));
+    let filtered = move || row.with(|r| r.as_ref().is_some_and(|r| !r.info.filters.is_empty()));
+    let name = output_id.to_string();
+    let owner = FilterOwner::Output {
+        output_id: output_id.clone(),
+    };
+
     view! {
-        <form class="new-output" on:submit=submit>
-            <h3>"Add an output"</h3>
-            <label>
-                "Kind"
-                <select on:change=move |event| {
-                    kind.set(
-                        match event_target_value(&event).as_str() {
-                            "record" => NewKind::Record,
-                            "virtual_cam" => NewKind::VirtualCam,
-                            _ => NewKind::Rtmp,
-                        },
-                    );
-                }>
-                    <option value="rtmp" prop:selected=move || kind.get() == NewKind::Rtmp>
-                        "Stream (RTMP)"
-                    </option>
-                    <option value="record" prop:selected=move || kind.get() == NewKind::Record>
-                        "Recording (MP4)"
-                    </option>
-                    <option
-                        value="virtual_cam"
-                        prop:selected=move || kind.get() == NewKind::VirtualCam
-                    >
-                        "Virtual camera"
-                    </option>
-                </select>
-            </label>
+        <li
+            class="output-row"
+            class:live=move || state() == Some(OutputState::Active)
+            class:busy=move || running() && state() != Some(OutputState::Active)
+            class:failed=move || state() == Some(OutputState::Failed)
+            data-output=name.clone()
+            on:dblclick=move |event| {
+                if !from_button(&event) {
+                    panel.settings.set(Some(Editing::Output(id.get_value())));
+                }
+            }
+            on:contextmenu=move |event| panel.open_menu(&event, id.get_value())
+        >
+            <span class="output-row-icon">
+                {move || {
+                    row.with(|row| row.as_ref().map(|row| kind_icon(&row.info.kind)))
+                        .map(|icon| view! { <Icon name=icon size=15 /> })
+                }}
+            </span>
+            <span class="output-row-main" title=full>
+                <span class="output-row-name">{name.clone()}</span>
+                <span class="output-row-target">
+                    {summary}
+                    {move || {
+                        warning()
+                            .map(|warning| {
+                                view! {
+                                    <span
+                                        class="output-row-warning"
+                                        role="img"
+                                        aria-label="Stream key sent unencrypted"
+                                        title=warning
+                                    >
+                                        "⚠"
+                                    </span>
+                                }
+                            })
+                    }}
+                </span>
+                {move || {
+                    blocker()
+                        .filter(|_| !running())
+                        .map(|why| view! { <span class="output-row-note">{why}</span> })
+                }}
+            </span>
+            <span
+                class="badge"
+                class:live=move || state() == Some(OutputState::Active)
+                class:busy=move || running() && state() != Some(OutputState::Active)
+                class:failed=move || state() == Some(OutputState::Failed)
+            >
+                {move || state().map_or("Gone", state_label)}
+            </span>
             <Show
-                when=move || kind.get().needs_target()
+                when=running
                 fallback=move || {
                     view! {
-                        <p class="hint">
-                            "Other apps on the engine's machine see the program as a webcam, JStream Virtual Camera."
-                        </p>
+                        <button
+                            type="button"
+                            class="row-action start"
+                            aria-label="Start"
+                            disabled=move || blocker().is_some()
+                            title=move || blocker().unwrap_or("Start")
+                            on:click=move |_| panel.start(id.get_value())
+                        >
+                            "▶"
+                        </button>
                     }
                 }
             >
-                <label>
-                    {move || match kind.get() {
-                        NewKind::Rtmp => "Server URL (without the stream key)",
-                        NewKind::Record | NewKind::VirtualCam => "File path on the engine's machine",
-                    }}
-                    <span class="path-row">
-                        <input
-                            type="text"
-                            bind:value=target
-                            placeholder=move || match kind.get() {
-                                NewKind::Rtmp => "rtmps://live.example.com/app",
-                                NewKind::Record | NewKind::VirtualCam => "/home/me/Videos/show.mp4",
-                            }
-                        />
-                        <Show when=move || kind.get() == NewKind::Record>
-                            {crate::browse::browse_button(
-                                crate::browse::BrowseKind::Save,
-                                vec!["mp4".into()],
-                                "Save the recording".into(),
-                                || true,
-                                move || crate::browse::file_name(&target.get()),
-                                move || crate::browse::start_folder(
-                                    jstream_control::protocol::AssetRoot::Absolute,
-                                    &target.get(),
-                                    None,
-                                ),
-                                move |picked| target.set(picked),
-                            )}
-                        </Show>
-                    </span>
-                </label>
+                <button
+                    type="button"
+                    class="row-action stop"
+                    aria-label="Stop"
+                    title="Stop"
+                    on:click=move |_| panel.stop(id.get_value())
+                >
+                    "■"
+                </button>
             </Show>
             <button
-                type="submit"
-                disabled=move || kind.get().needs_target() && target.with(|t| t.trim().is_empty())
+                type="button"
+                class="fx-button"
+                class:on=filtered
+                title=format!("Filters for {name} only")
+                aria-label=format!("{name} filters")
+                disabled=panel.fx.is_none()
+                on:click=move |_| panel.show_chains(owner.clone())
             >
-                "Add"
+                {label}
             </button>
-        </form>
+            <button
+                type="button"
+                class="row-action more"
+                aria-label=format!("More for {name}")
+                title="More"
+                on:click=move |event| panel.open_menu(&event, id.get_value())
+            >
+                "⋯"
+            </button>
+        </li>
+    }
+}
+
+/// Whether a double-click landed on one of the row's buttons, which keep their own
+/// clicks.
+fn from_button(event: &leptos::ev::MouseEvent) -> bool {
+    use leptos::web_sys::wasm_bindgen::JsCast;
+    event
+        .target()
+        .and_then(|t| t.dyn_into::<leptos::web_sys::Element>().ok())
+        .and_then(|e| e.closest("button").ok().flatten())
+        .is_some()
+}
+
+/// The settings dialog of one output, or of a new one (OBS's Settings › Output): its
+/// target and stream key, then the video it shows, its encoder and the bus it carries.
+/// Nothing applies until OK or Apply, which send what changed in one batch, then the
+/// key. Fields a running output can't change are off, with a note. Delete, bottom left,
+/// asks first.
+#[component]
+fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
+    // A new output's ID is picked when it is sent; until then, the first one free.
+    let output_id = match &editing {
+        Editing::Output(id) => id.clone(),
+        Editing::New => panel
+            .rows
+            .with_untracked(|rows| next_output_id(rows.keys())),
+    };
+    let is_new = editing == Editing::New;
+    let id = StoredValue::new(output_id.clone());
+    let row = {
+        let output_id = output_id.clone();
+        Memo::new(move |_| {
+            if is_new {
+                None
+            } else {
+                panel.rows.with(|rows| rows.get(&output_id).cloned())
+            }
+        })
+    };
+    let start = row
+        .with_untracked(|row| row.as_ref().and_then(|row| OutputDraft::of(&row.info)))
+        .unwrap_or_else(|| OutputDraft::new(NewKind::Rtmp));
+    let draft = RwSignal::new(start);
+    let key = RwSignal::new(KeyChange::Keep);
+    let key_field = NodeRef::<html::Input>::new();
+    let problem = RwSignal::new(None::<String>);
+    let busy = RwSignal::new(false);
+
+    let kind = move || draft.with(|d| d.kind);
+    let running = move || row.with(|row| row.as_ref().is_some_and(|row| is_running(row.state)));
+    let key_set = move || row.with(|row| row.as_ref().is_some_and(|row| row.key_set));
+    let gone = move || !is_new && row.with(Option::is_none);
+    let close = move || panel.settings.set(None);
+
+    // OK and Apply: the batch of what changed, then the stream key. The key goes from
+    // its field straight into a `SecretString`, and the field is emptied before the
+    // call is sent (R-SEC-001).
+    let apply = move |then_close: bool| {
+        if busy.get_untracked() {
+            return;
+        }
+        let before = row.get_untracked().map(|row| row.info);
+        let wanted = draft.get_untracked();
+        let change = key.get_untracked();
+        let typed = match change {
+            KeyChange::Replace => {
+                let typed = key_field
+                    .get_untracked()
+                    .map(|field| {
+                        let typed = field.value();
+                        field.set_value("");
+                        typed
+                    })
+                    .unwrap_or_default();
+                match take_key(typed) {
+                    Some(key) => Some(key),
+                    None => {
+                        problem.set(Some("Type or paste a stream key, or press Cancel.".into()));
+                        return;
+                    }
+                }
+            }
+            KeyChange::Keep | KeyChange::Clear => None,
+        };
+        let Some(session) = panel.session.get() else {
+            return;
+        };
+        busy.set(true);
+        spawn_local(async move {
+            let outcome = async {
+                // A new output takes the first ID free now, read from the engine: the
+                // panel's list may not have caught up with one added a moment ago.
+                let output_id = if is_new {
+                    let taken = load(&*session.control).await?.outputs;
+                    next_output_id(taken.iter().map(|row| &row.info.output_id))
+                } else {
+                    id.get_value()
+                };
+                let edits = draft_edits(&output_id, before.as_ref(), &wanted);
+                send_edits(&*session.control, edits).await?;
+                let keyed = match (change, typed) {
+                    (KeyChange::Replace, Some(key)) => Some(Action::OutputSetKey {
+                        output_id: output_id.clone(),
+                        key,
+                    }),
+                    (KeyChange::Clear, _) => Some(Action::OutputClearKey {
+                        output_id: output_id.clone(),
+                    }),
+                    _ => None,
+                };
+                if let Some(keyed) = keyed {
+                    action(&*session.control, keyed).await?;
+                    panel.refresh_status(&session, output_id).await?;
+                }
+                Ok::<(), String>(())
+            }
+            .await;
+            busy.try_set(false);
+            match outcome {
+                Ok(()) => {
+                    problem.try_set(None);
+                    key.try_set(KeyChange::Keep);
+                    if then_close {
+                        panel.settings.try_set(None);
+                    }
+                }
+                Err(why) => {
+                    problem.try_set(Some(why));
+                }
+            }
+        });
+    };
+    let can_send = move || !busy.get() && !gone() && draft.with(OutputDraft::ready);
+
+    let title = if is_new {
+        "Add output".to_owned()
+    } else {
+        format!("{output_id} settings")
+    };
+    let sub = move || {
+        if is_new {
+            format!(
+                "It will be {}",
+                panel.rows.with(|rows| next_output_id(rows.keys()))
+            )
+        } else {
+            row.with(|row| {
+                row.as_ref().map_or_else(
+                    || "This output was deleted.".to_owned(),
+                    |row| {
+                        format!(
+                            "{} · {}",
+                            describe_kind(&row.info.kind),
+                            state_label(row.state)
+                        )
+                    },
+                )
+            })
+        }
+    };
+    let set_target = move |event: leptos::ev::Event| {
+        let typed = event_target_value(&event);
+        draft.update(|d| d.target = typed);
+    };
+
+    view! {
+        <Modal label="Output settings" class="output-dialog" cancel=close>
+            <div class="modal-header">
+                <div class="modal-titles">
+                    <h2 class="modal-title">{title}</h2>
+                    <span class="modal-sub">{sub}</span>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                    "×"
+                </button>
+            </div>
+            <div class="output-dialog-body">
+                <fieldset class="output-section">
+                    <legend>"General"</legend>
+                    <Show when=move || is_new>
+                        <label class="output-field">
+                            <span class="label">"Kind"</span>
+                            <select
+                                aria-label="Kind"
+                                on:change=move |event| {
+                                    let picked = match event_target_value(&event).as_str() {
+                                        "record" => NewKind::Record,
+                                        "virtual_cam" => NewKind::VirtualCam,
+                                        _ => NewKind::Rtmp,
+                                    };
+                                    draft.update(|d| d.kind = picked);
+                                }
+                            >
+                                <option value="rtmp" prop:selected=move || kind() == NewKind::Rtmp>
+                                    "Stream (RTMP)"
+                                </option>
+                                <option value="record" prop:selected=move || kind() == NewKind::Record>
+                                    "Recording (MP4)"
+                                </option>
+                                <option
+                                    value="virtual_cam"
+                                    prop:selected=move || kind() == NewKind::VirtualCam
+                                >
+                                    "Virtual camera"
+                                </option>
+                            </select>
+                        </label>
+                    </Show>
+                    <Show when=move || kind().needs_target()>
+                        <label class="output-field">
+                            <span class="label">
+                                {move || match kind() {
+                                    NewKind::Record => "File path on the engine's machine",
+                                    NewKind::Rtmp | NewKind::VirtualCam => "Server URL (without the stream key)",
+                                }}
+                            </span>
+                            <span class="path-row">
+                                <input
+                                    type="text"
+                                    aria-label=move || {
+                                        if kind() == NewKind::Record { "File path" } else { "Server URL" }
+                                    }
+                                    prop:value=move || draft.with(|d| d.target.clone())
+                                    on:input=set_target
+                                    disabled=running
+                                    placeholder=move || match kind() {
+                                        NewKind::Record => "/home/me/Videos/show.mp4",
+                                        NewKind::Rtmp | NewKind::VirtualCam => "rtmps://live.example.com/app",
+                                    }
+                                />
+                                <Show when=move || kind() == NewKind::Record && !running()>
+                                    {crate::browse::browse_button(
+                                        crate::browse::BrowseKind::Save,
+                                        vec!["mp4".into()],
+                                        "Save the recording".into(),
+                                        || true,
+                                        move || crate::browse::file_name(&draft.with(|d| d.target.clone())),
+                                        move || crate::browse::start_folder(
+                                            jstream_control::protocol::AssetRoot::Absolute,
+                                            &draft.with(|d| d.target.clone()),
+                                            None,
+                                        ),
+                                        move |picked| draft.update(|d| d.target = picked),
+                                    )}
+                                </Show>
+                            </span>
+                        </label>
+                        <Show when=running>
+                            <p class="output-note">"Stop the output to change where it sends."</p>
+                        </Show>
+                        {move || {
+                            row.with(|row| row.as_ref().and_then(cleartext_warning))
+                                .map(|warning| view! { <p class="output-note warning" role="note">{warning}</p> })
+                        }}
+                    </Show>
+                    <Show when=move || kind() == NewKind::Rtmp>
+                        <div class="output-field stream-key">
+                            <span class="label">"Stream key"</span>
+                            <Show
+                                when=move || key.get() == KeyChange::Replace || (!key_set() && key.get() != KeyChange::Clear)
+                                fallback=move || {
+                                    view! {
+                                        <span class="key-row">
+                                            <span class="key-mask" aria-label="Stream key">
+                                                {move || if key.get() == KeyChange::Clear { "Removed on OK" } else { "••••••••" }}
+                                            </span>
+                                            <Show
+                                                when=move || key.get() == KeyChange::Clear
+                                                fallback=move || {
+                                                    view! {
+                                                        <button type="button" on:click=move |_| key.set(KeyChange::Replace)>
+                                                            "Change…"
+                                                        </button>
+                                                        <button type="button" class="secondary" on:click=move |_| key.set(KeyChange::Clear)>
+                                                            "Remove"
+                                                        </button>
+                                                    }
+                                                }
+                                            >
+                                                <button type="button" class="secondary" on:click=move |_| key.set(KeyChange::Keep)>
+                                                    "Keep it"
+                                                </button>
+                                            </Show>
+                                        </span>
+                                    }
+                                }
+                            >
+                                <span class="key-row">
+                                    <input
+                                        type="password"
+                                        name="stream-key-entry"
+                                        node_ref=key_field
+                                        autocomplete="off"
+                                        spellcheck="false"
+                                        aria-label="Stream key"
+                                        placeholder=move || {
+                                            if key_set() { "Paste the new key" } else { "Paste the stream key" }
+                                        }
+                                        on:input=move |_| {
+                                            if key.get_untracked() == KeyChange::Keep {
+                                                key.set(KeyChange::Replace);
+                                            }
+                                        }
+                                    />
+                                    <Show when=key_set>
+                                        <button type="button" class="secondary" on:click=move |_| {
+                                            if let Some(field) = key_field.get_untracked() {
+                                                field.set_value("");
+                                            }
+                                            key.set(KeyChange::Keep);
+                                        }>
+                                            "Keep current"
+                                        </button>
+                                    </Show>
+                                </span>
+                            </Show>
+                            <span class="output-note">
+                                "Write-only: JStream keeps it in the engine's credential store and never shows it again."
+                            </span>
+                        </div>
+                    </Show>
+                    <Show when=move || kind() == NewKind::VirtualCam>
+                        <p class="vcam-status" class:unregistered=move || panel.vcam.hint().is_some()>
+                            {panel.vcam.status()}
+                        </p>
+                        {panel.vcam.hint().map(|hint| view! { <p class="output-note">{hint}</p> })}
+                        <Show when=move || is_new>
+                            <p class="output-note">
+                                "Other apps on the engine's machine see the program as a webcam, JStream Virtual Camera."
+                            </p>
+                        </Show>
+                    </Show>
+                </fieldset>
+                <Show when=move || kind() != NewKind::VirtualCam>
+                    <fieldset class="output-section">
+                        <legend>"Video"</legend>
+                        <label class="output-field" title="An output shows the program at the canvas size unless it picks a mix.">
+                            <span class="label">"Shows"</span>
+                            <select
+                                aria-label="Video"
+                                on:change=move |event| {
+                                    let chosen = event_target_value(&event);
+                                    draft.update(|d| d.mix = (!chosen.is_empty()).then(|| VideoMixId::new(chosen)));
+                                }
+                            >
+                                <option value="" prop:selected=move || draft.with(|d| d.mix.is_none())>
+                                    "Program (canvas size)"
+                                </option>
+                                <For
+                                    each=move || panel.mixes.get()
+                                    key=|mix| (mix.mix_id.clone(), mix.name.clone())
+                                    let:mix
+                                >
+                                    {
+                                        let mix_id = mix.mix_id.clone();
+                                        view! {
+                                            <option
+                                                value=mix.mix_id.to_string()
+                                                prop:selected=move || draft.with(|d| d.mix.as_ref() == Some(&mix_id))
+                                            >
+                                                {mix.name}
+                                            </option>
+                                        }
+                                    }
+                                </For>
+                            </select>
+                        </label>
+                        <Show when=running>
+                            <p class="output-note">"A new mix or encoder applies when the output starts again."</p>
+                        </Show>
+                    </fieldset>
+                    <fieldset class="output-section">
+                        <legend>"Encoder"</legend>
+                        <span class="encoder-row">
+                            <select
+                                aria-label="Encoder"
+                                on:change=move |event| {
+                                    let chosen = event_target_value(&event);
+                                    draft.update(|d| d.encoder = (!chosen.is_empty()).then(|| EncoderProfileId::new(chosen)));
+                                }
+                            >
+                                <option value="" prop:selected=move || draft.with(|d| d.encoder.is_none())>
+                                    "Engine default"
+                                </option>
+                                <For
+                                    each=move || panel.encoders.get()
+                                    key=|encoder| (encoder.profile_id.clone(), encoder.name.clone())
+                                    let:encoder
+                                >
+                                    {
+                                        let profile_id = encoder.profile_id.clone();
+                                        view! {
+                                            <option
+                                                value=encoder.profile_id.to_string()
+                                                prop:selected=move || {
+                                                    draft.with(|d| d.encoder.as_ref() == Some(&profile_id))
+                                                }
+                                            >
+                                                {encoder.name}
+                                            </option>
+                                        }
+                                    }
+                                </For>
+                            </select>
+                            <button type="button" class="secondary" on:click=move |_| panel.libraries.set(true)>
+                                "Encoders & mixes…"
+                            </button>
+                        </span>
+                    </fieldset>
+                    <fieldset class="output-section">
+                        <legend>"Audio"</legend>
+                        <label class="output-field">
+                            <span class="label">"Bus"</span>
+                            <select
+                                aria-label="Audio"
+                                disabled=running
+                                title=move || {
+                                    if running() { "Stop the output to change its bus" } else { "The bus it carries" }
+                                }
+                                on:change=move |event| {
+                                    let chosen = event_target_value(&event);
+                                    draft.update(|d| d.bus = BusId::new(chosen));
+                                }
+                            >
+                                <For
+                                    each=move || panel.buses.get()
+                                    key=|bus| (bus.bus_id.clone(), bus.name.clone())
+                                    let:bus
+                                >
+                                    {
+                                        let bus_id = bus.bus_id.clone();
+                                        view! {
+                                            <option
+                                                value=bus.bus_id.to_string()
+                                                prop:selected=move || draft.with(|d| d.bus == bus_id)
+                                            >
+                                                {bus.name}
+                                            </option>
+                                        }
+                                    }
+                                </For>
+                            </select>
+                        </label>
+                    </fieldset>
+                </Show>
+                {move || problem.get().map(|why| view! { <p class="problem" role="alert">{why}</p> })}
+            </div>
+            <div class="modal-footer">
+                <Show when=move || !is_new>
+                    <button
+                        type="button"
+                        class="danger secondary output-delete"
+                        disabled=move || running() || gone()
+                        title=move || if running() { "Stop it before deleting it" } else { "Delete this output" }
+                        on:click=move |_| {
+                            panel.settings.set(None);
+                            panel.deleting.set(Some(id.get_value()));
+                        }
+                    >
+                        "Delete…"
+                    </button>
+                </Show>
+                <button type="button" class="secondary" on:click=move |_| close()>
+                    "Cancel"
+                </button>
+                <Show when=move || !is_new>
+                    <button type="button" class="secondary" disabled=move || !can_send() on:click=move |_| apply(false)>
+                        "Apply"
+                    </button>
+                </Show>
+                <button
+                    type="button"
+                    class="primary"
+                    data-primary
+                    disabled=move || !can_send()
+                    on:click=move |_| apply(true)
+                >
+                    {if is_new { "Add" } else { "OK" }}
+                </button>
+            </div>
+        </Modal>
+    }
+}
+
+/// Asks before an output is deleted.
+#[component]
+fn DeleteDialog(panel: Panel, output_id: OutputId) -> impl IntoView {
+    let close = move || panel.deleting.set(None);
+    let id = StoredValue::new(output_id.clone());
+    let delete = move || {
+        let output_id = id.get_value();
+        panel.deleting.set(None);
+        panel.run(move |session| async move {
+            edit(&*session.control, Edit::OutputDelete { output_id }).await
+        });
+    };
+    view! {
+        <Modal label="Delete output" class="confirm-dialog" cancel=close>
+            <div class="modal-header">
+                <div class="modal-titles">
+                    <h2 class="modal-title">{format!("Delete {output_id}?")}</h2>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                    "×"
+                </button>
+            </div>
+            <p class="confirm-body">"The output and its settings are removed."</p>
+            <div class="modal-footer">
+                <button type="button" class="secondary" on:click=move |_| close()>
+                    "Cancel"
+                </button>
+                <button type="button" class="danger" on:click=move |_| delete()>
+                    "Delete"
+                </button>
+            </div>
+        </Modal>
     }
 }
 
@@ -1386,6 +1898,18 @@ mod tests {
             key_set,
             cleartext: true,
         }
+    }
+
+    /// Gives the mock engine an encoder profile, `hq`, and returns its ID.
+    fn with_encoder(control: &impl Control) -> jstream_control::protocol::EncoderProfileId {
+        let hq = jstream_control::protocol::EncoderProfileId::new("hq");
+        let create = Edit::EncoderCreate {
+            profile_id: hq.clone(),
+            name: "High quality".into(),
+            profile: jstream_control::protocol::EncoderProfile::DEFAULT,
+        };
+        now(super::edit(control, create)).expect("an encoder");
+        hq
     }
 
     fn drops(output_packets: u64) -> DropCounts {
@@ -1822,5 +2346,168 @@ mod tests {
         assert!(!health.reading().dropping());
         health.observe(2, drops(1));
         assert_eq!(health.reading().drops.output_packets, 1);
+    }
+
+    /// The settings dialog sends only what changed: a new output is created with its
+    /// encoder, mix and bus in one batch, and an edit of a stopped one sends one edit
+    /// per changed field (#1206).
+    #[test]
+    fn the_settings_dialog_sends_what_changed_in_one_batch() {
+        use super::{OutputDraft, draft_edits, send_edits};
+        use jstream_control::protocol::{BusId, VideoMixId};
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        let vod = BusId::new("vod");
+        now(super::edit(
+            &control,
+            Edit::BusCreate {
+                bus_id: vod.clone(),
+                name: "VOD".into(),
+            },
+        ))
+        .expect("a bus");
+        let hq = with_encoder(&control);
+
+        let id = OutputId::new("output-1");
+        let mut draft = OutputDraft::new(NewKind::Record);
+        assert!(!draft.ready(), "a recording needs its path");
+        draft.target = " /tmp/show.mp4 ".into();
+        assert!(draft.ready());
+        assert_eq!(
+            draft_edits(&id, None, &draft),
+            vec![create_edit(id.clone(), NewKind::Record, "/tmp/show.mp4")],
+            "the defaults need no edits of their own"
+        );
+        draft.encoder = Some(hq.clone());
+        draft.bus = vod.clone();
+        let edits = draft_edits(&id, None, &draft);
+        assert_eq!(edits.len(), 3, "{edits:?}");
+        let before = now(load(&control)).expect("load").rev;
+        now(send_edits(&control, edits)).expect("create");
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.rev.0, before.0 + 1, "one batch, one undo step");
+        let info = &loaded.outputs[0].info;
+        assert_eq!(info.encoder_profile, Some(hq));
+        assert_eq!(info.audio_buses, vec![vod]);
+        assert_eq!(
+            OutputDraft::of(info),
+            Some(OutputDraft {
+                target: "/tmp/show.mp4".into(),
+                ..draft.clone()
+            })
+        );
+
+        // Unchanged, nothing is sent; a new path and the program again are two edits.
+        let mut again = OutputDraft::of(info).expect("a recording");
+        assert!(draft_edits(&id, Some(info), &again).is_empty());
+        now(send_edits(&control, Vec::new())).expect("nothing to send");
+        again.target = "/tmp/other.mp4".into();
+        again.encoder = None;
+        assert_eq!(
+            draft_edits(&id, Some(info), &again),
+            vec![
+                Edit::OutputSetPath {
+                    output_id: id.clone(),
+                    path: "/tmp/other.mp4".into(),
+                },
+                Edit::OutputSetEncoder {
+                    output_id: id.clone(),
+                    profile_id: None,
+                },
+            ]
+        );
+        now(send_edits(&control, draft_edits(&id, Some(info), &again))).expect("edit");
+        let info = now(load(&control)).expect("load").outputs[0].info.clone();
+        assert_eq!(super::target_of(&info.kind), "/tmp/other.mp4");
+        assert_eq!(info.encoder_profile, None);
+
+        // A stream's server URL is `output.set_target`, and a mix `output.set_video_mix`.
+        let stream = rtmp("s", OutputState::Stopped, true).info;
+        let mut edited = OutputDraft::of(&stream).expect("a stream");
+        edited.target = "rtmps://live.example.com/app".into();
+        edited.mix = Some(VideoMixId::new("vertical"));
+        assert_eq!(
+            draft_edits(&stream.output_id, Some(&stream), &edited),
+            vec![
+                Edit::OutputSetTarget {
+                    output_id: stream.output_id.clone(),
+                    target: RtmpTarget::Generic {
+                        url: "rtmps://live.example.com/app".into(),
+                    },
+                },
+                Edit::OutputSetVideoMix {
+                    output_id: stream.output_id.clone(),
+                    mix_id: Some(VideoMixId::new("vertical")),
+                },
+            ]
+        );
+    }
+
+    /// A row says where an output sends in a word: the server's host, the file's name,
+    /// or the webcam, and which encoder it uses.
+    #[test]
+    fn a_row_summarises_the_target_and_encoder() {
+        use super::{encoder_name, target_summary};
+        use jstream_control::protocol::{EncoderProfileId, RecordContainer};
+        let url = |url: &str| OutputKind::Rtmp {
+            target: RtmpTarget::Generic { url: url.into() },
+        };
+        assert_eq!(
+            target_summary(&url("rtmps://live.example.com/app")),
+            "live.example.com"
+        );
+        assert_eq!(
+            target_summary(&url("rtmp://127.0.0.1:1935/live")),
+            "127.0.0.1:1935"
+        );
+        assert_eq!(target_summary(&url("odd")), "odd");
+        let record = |path: &str| OutputKind::Record {
+            path: path.into(),
+            container: RecordContainer::Mp4,
+        };
+        assert_eq!(
+            target_summary(&record("/home/me/Videos/show.mp4")),
+            "show.mp4"
+        );
+        assert_eq!(target_summary(&record("C:\\Videos\\show.mp4")), "show.mp4");
+        assert_eq!(target_summary(&OutputKind::VirtualCam), "Webcam");
+
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        let hq = with_encoder(&control);
+        let encoders = now(load(&control)).expect("load").encoders;
+        assert_eq!(encoder_name(&encoders, None), "Engine default");
+        assert_eq!(encoder_name(&encoders, Some(&hq)), encoders[0].name);
+        let gone = EncoderProfileId::new("gone");
+        assert_eq!(encoder_name(&encoders, Some(&gone)), "gone");
+    }
+
+    /// The header's health is a word or two, with the detail on hover.
+    #[test]
+    fn health_has_a_short_form_for_the_header() {
+        let mut health = Health::default();
+        assert_eq!(health.reading().short(), "No stats yet");
+        health.observe(1, drops(10));
+        assert_eq!(health.reading().short(), "Healthy");
+        health.observe(
+            2,
+            DropCounts {
+                output_packets: 13,
+                render_ticks: 2,
+                ..DropCounts::default()
+            },
+        );
+        assert_eq!(health.reading().short(), "Dropping (5)");
+        assert!(health.reading().summary().contains("3 output packets"));
     }
 }
