@@ -247,6 +247,24 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
     assert_eq!(session.input().push(frame(20)), Err(PushError::Closed));
 }
 
+/// A frame the encoder takes more than a frame period after its push is counted late,
+/// and every packet's bytes are counted.
+#[test]
+fn frames_held_past_their_period_are_late_and_bytes_are_counted() {
+    let script = Script::default();
+    let session = scripted_session(&script, 8);
+    let _sub = session.subscribe();
+    push_all(&session.input(), 0..3);
+    // Held in the queue for more than 1/60 s before the encoder can take them. This
+    // sleep makes them late; nothing waits on it for a result.
+    std::thread::sleep(Duration::from_millis(40));
+    script.open.store(true, Ordering::SeqCst);
+    let stats = session.finish().unwrap();
+    assert_eq!(stats.encoded, 3);
+    assert_eq!(stats.late, 3);
+    assert_eq!(stats.bytes, 3 * 5, "each scripted packet is 5 bytes");
+}
+
 /// A snapshot of a video session taken while frames flow never counts a frame encoded,
 /// refused or published (one packet per frame) that it doesn't count received, nor more
 /// keyframes than packets. The push used to count a frame received only after sending it,

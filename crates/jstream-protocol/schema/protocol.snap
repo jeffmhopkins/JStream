@@ -7373,6 +7373,57 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "MixerProfile": {
+      "description": "The audio mixer and its inputs in the window ([`ProfileInfo::mixer`]). Every count is\nin engine sample frames (48 000 a second) or mixer blocks.",
+      "properties": {
+        "block_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest mix of a block, in milliseconds."
+        },
+        "block_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The length of a block, in milliseconds: what a mix must stay under."
+        },
+        "blocks": {
+          "default": 0,
+          "description": "The blocks the mixer mixed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_frames": {
+          "default": 0,
+          "description": "Frames the inputs dropped: arrived after the mixer had passed them, or\noverwritten before it read them.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "late_blocks": {
+          "default": 0,
+          "description": "The blocks whose mix took longer than the audio they hold: the mixer can't keep\nup with the clock while this grows.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped_frames": {
+          "default": 0,
+          "description": "Frames the mixer skipped because it fell more than half its ring behind the clock.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "underrun_frames": {
+          "default": 0,
+          "description": "Frames the inputs had no audio for when the mixer read them, played as silence:\na device or source that delivers late or not at all.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "MonitorTap": {
       "description": "Where a bus's monitor listens (ADR-0028, D22). Serialized as a snake_case string.",
       "oneOf": [
@@ -8874,6 +8925,71 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind"
       ],
       "type": "object"
+    },
+    "ProfileStream": {
+      "description": "An encoded stream, by what it feeds ([`StreamProfile::stream`]).",
+      "oneOf": [
+        {
+          "description": "An output's program feed.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An H.264 preview stream.",
+          "properties": {
+            "channel": {
+              "description": "The stream's channel on its connection.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene it shows; omitted with `source_id` for the program."
+            },
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The source it shows alone."
+            },
+            "type": {
+              "const": "preview",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProfileUnit": {
       "description": "A unit of drawing work, by its owner.",
@@ -11029,6 +11145,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "Whether units carry `gpu_ms`, measured with GPU timestamp queries. `false` until\nthe engine measures GPU time, and on an adapter that can't.",
               "type": "boolean"
             },
+            "mixer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MixerProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The audio mixer and its inputs in the window (since 0.92). Omitted when the\nmixer didn't run in it."
+            },
             "plan": {
               "$ref": "#/$defs/PlanProfile",
               "default": {
@@ -11059,6 +11186,14 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The sources that cost the `jstream-sources` thread or the planner time,\ncostliest first.",
               "items": {
                 "$ref": "#/$defs/SourceProfile"
+              },
+              "type": "array"
+            },
+            "streams": {
+              "default": [],
+              "description": "What happened to the frames past the drawers (since 0.92): each output's and\neach H.264 preview stream's, from its encoder to where it sends them, most\nframes lost first. A stream that ran in none of the window is left out.",
+              "items": {
+                "$ref": "#/$defs/StreamProfile"
               },
               "type": "array"
             },
@@ -12044,6 +12179,78 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "StreamProfile": {
+      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own.",
+      "properties": {
+        "dropped": {
+          "default": 0,
+          "description": "The video frames lost between its encoder's input and where it sends them: a\nfull encoder queue, a busy encoder, a full packet queue, or a dropped link.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encode_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time its encoder spent on a frame, in milliseconds. A hardware\nencoder that works asynchronously spends only the time to submit it."
+        },
+        "encoded": {
+          "default": 0,
+          "description": "The video frames its encoder took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The frame rate it is encoded at."
+        },
+        "frames_in": {
+          "default": 0,
+          "description": "The video frames handed to its encoder, dropped ones included.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frames_out": {
+          "default": 0,
+          "description": "The video frames it sent: to the muxer or publish target for an output, to the\nclient for a preview stream.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kbps": {
+          "default": 0,
+          "description": "The bit rate it sent at over the window, in kilobits a second: video and audio\nfor an output, video for a preview stream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "late": {
+          "default": 0,
+          "description": "The video frames its encoder took more than a frame period after they were\nhanded over: a stream falls behind before it drops.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stream": {
+          "$ref": "#/$defs/ProfileStream",
+          "description": "Which stream."
+        },
+        "target_kbps": {
+          "default": 0,
+          "description": "The bit rate its encoders are set to, in kilobits a second, the same way.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stream"
+      ],
+      "type": "object"
+    },
     "StreamStatus": {
       "description": "What YouTube says a stream is doing (`status.streamStatus`). Serialized as a\nsnake_case string.",
       "oneOf": [
@@ -13008,5 +13215,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.91"
+  "title": "JStream protocol 0.92"
 }
