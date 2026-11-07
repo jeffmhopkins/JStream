@@ -123,7 +123,9 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
+today `collection` (an open or a new stops every output and clears every client's undo,
+[ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
+`output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
