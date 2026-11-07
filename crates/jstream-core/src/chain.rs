@@ -112,6 +112,16 @@ fn outset_of(kind: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
+fn whole_params(descriptor: &jstream_protocol::KindDescriptor) -> Vec<String> {
+    descriptor
+        .params
+        .iter()
+        .filter(|param| matches!(param.ty, jstream_protocol::ParamType::Int { .. }))
+        .map(|param| param.id.clone())
+        .collect()
+}
+
 /// One filter of a [`Chain`], as the collection holds it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ChainFilter {
@@ -353,6 +363,26 @@ impl Chain {
             .map(|filter| filter.kind.as_str())
     }
 
+    /// Each filter's `int` parameters, in order, which a Move keeps whole as it blends
+    /// their settings (ADR-0127): from a pack effect's descriptor, or the built-in
+    /// kind's.
+    pub(crate) fn whole_params(&self) -> Vec<Vec<String>> {
+        static BUILTIN: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .iter()
+                .map(|kind| (kind.kind_id.clone(), whole_params(kind)))
+                .collect()
+        });
+        self.filters
+            .iter()
+            .map(|filter| match &filter.effect {
+                Some(effect) => whole_params(effect.kind_descriptor()),
+                None => builtin.get(&filter.kind).cloned().unwrap_or_default(),
+            })
+            .collect()
+    }
+
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
     /// look the same, so a transition may pair them (ADR-0065 §6, as ADR-0081 amends it).
     pub(crate) fn look(&self) -> Vec<(String, Settings)> {
@@ -510,13 +540,16 @@ impl Chains {
     /// caller runs none of them again: every mix a tick draws shares one frame, and a
     /// stateful filter sees each tick once. Each chain then runs with [`Self::run_one`].
     /// `stages` are the output stage's chains (ADR-0080), kept the same way, which
-    /// [`Self::stage`] runs once each per frame.
+    /// [`Self::stage`] runs once each per frame. `blended` holds, for a chain whose item
+    /// a Move blends between two looks (ADR-0127), the settings each of its filters
+    /// draws with this frame, in place of the plan's.
     pub(crate) fn begin(
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         chains: &BTreeMap<ChainOwner, Chain>,
         stages: &BTreeMap<ChainOwner, Chain>,
+        blended: &[(&ChainOwner, Vec<Settings>)],
     ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
@@ -545,7 +578,11 @@ impl Chains {
                 self.running.insert(source.clone(), Vec::new());
             }
             if let Some(running) = self.running.get_mut(source) {
-                sync(source, running, &chain.filters, &mut self.retired);
+                let blend = blended
+                    .iter()
+                    .find(|(owner, _)| *owner == source)
+                    .map(|(_, settings)| settings.as_slice());
+                sync(source, running, &chain.filters, blend, &mut self.retired);
                 for (r, f) in running.iter_mut().zip(&chain.filters) {
                     refer(compositor, source, r, f, &mut self.retired);
                 }
@@ -814,35 +851,52 @@ fn sync(
     source: &ChainOwner,
     running: &mut Vec<Running>,
     filters: &[ChainFilter],
+    blended: Option<&[Settings]>,
     retired: &mut Vec<VideoFilter>,
 ) {
+    // The settings filter `at` draws with: the blend's this frame, or the plan's.
+    fn settings<'a>(
+        blended: Option<&'a [Settings]>,
+        at: usize,
+        f: &'a ChainFilter,
+    ) -> &'a Settings {
+        blended
+            .and_then(|blended| blended.get(at))
+            .unwrap_or(&f.settings)
+    }
     let same_shape = running.len() == filters.len()
         && running
             .iter()
             .zip(filters)
             .all(|(r, f)| r.id == f.id && r.kind == f.kind);
     if same_shape {
-        for (r, f) in running.iter_mut().zip(filters) {
-            update(r, f, retired);
+        for (at, (r, f)) in running.iter_mut().zip(filters).enumerate() {
+            update(r, f, settings(blended, at, f), retired);
         }
         return;
     }
     let mut old: Vec<Running> = std::mem::take(running);
-    for f in filters {
+    for (at, f) in filters.iter().enumerate() {
         let kept = old
             .iter()
             .position(|r| r.id == f.id && r.kind == f.kind)
             .map(|at| old.swap_remove(at));
         let entry = match kept {
             Some(mut r) => {
-                update(&mut r, f, retired);
+                update(&mut r, f, settings(blended, at, f), retired);
                 r
             }
             None => match f.video_filter() {
-                Some(filter) => Running {
+                Some(mut filter) => Running {
                     id: f.id.clone(),
                     kind: f.kind.clone(),
-                    settings: f.settings.clone(),
+                    settings: {
+                        let settings = settings(blended, at, f);
+                        if *settings != f.settings {
+                            filter.set_settings(settings);
+                        }
+                        settings.clone()
+                    },
                     effect: f.effect.clone(),
                     program: f.program.as_ref().map(|p| (p.source.clone(), p.shown)),
                     slots: Vec::new(),
@@ -866,26 +920,35 @@ fn sync(
     retired.extend(old.into_iter().map(|r| r.filter));
 }
 
-/// Gives `running` the settings of `filter`, the same filter as the plan has it now: in
+/// Gives `running` `settings` (`filter`'s, or a Move's blend of them, ADR-0127) and the
+/// rest of `filter`, the same filter as the plan has it now: in
 /// place, or, when its pack effect was reloaded, by making it again with the new effect
 /// and retiring the old one. A pack effect keeps no state between frames, so nothing is
 /// lost.
 ///
 /// A program is made again when its shader source was reloaded, losing its feedback,
 /// and restarted when its source showed a new frame.
-fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFilter>) {
+fn update(
+    running: &mut Running,
+    filter: &ChainFilter,
+    settings: &Settings,
+    retired: &mut Vec<VideoFilter>,
+) {
     let program = filter.program.as_ref().map(|p| (p.source.clone(), p.shown));
     let reloaded = running.program.as_ref().map(|(source, _)| source)
         != program.as_ref().map(|(source, _)| source);
     if running.effect != filter.effect || reloaded {
-        if let Some(fresh) = filter.video_filter() {
+        if let Some(mut fresh) = filter.video_filter() {
+            if *settings != filter.settings {
+                fresh.set_settings(settings);
+            }
             retired.push(std::mem::replace(&mut running.filter, fresh));
         }
         running.effect = filter.effect.clone();
         running.program = program;
         // The new filter holds no slot yet.
         running.slots.clear();
-        running.settings = filter.settings.clone();
+        running.settings = settings.clone();
         if running.meter.is_none() {
             running.meter = meter_for(filter);
         }
@@ -897,9 +960,9 @@ fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFi
         running.filter.restart();
         *shown = *now;
     }
-    if running.settings != filter.settings {
-        running.filter.set_settings(&filter.settings);
-        running.settings = filter.settings.clone();
+    if running.settings != *settings {
+        running.filter.set_settings(settings);
+        running.settings = settings.clone();
     }
     if running.meter.is_none() {
         running.meter = meter_for(filter);

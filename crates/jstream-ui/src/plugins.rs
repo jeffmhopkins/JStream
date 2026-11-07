@@ -1,5 +1,8 @@
 //! The Plugins section (WA1, ADR-0069, ADR-0076): the WASM automation plugins installed
-//! in the engine, and the dialogs that install one and grant it what it may do.
+//! in the engine, and the dialogs that install one and grant it what it may do. It is the
+//! Settings dialog's Plugins page (`settings.rs`), and its two dialogs open over that
+//! dialog, drawn at the page's top level ([`Portal`]) so a moved Settings dialog doesn't
+//! carry them with it.
 //!
 //! - **Calls.** `plugin.list` reads the plugins, `plugin.install` installs a package with
 //!   no grant beyond `read`, `plugin.grant` replaces a grant and `plugin.enable` turns a
@@ -33,6 +36,7 @@ use jstream_control::protocol::{
     PluginInfo, PluginRequest, PluginState, Query, QueryResult,
 };
 use jstream_control::{Control, ControlError};
+use leptos::portal::Portal;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::collections::BTreeSet;
@@ -560,7 +564,6 @@ pub fn Plugins() -> impl IntoView {
     view! {
         <Show when=move || read.get()>
             <section class="plugins">
-                <h2>"Plugins"</h2>
                 <button class="primary" on:click=move |_| section.installing.set(true)>
                     "Install plugin"
                 </button>
@@ -578,12 +581,14 @@ pub fn Plugins() -> impl IntoView {
                     </ul>
                 </Show>
             </section>
-            <Show when=move || section.installing.get()>
-                <InstallDialog section=section />
-            </Show>
-            {move || section.granting.get().map(|plugin| view! {
-                <GrantDialog section=section plugin=plugin />
-            })}
+            <Portal>
+                <Show when=move || section.installing.get()>
+                    <InstallDialog section=section />
+                </Show>
+                {move || section.granting.get().map(|plugin| view! {
+                    <GrantDialog section=section plugin=plugin />
+                })}
+            </Portal>
         </Show>
     }
     .into_any()

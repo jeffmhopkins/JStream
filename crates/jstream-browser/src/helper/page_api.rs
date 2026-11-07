@@ -106,7 +106,7 @@ struct Granted {
     /// frame shows a document the rule covers.
     feed: Option<(V8Context, V8Value)>,
     /// How many browser objects with this ID the renderer holds: a cross-origin
-    /// navigation (a `data:` page's reload among them) creates the new one before it
+    /// navigation creates the new one before it
     /// destroys the old, so the entry goes only with the last.
     browsers: usize,
 }
