@@ -2313,7 +2313,7 @@ stamp = { hash = "b3:beb8af26860516d9", by = "agent:cursor", note = "Collapsed t
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:2481538d771d9214", by = "agent:claude-0104", note = "Re-read against R-SEC-002's ADR-0104 sentence. The desktop app still serves on 127.0.0.1 on an OS-picked port and pairs nothing; the network setting ADR-0104 describes is not built, so the section's loopback claims hold." }
+stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the desktop's server, origin and token handling are unchanged" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -4941,7 +4941,7 @@ stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read Desig
 stamp = { hash = "b3:94b79eb688db7abc", by = "agent:grok", note = "Re-read Design against the protocol and control dependencies. The server still forwards edits. canvas.set_frame_rate is one more edit, and this section does not name a rate." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:2481538d771d9214", by = "agent:claude-0104", note = "Open question 1 (TLS) now names ADR-0104 for how the certificate is made and trusted (self-signed, pinned by fingerprint, an opt-in network listener admitting device tokens only). Re-read the gate table and pairing text against R-SEC-002's new sentence: no listener beyond loopback exists, so they hold; 'Not here yet: a TLS listener' stays true." }
+stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
 
 ["CRATE-jstream-server#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -6585,7 +6585,7 @@ stamp = { hash = "b3:a7d08d8dbb13095d", by = "agent:acc756d9", note = "Re-read t
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:2481538d771d9214", by = "agent:claude-0104", note = "Re-read the control API bullet against R-SEC-002's ADR-0104 sentence (a listener beyond loopback is opt-in, TLS only, device tokens only). It describes the built controls, which are unchanged: localhost by default, device tokens only over loopback or TLS. Holds; ADR-0104 is accepted but not built." }
+stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the control API bullet describes the control listener, which is unchanged, and none of those sockets is built yet" }
 
 ["SECURITY#scope"."dep:docs/RULES.md#R-SEC-003"]
 stamp = { hash = "b3:e62d5f1a75c6baa0" }
@@ -6717,7 +6717,7 @@ stamp = { hash = "b3:18c6a50ca7ccdbf6", by = "agent:acc756d9", note = "Re-read s
 stamp = { hash = "b3:0458e9b50c2535fc", by = "agent:claude-0104", note = "The ADR-0104 sentence now says native clients pin the self-signed certificate by fingerprint, and that a browser keeps no pin, only a per-certificate exception, so a new warning on a paired host means stop (ADR-0114). Re-read the rest of the controls on main: the daemon still binds 127.0.0.1 with no flag and no TLS, and the desktop --mcp and launcher clipboard text are unchanged, so they hold." }
 
 ["THREAT-MODEL#server"."dep:docs/RULES.md#R-SEC-002"]
-stamp = { hash = "b3:2481538d771d9214", by = "agent:claude-0104", note = "Added a sentence: ADR-0104 decides an opt-in TLS-only network listener with a pinned self-signed certificate that admits device tokens and never the control token, not built. Re-read the controls on main against R-SEC-002's new sentence: the daemon still binds 127.0.0.1 with no flag and no TLS, so they hold." }
+stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; this section covers the control server, whose controls are unchanged; the LAN inputs get their own threat section in the PR that opens their sockets" }
 
 ["THREAT-MODEL#server"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }

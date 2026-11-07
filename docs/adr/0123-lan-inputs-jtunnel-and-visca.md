@@ -2,14 +2,14 @@
 id = "ADR-0123"
 title = "LAN inputs without TLS: JTunnel senders and VISCA, opt-in and accepted one peer at a time"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0123: LAN inputs without TLS: JTunnel senders and VISCA, opt-in and accepted one peer at a time
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -72,10 +72,9 @@ there's a clear on or off setting, and accepting a sender is explicit the first 
    acceptance and bounded actions keep it to people on the same network who already
    target this machine. The control listener, and what a device token may do, are
    unchanged.
-7. **Rule change.** On acceptance, R-SEC-002 also says: the JTunnel and VISCA sockets
-   are not control listeners. They follow ADR-0123: each is opt-in, LAN only and limited
-   to accepted peers, and runs only bindings or camera actions, never the protocol.
-   Nothing that opens these sockets is built before then.
+7. **Rule change.** R-SEC-002 also says: the JTunnel and VISCA sockets are not control
+   listeners. They follow ADR-0123: each is opt-in, LAN only and limited to accepted
+   peers, and runs only bindings or camera actions, never the protocol.
 
 <a id="consequences"></a>
 ## Consequences
@@ -85,4 +84,4 @@ there's a clear on or off setting, and accepting a sender is explicit the first 
   one needs its source-address filter, LAN-range check and counters tested, and listed
   in `profile.get`.
 - **Must do:** the settings and the accepted-senders, camera and controller lists, each
-  in the PR that opens its socket, and the R-SEC-002 text once this is accepted.
+  in the PR that opens its socket. The R-SEC-002 text lands with this ADR.
