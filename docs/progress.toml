@@ -128,6 +128,8 @@ title = "Save and load projects: File › New, Open, Save As and Open recent"
 priority = 4
 status = "planned"
 issues = [1218]
+prs = [1269]
+note = "#1269 is the protocol and engine part (ADR-0121); the File menu follows"
 
 [[target]]
 release = "alpha.5"
@@ -1501,7 +1503,7 @@ note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
 id = "PA4"
 milestone = "M3"
 title = "Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124)"
-status = "planned"
+status = "done"
 release = "alpha.5"
 prs = [1287]
 

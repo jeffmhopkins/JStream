@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `░░░░░░░░░░` 5% | 1 | 0 | 20 | 0 |
+| `█░░░░░░░░░` 10% | 2 | 0 | 19 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -182,7 +182,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |
 | 2 | Pop-out projectors: the program, the preview or a scene in its own window or full screen on another monitor, at full quality and frame rate | ⏳ planned: #1199 merged; the Windows check is #1208 | #1208 | #1199 |
 | 3 | An Application Settings dialog: plugin management, Check for updates, a CLAP plugins page, project video settings, and one set of blend modes | ⏳ planned: #1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open | #1207, #1210, #1212, #1192, #1230 | #1249 |
-| 4 | Save and load projects: File › New, Open, Save As and Open recent | ⏳ planned | #1218 |  |
+| 4 | Save and load projects: File › New, Open, Save As and Open recent | ⏳ planned: #1269 is the protocol and engine part (ADR-0121); the File menu follows | #1218 | #1269 |
 | 5 | A UI scrub of every panel, dialog and window, with a decluttered Inspector and Properties and Filters in one dialog | ⏳ planned | #1219, #1198, #1202, #1204, #1206 |  |
 |  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 |  |
 |  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned: #1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188) | #1225, #1216, #1214, #1188 | #1251, #1270, #1278 |
@@ -197,14 +197,14 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 |  |
 
 <details open>
-<summary><b>Roadmap items in 0.1.0-alpha.5</b>: 1 of 2 merged</summary>
+<summary><b>Roadmap items in 0.1.0-alpha.5</b>: 2 of 2 merged</summary>
 
 A gate item (🚧) is one the release waits for.
 
 | ID | Item | Gate | Milestone | Status | PRs |
 |---|---|---|---|---|---|
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) |  | M3 | ⏳ planned | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) |  | M3 | 🧪 merged, Windows run pending: Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
+| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) |  | M3 | ✅ merged | #1287 |
 
 </details>
 
@@ -220,12 +220,12 @@ Every roadmap item, by milestone.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 77% | 34 | 0 | 10 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 80% | 35 | 0 | 9 |
 
-146 of 158 items are merged; 22 of those still wait on a run on Windows hardware.
+147 of 158 items are merged; 22 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 34 items, by next step: 🔨 build 12, 🧪 Windows run 20, 👤 maintainer 1, ❔ not set 1</summary>
+<summary><b>What's left</b>: 33 items, by next step: 🔨 build 12, 🧪 Windows run 20, 👤 maintainer 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -261,7 +261,6 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🧪 Windows run | Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🧪 Windows run | Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🧪 Windows run | Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | M3 | ❔ not set |  | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | M3 | 🧪 Windows run | Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🧪 Windows run | Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🧪 Windows run | Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
@@ -431,7 +430,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 34 of 44 merged</summary>
+<summary><b>M3</b> Depth and reach: 35 of 44 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -468,7 +467,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🧪 merged, Windows run pending: Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA1 | Page API part 1: ADR-0102 and shared values (values.set, values.list) | ✅ merged | #1077, #1127 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🧪 merged, Windows run pending: Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
-| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | ⏳ planned | #1287 |
+| PA4 | Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124) | ✅ merged | #1287 |
 | PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | 🧪 merged, Windows run pending: Merged; the Windows run's page API step (#1147) checks a granted bus with real audio | #1263 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | ✅ merged | #1100 |

@@ -1183,8 +1183,13 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
-            // The mock watches no packs folder (ADR-0097), as an engine without one.
-            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+            // The mock watches no packs folder (ADR-0097), as an engine without one, and
+            // keeps no collection file (ADR-0121), as an engine whose host named none.
+            action @ (Action::PackWrite { .. }
+            | Action::PackDelete { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: action.name().into(),
                 });
@@ -1432,7 +1437,7 @@ impl State {
                     call: query.name().into(),
                 });
             }
-            Query::DeviceList | Query::UiSettingsGet { .. } => {
+            Query::DeviceList | Query::UiSettingsGet { .. } | Query::CollectionInfo => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
                 });

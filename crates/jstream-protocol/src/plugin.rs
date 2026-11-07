@@ -257,6 +257,12 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // values is a read.
     ("values.set", N),
     ("values.list", Class(R)),
+    // A project switch stops outputs and clears every client's undo, and its path is a
+    // file a folder grant was never asked about (ADR-0121): never a plugin's.
+    ("collection.open", N),
+    ("collection.new", N),
+    ("collection.save_as", N),
+    ("collection.info", N),
     // History, on the plugin's own session.
     ("history.undo", Class(E)),
     ("history.redo", Class(E)),

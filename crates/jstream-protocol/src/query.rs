@@ -305,6 +305,11 @@ pub enum Query {
     /// whose platform downloads no codec, or that has no codec backend, lists none.
     #[serde(rename = "codec.downloads")]
     CodecDownloads,
+    /// Reads which project (collection file) the engine saves to, and the projects
+    /// opened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails
+    /// with `unsupported` when the host named no collection file.
+    #[serde(rename = "collection.info")]
+    CollectionInfo,
     /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
     /// drawing thread, per unit of drawing work and its owner (a source's upload or
     /// chain, a scene's chain or pass, an item's effects, an output's chain), per
@@ -396,6 +401,7 @@ impl Query {
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
             Query::CodecDownloads => "codec.downloads",
+            Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
         }
     }
@@ -750,6 +756,17 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// The result of `collection.info` (0.94). Not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "collection.info")]
+    CollectionInfo {
+        /// The absolute path of the collection file the engine saves to.
+        path: String,
+        /// Up to ten collection files opened, created or saved as, most recent first,
+        /// `path` among them. A file may have moved or gone since.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        recent: Vec<String>,
+    },
     /// The result of `plugin.list` (0.58). Installed plugins are not collection state, so
     /// it carries no `rev`.
     #[serde(rename = "plugin.list")]
@@ -809,6 +826,7 @@ impl QueryResult {
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
             QueryResult::CodecDownloads { .. } => "codec.downloads",
+            QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
         }
     }
