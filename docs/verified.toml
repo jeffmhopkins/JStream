@@ -1371,7 +1371,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:d0aa83527d4611aa", by = "agent:claude", note = "run.rs prints CaptureTargetInfo.formats for devices; design unchanged" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the design: it does not quote the state.get golden; that fixture's Cut duration is now 0, matching initial_preset, and the parser and session design are unchanged." }
+stamp = { hash = "b3:c1f1d07b066f31d4", by = "agent:claude", note = "run/tests.rs now expects the mock webcam and its two format lines in capture targets; the section holds | kept from the merged side: Re-read the design: it does not quote the state.get golden; that fixture's Cut duration is now 0, matching initial_preset, and the parser and session design are unchanged." }
 
 ["CRATE-jstream-cli#purpose"."body"]
 stamp = { hash = "b3:d796b16e2013c42c", by = "agent:claude", note = "Running bullet now says an edit batch may read state.get first to fit capture items; args.rs gains a usage note, run.rs fit_captures/state, run/tests.rs three fit tests; the rest of the contents list holds." }
@@ -1398,7 +1398,7 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:d0aa83527d4611aa", by = "agent:claude", note = "capture targets now prints each device's formats under it; the purpose still holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/run/tests.rs"]
-stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
+stamp = { hash = "b3:c1f1d07b066f31d4", by = "agent:claude", note = "run/tests.rs now expects the mock webcam and its two format lines in capture targets; the section holds | kept from the merged side: Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
 
 ["CRATE-jstream-cli#usage"."body"]
 stamp = { hash = "b3:6a01bbf871ad6d24", by = "agent:claude", note = "the capture targets row now names webcams and their format lines; the usage text holds | kept from the merged side: Re-read the canvas sentence. It now names canvas.set_frame_rate 30 or 60 beside canvas.set_size." }
