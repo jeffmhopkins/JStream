@@ -6369,7 +6369,7 @@ stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usa
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
 
 ["PERF-SUITE#runner"."body"]
-stamp = { hash = "b3:8bb282a1bf657567", by = "agent:claude-perf-suite", note = "Added --bench <gates.json>: runs jstream bench --scenario all --preset cut on the same daemon into target/perf/run/bench and fails the run when a gate fails (xtask/src/perf/mod.rs bench()); named the perf-linux CI job that runs it" }
+stamp = { hash = "b3:6ef2740094e0f29b", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/assets.rs"]
 stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
@@ -6378,7 +6378,7 @@ stamp = { hash = "b3:df0c7bc5d7765f2b", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:4b28a45ac91e63ee", by = "agent:claude-perf-suite", note = "new section: checked against perf/mod.rs and client.rs: build flags, target/perf/run layout with XDG_DATA_HOME, lavapipe default, MCP via jstream-cli mcp, canvas default 1280x720, program.mp4 recording and the --openh264 store copy, settle plus window timing, delete.plan teardown, error rows, churn cycles, report path and table columns, --browser and --scene patterns" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/mod.rs"]
-stamp = { hash = "b3:5d4510d56461100e", by = "agent:claude-perf-suite", note = "Added --bench <gates.json>: runs jstream bench --scenario all --preset cut on the same daemon into target/perf/run/bench and fails the run when a gate fails (xtask/src/perf/mod.rs bench()); named the perf-linux CI job that runs it" }
+stamp = { hash = "b3:e4f6b0f4e418f553", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
 
 ["PERF-SUITE#runner"."file:xtask/src/perf/scene.rs"]
 stamp = { hash = "b3:30a9997dd377dd46", by = "agent:claude-perf-suite", note = "re-read after B1: the commit only drops three #[allow]s on casts (and a let-and-return); no behaviour the section describes changed" }
