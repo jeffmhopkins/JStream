@@ -583,8 +583,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and Nearest on top as fields in one column under Camera and Rendering headings (each
   label on the row of its control, the check in front of its text); OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
-  an override that starts from the parent's camera, offered only while the parent has
-  one (`camera_start`). A note warns when items already have depth or angles
+  an override that starts from the parent's camera, or from the framing camera when the
+  parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
   on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the

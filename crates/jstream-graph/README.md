@@ -394,9 +394,11 @@ that does not want to change the graph it has.
   `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
   (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
-  the variant's override, refused while the parent has no camera, and `State::effective_camera`
-  reads the override or the parent's. Removing a parent's camera drops its variants'
-  overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
+  the variant's override, which a keyframe of a 2D scene may have too
+  ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)), and
+  `State::effective_camera` reads the override or the parent's. Removing a parent's camera
+  drops its variants' overrides, and the inverse restores them; a removal on a parent that
+  has none drops nothing; a deleted scene's inverse restores its camera.
   `scene.set_camera_motion` (`camera.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) writes the whole
   motion list (checked by `check_camera_motion`, field `motion…`), undone by the old

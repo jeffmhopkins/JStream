@@ -4192,9 +4192,8 @@ impl State {
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
         if let Some(((from, shared), program, mut run)) = started {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -4518,9 +4517,8 @@ impl State {
                     transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
                     transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
                 };
-                let to_camera = transition::camera_of(&self.graph, &scene_id);
                 let from_camera = shared.unwrap_or(None);
-                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                if shared.is_err() {
                     run.pairs = false;
                 }
                 Some(transition::Running {
@@ -4642,9 +4640,8 @@ impl State {
             (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
         });
         if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(

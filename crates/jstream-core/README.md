@@ -1150,9 +1150,16 @@ parent's camera, and a live removal of the parent's makes its variants 2D. The s
 (`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
 between two 3D scenes interpolates the camera with the Move's own timing
 (`lerp_camera`, its focus and blur too, a side with no focus taken as focused where the
-other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and draws both sides' tracks through it. A Move between a 3D scene and
-a 2D one has nothing to pair, so it runs as a Fade of the same duration, and a Fade
-keeps each side's own camera on its items. A stinger's items are seen through their
+other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and draws both sides' tracks through it. A Move between a 3D side and
+a 2D one moves too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)):
+`Planner::track_cameras` takes the canvas's framing camera for the 2D end, which draws
+it as 2D does, unless `Planner::transition` finds an item on the 2D side that the
+framing camera would draw differently (tilted, turned or pushed in depth, without its
+own perspective at the framing focal length, `framed_alike`), in which case it plans a
+Fade of the same duration; the engine no longer fades such a switch up front. A Fade
+keeps each side's own camera on its items. A keyframe of a 2D scene may have a camera
+of its own (`PassCamera::committed` is the override, else the parent's), and a live
+removal of a 3D parent's camera makes its keyframes 2D while it lasts. A stinger's items are seen through their
 own scene's camera (`TrackCameras.overlay`), none for a 2D stinger scene, in a
 `depth_run` of their own (one past every run held from the screen,
 `TrackCameras.overlay_run`), so they sort among themselves and stay over the scenes
