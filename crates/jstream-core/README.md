@@ -440,7 +440,18 @@ state machine. Contents:
   reads all of them, the threads from the host's `ThreadCpu`
   (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
   and each `profile.get`, keeps a minute of samples, and answers a window as the
-  difference between the newest and the one from that long ago.
+  difference between the newest and the one from that long ago. Past the drawers
+  (protocol 0.92, `profile/streams.rs`): each running output, and each H.264 preview
+  session, registers a `StreamMeter` while it runs, whose reader loads its video
+  session's counters (`jstream-encode`'s `received`, `encoded`, `late`, `encode_nanos`)
+  through a `StatsHandle` that keeps no session alive, then what it sent and lost after
+  it (the output's `SentCounters` and drops, the preview stream's queued and refused
+  pictures); a session reopened, or an output's next run, is a new meter that counts
+  from zero. The mixer thread counts each block and how long its mix took (the poll
+  that makes it and everything done with it after) into a `MixerMeter` of relaxed
+  atomics, and the program stage registers it with its master bus's skips; the audio
+  inputs' underruns and drops are the drop ledger's `AudioInputDrops`, summed with the
+  ones removed.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
@@ -2180,6 +2191,13 @@ snapshot, so the preview shows the transition onto the new program scene, then t
 scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
 program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.
 
+Each H.264 session a stream opens, the hub's own or the program stage's, is metered in
+`profile.get`'s `streams` (protocol 0.92) while it is open: the subscription hands the
+stream the profiler's `StreamRegistry`, and the stream counts each picture its binary
+queue took or refused (`SentCounts`), so its `frames_out` and `dropped` are what reached
+the client's queue and what its keyframe gate dropped, beside the encoder's own drops.
+JPEG and PNG streams are not metered.
+
 <a id="events"></a>
 ## Events
 <!-- @section
@@ -2223,6 +2241,10 @@ Registering two sources for the same drop adds it twice.
 
 A source reports running totals. The tick is the sum, so a client subtracts the previous
 tick.
+
+A mixer input's source also reports its own counters (`DropSource::audio_input`), so
+`profile.get`'s `mixer` sums the inputs' underruns and drops, removed inputs' latched
+with the rest (protocol 0.92).
 
 What each stage contributes:
 
@@ -3072,7 +3094,8 @@ lock. A plugin's thread holds no engine lock while the plugin runs, so the plugi
 calls take the collection lock as any session's do. The live sources' `SourceMeters`
 (a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
 takes under the collection lock and `jstream-sources` and the profiler take alone; the
-`Profiler`'s history and thread-reader locks are never taken with the collection lock
+`Profiler`'s history, thread-reader, stream and mixer locks are never taken with the
+collection lock (the mixer thread takes none: its meter is atomics)
 (*Profile* in [Purpose](#purpose)). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`

@@ -22,7 +22,7 @@ pub use audio::{AudioInput, AudioSession};
 pub use error::{EncodeError, PushError, StreamEnd};
 pub use fanout::{SubscriberStats, Subscription};
 pub use registry::{SessionKey, SessionRegistry};
-pub use session::{EncoderSettings, SessionOptions, SessionStats, StreamInfo};
+pub use session::{EncoderSettings, SessionOptions, SessionStats, StatsHandle, StreamInfo};
 pub use video::{VideoInput, VideoPath, VideoSession};
 
 #[cfg(test)]

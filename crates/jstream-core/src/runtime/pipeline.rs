@@ -63,7 +63,7 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
-    ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
+    ProfileStream, ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
     Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
@@ -81,7 +81,10 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::output_stats::{MeterGuard, OutputSample, ReadSample, SentCounters};
-use crate::profile::{DrawMeter, Phase};
+use crate::profile::{
+    DrawMeter, MixerGuard, MixerMeter, MixerSource, Phase, StreamGuard, StreamMeter, StreamTotals,
+    streams,
+};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -779,6 +782,10 @@ pub(crate) struct Program {
     audio: Mutex<AudioInputs>,
     capture_drops: DropSnapshot,
     bus: BusControl,
+    /// What the mixer thread counts of its blocks, for `profile.get` (protocol 0.92).
+    mixer_meter: Arc<MixerMeter>,
+    /// The mixer's place in `profile.get`, given up when the stage stops.
+    mixer_profile: Option<MixerGuard>,
     drop_guard: Option<DropGuard>,
     ticker: Option<JoinHandle<()>>,
     /// Emits one last `stats.tick` once the threads have stopped and the sources are
@@ -970,6 +977,11 @@ impl Program {
             engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
         ];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        let bus = self.bus.clone();
+        self.mixer_profile = Some(engine.profiler().add_mixer(MixerSource {
+            meter: Arc::clone(&self.mixer_meter),
+            skipped: Box::new(move || bus.stats().skipped_frames),
+        }));
         self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
         *lock(&self.final_tick) = Some(engine.stats_emitter());
     }
@@ -1287,6 +1299,8 @@ pub(crate) struct Running {
     started: Instant,
     /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
     meter: Option<MeterGuard>,
+    /// Its stream in `profile.get` (protocol 0.92), removed with the drop guard.
+    profiled: Option<StreamGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
     /// Dropped last: when this was the program's last output, that stops the render
@@ -1354,6 +1368,64 @@ impl Running {
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
         self.meter =
             Some(engine.add_output_meter(self.output_id.clone(), self.started, self.read_sample()));
+        if let Some(encoders) = &self.encoders {
+            let (fps, target_kbps) = streams::encoder_target(
+                encoders.video.info(),
+                self.audio.as_ref().map(|audio| audio.info()),
+            );
+            self.profiled = Some(engine.profiler().add_stream(StreamMeter {
+                stream: ProfileStream::Output {
+                    output_id: self.output_id.clone(),
+                },
+                fps,
+                target_kbps,
+                read: self.read_stream(),
+            }));
+        }
+    }
+
+    /// How this output's stream reads in `profile.get`: its video encoder's frames,
+    /// counted from the time it was armed like [`read_sample`](Self::read_sample)'s
+    /// drops, then what the output thread sent and lost after it.
+    fn read_stream(&self) -> streams::ReadStream {
+        let sample = self.read_sample();
+        let video = self
+            .encoders
+            .as_ref()
+            .map(|encoders| Arc::downgrade(&encoders.video));
+        let read = move || {
+            video
+                .as_ref()
+                .and_then(Weak::upgrade)
+                .map(|video| video.stats())
+        };
+        let base = read().unwrap_or_default();
+        // The last reading while the session was alive, so the totals don't fall once it
+        // closes.
+        let last = Mutex::new(base);
+        Box::new(move || {
+            let video = match read() {
+                Some(stats) => {
+                    *lock(&last) = stats;
+                    stats
+                }
+                None => *lock(&last),
+            };
+            let sent = sample();
+            let since = |now: u64, then: u64| now.saturating_sub(then);
+            StreamTotals {
+                frames_in: since(
+                    video.received.saturating_add(video.dropped_queue_full),
+                    base.received.saturating_add(base.dropped_queue_full),
+                ),
+                encoded: since(video.encoded, base.encoded),
+                frames_out: sent.frames,
+                dropped: sent.dropped_frames,
+                late: since(video.late, base.late),
+                encode_nanos: since(video.encode_nanos, base.encode_nanos),
+                bytes: sent.bytes,
+            }
+        })
     }
 
     /// How this output's meter reads its counters: what the output thread sent, and
@@ -1953,6 +2025,13 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    let mixer_meter = {
+        let config = mixer.config();
+        let block = Duration::from_secs_f64(
+            config.block_frames as f64 / f64::from(config.sample_rate.max(1)),
+        );
+        Arc::new(MixerMeter::new(block))
+    };
     // The monitors the audio sources' thread opens hand their feeds to the mixer
     // thread here, at most one per bus at a time.
     let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
@@ -2066,7 +2145,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             taps: Arc::clone(&scope_taps),
             monitors: monitor_feeds,
         };
-        let mixing = Mixing { mixer, metering };
+        let mixing = Mixing {
+            mixer,
+            metering,
+            meter: Arc::clone(&mixer_meter),
+        };
         move || {
             let _raised = raise(priority.as_deref(), ThreadRole::Audio);
             mixer_thread(mixing, clock, &out, stop, fail, &collector);
@@ -2106,6 +2189,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         audio: Mutex::new(audio),
         capture_drops,
         bus,
+        mixer_meter,
+        mixer_profile: None,
         drop_guard: None,
         ticker: None,
         final_tick: Mutex::new(None),
@@ -2277,6 +2362,7 @@ pub(crate) fn launch(
         sent,
         started,
         meter: None,
+        profiled: None,
         registration: Some(registration),
         program: Some(program),
     };
@@ -2346,6 +2432,7 @@ pub(crate) fn launch_vcam(
         sent: Arc::default(),
         started: Instant::now(),
         meter: None,
+        profiled: None,
         registration: Some(registration),
         program: Some(program),
     })
@@ -3779,6 +3866,8 @@ fn mixer_thread(
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
+    /// Counts each block and how long its mix took.
+    meter: Arc<MixerMeter>,
 }
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
@@ -3792,6 +3881,7 @@ fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
+        meter,
     }: Mixing,
     clock: &dyn MediaClock,
     out: &MixOut,
@@ -3818,6 +3908,8 @@ fn mixer_loop(
     // allocates here.
     let mut monitors: Vec<MonitorRoute> = Vec::with_capacity(2 * jstream_audio::MAX_BUSES);
     'mix: while !stop.load(Ordering::Relaxed) {
+        // A block's mix is the poll that makes it and everything done with it after.
+        let began = Instant::now();
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
@@ -3877,6 +3969,7 @@ fn mixer_loop(
                     report(fail, format!("mixer block rejected: {err}"));
                     break 'mix;
                 }
+                meter.mixed(began.elapsed());
             }
             Ok(None) => thread::sleep(Duration::from_millis(1)),
             Err(err) => {

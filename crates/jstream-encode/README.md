@@ -47,6 +47,8 @@ the encode thread's rules ([R-RT-002](../../docs/RULES.md#R-RT-002),
   otherwise a CPU one; `path()` returns the `VideoPath` it took.
   `input()`, `subscribe()`, `subscribe_with_capacity(n)`, `request_keyframe()`,
   `info()`, `stats()` and `finish()`. Sessions are `Send + Sync`, so outputs can share one through an `Arc`.
+  `VideoSession::stats_handle()` gives a `StatsHandle` that reads `stats()` from
+  anywhere without keeping the session alive.
   `VideoSession::codec()` is the codec encoding now: `info()`'s, or the one the encoder
   fell back to after it opened (a hardware encoder refusing its first frame, #443),
   which the encode thread records once.
@@ -212,7 +214,10 @@ lives while an output holds its `Arc`; the output that lets go last should `fini
 
 `SessionStats`: inputs `received`, `dropped_queue_full`, `dropped_encoder_busy`,
 `encoded`, `packets`, `keyframes`, `keyframes_requested` (requests the encoder
-accepted), current `subscribers`, `subscriber_drops` and `silence_frames`. `SubscriberStats`: `delivered` and `dropped`. All are atomic counters
+accepted), current `subscribers`, `subscriber_drops` and `silence_frames`, and for
+`profile.get`'s streams: `late` (video inputs the encoder had finished taking more
+than one frame period after their push, stamped at the push), `encode_nanos` (the time
+in the encoder's `encode` calls) and `bytes` (every packet's). `SubscriberStats`: `delivered` and `dropped`. All are atomic counters
 read without stopping the thread, so a snapshot can be mid-update, but never ahead of
 itself: an input is counted `received` before it is queued, the later stages count it
 with release ordering, and the snapshot reads them in reverse with acquire. So a

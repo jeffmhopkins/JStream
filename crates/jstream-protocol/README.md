@@ -147,7 +147,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -301,7 +301,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.89 because a collection can set its base frame rate with
+`PROTOCOL_VERSION` is 0.92 because `profile.get` reports past the drawers: each
+encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
+mixer's blocks (`mixer`, `MixerProfile`) (#1220, a placeholder number the release
+queue sets, with 0.90 and 0.91 held by changes ahead of it); 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -1359,8 +1362,22 @@ Queries read and never change `rev`. Those that read the collection state carry 
   process's CPU; and its threads by name, as a percentage of one core (JStream's own
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
   cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
-  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
-  0.73.
+  `gpu_timing` are reserved for GPU timestamps. Since 0.92 it also reports past the
+  drawers. `streams` lists each running output's program feed and each H.264 preview
+  stream (a `ProfileStream`: `output` with its `output_id`, or `preview` with its
+  `channel` and the `scene_id` or `source_id` it shows) as a `StreamProfile`: its
+  encoded `fps`, the video frames handed to its encoder (`frames_in`), taken by it
+  (`encoded`), sent on (`frames_out`, to the muxer or publish target, or to the
+  client) and `dropped` on the way, the frames its encoder took more than a frame
+  period after they were handed over (`late`), the encoder's average time per frame
+  (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
+  video and audio for an output, video for a preview stream). Most frames lost come
+  first; a stream that ran in none of the window, or has ended, is left out. `mixer`
+  (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
+  `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
+  mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
+  inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
