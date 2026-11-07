@@ -20,17 +20,17 @@ use super::{item, open};
 use crate::color::srgb_channel_to_linear;
 use crate::{Color, Crop, Image, Placement, Scene, Snapshot};
 
-const WIDTH: u32 = 240;
-const HEIGHT: u32 = 136;
+pub(super) const WIDTH: u32 = 240;
+pub(super) const HEIGHT: u32 = 136;
 const SOURCE: u32 = 64;
 /// Scenario C's source: big enough that the floor is minified several times over.
-const LARGE_SOURCE: u32 = 512;
+pub(super) const LARGE_SOURCE: u32 = 512;
 /// The background, dark grey so an item's edge has contrast against it.
 const BACKGROUND: [u8; 3] = [20, 20, 20];
 
 /// A `size`² pattern: an 8-texel checkerboard of two colours, with a brighter texel ring
 /// every 16, so a bent or shifted texture shows, and a minified one aliases.
-fn pattern(size: u32) -> Vec<u8> {
+pub(super) fn pattern(size: u32) -> Vec<u8> {
     let mut rgba = Vec::with_capacity((size * size * 4) as usize);
     for y in 0..size {
         for x in 0..size {
@@ -47,7 +47,7 @@ fn pattern(size: u32) -> Vec<u8> {
     rgba
 }
 
-fn geometry(
+pub(super) fn geometry(
     center: (f32, f32),
     size: (f32, f32),
     rotation: f32,
@@ -73,19 +73,19 @@ fn geometry(
 }
 
 /// The reference image (sRGB) and how much of each pixel the items cover.
-struct Reference {
+pub(super) struct Reference {
     rgb: Vec<[f32; 3]>,
     coverage: Vec<f32>,
 }
 
 /// The pattern's texels in linear light.
-struct Texels {
+pub(super) struct Texels {
     size: u32,
     linear: Vec<[f32; 3]>,
 }
 
 impl Texels {
-    fn new(rgba: &[u8], size: u32) -> Self {
+    pub(super) fn new(rgba: &[u8], size: u32) -> Self {
         Self {
             size,
             linear: rgba
@@ -164,7 +164,7 @@ fn sample(
     Some(texels.bilinear(vertex.uv[0], vertex.uv[1], crop))
 }
 
-fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Reference {
+pub(super) fn reference(items: &[ItemGeometry], texels: &Texels, n: u32, crop: Crop) -> Reference {
     reference_seen(items, None, texels, n, crop)
 }
 
@@ -243,7 +243,7 @@ fn encode(linear: f32) -> f32 {
     srgb * 255.0
 }
 
-fn gpu(
+pub(super) fn gpu(
     compositor: &mut crate::Compositor,
     items: &[ItemGeometry],
     rgba: &[u8],
@@ -256,7 +256,7 @@ fn gpu(
     draw(compositor, items, &image, crop)
 }
 
-fn draw(
+pub(super) fn draw(
     compositor: &mut crate::Compositor,
     items: &[ItemGeometry],
     image: &Image,
@@ -296,7 +296,11 @@ fn draw_seen(
 
 /// Mean and 99th-percentile error per channel over the pixels `keep` selects, and how
 /// many there were.
-fn error(got: &Snapshot, want: &Reference, keep: impl Fn(f32) -> bool) -> (f32, f32, usize) {
+pub(super) fn error(
+    got: &Snapshot,
+    want: &Reference,
+    keep: impl Fn(f32) -> bool,
+) -> (f32, f32, usize) {
     let mut errors = Vec::new();
     for (i, (rgb, coverage)) in want.rgb.iter().zip(&want.coverage).enumerate() {
         if !keep(*coverage) {
@@ -315,7 +319,7 @@ fn error(got: &Snapshot, want: &Reference, keep: impl Fn(f32) -> bool) -> (f32, 
     (mean, p99, errors.len() / 3)
 }
 
-fn interior(coverage: f32) -> bool {
+pub(super) fn interior(coverage: f32) -> bool {
     coverage >= 0.999
 }
 
@@ -327,7 +331,7 @@ fn all(_: f32) -> bool {
     true
 }
 
-fn check(name: &str, measured: (f32, f32, usize), max_mean: f32, max_p99: f32) {
+pub(super) fn check(name: &str, measured: (f32, f32, usize), max_mean: f32, max_p99: f32) {
     let (mean, p99, pixels) = measured;
     let _ = writeln!(
         std::io::stderr(),

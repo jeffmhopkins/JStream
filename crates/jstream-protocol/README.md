@@ -313,7 +313,9 @@ the events `agent.approval_requested` and `agent.approval_resolved`, the actions
 `agent.approve` and `agent.forget`, the query `agent.approved`, the error `not_allowed`
 and the entity kind `approval`
 ([Agent approval](#agent-approval), [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md),
-a placeholder number the release queue sets); 0.94 because of projects: the actions `collection.open`,
+a placeholder number the release queue sets); 0.95 because `preview.subscribe` takes an
+`fps` up to 60, so a live view can show a 60 fps program at its full rate (30 before; a
+number the release queue set); 0.94 because of projects: the actions `collection.open`,
 `collection.new` and `collection.save_as`, the query `collection.info`, the event
 `collection.file_changed` and the `file` entity kind
 ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
@@ -2561,7 +2563,8 @@ the JSON text messages of the same connection (0.20,
   apart in the frame header). The picture is the canvas scaled down to fit
   `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
   so it follows `canvas.set_size`. A picture is sent when what the stream shows
-  changes, at most `fps` times a second (default 15, at most 30), and at least every
+  changes, at most `fps` times a second (default 15, at most 60 since 0.95, 30 before; the engine
+  runs it no faster than the collection's base rate), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
   back to a later one if an encoder fails to open, so each frame names its codec.
