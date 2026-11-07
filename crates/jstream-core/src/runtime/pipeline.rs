@@ -1657,6 +1657,13 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             if let Some(hook) = &hook {
                 hook(&compositor);
             }
+            // A device wgpu has said is lost is replaced before anything is drawn on it.
+            // Its draws don't always fail: on a destroyed device a submit can be a quiet
+            // no-op and a readback's map fail at once, so the ring never fills and the
+            // frames stop with no error to say why (#1370).
+            if let Some(why) = compositor.lost_already() {
+                return Err(DrawError::Lost(why.to_owned()));
+            }
             // The pack passes' GPU times that came back since the last tick, a tick or
             // two late, go to the guard (#349).
             if let Some(guard) = meter.pass_guard() {
@@ -5219,6 +5226,50 @@ mod tests {
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
         }
+    }
+
+    /// #1370: once wgpu has said the device is lost, the next draw says so, even one with
+    /// nothing on it that would fail on a lost device. Before, such draws went on
+    /// "succeeding" and the frames stopped with no loss counted.
+    #[test]
+    fn a_draw_after_a_reported_loss_says_the_device_is_lost() {
+        struct NoCaptures;
+        impl Captures for NoCaptures {
+            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
+                None
+            }
+        }
+        let lose = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&lose);
+        let hook: super::DrawHook = Arc::new(move |compositor: &jstream_render::Compositor| {
+            if flag.swap(false, Ordering::SeqCst) {
+                compositor.device().destroy();
+                let _ = compositor.device().poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(Duration::from_secs(5)),
+                });
+            }
+        });
+        // Without an adapter there is nothing to lose; CI's Linux jobs have lavapipe.
+        let Ok(mut draw) = (super::gpu_draw_with(hook))(None) else {
+            return;
+        };
+        let mut call = || {
+            draw(
+                &Shot::default(),
+                &LiveParams::default(),
+                &NoCaptures,
+                &mut [],
+                MediaTime::zero(Timebase::NANOS),
+                &mut crate::profile::DrawMeter::default(),
+            )
+        };
+        assert!(call().is_ok(), "a usable device draws");
+        lose.store(true, Ordering::SeqCst);
+        assert!(
+            matches!(call(), Err(super::DrawError::Lost(_))),
+            "a lost device is reported"
+        );
     }
 
     /// A virtual camera holds the program at the program stage's size: its frame is drawn on

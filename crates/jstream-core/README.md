@@ -3557,7 +3557,10 @@ render loop ends.
 one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
 (`Compositor::lost`) into `DrawError::Lost`, as it does a tick that skips a mix's
 composite on a full readback ring while the device is lost, since a lost device's maps
-may never finish (DX12) and no draw would fail. Then the render thread starts the same
+may never finish (DX12) and no draw would fail. It also starts each draw with
+`Compositor::lost_already`, which reads what wgpu's callback reported without polling: on
+lavapipe a destroyed device's submits can go quietly and its maps fail at once, so no
+draw fails and the frames stop with no loss counted (#1370). Then the render thread starts the same
 switch at once, without counting to 10. On the context, it is the fallback above, so
 the captures move to the CPU path. On the render thread's own device, it is a new
 device (`open(None)` again, hardware adapter first), and the captures stay where they

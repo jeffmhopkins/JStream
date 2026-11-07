@@ -687,6 +687,13 @@ impl Compositor {
         self.gpu.faults.lost.get().cloned()
     }
 
+    /// Why the device was lost, when wgpu has already said so ([`Self::lost`]), without
+    /// polling: cheap enough to ask before every frame. The callback runs on a poll, and
+    /// the compositor polls its device as it reads frames back.
+    pub fn lost_already(&self) -> Option<&str> {
+        self.gpu.faults.lost.get().map(String::as_str)
+    }
+
     /// The first uncaptured wgpu error on this compositor's device since the last call:
     /// one no call returned, such as a validation error in a submitted command. wgpu's
     /// default would panic on it. The compositor installs its own handler instead, so a
