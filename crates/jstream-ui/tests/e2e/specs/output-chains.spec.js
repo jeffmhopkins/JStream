@@ -91,9 +91,9 @@ test('filters added to the program output and to an output count on their FX but
   await filters(page).getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await expect(add.locator('.modal-sub')).toHaveText('For “Program output”');
-  // Both chains: Sharpen for the video chain, Gain for the audio chain.
+  // Both chains: Sharpen and Custom shader for the video chain, Gain for the audio chain.
   const types = add.getByRole('listbox', { name: 'Filter type' }).getByRole('option');
-  await expect(types).toHaveText(['Sharpen', 'Gain']);
+  await expect(types).toHaveText(['Sharpen', 'Custom shader', 'Gain']);
   await expect(add.locator('.add-filter-foot')).toHaveText('Applies to everything leaving JStream.');
   await types.filter({ hasText: 'Gain' }).click();
   let start = await rev(page);
