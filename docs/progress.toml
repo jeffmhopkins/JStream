@@ -87,6 +87,7 @@ title = "jstream bench: standard scenes on real hardware that pass or fail on fr
 priority = 1
 status = "planned"
 issues = [1220, 1140]
+prs = [1260, 1315]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
