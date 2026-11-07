@@ -2065,6 +2065,7 @@ mod tests {
                         rev,
                         edits: self.plan.clone(),
                         hotkeys: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 };
                 Ok(response)

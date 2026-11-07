@@ -11,9 +11,9 @@ use crate::model::{
     State, VideoMix,
 };
 use jstream_protocol::{
-    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo, HotkeyBinding,
-    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
-    SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
+    Binding, BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo,
+    HotkeyBinding, ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError,
+    Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
@@ -185,6 +185,11 @@ impl Graph {
                 .state
                 .hotkeys()
                 .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                .collect(),
+            bindings: self
+                .state
+                .bindings()
+                .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                 .collect(),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
@@ -455,6 +460,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
+                bindings: vec![],
                 folders: Vec::new(),
                 labels: Vec::new(),
             }

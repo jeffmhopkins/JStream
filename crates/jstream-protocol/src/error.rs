@@ -248,6 +248,10 @@ pub enum EntityKind {
     Device,
     /// A hotkey binding, named by its chord.
     Hotkey,
+    /// A controller binding (0.96), named by its trigger as `Display` writes it, such as
+    /// `MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,
+    /// so a client older than 0.96, which sends none, never reads it.
+    Binding,
     /// An installed plugin (0.35). Only an error answering a `plugin.*` action names it,
     /// so a client older than 0.35, which sends none, never reads it.
     Plugin,
@@ -280,6 +284,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
+            EntityKind::Binding => "binding",
             EntityKind::Plugin => "plugin",
             EntityKind::Pack => "pack",
             EntityKind::Timeline => "timeline",
