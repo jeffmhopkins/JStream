@@ -233,7 +233,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   keyframe follows them, with the graph's inverses, and an item's motion
   ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), through
   `item.set_motion` addressed to it (the whole list, checked with the protocol's
-  `check_motion` as the item's own is);
+  `check_motion` as the item's own is), and its timing in switches into the keyframe
+  ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)), through
+  `item.set_timing` (checked with `KeyframeTiming::problem`, an empty timing clearing
+  it);
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing

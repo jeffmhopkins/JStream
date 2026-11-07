@@ -20,8 +20,8 @@ use crate::panels::labels::{LabelChips, LabelPopover, TagButton, TagPopover, Tag
 use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
-    ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
+    Bezier, BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry,
+    ItemId, ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
     SourceKind, TransitionEffect, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
@@ -364,14 +364,37 @@ pub fn transition_options(transitions: &TransitionsInfo) -> Vec<(String, String)
 /// up to [`MAX_DELAY_MS`]).
 pub const SWITCH_DELAY_MAX: u32 = 3_000;
 
-/// The item easings, as `(value, label)`, in the order the select lists them.
-pub const ITEM_EASINGS: [(ItemEasing, &str, &str); 5] = [
+/// The item easings, as `(value, label)`, in the order the select lists them. The
+/// custom curve starts from [`Bezier::BACK_OUT`] (ADR-0129); an item that has another
+/// curve shows as it, and keeps its points until another easing is picked.
+pub const ITEM_EASINGS: [(ItemEasing, &str, &str); 8] = [
     (ItemEasing::Inherit, "inherit", "Inherit"),
     (ItemEasing::EaseInOut, "ease_in_out", "Ease in-out"),
     (ItemEasing::EaseOut, "ease_out", "Ease out"),
+    (ItemEasing::EaseIn, "ease_in", "Ease in"),
     (ItemEasing::Linear, "linear", "Linear"),
     (ItemEasing::Spring, "spring", "Spring"),
+    (ItemEasing::Hold, "hold", "Hold, then jump"),
+    (
+        ItemEasing::CubicBezier(Bezier::BACK_OUT),
+        "cubic_bezier",
+        "Custom curve",
+    ),
 ];
+
+/// The option value of `easing` in [`ITEM_EASINGS`]: every curve is the custom one.
+fn item_easing_value(easing: ItemEasing) -> &'static str {
+    ITEM_EASINGS
+        .iter()
+        .find(|(v, ..)| {
+            *v == easing
+                || matches!(
+                    (v, easing),
+                    (ItemEasing::CubicBezier(_), ItemEasing::CubicBezier(_))
+                )
+        })
+        .map_or("inherit", |(_, n, _)| n)
+}
 
 /// Whether an item may glide, as `(value, label)`.
 pub const GLIDES: [(Glide, &str, &str); 2] = [
@@ -418,10 +441,7 @@ pub fn switch_value(transition: &ItemTransition, field: SwitchField) -> &'static
             .map_or("inherit", |(_, n, _)| *n)
     };
     match field {
-        SwitchField::Easing => ITEM_EASINGS
-            .iter()
-            .find(|(v, ..)| *v == transition.easing)
-            .map_or("inherit", |(_, n, _)| n),
+        SwitchField::Easing => item_easing_value(transition.easing),
         SwitchField::Glide => GLIDES
             .iter()
             .find(|(v, ..)| *v == transition.glide)
@@ -447,7 +467,9 @@ pub fn with_switch(
     };
     match field {
         SwitchField::Easing => {
-            next.easing = ITEM_EASINGS.iter().find(|(_, n, _)| *n == value)?.0;
+            if item_easing_value(next.easing) != value {
+                next.easing = ITEM_EASINGS.iter().find(|(_, n, _)| *n == value)?.0;
+            }
         }
         SwitchField::Glide => next.glide = GLIDES.iter().find(|(_, n, _)| *n == value)?.0,
         SwitchField::Appear => next.appear = effect()?,
@@ -1657,5 +1679,33 @@ mod tests {
         assert_eq!(with_delay(&t, 152.4).delay_ms, 152);
         assert_eq!(with_delay(&t, 9000.0).delay_ms, SWITCH_DELAY_MAX);
         assert_eq!(with_delay(&t, -5.0).delay_ms, 0);
+    }
+
+    /// ADR-0129's easings: ease in and hold by name, and a custom curve that starts from
+    /// the back-out curve, reads as custom whatever its points, and keeps them when
+    /// picked again.
+    #[test]
+    fn the_easing_select_offers_ease_in_hold_and_a_custom_curve() {
+        let t = ItemTransition::default();
+        let next = with_switch(&t, SwitchField::Easing, "ease_in").expect("an option");
+        assert_eq!(next.easing, ItemEasing::EaseIn);
+        let next = with_switch(&t, SwitchField::Easing, "hold").expect("an option");
+        assert_eq!(switch_value(&next, SwitchField::Easing), "hold");
+        let curve = with_switch(&t, SwitchField::Easing, "cubic_bezier").expect("an option");
+        assert_eq!(curve.easing, ItemEasing::CubicBezier(Bezier::BACK_OUT));
+        let own = ItemTransition {
+            easing: ItemEasing::CubicBezier(Bezier {
+                x1: Finite32::ZERO,
+                y1: Finite32::ONE,
+                x2: Finite32::ONE,
+                y2: Finite32::ZERO,
+            }),
+            ..t
+        };
+        assert_eq!(switch_value(&own, SwitchField::Easing), "cubic_bezier");
+        assert_eq!(
+            with_switch(&own, SwitchField::Easing, "cubic_bezier"),
+            Some(own)
+        );
     }
 }

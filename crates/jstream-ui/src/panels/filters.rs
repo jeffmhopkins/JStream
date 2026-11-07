@@ -3645,6 +3645,7 @@ mod tests {
         };
         let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: "i-cam".into(),
             geometry: None,
             transform: None,

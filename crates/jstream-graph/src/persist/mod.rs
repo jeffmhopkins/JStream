@@ -19,9 +19,10 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
     Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
     FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemTransform, ItemTransition, LabelId, MotionModifier, OutputId, OutputKind, ProtocolError,
-    Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, VideoMix, VideoMixId,
+    ItemTransform, ItemTransition, KeyframeTiming, LabelId, MotionModifier, OutputId, OutputKind,
+    ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
+    SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, VideoMix,
+    VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -58,7 +59,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -224,6 +225,24 @@ fn v6_to_v7(value: &mut Value) -> Result<(), String> {
 /// kind's defaults, which would turn both off, so a version 7 source whose names or bus
 /// are set gets its checkbox on: nothing a user granted is taken away, and nothing new
 /// is granted.
+/// Version 9 adds a keyframe scene's timing for an item in transitions into it
+/// (`scenes[].overrides[].timing`, ADR-0129). A version 8 file has none, so it upgrades
+/// unchanged; one there is refused, as version 8 refused it.
+fn v8_to_v9(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if overrides
+            .into_iter()
+            .flatten()
+            .any(|o| o.get("timing").is_some())
+        {
+            return Err("a version 8 keyframe override has no `timing`".into());
+        }
+    }
+    Ok(())
+}
+
 fn v7_to_v8(value: &mut Value) -> Result<(), String> {
     let sources = value.get_mut("sources").and_then(Value::as_array_mut);
     for source in sources.into_iter().flatten() {
@@ -486,6 +505,10 @@ struct FileOverride {
     /// when the keyframe follows the item's own. An empty list is an override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     motion: Option<Vec<MotionModifier>>,
+    /// The item's timing in transitions into the keyframe (ADR-0129, schema_version 9);
+    /// omitted when the keyframe follows the item's own and the preset's. Never empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    timing: Option<KeyframeTiming>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -765,6 +788,7 @@ impl Graph {
                                 opacity: info.opacity,
                                 effects: o.effects.as_ref().map(|e| self.file_filters(&e.video)),
                                 motion: info.motion,
+                                timing: info.timing,
                             }
                         })
                         .collect(),
@@ -1484,7 +1508,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
 }
 
 /// The edits addressed to the keyframe scene `scene_id` that write `o`: the placement
-/// edits, then `item.set_motion`, then `item.set_effects`.
+/// edits, then `item.set_motion`, `item.set_timing` and `item.set_effects`.
 fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
     let (item_id, scene_id) = (&o.item_id, Some(scene_id.clone()));
     let mut edits = Vec::new();
@@ -1528,6 +1552,13 @@ fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
             item_id: item_id.clone(),
             scene_id: scene_id.clone(),
             motion: motion.clone(),
+        });
+    }
+    if let (Some(timing), Some(scene_id)) = (o.timing, &scene_id) {
+        edits.push(Edit::ItemSetTiming {
+            scene_id: scene_id.clone(),
+            item_id: item_id.clone(),
+            timing,
         });
     }
     if let (Some(effects), Some(scene_id)) = (&o.effects, scene_id) {
