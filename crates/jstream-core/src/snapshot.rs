@@ -33,7 +33,7 @@ use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
     ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
-    SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
+    SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
@@ -341,9 +341,11 @@ type Moving = (MediaTime, Track);
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
 
-/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned plus
-/// the effects' outset on every side, in canvas pixels, scaled down to fit
-/// [`MAX_LAYER_SIDE`] when larger. A live resize draws into the same layer, scaled, until
+/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
+/// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
+/// every side when larger. The effects grow it by the outset where the first of them
+/// that draws past its input runs (`Chain::pad_at`), and the result is placed over the
+/// box grown by the outset. A live resize draws into the same layer, scaled, until
 /// the plan is made again.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Boxed {
@@ -351,7 +353,7 @@ pub(crate) struct Boxed {
     size: [f32; 2],
     /// The room the effects need beyond each edge, in canvas pixels.
     outset: f32,
-    /// The layer's size in pixels.
+    /// The size in pixels of the layer the item is drawn into: the box's.
     layer: [u32; 2],
     /// Layer pixels per canvas pixel: 1, or less for a layer scaled down to fit.
     scale: f32,
@@ -382,7 +384,9 @@ impl Boxed {
         Some(Self {
             size,
             outset,
-            layer: [side(padded[0]), side(padded[1])],
+            // The box alone: the effects grow it by the outset where the first of them
+            // that draws past its input runs (`Chain::pad_at`).
+            layer: [side(size[0]), side(size[1])],
             scale,
             input,
             canvas: false,
@@ -628,7 +632,85 @@ struct Transitioning {
     /// What moves the cameras of the scene it leaves and the one it shows (ADR-0113 §3):
     /// a Move into or out of a follow camera moves with it.
     moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
+    /// The item chains whose settings a Move blends between two looks (ADR-0127).
+    blends: Vec<EffectBlend>,
     end_ms: f32,
+}
+
+/// One item's effects as a Move blends their settings (ADR-0127): from the leaving
+/// side's to the arriving chain's, with the item's own progress.
+#[derive(Debug, PartialEq)]
+struct EffectBlend {
+    /// The arriving item's chain, which draws the pair.
+    owner: ChainOwner,
+    /// The settings it blends from, one per filter of the chain.
+    from: Arc<[Settings]>,
+    /// The settings it blends to: the chain's own, one per filter.
+    to: Vec<Settings>,
+    /// Each filter's `int` parameters, which stay whole.
+    whole: Vec<Vec<String>>,
+    /// The item's timing, whose eased progress the blend follows.
+    timing: Timing,
+}
+
+impl Transitioning {
+    /// Each blended chain's settings `at`, one per filter (ADR-0127).
+    fn blended(&self, at: MediaTime) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blended_ms(transition::elapsed_ms(self.start, at))
+    }
+
+    /// [`Self::blended`], `elapsed_ms` after its start.
+    fn blended_ms(&self, elapsed_ms: f32) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blends
+            .iter()
+            .map(|blend| {
+                let k = blend.timing.progress(elapsed_ms);
+                let settings = blend
+                    .from
+                    .iter()
+                    .zip(&blend.to)
+                    .zip(&blend.whole)
+                    .map(|((from, to), whole)| {
+                        jstream_render::transition::blend_settings(from, to, k, whole)
+                    })
+                    .collect();
+                (&blend.owner, settings)
+            })
+            .collect()
+    }
+}
+
+/// The blends of `tracks` and of the children moving inside each group among them
+/// (ADR-0127), for the chains `chains` holds.
+fn effect_blends(
+    tracks: &[(Visual, Track)],
+    chains: &BTreeMap<ChainOwner, Chain>,
+    blends: &mut Vec<EffectBlend>,
+) {
+    for (visual, track) in tracks {
+        if let Some(inside) = &visual.inside {
+            effect_blends(&inside.planned.tracks, chains, blends);
+        }
+        let (Some(from), SourceRef::Boxed(scene, item), Track::Pair { timing, .. }) =
+            (&visual.blend_from, &visual.image, track)
+        else {
+            continue;
+        };
+        let owner = ChainOwner::Item(scene.clone(), item.clone());
+        let Some(chain) = chains.get(&owner) else {
+            continue;
+        };
+        if chain.filters.len() != from.len() {
+            continue;
+        }
+        blends.push(EffectBlend {
+            to: chain.filters.iter().map(|f| f.settings.clone()).collect(),
+            whole: chain.whole_params(),
+            owner,
+            from: Arc::clone(from),
+            timing: *timing,
+        });
+    }
 }
 
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
@@ -1039,6 +1121,23 @@ impl Shot {
         })
     }
 
+    /// The settings each chain a running Move blends draws with `elapsed_ms` after its
+    /// start (ADR-0127), or `None` without a transition.
+    #[cfg(test)]
+    pub(crate) fn blended_effects(
+        &self,
+        elapsed_ms: f32,
+    ) -> Option<Vec<(ChainOwner, Vec<Settings>)>> {
+        let transition = self.transition.as_ref()?;
+        Some(
+            transition
+                .blended_ms(elapsed_ms)
+                .into_iter()
+                .map(|(owner, settings)| (owner.clone(), settings))
+                .collect(),
+        )
+    }
+
     /// The depth run each of the running transition's tracks sorts in, in drawing order,
     /// or `None` without one, for tests.
     #[cfg(test)]
@@ -1411,6 +1510,8 @@ fn plan_inner(
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
+            let mut blends = Vec::new();
+            effect_blends(&planned.tracks, &shot.chains, &mut blends);
             let tracks = planned
                 .tracks
                 .into_iter()
@@ -1440,6 +1541,7 @@ fn plan_inner(
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: planner.track_cameras(running),
                 moves,
+                blends,
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -2179,6 +2281,7 @@ impl<'a> Planner<'a, '_> {
                 ..ItemTransition::default()
             },
             effects: Vec::new(),
+            blend_from: None,
             inside: None,
             seen: Seen::AsPlanned,
             motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
@@ -2291,7 +2394,7 @@ impl<'a> Planner<'a, '_> {
         if let Some(planned) = out.boxes.get(&owner) {
             return Some(planned.boxed);
         }
-        let chain = Chain::of_filters(
+        let mut chain = Chain::of_filters(
             &owner,
             item.effects(),
             GpuKey::ItemBox(scene.clone(), item.id().clone()),
@@ -2343,6 +2446,9 @@ impl<'a> Planner<'a, '_> {
             }),
             false => None,
         };
+        if let Some(chain) = chain.as_mut() {
+            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        }
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -2493,6 +2599,7 @@ impl<'a> Planner<'a, '_> {
                 size,
                 settings,
                 effects,
+                blend_from: None,
                 inside: None,
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
@@ -4765,7 +4872,14 @@ fn run_chains(
     (live, captures): (&LiveParams, &dyn Captures),
     at: MediaTime,
 ) -> Result<(), RenderError> {
-    if !chains.begin(compositor, cache, &shot.chains, &shot.stages) {
+    // A Move blending an item's effects gives its chain this frame's settings (ADR-0127).
+    let blended = shot
+        .transition
+        .as_ref()
+        .filter(|transition| !transition.blends.is_empty())
+        .map(|transition| transition.blended(at))
+        .unwrap_or_default();
+    if !chains.begin(compositor, cache, &shot.chains, &shot.stages, &blended) {
         return Ok(());
     }
     let canvas = shot.canvas()?;
@@ -5468,8 +5582,9 @@ pub(crate) mod tests {
         Frame::new(16, 9, &bytes, u64::from(rgba[1])).expect("invariant: 16x9 RGBA8")
     }
 
-    /// An item's effects layer is its box plus the outset on every side (ADR-0065 §5):
-    /// the box is drawn centred in it, flat, and the layer is placed over the box grown
+    /// An item's effects layer is its box, which the effects pad by the outset on every
+    /// side (ADR-0065 §5): the box is drawn into it, flat, and the result is placed over
+    /// the box grown
     /// in proportion, turned as the box is. A box too large for one texture is scaled
     /// down uniformly, and a legacy transform has the box its quad covers.
     #[test]
@@ -5484,10 +5599,11 @@ pub(crate) mod tests {
         placed.flip_h = true;
         placed.fit_mode = FitMode::Fill;
         let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
-        assert_eq!(boxed.layer, [108, 58]);
+        // The box alone: the effects pad it by the outset as they run.
+        assert_eq!(boxed.layer, [100, 50]);
 
         let inside = boxed.inside(&placed).expect("inside");
-        assert_eq!((inside.center.x.get(), inside.center.y.get()), (54.0, 29.0));
+        assert_eq!((inside.center.x.get(), inside.center.y.get()), (50.0, 25.0));
         assert_eq!(
             (inside.size.width.get(), inside.size.height.get()),
             (100.0, 50.0)
@@ -6109,6 +6225,7 @@ pub(crate) mod tests {
                 overlay_run: 1,
             },
             moves: (None, None),
+            blends: Vec::new(),
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
@@ -7043,6 +7160,7 @@ pub(crate) mod tests {
             Chain {
                 input: GpuKey::Frame(SourceId::new("red")),
                 filters: Vec::new(),
+                pad: None,
             },
         );
         assert_eq!(scales(&planned)[1], (SourceId::new("red"), 1.0));

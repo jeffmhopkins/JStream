@@ -1,0 +1,74 @@
+[
+  {
+    "name": "browser_1",
+    "about": "one animated full-canvas browser page at 30 fps",
+    "needs": "browser",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "br1",
+        "name": "br1",
+        "kind": {
+          "type": "builtin",
+          "kind": "browser"
+        },
+        "settings": {
+          "file": "$asset:page_anim.html",
+          "width": 1280,
+          "height": 720,
+          "fps": 30
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "browser_1",
+        "item_id": "br1i",
+        "source_id": "br1",
+        "geometry": "$canvas"
+      }
+    ]
+  },
+  {
+    "name": "browser_6",
+    "about": "six browser pages, half animated, half still",
+    "needs": "browser",
+    "edits": [
+      {
+        "each": {
+          "count": 6,
+          "cols": 3,
+          "cycle": {
+            "page": [
+              "$asset:page_anim.html",
+              "$asset:page_static.html"
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "br6_{i}",
+            "name": "br6_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "browser"
+            },
+            "settings": {
+              "file": "$page",
+              "width": 640,
+              "height": 360,
+              "fps": 30
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "browser_6",
+            "item_id": "br6i_{i}",
+            "source_id": "br6_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  }
+]
