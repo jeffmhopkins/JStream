@@ -1766,9 +1766,19 @@ impl<'a> Planner<'a, '_> {
                 .and_then(|parent| parent.camera().copied());
             (parent.clone(), committed)
         });
-        (own.is_some() || parent.is_some()).then_some(PassCamera {
+        // A follow camera on a scene with no camera of its own supplies the framing
+        // camera, so the scene draws as it does in 2D until the pointer moves it
+        // (ADR-0120).
+        let family = scene.variant_of().unwrap_or(scene.id());
+        let supplied = self
+            .state
+            .scene(family)
+            .and_then(|family| family.camera_follow())
+            .map(|_| SceneCamera::framing(self.state.canvas()));
+        (own.is_some() || parent.is_some() || supplied.is_some()).then_some(PassCamera {
             own,
             parent,
+            supplied,
             moves: None,
         })
     }
@@ -1782,7 +1792,7 @@ impl<'a> Planner<'a, '_> {
         let family = scene.variant_of().unwrap_or(scene.id()).clone();
         let parent = state.scene(&family)?;
         let motion = CameraMotion::of(parent.camera_motion());
-        let follow = parent.camera_follow().cloned();
+        let follow = parent.camera_follow();
         if motion.is_still() && follow.is_none() {
             return None;
         }
@@ -2351,7 +2361,10 @@ impl<'a> Planner<'a, '_> {
                             .all(|inner| inner.blend().is_normal())
                         && self.scene_chain(scene_id).is_none()
                         && !self.filters_scene(source)
-                        && !item.effects().iter().any(|effect| effect.enabled())
+                        && !item.effects().iter().any(|effect| {
+                            effect.enabled()
+                                && effect.kind() != jstream_protocol::FOLLOW_POINTER_KIND
+                        })
                         // A group that moves on its own is one picture (ADR-0099).
                         && item.motion().is_empty()
                     {
@@ -2692,6 +2705,9 @@ struct PassCamera {
     own: Option<SceneCamera>,
     /// For a keyframe scene, its parent and the parent's committed camera.
     parent: Option<(SceneId, Option<SceneCamera>)>,
+    /// The framing camera a follow camera supplies (ADR-0120), drawn through when the
+    /// scene would otherwise be 2D.
+    supplied: Option<SceneCamera>,
     /// Its family's camera motion and follow camera (ADR-0113), when it has either.
     moves: Option<Arc<CameraMoves>>,
 }
@@ -2706,11 +2722,13 @@ impl PassCamera {
         live: impl Fn(&SceneId) -> Option<Option<SceneCamera>>,
     ) -> Option<SceneCamera> {
         let own = live(scene).unwrap_or(self.own);
-        let Some((parent, committed)) = &self.parent else {
-            return own;
+        let drawn = match &self.parent {
+            None => own,
+            Some((parent, committed)) => live(parent)
+                .unwrap_or(*committed)
+                .map(|parent| own.unwrap_or(parent)),
         };
-        let parent = live(parent).unwrap_or(*committed)?;
-        Some(own.unwrap_or(parent))
+        drawn.or(self.supplied)
     }
 
     /// The camera it draws through with no live values.
@@ -2719,6 +2737,7 @@ impl PassCamera {
             None => self.own,
             Some((_, parent)) => parent.map(|parent| self.own.unwrap_or(parent)),
         }
+        .or(self.supplied)
     }
 }
 

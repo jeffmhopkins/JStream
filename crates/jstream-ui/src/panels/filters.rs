@@ -27,10 +27,10 @@ use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Edit, EffectsSpace, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId,
-    KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState,
-    OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId,
-    SourceInfo, SourceKind,
+    Action, Edit, EffectsSpace, FOLLOW_POINTER_KIND, FilterChain, FilterChains, FilterId,
+    FilterInfo, FilterOwner, ItemId, KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS,
+    OutputKind, OutputState, OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId,
+    Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -76,7 +76,7 @@ const AUDIO_GROUPS: [&str; 7] = [
 /// The kinds the prototype's catalogue has, by the engine's kind ID, in its order. The
 /// engine's kinds the prototype lacks (pixelate, aspect ratio, image mask) join the
 /// group they fit, and its wishes the engine lacks are left out.
-const KNOWN: [(&str, Known); 23] = {
+const KNOWN: [(&str, Known); 24] = {
     use FilterChain::{Audio, Video};
     const fn k(
         chain: FilterChain,
@@ -187,6 +187,15 @@ const KNOWN: [(&str, Known); 23] = {
                 "Motion and timing",
                 "Video delay",
                 "Hold the picture back to match audio",
+            ),
+        ),
+        (
+            "follow_pointer",
+            k(
+                Video,
+                "Motion and timing",
+                "Follow pointer",
+                "The scene’s camera glides after the pointer over this capture",
             ),
         ),
         (
@@ -343,6 +352,21 @@ pub fn catalogue(kinds: &[KindSummary], video: bool, audio: bool) -> Vec<FilterT
     };
     types.sort_by(|a, b| rank(a).cmp(&rank(b)).then_with(|| a.name.cmp(&b.name)));
     types
+}
+
+/// Whether `owner` may take a Follow pointer filter (ADR-0120): an item's own effects,
+/// on an item that shows a display or window capture. The Add filter dialog offers the
+/// kind only there.
+pub fn takes_follow(collection: &Collection, owner: &FilterOwner) -> bool {
+    let FilterOwner::Item { item_id } = owner else {
+        return false;
+    };
+    collection
+        .item(item_id)
+        .and_then(|(_, item)| collection.source(&item.source_id))
+        .is_some_and(|source| {
+            matches!(&source.kind, SourceKind::Builtin { kind } if kind == "display" || kind == "window")
+        })
 }
 
 /// Whether a type matches the dialog's search: its name, hint or group, in any case.
@@ -2463,6 +2487,29 @@ fn FilterPane(target: Target) -> impl IntoView {
         }
         }
     };
+    // A follow camera's zoom keys (ADR-0112, ADR-0120): bound at once, as everywhere,
+    // to its scene's live zoom.
+    let zoom_keys = (kind_id == FOLLOW_POINTER_KIND)
+        .then(|| {
+            let FilterOwner::Item { item_id } = target.with_value(|t| t.owner.clone()) else {
+                return None;
+            };
+            let scene_id = studio.collection.with_untracked(|c| {
+                c.as_ref()
+                    .and_then(|c| c.item(&item_id).map(|(scene, _)| scene.scene_id.clone()))
+            })?;
+            let zoom = move |steps: i32| Action::SceneZoomCamera {
+                scene_id: scene_id.clone(),
+                steps,
+            };
+            Some(view! {
+                <div class="filter-keys">
+                    <crate::panels::inspector::HotkeyRow label="Zoom in" action=zoom(1) />
+                    <crate::panels::inspector::HotkeyRow label="Zoom out" action=zoom(-1) />
+                </div>
+            })
+        })
+        .flatten();
     let label = format!("{name} settings");
     view! {
         <div class="filter-pane" role="group" aria-label=label>
@@ -2486,6 +2533,7 @@ fn FilterPane(target: Target) -> impl IntoView {
             <div class="filter-dialog-body">
                 {(!hint.is_empty()).then(|| view! { <p class="filter-hint">{hint}</p> })}
                 {form}
+                {zoom_keys}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </div>
             <div class="filter-pane-foot">
@@ -2524,16 +2572,21 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     let dialogs = expect_context::<FilterDialogs>();
-    let (video, audio, name) = studio.collection.with_untracked(|c| {
-        c.as_ref().map_or((false, false, String::new()), |c| {
-            let (video, audio) = owner_chains(c, &owner);
-            (video, audio, owner_name(c, &owner))
-        })
+    let (video, audio, name, follows) = studio.collection.with_untracked(|c| {
+        c.as_ref()
+            .map_or((false, false, String::new(), false), |c| {
+                let (video, audio) = owner_chains(c, &owner);
+                (video, audio, owner_name(c, &owner), takes_follow(c, &owner))
+            })
     });
     let types = Memo::new(move |_| {
-        studio
+        let mut types = studio
             .kinds
-            .with(|k| catalogue(k.as_deref().unwrap_or_default(), video, audio))
+            .with(|k| catalogue(k.as_deref().unwrap_or_default(), video, audio));
+        if !follows {
+            types.retain(|t| t.kind != FOLLOW_POINTER_KIND);
+        }
+        types
     });
     let search = RwSignal::new(String::new());
     let shown = Memo::new(move |_| {

@@ -1170,6 +1170,82 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "follow_pointer",
+    "category": "video_filter",
+    "name": "Follow pointer",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "zoom",
+        "type": "float",
+        "min": 1.0,
+        "max": 4.0,
+        "unit": "×",
+        "default": 1.0,
+        "label": "Zoom",
+        "description": "The resting zoom. At 1 the frame shows two thirds of the capture's height.",
+        "live": true
+      },
+      {
+        "id": "yaw_deg",
+        "type": "float",
+        "min": -60.0,
+        "max": 60.0,
+        "unit": "°",
+        "default": 20.0,
+        "label": "From the right",
+        "description": "The camera's angle to the right of the capture; negative is from the left.",
+        "live": true
+      },
+      {
+        "id": "pitch_deg",
+        "type": "float",
+        "min": -60.0,
+        "max": 60.0,
+        "unit": "°",
+        "default": -10.0,
+        "label": "From below",
+        "description": "The camera's angle below the capture; negative looks down from above.",
+        "live": true
+      },
+      {
+        "id": "lean_deg",
+        "type": "float",
+        "min": 0.0,
+        "max": 30.0,
+        "unit": "°",
+        "default": 9.0,
+        "label": "Lean",
+        "description": "How far the camera leans as the pointer moves. 0 is off.",
+        "live": true
+      },
+      {
+        "id": "smooth_ms",
+        "type": "int",
+        "min": 50,
+        "max": 5000,
+        "unit": "ms",
+        "default": 450,
+        "label": "Smoothing",
+        "description": "How long the camera takes to catch up with the pointer.",
+        "live": true
+      },
+      {
+        "id": "safe_margin_pct",
+        "type": "int",
+        "min": 0,
+        "max": 40,
+        "unit": "%",
+        "default": 10,
+        "label": "Safe margin",
+        "description": "How far in from each edge of the frame the pointer always stays.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "gain",
     "category": "audio_filter",
     "name": "Gain",

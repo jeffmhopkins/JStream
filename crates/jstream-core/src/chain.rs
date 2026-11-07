@@ -272,6 +272,8 @@ impl Chain {
         let filters: Vec<ChainFilter> = filters
             .iter()
             .filter(|filter| filter.enabled())
+            // A follow camera drives its scene's camera and draws nothing (ADR-0120).
+            .filter(|filter| filter.kind() != jstream_protocol::FOLLOW_POINTER_KIND)
             .filter_map(|filter| {
                 let effect = assets.effects().get(filter.kind()).cloned();
                 let drawn = effect.is_some()

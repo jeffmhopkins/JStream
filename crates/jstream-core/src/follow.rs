@@ -15,7 +15,9 @@
 //!    box, and the camera moves nearer when a corner is still out of view;
 //! 4. the look point glides there through two chained critically damped springs;
 //! 5. the camera leans a little with the look point's speed;
-//! 6. its distance glides in log space toward the zoom's, never past what fills the frame.
+//! 6. its distance glides in log space toward the zoom's, never past what fills the frame;
+//! 7. if the pointer would still be past the safe margin, the look point slides toward it
+//!    just far enough to put it back on the margin (#1216), whatever the smoothing.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -25,8 +27,8 @@ use jstream_media::MediaTime;
 use jstream_platform::PointerPosition;
 use jstream_protocol::{
     CameraFollow, CameraProperty, Canvas, CanvasPoint, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
-    Finite32, FitMode, ItemGeometry, MAX_BLUR_PX, MAX_FOV_DEG, MIN_FOV_DEG, Placed, SceneCamera,
-    SceneId, Vec3,
+    Finite32, FitMode, ItemGeometry, MAX_BLUR_PX, MAX_FOLLOW_MARGIN_PCT, MAX_FOV_DEG, MIN_FOV_DEG,
+    Placed, SceneCamera, SceneId, Vec3,
 };
 
 use crate::snapshot::{CaptureKey, Captures};
@@ -319,6 +321,9 @@ struct Tuning {
     dist: f32,
     follow_time: f32,
     dead_zone: f32,
+    /// How far from the frame's centre the pointer may be seen, in -1..1 view units
+    /// across and down: 1 less twice the safe margin.
+    margin: f32,
     lean_per_speed: f32,
     lean_max: f32,
     lean_time: f32,
@@ -341,6 +346,7 @@ impl Tuning {
             dist: bx.size[1] / (3.0 * half_fov),
             follow_time: follow.smooth_ms as f32 / 1000.0,
             dead_zone: 0.35,
+            margin: 1.0 - 2.0 * (follow.safe_margin_pct.min(MAX_FOLLOW_MARGIN_PCT) as f32 / 100.0),
             lean_per_speed: follow.lean_deg.get() / 750.0 / scale,
             lean_max: follow.lean_deg.get(),
             lean_time: 0.7,
@@ -462,6 +468,50 @@ impl Tuning {
             aim = (aim.0 + dx, aim.1 + dy);
         }
         aim
+    }
+
+    /// Whether `p`, in the box's pixels, is inside the safe margin of `camera`'s view.
+    fn within(&self, camera: SceneCamera, p: (f32, f32)) -> bool {
+        let (u, v) = self.seen(camera, p);
+        u.abs() <= self.margin && v.abs() <= self.margin
+    }
+
+    /// `aim`, or where it is slid toward `pointer` just far enough that the view from
+    /// `dist` at this angle shows the pointer inside the safe margin, kept on the box. At
+    /// the box's very edge the frame stays on the box first, so there the pointer can
+    /// sit between the margin and the frame's edge.
+    fn keep_in_margin(
+        &self,
+        aim: (f32, f32),
+        yaw: f32,
+        pitch: f32,
+        dist: f32,
+        pointer: (f32, f32),
+    ) -> (f32, f32) {
+        if self.within(self.camera(aim, yaw, pitch, dist), pointer) {
+            return aim;
+        }
+        let toward = |k: f32| {
+            let a = (
+                aim.0 + (pointer.0 - aim.0) * k,
+                aim.1 + (pointer.1 - aim.1) * k,
+            );
+            self.inside(a, yaw, pitch, dist)
+        };
+        let shows = |a: (f32, f32)| self.within(self.camera(a, yaw, pitch, dist), pointer);
+        if !shows(toward(1.0)) {
+            return toward(1.0);
+        }
+        let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
+        for _ in 0..20 {
+            let m = 0.5 * (lo + hi);
+            if shows(toward(m)) {
+                hi = m;
+            } else {
+                lo = m;
+            }
+        }
+        toward(hi)
     }
 
     /// Where `p`, in the box's pixels, is in `camera`'s view: -1..1 across and down,
@@ -598,10 +648,7 @@ impl Follow {
         let mut want_dist = (t.dist / self.zoom * pull).min(0.97 * t.max_dist(centre, yaw, pitch));
         // 3. Slide the look point back by any overshoot past the box; move in for a corner.
         let mut want = t.inside(follow, yaw, pitch, want_dist);
-        let shows = |a: (f32, f32), d: f32| {
-            let (u, v) = t.seen(t.camera(a, yaw, pitch, d), pointer);
-            u.abs() <= 0.92 && v.abs() <= 0.92
-        };
+        let shows = |a: (f32, f32), d: f32| t.within(t.camera(a, yaw, pitch, d), pointer);
         if want_dist > 0.0 && !shows(want, want_dist) {
             let (mut lo, mut hi) = (t.nearest.min(want_dist), want_dist);
             for _ in 0..14 {
@@ -642,6 +689,14 @@ impl Follow {
                 v: self.log_dist.v.min(0.0),
             };
         }
+        // 7. The safe margin (#1216): if the springs left the pointer past it, slide the
+        //    look point toward the pointer just far enough to put it back on the margin,
+        //    and carry the springs along so they don't pull it out again.
+        let aim = t.keep_in_margin(aim, yaw, pitch, dist, pointer);
+        self.aim[0].x = aim.0;
+        self.aim[1].x = aim.0;
+        self.aim[2].x = aim.1;
+        self.aim[3].x = aim.1;
         t.camera(aim, yaw, pitch, dist)
     }
 }
@@ -785,6 +840,63 @@ mod tests {
         }
         assert_eq!(uncovered, 0, "frames showing past the screen");
         assert!(out_of_view < 10, "{out_of_view} frames lost the pointer");
+    }
+
+    /// #1216: a fast pointer, jumping across the screen and sweeping quickly, stays
+    /// inside the safe margin on every frame at zoom 2 and 4, whatever the smoothing,
+    /// wherever the screen lets the frame reach it.
+    #[test]
+    fn the_pointer_stays_inside_the_safe_margin() {
+        for (zoom, smooth_ms) in [(2.0, 450), (4.0, 450), (4.0, 3000)] {
+            let follow = CameraFollow {
+                zoom: Finite32::new(zoom).expect("finite"),
+                smooth_ms,
+                ..follow()
+            };
+            let mut cameras = Cameras::default();
+            let family = SceneId::new("a");
+            // Jumps between far corners every 20 frames, with quick sweeps between, at
+            // least 250 px in from the screen's edges: nearer, at an angle, the frame
+            // stays on the screen first (ADR-0113 §2).
+            let corners = [
+                (350.0, 300.0),
+                (1090.0, 600.0),
+                (1090.0, 300.0),
+                (350.0, 600.0),
+            ];
+            let path = |i: i64| -> (f32, f32) {
+                let (x, y) = corners[(i / 20) as usize % corners.len()];
+                let s = (i % 20) as f32 / 20.0;
+                (x + 100.0 * (s * 9.0).sin(), y + 50.0 * (s * 7.0).cos())
+            };
+            let t = Tuning::new(&follow, base(), CANVAS, SCREEN);
+            let mut worst = 0.0_f32;
+            for i in 0..240 {
+                let pointer = path(i);
+                let camera = cameras.follow(
+                    &family,
+                    &follow,
+                    base(),
+                    CANVAS,
+                    SCREEN,
+                    Some(pointer),
+                    (ms(i * 16), 0),
+                );
+                let (u, v) = t.seen(camera, pointer);
+                worst = worst.max(u.abs()).max(v.abs());
+                let fp = on_box(camera).expect("the frame meets the screen");
+                assert!(
+                    fp.iter()
+                        .all(|p| (-2.0..1442.0).contains(&p.0) && (-2.0..902.0).contains(&p.1)),
+                    "zoom {zoom} frame {i} shows past the screen"
+                );
+            }
+            // The default margin is 10% a side: the middle 80% is -0.8..0.8.
+            assert!(
+                worst <= 0.801,
+                "zoom {zoom}, {smooth_ms} ms: reached {worst}"
+            );
+        }
     }
 
     #[test]

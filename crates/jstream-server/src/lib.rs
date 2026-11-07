@@ -47,6 +47,7 @@ pub use jstream_control::WS_PATH;
 pub use mcp::MCP_PATH;
 pub use pair::PAIR_PATH;
 pub use pair_page::PAIR_PAGE_PATH;
+pub use ui_settings::UiSettingsView;
 
 use admitted::Admitted;
 use axum::Router;
@@ -189,6 +190,11 @@ impl Server {
             app,
             shutdown,
         })
+    }
+
+    /// The UI settings this server keeps (ADR-0084), for the app that runs it to read.
+    pub fn ui_settings(&self) -> UiSettingsView {
+        UiSettingsView(Arc::clone(&self.app.ui_settings))
     }
 
     /// The address the server listens on (with the actual port if `0` was asked for).

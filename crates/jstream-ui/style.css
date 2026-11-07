@@ -1160,6 +1160,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* Check for updates and Settings (updates.rs). */
 .modal.update-dialog, .modal.settings-dialog { width: 420px; }
 .update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
+.settings-body { display: flex; flex-direction: column; gap: 14px; }
 .update-body p, .settings-check-note { margin: 0; }
 .update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }
 .update-body a { color: var(--link); }

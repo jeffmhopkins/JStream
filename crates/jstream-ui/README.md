@@ -106,7 +106,13 @@ Contents ([Design](#design) explains the choices):
   while the page has the focus and no dialog or menu is open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
-  `Collection::chords_for` lists a row's chords), tested natively.
+  `Collection::chords_for` lists a row's chords), tested natively. In the desktop app,
+  File › Settings… also holds "Hear hotkeys while another app has the focus", kept as
+  the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
+  `false`), which the desktop app reads to register the bound chords with the OS
+  ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
+  registers reaches JStream as a hotkey even while the page has the focus, so the page
+  doesn't see that key press.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -140,9 +146,9 @@ Contents ([Design](#design) explains the choices):
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
-  natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
-  with the followable items, the follow fields and adding a camera modifier tested
-  natively), the Filters
+  natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
+  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
+  modifier tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
@@ -587,18 +593,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
-  offered while the scene places a display or window capture (`followable`), its fields
-  shown only while it is on and indented under the check, one row each for the
-  item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
-  hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
+  a note (`follow_note`) naming the capture whose `follow_pointer` filter moves the
+  camera, with Open its filter, or saying how to add one, with Add Follow pointer…, which
+  opens Add filter on the scene's first display or window capture (`followable`)
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)); and
   Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
-  on the position's x. Both are draft fields, which OK sends as
-  `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
-  `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
-  shows neither, since it draws its parent's.
-  Duplicate scene copies the scene's options and camera with it, and its camera motion
-  and follow camera, the follow on the copy of the item it follows. On the right, in the source Properties dialog's shell, are the
+  on the position's x. The list is a draft field, which OK sends as
+  `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
+  A keyframe scene shows neither, since it draws its parent's.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion;
+  the follow camera, a filter on the item it follows, goes with the copy of that item. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The

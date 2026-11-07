@@ -155,7 +155,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
-  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent)
+  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent;
+  since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -190,9 +191,12 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   which checks a camera's list as `check_motion` checks an item's and refuses an
   `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
-  `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
-  `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
-  what `scene.zoom_camera` steps by.
+  `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms` and, since 0.91, `safe_margin_pct`
+  up to `MAX_FOLLOW_MARGIN_PCT`, each with its default) with `CameraFollow::check`, and
+  `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25), what `scene.zoom_camera`
+  steps by. Since 0.91 a follow camera is a filter (ADR-0120): `FOLLOW_POINTER_KIND`
+  (`follow_pointer`), its `follow_pointer_descriptor`, and `CameraFollow::settings` and
+  `CameraFollow::from_settings`, which map a follow to that filter's settings and back.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -302,8 +306,12 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 -->
 
 `PROTOCOL_VERSION` is 0.97 because `preview.subscribe` takes an `fps` up to 60, so a
-live view can show a 60 fps program at its full rate (30 before);
-0.89 because a collection can set its base frame rate with
+live view can show a 60 fps program at its full rate (30 before; a placeholder number
+the release queue sets); 0.91 because a follow camera is a `follow_pointer` filter on a
+capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
+`CameraFollow` gains `safe_margin_pct`
+([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
+release queue sets); 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`

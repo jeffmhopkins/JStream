@@ -33,15 +33,21 @@ const V4: &str = include_str!("fixtures/v4.json");
 /// loading as version 1 must.
 const V5: &str = include_str!("fixtures/v5.json");
 
-/// A collection file at schema version 6, the current one: version 5 with a timeline in
-/// scene `a` and a hotkey that plays it (ADR-0115). The same rule applies once version 7
-/// exists.
+/// A collection file at schema version 6: version 5 with a timeline in scene `a` and a
+/// hotkey that plays it (ADR-0115). It must keep loading as version 1 must.
 const V6: &str = include_str!("fixtures/v6.json");
 
-/// The parity fixture's `webcam`, and `color`, whose `follow` parameter refers to
+/// A collection file at schema version 7, the current one: version 6 with its follow
+/// camera saved as a `follow_pointer` effect on the screen item (ADR-0120). The same rule
+/// applies once version 8 exists.
+const V7: &str = include_str!("fixtures/v7.json");
+
+/// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
+/// `color`, whose `follow` parameter refers to
 /// another source.
 fn kinds() -> Vec<KindDescriptor> {
     let mut kinds = parity::kinds();
+    kinds.push(jstream_protocol::follow_pointer_descriptor());
     kinds.push(KindDescriptor {
         kind_id: "color".into(),
         category: KindCategory::Source,
@@ -425,15 +431,40 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V6);
+    assert_eq!(v6_graph().to_collection_json(), V7);
 }
 
 #[test]
-fn the_v6_fixture_loads_exactly() {
+fn the_v7_fixture_loads_exactly() {
+    let expected = v6_graph();
+    let loaded = load(V7);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 6 moves its follow camera onto its item as a `follow_pointer` effect
+/// (ADR-0120): it loads as the same collection, whose follow is that effect.
+#[test]
+fn the_v6_fixture_loads_its_follow_as_an_effect() {
     let expected = v6_graph();
     let loaded = load(V6);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+    let loaded = loaded.expect("loads");
+    let (_, screen) = loaded
+        .state()
+        .item(&ItemId::new("i_screen"))
+        .expect("the screen item");
+    let kinds: Vec<&str> = screen.effects().iter().map(|f| f.kind()).collect();
+    assert_eq!(kinds, [jstream_protocol::FOLLOW_POINTER_KIND]);
+    assert_eq!(
+        loaded
+            .state()
+            .scene(&SceneId::new("a"))
+            .and_then(|a| a.camera_follow())
+            .map(|f| f.zoom.get()),
+        Some(1.5)
+    );
 }
 
 /// Version 5 upgrades unchanged: it has no timelines, and one there is refused.
@@ -467,9 +498,10 @@ fn the_v4_fixture_loads_and_refuses_camera_motion() {
     ));
 }
 
-/// A follow camera whose item has left the scene is inert, and isn't saved.
+/// A follow camera goes with its item (ADR-0120): once the item is removed, the scene
+/// saves no follow camera.
 #[test]
-fn an_inert_follow_camera_is_not_saved() {
+fn a_removed_items_follow_camera_is_not_saved() {
     let mut graph = v5_graph();
     let applied = graph.apply(
         &[Edit::ItemRemove {
