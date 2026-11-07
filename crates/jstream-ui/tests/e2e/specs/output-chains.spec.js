@@ -1,16 +1,16 @@
 // The program output's and each output's filter chains (ADR-0080): the Outputs panel's
-// rows with their FX buttons and footnote, the Mixer's master FX button, and the Filters
+// rows with their FX buttons and the program row's note, the Mixer's master FX button, and the Filters
 // panel and Add filter dialog on those chains: a video chain on each, and an audio chain
 // on the master and outputs that carry sound. The mock engine lists and describes no
 // kinds, so the page's socket answers for Sharpen and Gain (`describeKinds`).
-import { test, expect, connect, describeKinds, rev, showPanel } from '../fixtures.js';
+import { test, expect, connect, describeKinds, rev, showPanel, addOutput } from '../fixtures.js';
 
 function filters(page) {
   return page.locator('.filters-panel');
 }
 
 function chains(page) {
-  return page.getByRole('list', { name: 'Output filters' });
+  return page.getByRole('list', { name: 'Outputs' });
 }
 
 /** The audio chain's rows in the Filters panel. */
@@ -18,12 +18,9 @@ function audioRows(page) {
   return filters(page).getByRole('list', { name: 'Audio filters' }).getByRole('listitem');
 }
 
-/** Adds a recording through the Outputs panel's form; it gets the first free `output-N`. */
+/** Adds a recording through the Outputs panel's dialog; it gets the first free `output-N`. */
 async function addRecording(page) {
-  const form = page.locator('form.new-output');
-  await form.getByRole('combobox').selectOption('record');
-  await form.getByRole('textbox').fill('/tmp/show.mp4');
-  await form.getByRole('button', { name: 'Add' }).click();
+  await addOutput(page, 'record', '/tmp/show.mp4');
 }
 
 const KINDS = [
@@ -37,21 +34,24 @@ const KINDS = [
   },
 ];
 
-test('the Outputs panel lists the program output, then each output, and an FX button shows its chain', async ({ page, daemon }) => {
+test('the Outputs panel lists the program output, then each output once, and an FX button shows its chain', async ({ page, daemon }) => {
   await connect(page, daemon);
   await showPanel(page, 'Outputs');
   const rows = chains(page).getByRole('listitem');
   await expect(rows).toHaveCount(1);
   await expect(rows.first()).toHaveClass(/\bprogram\b/);
-  await expect(rows.first().locator('.output-chain-name')).toHaveText('Program output');
-  await expect(rows.first().locator('.output-chain-status')).toHaveText('master');
+  await expect(rows.first().locator('.output-row-name')).toHaveText('Program output');
+  await expect(rows.first().locator('.output-row-status')).toHaveText('master');
   await expect(rows.first().getByRole('button', { name: 'Program output filters' })).toHaveText('FX 0');
-  await expect(page.locator('.output-foot')).toHaveText('Program filters apply to every output; each output can add its own after them.');
+  // The note is the program row's tooltip, not a paragraph.
+  await expect(rows.first()).toHaveAttribute('title', 'Program filters apply to every output; each output can add its own after them.');
 
   await addRecording(page);
   await expect(rows).toHaveCount(2);
-  await expect(rows.nth(1).locator('.output-chain-name')).toHaveText('output-1');
-  await expect(rows.nth(1).locator('.output-chain-status')).toHaveText('Stopped');
+  await expect(rows.nth(1).locator('.output-row-name')).toHaveText('output-1');
+  await expect(rows.nth(1).locator('.badge')).toHaveText('Stopped');
+  // Each output is listed once: its FX button is on its own row.
+  await expect(page.locator('section.outputs').getByText('output-1', { exact: true })).toHaveCount(1);
   const fx = rows.nth(1).getByRole('button', { name: 'output-1 filters' });
   await expect(fx).toHaveText('FX 0');
   await expect(fx).toHaveAttribute('title', 'Filters for output-1 only');
