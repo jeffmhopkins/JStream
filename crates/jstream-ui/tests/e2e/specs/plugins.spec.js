@@ -1,9 +1,18 @@
-// The Plugins section under the Inspector (WA1): the installed WASM automation plugins,
+// The Settings dialog's Plugins page (WA1): the installed WASM automation plugins,
 // the install dialog, and the grant dialog that offers what a manifest asks for. The mock
 // engine runs no plugins, so the page's WebSocket is routed: `plugin.list`,
 // `plugin.install`, `plugin.grant` and `plugin.enable` are answered here from a list the
 // test keeps, and every other message goes on to the mock daemon.
 import { test, expect, connect, showPanel } from '../fixtures.js';
+
+/** Opens File › Plugins…, the Settings dialog on its Plugins page. */
+async function openPlugins(page) {
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Plugins…' }).click();
+  await expect(page.getByRole('dialog', { name: 'Settings' }).getByRole('tab', { name: 'Plugins' }))
+    .toHaveAttribute('aria-selected', 'true');
+}
+
 
 /** Answers the plugin calls from `plugins`, and records each plugin action sent. */
 async function fakePlugins(page, plugins, manifests) {
@@ -76,7 +85,7 @@ test('an install goes on to the grant dialog, which grants only what was ticked'
     },
   });
   await connect(page, daemon);
-  await showPanel(page, 'Inspector');
+  await openPlugins(page);
   await expect(section(page).getByText('No plugins installed.')).toBeVisible();
 
   await section(page).getByRole('button', { name: 'Install plugin' }).click();
@@ -130,7 +139,7 @@ test('a plugin whose update needs a grant is granted and turned on in one step',
   ];
   const { sent } = await fakePlugins(page, plugins, {});
   await connect(page, daemon);
-  await showPanel(page, 'Inspector');
+  await openPlugins(page);
   const row = section(page).locator('li.plugin');
   await expect(row.locator('.plugin-name')).toHaveText('Scene timer');
   await expect(row.locator('.plugin-state')).toHaveText('Off: its update asks for more');
@@ -150,4 +159,47 @@ test('a plugin whose update needs a grant is granted and turned on in one step',
     { type: 'plugin.enable', plugin_id: 'plg_timer' },
   ]);
   await expect(row.locator('.plugin-state')).toHaveText('On');
+});
+
+test('plugins and devices live in the Settings dialog, not the Inspector', async ({ page, daemon }) => {
+  await fakePlugins(page, [], {});
+  await connect(page, daemon);
+  await showPanel(page, 'Inspector');
+  await expect(page.locator('.dock section.plugins')).toHaveCount(0);
+  await expect(page.locator('.dock section.pairing')).toHaveCount(0);
+
+  // File › Settings… opens on General; a click or an arrow key moves between pages.
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  const tab = (name) => settings.getByRole('tab', { name });
+  await expect(tab('General')).toHaveAttribute('aria-selected', 'true');
+  await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeVisible();
+  await tab('Plugins').click();
+  await expect(settings.locator('section.plugins').getByText('No plugins installed.')).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(tab('Devices')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab('Devices')).toBeFocused();
+  await expect(settings.getByRole('tabpanel')).toHaveAttribute('data-page', 'devices');
+  await page.keyboard.press('ArrowDown');
+  await expect(tab('General')).toHaveAttribute('aria-selected', 'true');
+
+  // The install dialog opens over Settings, even with Settings moved, and Escape closes
+  // only it.
+  await tab('Plugins').click();
+  const head = settings.locator('.modal-header');
+  const box = await head.boundingBox();
+  await page.mouse.move(box.x + 40, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 140, box.y + box.height / 2 + 60, { steps: 4 });
+  await page.mouse.up();
+  await settings.locator('section.plugins').getByRole('button', { name: 'Install plugin' }).click();
+  const install = page.getByRole('dialog', { name: 'Install plugin' });
+  await expect(install).toBeVisible();
+  const placed = await install.boundingBox();
+  const viewport = page.viewportSize();
+  expect(Math.abs(placed.x + placed.width / 2 - viewport.width / 2)).toBeLessThan(4);
+  await page.keyboard.press('Escape');
+  await expect(install).toHaveCount(0);
+  await expect(settings).toBeVisible();
 });
