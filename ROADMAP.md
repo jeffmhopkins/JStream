@@ -167,6 +167,41 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
   needs root, so it gets its own ADR.
 
+<a id="beta"></a>
+## Beta: what the first beta needs
+<!-- @section
+depends_on = ["docs/runbooks/release.md#version", "docs/runbooks/windows-hardware-pass.md#setup"]
+-->
+
+The alphas add features. The first beta, `0.1.0-beta.1`
+([RUNBOOK-RELEASE › The version](docs/runbooks/release.md#version)), adds none: it is what
+the alphas ship, made dependable on Windows. Its targets are the `beta.1` release in
+[`docs/progress.toml`](docs/progress.toml), which the README shows once alpha.5 ships. The
+maintainer set its scope:
+
+- **Windows only.** Linux and macOS stay in [M3](#m3) and their hardware runs don't gate
+  it.
+- **Unsigned**, like the alphas. A code-signing certificate isn't part of it.
+- **No compatibility promise.** A beta build need not load projects, collections or
+  settings saved by an earlier build, and the protocol keeps changing as it does now.
+
+It ships when all of these hold on the candidate build:
+
+1. **The bench passes.** `jstream bench` passes on the Windows pass machine
+   ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
+   seamless preview alpha.5 aims for.
+2. **Every Windows run passes.** Each merged item marked *Windows run* in the README's
+   What's left table passes it, in one acceptance pass on the candidate build rather
+   than one run at a time.
+3. **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
+   browser pages, media files and snapshots work, and stopping is graceful.
+4. **The security basics hold**: the threat-model follow-ups, a permission policy for
+   browser pages, a GPU-hang story for shader packs, and asking before a new agent
+   connects.
+
+Everything else, new features, Linux and macOS included, goes to the alphas before it or
+to the releases after it.
+
 <a id="endgame"></a>
 ## Endgame: what done means
 <!-- @section
