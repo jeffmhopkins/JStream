@@ -6237,10 +6237,10 @@ stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:a21610e70fb7cb33", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared; matches identity() in governance.rs and its two new tests" }
 
 ["DOCS#ttl"."body"]
-stamp = { hash = "b3:b5e19598d2324056", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "the weekly sweep bullet now also says docs progress lists rows whose needs is missing (planned or review) or left over (done), matching progress.rs's stale(); the other sweep bullets are unchanged" }
+stamp = { hash = "b3:dd591a7e994abee5", by = "agent:issues-burndown", note = "Re-read the sweep's list: only the not-yet-built decision audit's wording changed, from the old Tier-1 name to maintainer-tier (ADR-0043, #1312); sweep.yml's matching echo line is the same rename" }
 
 ["DOCS#ttl"."file:.github/workflows/sweep.yml"]
-stamp = { hash = "b3:397125d6e5564cee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
+stamp = { hash = "b3:410a5bfcdb767532", by = "agent:issues-burndown", note = "Re-read the sweep's list: only the not-yet-built decision audit's wording changed, from the old Tier-1 name to maintainer-tier (ADR-0043, #1312); sweep.yml's matching echo line is the same rename" }
 
 ["FUZZ#ci"."body"]
 stamp = { hash = "b3:6e88d20781e5a224", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "New section for the new fuzz.yml: daily cron plus workflow_dispatch, no PR trigger; pinned nightly-2026-10-15 and cargo-fuzz 0.13.2; build, seed.sh, each target from cargo fuzz list for 180 s with -timeout=30 and -rss_limit_mb=2048; crash inputs uploaded as fuzz-artifacts and an issue 'Fuzz crash: <target>' opened or commented; findings don't fail the job, a non-zero exit with no saved input does. Checked line by line against the workflow." }
