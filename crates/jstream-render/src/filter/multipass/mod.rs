@@ -1,10 +1,10 @@
-//! The multi-pass filters (roadmap V2): blur, pixelate, drop shadow, outline, glow and
-//! video delay.
+//! The multi-pass filters (roadmap V2): blur, pixelate, drop shadow, outline, glow,
+//! bloom and video delay.
 //!
 //! Docs: crates/jstream-render/README.md#filters
 //!
-//! Shared pieces: [`gauss`] is the bounded separable blur that blur, drop shadow and
-//! glow use; [`area`] is the whole / inside / outside rectangle that blur and pixelate
+//! Shared pieces: [`gauss`] is the bounded separable blur that blur, drop shadow,
+//! glow and bloom use; [`area`] is the whole / inside / outside rectangle that blur and pixelate
 //! share; [`bounds`] is the room drop shadow and glow blur their shape in; `common.wgsl`
 //! holds the WGSL helpers these shaders share.
 
@@ -16,6 +16,7 @@ macro_rules! wgsl {
 }
 
 mod area;
+mod bloom;
 mod blur;
 mod bounds;
 mod drop_shadow;
@@ -71,6 +72,7 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
         drop_shadow::descriptor(),
         outline::descriptor(),
         glow::descriptor(),
+        bloom::descriptor(),
         video_delay::descriptor(),
     ]
 }
@@ -83,6 +85,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         drop_shadow::KIND => Box::new(drop_shadow::DropShadow::new(settings)),
         outline::KIND => Box::new(outline::Outline::new(settings)),
         glow::KIND => Box::new(glow::Glow::new(settings)),
+        bloom::KIND => Box::new(bloom::Bloom::new(settings)),
         video_delay::KIND => Box::new(video_delay::VideoDelay::new(settings)),
         _ => return None,
     })
@@ -91,6 +94,29 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// A straight-alpha linear colour, premultiplied, as shaders take it.
 fn premultiplied([r, g, b, a]: [f32; 4]) -> [f32; 4] {
     [r * a, g * a, b * a, a]
+}
+
+const PAD: Shader = Shader {
+    label: "multipass-pad",
+    source: wgsl!("pad.wgsl"),
+    blend: Blend::Replace,
+};
+
+/// Draws `input` into `output`, `pad` pixels larger on every side, centred, with
+/// transparent around it.
+pub(crate) fn pad(
+    ctx: &mut Ctx<'_>,
+    input: &Image,
+    pad: u32,
+    output: &Image,
+) -> Result<(), RenderError> {
+    ctx.draw(&Draw {
+        shader: PAD,
+        input,
+        aux: None,
+        params: &Uniforms::new().i32(pad as i32).finish(),
+        target: output,
+    })
 }
 
 /// Copies `input` texel for texel into `output`, the same size.
