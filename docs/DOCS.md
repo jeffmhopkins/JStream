@@ -477,12 +477,19 @@ It fails on:
    breaks its rules, a UI feature row with an unknown status). See
    [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
-7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
-   `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
-   delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
-8. **Identity violations:** a rule or section anchor that existed on `main` is missing
-   and has no tombstone. See [Lifecycle](#lifecycle).
-9. **Rule metadata:** see [Rules](#rules).
+7. **Rule metadata:** see [Rules](#rules).
+
+`docs check` reads only the tree it runs on, never `main`, so two rules that compare a
+PR with its base are enforced by the `governance` check instead (see
+[Governance](#governance)). It fails on each of these unless the PR carries
+`governance-approved` and a justification:
+
+- **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
+  `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
+  delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
+- **Identity changes:** a doc, section or rule that existed on the base is deleted or
+  retired, whether or not it leaves a tombstone ([R-DOC-010](RULES.md#R-DOC-010)). See
+  [Lifecycle](#lifecycle).
 
 It also **reports**, without failing (as `warning:` lines), crates that no section covers,
 and `applies_to` globs naming a crate directory (`crates/<name>/…`, `apps/<name>/…`) that
