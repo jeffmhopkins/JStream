@@ -31,7 +31,7 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (the connection's details, the open project with New project…, Open project…, Save
-  project as… and Open recent, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  project as… and Open recent, Settings…, Video settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
