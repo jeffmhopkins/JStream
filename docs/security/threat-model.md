@@ -151,6 +151,9 @@ a stolen token, local denial of service.
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
   no one else more than reading its descriptor or attributes (`check_private_file`).
+  App package and capability SIDs (`S-1-15-2-…`, `S-1-15-3-…`, which a packaged app's
+  redirected `%APPDATA%` puts on every file) don't count as anyone else: Windows grants
+  an app container only what its user's SIDs are granted too (#1189).
   The UI settings file holds no secret (layouts), so an existing one is read without
   that check; it is still rewritten user-only (`0600` on Unix).
   The daemon's log files and the crash reports are always new files, and the desktop
