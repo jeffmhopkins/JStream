@@ -49,10 +49,10 @@ use std::time::{Duration, Instant};
 
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
-use jstream_protocol::{AssetRoot, FilterChain, SceneId, Settings, SourceId, SourceKind};
+use jstream_protocol::{AssetRoot, BusId, FilterChain, SceneId, Settings, SourceId, SourceKind};
 use jstream_sources::{
-    AudioScope, AudioScopes, BrowserBackend, CaptureSpec, Context, MediaAudio, PageView, Painter,
-    Registry, Source, SourceAudio, SourceError,
+    AudioScope, AudioScopes, BrowserBackend, BusLevels, CaptureSpec, Context, MediaAudio, PageView,
+    Painter, Registry, Source, SourceAudio, SourceError,
 };
 use serde_json::Value;
 
@@ -733,7 +733,8 @@ impl LiveSources {
 
     /// Tells each running source whose page has the page API (ADR-0102) what it may read
     /// now: whether it is shown on program and on preview, nested scenes included, the
-    /// two scenes, and the shared values. Each source sends its page only what changed,
+    /// two scenes, the shared values, and each bus's levels (`buses`, read only when a
+    /// page is granted). Each source sends its page only what changed,
     /// so this runs after anything that can change one of them.
     pub(crate) fn feed_pages(
         &mut self,
@@ -741,6 +742,7 @@ impl LiveSources {
         program: Option<&SceneId>,
         preview: Option<&SceneId>,
         values: &BTreeMap<String, Value>,
+        buses: &dyn Fn() -> BTreeMap<BusId, BusLevels>,
     ) {
         let granted = |entry: &Entry| entry.running.as_ref().is_some_and(|r| r.source.page_api());
         if !self.entries.values().any(granted) {
@@ -749,6 +751,8 @@ impl LiveSources {
             }
             return;
         }
+        // Read only when a page is granted: a few atomic loads per bus.
+        let buses = buses();
         let on_program = program.map(|scene| crate::activity::shown_sources(state, scene));
         let on_preview = preview.map(|scene| crate::activity::shown_sources(state, scene));
         let scene = |scene_id: Option<&SceneId>| {
@@ -772,6 +776,7 @@ impl LiveSources {
                 program_scene: scene(program),
                 preview_scene: scene(preview),
                 values,
+                buses: &buses,
             });
             due = crate::snapshot::earliest(due, at);
         }

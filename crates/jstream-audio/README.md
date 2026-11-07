@@ -149,7 +149,8 @@ stamped on the clock, and no device is the master.
   failure reported before then.
 - `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
   ramped over one block. They read meters (per channel, post-fader, so an input's is
-  before its sends: the peak held until read, and the last block's RMS) and counters
+  before its sends: the peak held until taken, and the last block's RMS;
+  `BusControl::peek_meter` reads a bus's without restarting its held peak) and counters
   (`InputStats`, `BusStats`): packets, discontinuities,
   gap, late, overrun and underrun frames, resets, re-anchors, timestamp outliers, the
   measured drift and stamp jitter, the controller's correction and timing error, and
