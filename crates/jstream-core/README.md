@@ -483,7 +483,9 @@ state machine. Contents:
   to the CPU path in place when a CPU reader joins, its counters carried on, and
   `DeviceLost` for every reader when it doesn't open again there, and one open on the
   CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  without an MJPEG decoder, and with the resolution, frame rate and pixel format its
+  settings ask for, falling back to the engine's choice when the device offers none
+  that matches, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
@@ -866,8 +868,12 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `source.size_changed` for each one that changed, under the collection lock (see
   *Source sizes* in *Snapshots*).
 - **`capture.targets`** lists the platform capture backend's displays, then its
-  windows, with no engine lock held, since listing windows calls the OS. With no
-  backends it answers `action_failed`, and so it does when the OS refuses the list.
+  windows, then the video-device backend's devices, each with the formats the engine
+  reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
+  held, since listing windows and devices calls the OS. A device whose formats can't be
+  read is listed without them. With no backends it answers `action_failed`, and so it
+  does when the OS refuses both lists; when one fails, it answers with the other and
+  logs a warning.
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of

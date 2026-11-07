@@ -48,16 +48,16 @@ use jstream_graph::Graph;
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
-    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
-    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
-    YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
+    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
+    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
+    VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -1895,28 +1895,65 @@ impl Engine {
         self
     }
 
-    /// `capture.targets`: what the platform's capture backend can capture now, listed
-    /// with no engine lock held, since listing windows calls the OS.
+    /// `capture.targets`: what the platform's capture backend can capture now, then the
+    /// video devices with the formats the engine reads of each, listed with no engine
+    /// lock held, since listing windows and devices calls the OS. A list that fails is
+    /// left out, and logged; the query fails only when both do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
-        let capture = self.media.as_ref().and_then(|host| {
-            lock(&host.backends)
-                .as_ref()
-                .map(|backends| Arc::clone(&backends.capture))
+        let backends = self.media.as_ref().and_then(|host| {
+            lock(&host.backends).as_ref().map(|backends| {
+                (
+                    Arc::clone(&backends.capture),
+                    Arc::clone(&backends.video_devices),
+                )
+            })
         });
-        let Some(capture) = capture else {
+        let Some((capture, devices)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
         };
-        let mut targets: Vec<_> = capture
+        let captured = capture
             .targets()
-            .map_err(|err| ProtocolError::ActionFailed {
-                reason: format!("listing capture targets: {err}"),
-            })?
-            .into_iter()
-            .filter_map(capture_target_info)
-            .collect();
-        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+            .map_err(|err| format!("listing capture targets: {err}"));
+        let listed = devices
+            .devices()
+            .map_err(|err| format!("listing video devices: {err}"));
+        let (mut targets, devices_listed) = match (captured, listed) {
+            (Err(capture), Err(devices)) => {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!("{capture}; {devices}"),
+                });
+            }
+            (captured, listed) => {
+                let targets: Vec<_> = match captured {
+                    Ok(targets) => targets
+                        .into_iter()
+                        .filter_map(capture_target_info)
+                        .collect(),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
+                        Vec::new()
+                    }
+                };
+                let listed = listed.unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, "capture.targets lists no video devices");
+                    Vec::new()
+                });
+                (targets, listed)
+            }
+        };
+        let rank = |kind: CaptureTargetKind| match kind {
+            CaptureTargetKind::Display => 0,
+            CaptureTargetKind::Window => 1,
+            _ => 2,
+        };
+        targets.sort_by_key(|info| rank(info.kind));
+        targets.extend(
+            devices_listed
+                .into_iter()
+                .map(|device| device_target_info(devices.as_ref(), device)),
+        );
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -5586,7 +5623,43 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
             height: size.height(),
         }),
         primary: info.primary,
+        formats: Vec::new(),
     })
+}
+
+/// A video device as `capture.targets` reports it, with the formats the engine reads
+/// of it: MJPEG among them, as every platform's codecs decode it. A device whose
+/// formats can't be read is listed without them.
+fn device_target_info(
+    devices: &dyn VideoDevices,
+    device: VideoDeviceInfo,
+) -> jstream_protocol::CaptureTargetInfo {
+    let formats = match devices.formats(&device.id) {
+        Ok(formats) => formats
+            .iter()
+            .filter(|format| crate::runtime::readable_format(format, true))
+            .filter_map(|format| {
+                Some(CaptureFormatInfo {
+                    width: format.size.width(),
+                    height: format.size.height(),
+                    fps: (crate::runtime::format_fps(format) * 100.0).round() / 100.0,
+                    pixel_format: crate::runtime::pixel_format_name(format.encoding)?.to_owned(),
+                })
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's formats");
+            Vec::new()
+        }
+    };
+    jstream_protocol::CaptureTargetInfo {
+        kind: CaptureTargetKind::Device,
+        target: device.id.as_str().to_owned(),
+        name: device.name,
+        size: None,
+        primary: false,
+        formats,
+    }
 }
 
 /// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves
