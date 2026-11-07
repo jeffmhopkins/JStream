@@ -31,7 +31,12 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 - **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
   is, plus the virtual camera) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
-  on); `vcam_status`, whether the camera is registered and current.
+  on, and with `Network` the TLS network listener and pairing); `vcam_status`, whether
+  the camera is registered and current.
+- **Network access** (`network.rs`): "Allow devices on my network"
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
+  data folder's `network.json`, the network listener's configuration, and `set_network`,
+  the command that saves it.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows and on an X11 session): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -42,14 +47,15 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   request sends no body, token or version. Tested without the network.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
   the virtual camera's status, the data folder (so a picked file under it can be
-  stored relative to the collection) and `browse`, which opens a native dialog.
+  stored relative to the collection), whether "Allow devices on my network" is on,
+  `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
-  tested everywhere), shutdown, and the one command
-  the page may call (`pick.rs`): a native file, save or folder dialog.
+  tested everywhere), shutdown, and the two commands the page may call: a native file,
+  save or folder dialog (`pick.rs`), and saving the network setting (`network.rs`).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -61,7 +67,9 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   token and the webview's origin, the bundle's paths, types and CSP, the bootstrap
   script's escaping, the command line, the virtual camera's status values, the
   capped log file (user-only, checked on Unix), the update check's request and the
-  replies it gives a releases list, a rate limit and a malformed message, and the control token registered for redaction; the crash hook's own
+  replies it gives a releases list, a rate limit and a malformed message, the network
+  setting (off until saved on, user-only, off when malformed), the network listener and
+  pairing it turns on, and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
@@ -69,7 +77,8 @@ Contents (a first cut; Windows first, because the window needs WebView2):
 Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
-dumps (only a panic writes a report, as in the daemon), pairing remote browsers, and browser sources in a default build
+dumps (only a panic writes a report, as in the daemon), renewing the network
+certificate from the app (the daemon's `--lan-renew` renews the same file), and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder
 ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
@@ -157,7 +166,17 @@ folder, and its log `logs\cef.log`.
   token ([Getting started › Connect an agent](../../docs/GETTING-STARTED.md#agents)). The
   window uses the same token. The log names the endpoint and the token file, never the
   token. A port in use stops the start with a page that says to pass `--port`. Pairing
-  stays off.
+  stays off unless network access is on.
+- **Devices on the network.** Settings › Devices › "Allow devices on my network" (off
+  until turned on) saves `network.json` in the data folder; it applies at the next
+  start. On, the app also listens on every interface on port 4456 (the daemon's
+  `--lan` port), TLS only, admitting paired devices only
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), and pairs devices:
+  Settings › Devices then opens a pairing code and shows the addresses to open and the
+  certificate's fingerprint to compare. The certificate (`token.tls`, made the
+  first time) and the paired devices (`token.devices`) are kept beside the `token` file, the daemon's
+  files, so the two share them. When the port is in use (a daemon with `--lan`), the
+  app starts without network access and the log says why.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager) and start it.
 - **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
@@ -183,11 +202,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   code, so it has the same checks (user-only, refused otherwise), and turns MCP on
   (`ServerConfig::mcp`), so agents and the CLI connect with that file. The server accepts the
   webview's origin besides its own (R-SEC-002); every connection still presents the
-  token. The window needs no pairing and pairing remote browsers isn't offered yet
-  ([Purpose](#purpose)), so the server pairs no device
-  (`ServerConfig::pairing` off): `pairing.start`, `device.list` and `device.revoke`
-  answer `unsupported`, `jstream-ui`'s pairing panel stays hidden, and there is no
-  pairing page or device cookie
+  token. The window needs no pairing, so unless "Allow devices on my network" is on the
+  server pairs no device (`ServerConfig::pairing` off): `pairing.start`, `device.list`
+  and `device.revoke` answer `unsupported`, `jstream-ui`'s pairing panel says no device
+  can pair, and there is no pairing page or device cookie
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). The
   server still answers `ui_settings.get` and `ui_settings.set`, keeping them in the data
   folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
@@ -200,6 +218,21 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `profile.get`'s threads and `WindowsThreadPriority` for the render and mixer threads'
   MMCSS tasks ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
   When the app exits, the server closes its connections and the engine stops.
+- **Network access** (`network.rs`, [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
+  decision 1). The setting is `{"allow": true}` in the data folder's `network.json`,
+  written user-only and replaced whole; a missing, unreadable or malformed file is off.
+  Only the person changes it: the page calls `allowNetwork`, which invokes the Tauri
+  command `set_network`, granted to the main window by the `network` capability and to
+  nothing else. It is not a UI setting (`ui_settings.set`), because any engine client
+  (an agent with `--mcp`, a paired device) can write those, and widening who can reach the
+  engine is the person's choice. It is read once at start, so a change applies at the
+  next start. On, `Host::start` gets a `Network`: `ServerConfig::network` on
+  `0.0.0.0:4456` with the certificate from `jstream_server::identity` (made the first
+  time, kept when its names are out of date, with a warning in the log, never renewed
+  silently), `device_file` beside the token file, and pairing on, so the loopback
+  listener (which the window uses) opens codes and `pairing.start` names the network
+  listener's addresses and fingerprint (protocol 0.101). A certificate that can't be
+  used, or a port in use, is logged and the app starts without network access.
 - **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
@@ -244,9 +277,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
   (not Windows). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
-  folder, and `browse`, a function. `browse` calls the app's one command, `pick_path`,
-  and resolves to the filesystem path the person picked, or null if they cancelled or
-  the dialog failed.
+  folder, `network`, whether "Allow devices on my network" was on at start, and two
+  functions. `browse` calls the app's command `pick_path` and resolves to the
+  filesystem path the person picked, or null if they cancelled or the dialog failed.
+  `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
+  saved (see *Network access*).
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
@@ -276,11 +311,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Explorer, for those URLs only; the Cisco URL is that one string, and no comma,
   backslash, quote, space or percent escape can reach Explorer's command line. Every
   other new window is refused, and a
-  projector can open none. The page gets one Tauri command, `pick_path` (`pick.rs`),
-  and no other. `build.rs` declares that command to `tauri-build`, which writes
-  `allow-pick-path` under `permissions/autogenerated/` (gitignored, as `gen/` is).
-  The capability `browse` grants that permission to the main window only, and does
-  not grant `core:default`. A projector has no path fields, so it is not granted.
+  projector can open none. The page gets two Tauri commands, `pick_path` (`pick.rs`)
+  and `set_network` (`network.rs`), and no other. `build.rs` declares them to
+  `tauri-build`, which writes `allow-pick-path` and `allow-set-network` under
+  `permissions/autogenerated/` (gitignored, as `gen/` is). The capabilities `browse`
+  and `network` grant those permissions to the main window only, and do not grant
+  `core:default`. A projector has no path fields or settings, so it is granted neither.
   The command opens a
   common-item dialog owned by the calling window and returns the path the person
   picked. It does not read the file. The UI calls it only through `browse` on the

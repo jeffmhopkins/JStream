@@ -6,7 +6,8 @@
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
 //! - **Devices** pairs remote browsers and lists the paired devices (`pairing.rs`),
-//!   when a server in front of the engine pairs them.
+//!   when a server in front of the engine pairs them. In the desktop app it starts with
+//!   "Allow devices on my network".
 //!
 //! The shell provides [`SettingsDialog`] as a context, so a menu item or a notice can
 //! open the dialog on the page it is about. The dialog shows one page at a time; a page
@@ -15,7 +16,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::dialog::Modal;
-use crate::pairing::Pairing;
+use crate::pairing::{NetworkAccessSetting, Pairing};
 use crate::plugins::Plugins;
 use crate::updates::LaunchCheckSetting;
 use leptos::prelude::*;
@@ -170,7 +171,7 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                     {move || match page() {
                         SettingsPage::General => view! { <LaunchCheckSetting /> }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
-                        SettingsPage::Devices => view! { <Pairing /> }.into_any(),
+                        SettingsPage::Devices => view! { <NetworkAccessSetting /> <Pairing /> }.into_any(),
                     }}
                 </div>
             </div>

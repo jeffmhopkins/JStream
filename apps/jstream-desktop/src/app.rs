@@ -6,6 +6,7 @@
 use crate::bootstrap;
 use crate::host::{self, Host};
 use crate::logs::LogFile;
+use crate::network;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use jstream_crash::Secrets;
@@ -79,6 +80,9 @@ pub struct Startup {
     pub script: Option<String>,
     /// The engine and its server, when they started.
     pub host: Option<Host>,
+    /// The "Allow devices on my network" setting's file, which the window's
+    /// `set_network` command writes, when the data folder is known.
+    pub network_file: Option<PathBuf>,
 }
 
 impl Startup {
@@ -88,6 +92,7 @@ impl Startup {
             ui: Ui::Problem(message),
             script: None,
             host: None,
+            network_file: None,
         }
     }
 }
@@ -130,13 +135,34 @@ pub fn start(
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
         });
-        Host::start(
-            engine,
+        let ui_settings = Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE));
+        let network = network_access(data);
+        match Host::start(
+            Arc::clone(&engine),
             ui::ORIGIN,
             secrets,
-            Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE)),
+            ui_settings.clone(),
             agents.as_ref(),
-        )
+            network.as_ref(),
+        ) {
+            Err(error) if network.is_some() => {
+                // The network listener's port may be in use (a daemon with `--lan`): the
+                // app still starts, for this machine only.
+                tracing::error!(
+                    error = format!("{error:#}"),
+                    "could not open the network listener; starting without network access"
+                );
+                Host::start(
+                    engine,
+                    ui::ORIGIN,
+                    secrets,
+                    ui_settings,
+                    agents.as_ref(),
+                    None,
+                )
+            }
+            started => started,
+        }
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
     tracing::info!(vcam = vcam.as_str(), "virtual camera");
@@ -164,11 +190,37 @@ pub fn start(
         host.token(),
         vcam.as_str(),
         collection.as_ref(),
+        network::allowed(&network::setting_file(data)),
     );
     Startup {
         ui,
         script: Some(script),
         host: Some(host),
+        network_file: Some(network::setting_file(data)),
+    }
+}
+
+/// "Allow devices on my network", when the person turned it on: the network listener's
+/// configuration, and the paired devices' file, both beside the data folder's token
+/// file as the daemon keeps them. A certificate that can't be used is logged, and the
+/// app starts without network access.
+fn network_access(data: &Path) -> Option<host::Network> {
+    if !network::allowed(&network::setting_file(data)) {
+        return None;
+    }
+    let token_file = data.join(host::TOKEN_FILE);
+    match network::config(&token_file) {
+        Ok(config) => Some(host::Network {
+            config,
+            device_file: jstream_server::token_file::device_file(&token_file),
+        }),
+        Err(error) => {
+            tracing::error!(
+                error = format!("{error:#}"),
+                "starting without network access"
+            );
+            None
+        }
     }
 }
 

@@ -12,6 +12,10 @@
 //!   pairs: while it is open the panel re-reads `device.list` every few seconds, and a
 //!   device that wasn't there when the code was drawn means the code was used. The code
 //!   is never logged or stored by the page (R-SEC-001).
+//! - **Allow devices on my network** (ADR-0104), in the desktop app only: a switch above
+//!   the panel that asks the app to save the setting (`host::allow_network`, the app's own
+//!   command, which no engine client reaches). It applies when the app next starts, and
+//!   says so while the saved choice differs from the one the app started with.
 //! - **The network listener** (ADR-0130). When the server also listens on the local
 //!   network, `pairing.start` names its addresses and its certificate's fingerprint, and
 //!   the panel shows both, with when to continue past the browser's certificate warning:
@@ -308,6 +312,48 @@ fn network_view(network: NetworkAccess) -> impl IntoView {
             <p class="pairing-fingerprint"><code>{network.fingerprint}</code></p>
         </div>
     }
+}
+
+/// "Allow devices on my network", in the desktop app only (ADR-0104 decision 1).
+#[component]
+pub fn NetworkAccessSetting() -> impl IntoView {
+    let Some(started) = crate::host::desktop_network() else {
+        return ().into_any();
+    };
+    let on = RwSignal::new(started);
+    let problem = RwSignal::new(None::<&'static str>);
+    let save = move |allow: bool| {
+        on.set(allow);
+        spawn_local(async move {
+            if crate::host::allow_network(allow).await {
+                problem.try_set(None);
+            } else {
+                on.try_set(!allow);
+                problem.try_set(Some("The setting could not be saved."));
+            }
+        });
+    };
+    view! {
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Allow devices on my network"
+                prop:checked=move || on.get()
+                on:change=move |event| save(event_target_checked(&event))
+            />
+            <span>
+                <span class="settings-check-label">"Allow devices on my network"</span>
+                <span class="settings-check-note">
+                    "When on, a phone, tablet or other computer on this network can pair with a code and control JStream, over HTTPS on port 4456. Only paired devices get in. Off until you turn it on."
+                </span>
+                {move || (on.get() != started).then(|| view! {
+                    <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
+                })}
+                {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
+            </span>
+        </label>
+    }
+    .into_any()
 }
 
 /// The pairing panel. Shows nothing until `device.list` answers, and nothing at all on

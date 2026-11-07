@@ -2,10 +2,11 @@
 //! desktop app does.
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
-//! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, browse }`:
-//! its in-process engine's WebSocket URL and control token, whether its virtual camera
-//! can be used, the data folder `collection` asset paths are relative to, and `browse`,
-//! which opens a native file dialog. In a browser the global is absent and the UI shows
+//! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
+//! browse, allowNetwork }`: its in-process engine's WebSocket URL and control token,
+//! whether its virtual camera can be used, the data folder `collection` asset paths are
+//! relative to, whether "Allow devices on my network" was on at start, `browse`, which
+//! opens a native file dialog, and `allowNetwork`, which saves that setting. In a browser the global is absent and the UI shows
 //! the connect form.
 //!
 //! A projector window the app opens for `window.open` (`projector.rs`) may not run that
@@ -104,6 +105,61 @@ pub fn desktop_vcam() -> Option<String> {
     Reflect::get(&global, &JsValue::from_str("vcam"))
         .ok()?
         .as_string()
+}
+
+/// The desktop app's "Allow devices on my network" setting as it was when the app
+/// started (ADR-0104), if the page runs in an app that has it.
+pub fn desktop_network() -> Option<bool> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("allowNetwork"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    Reflect::get(&global, &JsValue::from_str("network"))
+        .ok()?
+        .as_bool()
+}
+
+/// Asks the desktop app to save "Allow devices on my network", which applies when it
+/// next starts. Resolves to whether it was saved.
+pub async fn allow_network(allow: bool) -> bool {
+    #[cfg(target_arch = "wasm32")]
+    {
+        allow_network_js(allow).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = allow;
+        false
+    }
+}
+
+/// Calls `allowNetwork` on the desktop global and awaits its promise.
+#[cfg(target_arch = "wasm32")]
+async fn allow_network_js(allow: bool) -> bool {
+    use leptos::wasm_bindgen::JsCast;
+    use leptos::web_sys::js_sys::{Function, Promise};
+
+    let Some(global) = global() else {
+        return false;
+    };
+    let Some(function) = Reflect::get(&global, &JsValue::from_str("allowNetwork"))
+        .ok()
+        .and_then(|value| value.dyn_into::<Function>().ok())
+    else {
+        return false;
+    };
+    let Some(promise) = function
+        .call1(&global, &JsValue::from_bool(allow))
+        .ok()
+        .and_then(|value| value.dyn_into::<Promise>().ok())
+    else {
+        return false;
+    };
+    wasm_bindgen_futures::JsFuture::from(promise)
+        .await
+        .ok()
+        .and_then(|value| value.as_bool())
+        == Some(true)
 }
 
 /// Asks the desktop app to open a dialog. `kind` is `open`, `save` or `folder`.

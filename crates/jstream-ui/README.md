@@ -84,8 +84,9 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  `desktop_vcam()`, what that global says about the virtual camera, and `browse`,
-  which calls the global's `browse` to open a native dialog. `same_engine` says
+  `desktop_vcam()`, what that global says about the virtual camera, `browse`,
+  which calls the global's `browse` to open a native dialog, and `desktop_network()`
+  and `allow_network`, which read and save the app's "Allow devices on my network". `same_engine` says
   whether the open session is that app's own engine.
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
@@ -198,7 +199,8 @@ Contents ([Design](#design) explains the choices):
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
   Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
-  revoke devices), and the calls behind it, tested natively against `MockEngine` and a
+  revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
+  network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
   Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
@@ -234,8 +236,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
-  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection` and
-  `browse`) before the page loads,
+  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
+  `network`, `browse` and `allowNetwork`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -904,7 +906,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
-- **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+- **Pairing.** In the desktop app the Devices page starts with "Allow devices on my
+  network" ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) decision 1),
+  shown only when the global has `network` and `allowNetwork`. It saves through
+  `allowNetwork`, the app's own command, not `ui_settings.set`, so no engine client can
+  turn it on; a failed save puts the box back and says so, and while the box differs
+  from the setting the app started with it says to restart JStream. The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
   no device can pair with this session. "Pair a device"
