@@ -25,7 +25,7 @@
 //!   code, the token and the cookie are never logged (R-SEC-001).
 
 use crate::App;
-use crate::devices::{Now, PairError, check_name};
+use crate::devices::{Attempt, Now, PairError, check_name};
 use crate::gate::{Refusal, device_cookie_header};
 use crate::listener::Accepted;
 use axum::body::Body;
@@ -50,7 +50,10 @@ pub(crate) async fn handle(
     body: Body,
 ) -> Response {
     let peer = accepted.peer;
-    if let Err(refusal) = app.gate.admit_unauthenticated(&headers, peer) {
+    if let Err(refusal) = app
+        .gate
+        .admit_unauthenticated(&headers, peer, accepted.on())
+    {
         return refusal.into_response();
     }
     if method != Method::POST {
@@ -99,10 +102,15 @@ pub(crate) async fn handle(
         Some(Value::Bool(browser)) => *browser,
         Some(_) => return bad_request("`browser` must be true or false"),
     };
-    if browser && !app.tls {
+    if browser && !app.tls(&accepted) {
         return bad_request("a browser pairs only on a TLS listener");
     }
-    match app.devices.pair(code, name, Now::current()) {
+    let from = if accepted.network {
+        Attempt::Network(peer.ip())
+    } else {
+        Attempt::Host
+    };
+    match app.devices.pair(code, name, Now::current(), from) {
         Ok((device_id, token)) if browser => {
             let Some(cookie) = device_cookie_header(token.as_bytes()) else {
                 // The server's tokens are hex digits, so this can't happen; the device
@@ -146,6 +154,10 @@ pub(crate) async fn handle(
             } else {
                 Refusal::WrongPairingCode.into_response()
             }
+        }
+        Err(PairError::PeerLimit) => {
+            Refusal::PairingPeerLimit.log(peer);
+            Refusal::PairingPeerLimit.into_response()
         }
         Err(PairError::Random(error)) => {
             tracing::warn!(error = %error, "could not draw a device token");

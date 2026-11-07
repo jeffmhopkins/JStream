@@ -127,11 +127,12 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0111](0111-camera-up-at-the-poles.md) | A scene camera's up at either pole | accepted | agent |  |
 | [ADR-0112](0112-assignable-camera-zoom-bindings.md) | Assignable zoom bindings for a follow-cursor camera, heard while another app has the focus | accepted | maintainer |  |
 | [ADR-0113](0113-camera-motion-and-follow-pointer.md) | Camera motion, and a scene camera that follows the pointer over a capture | accepted | agent |  |
-| [ADR-0114](0114-browsers-keep-no-certificate-pin.md) | A paired browser keeps no certificate pin, so a new warning on its host means stop | accepted | agent |  |
+| [ADR-0114](0114-browsers-keep-no-certificate-pin.md) | A paired browser keeps no certificate pin, so a new warning on its host means stop | superseded | agent | [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) |
 | [ADR-0115](0115-timelines-on-the-wire.md) | Timelines on the wire: global IDs, inert cues, studio-state playback and source.restart | accepted | agent |  |
 | [ADR-0116](0116-keyframe-tracks.md) | Keyframe tracks: a placed scene switches its own keyframe, as studio state, with a Move | accepted | agent |  |
 | [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
 | [ADR-0118](0118-placed-keyframes-on-the-graph.md) | Placed keyframes live on the engine's graph, not on a copy rebuilt each batch | accepted | agent |  |
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) | A paired browser keeps no certificate pin, so a new warning on its host means checking the fingerprint again | accepted | agent |  |
 <!-- @generated end adr-index -->

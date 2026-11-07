@@ -54,7 +54,7 @@ shown by the menu item. Nothing is downloaded or installed. That read is not tel
 | Attacker | What they start with | In scope? |
 |---|---|---|
 | A web page in the user's own browser | JavaScript on a foreign origin; can try `ws://127.0.0.1:<port>` and DNS rebinding | Yes: it must get nothing |
-| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, whose device tokens are refused beyond loopback until there is TLS |
+| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, on the opt-in TLS-only network listener ([ADR-0104](../adr/0104-network-listener-over-tls.md)), which admits paired devices and never the control token (see [Server](#server)) |
 | A page shown by a browser source | Arbitrary HTML and JavaScript, rendered by the engine's own helper | Yes: untrusted content ([ADR-0021](../adr/0021-browser-source.md)) |
 | A crafted file | A collection file, image, font or media file someone shares | Yes: parsing must not crash the engine or reach outside its asset roots |
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
@@ -103,33 +103,59 @@ covers = [
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
   "crates/jstream-server/src/token_file.rs",
+  "crates/jstream-server/src/network.rs",
+  "crates/jstream-server/src/identity.rs",
 ]
-depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
+depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md", "docs/adr/0104-network-listener-over-tls.md", "docs/adr/0130-browsers-keep-no-certificate-pin-v2.md"]
 -->
 
 **Threats:** a foreign web page driving the API (CSRF, DNS rebinding), a network peer,
 a stolen token, local denial of service.
 
 **Controls on main:**
-- One listener in [`jstream-server`](../../crates/jstream-server/README.md) carries the
+- The host's listener in [`jstream-server`](../../crates/jstream-server/README.md) carries the
   WebSocket API, MCP and (when configured) the UI's static files. Every request passes
   the same gate: `Host` must name the listener (`127.0.0.1`, `localhost` or `[::1]` with
   its port, or a configured extra), which defeats DNS rebinding; `Origin`, when present,
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
-  device's, accepted only on loopback or a TLS listener, and there is no TLS listener
-  yet. `POST /api/v1/pair` is the one request answered without one, only while a
-  pairing code is open (see [Pairing](#pairing)).
+  device's, accepted only on loopback or a TLS listener. `POST /api/v1/pair` is the one
+  request answered without one, only while a pairing code is open (see
+  [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
-- The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
-  [ADR-0104](../adr/0104-network-listener-over-tls.md) decides how that changes, and
-  it is not built: an opt-in second listener for the network, TLS only with a
-  self-signed certificate native clients pin by fingerprint, admitting device tokens and
-  never the control token. A browser keeps no pin, only an exception for that one
-  certificate, so a new warning on a paired host means stop
-  ([ADR-0114](../adr/0114-browsers-keep-no-certificate-pin.md)).
+- The daemon's own listener binds `127.0.0.1`, with no flag to bind it elsewhere.
+  **Network access** ([ADR-0104](../adr/0104-network-listener-over-tls.md)) is a second
+  listener the person turns on with `--lan` (the server's `tls` feature,
+  `ServerConfig::network`); it is off by default:
+  - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
+    suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.
+  - **A self-signed certificate made on the host**: an ECDSA P-256 key, made on first use
+    and kept with the certificate in one user-only file beside the token file
+    (`<token file>.tls`), checked and written like the token file. The key is in no log,
+    event, result or snapshot. The certificate names the host name, its `.local` name and
+    the machine's addresses. It is never renewed silently: when today's names aren't all
+    on it, the daemon says so at startup, and `--lan-renew` makes a new key.
+  - **Trust by fingerprint.** The daemon prints the certificate's SHA-256 fingerprint
+    with the listener's addresses. A native client pins it after the person compares it.
+    A browser keeps no pin, so a new certificate warning on a paired host means continue
+    only if the fingerprint matches the one the host shows
+    ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes
+    ADR-0114). The `/pair` page says the same next to its code field.
+  - **Device tokens only.** The control token is refused there, however it is presented.
+    `Host` must be the listener's port with a name the certificate carries or the
+    address the connection arrived on, and `Origin`, when present, `https://` and that
+    host. Configured extra origins don't apply.
+  - **Limits.** It has its own pool of 128 open TCP connections, so the network can't
+    use up the host's own UI's. Its TLS handshake runs on the connection's task, within
+    the same 10 s header-read deadline. Its WebSocket and MCP sessions count against
+    the shared limits below. Pairing attempts from it are limited per peer (see
+    [Pairing](#pairing)).
+  - **Where it listens.** Every interface by default, on a fixed port (4456, `--lan-port`),
+    so it is also reachable on public Wi-Fi or a VPN the machine joins: `--lan-bind`
+    picks one address. On Windows and macOS, the first start can raise the OS firewall's
+    prompt.
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the
@@ -192,30 +218,38 @@ covers = [
   "crates/jstream-server/src/pair_page.rs",
   "crates/jstream-server/src/gate.rs",
 ]
-depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
+depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md"]
 -->
 
 **Built:** codes, device tokens, and the browser pairing page and device cookie (#288),
 in [`jstream-server`](../../crates/jstream-server/README.md#design). `pairing.start`
 answers and device tokens are accepted only while the server listens on loopback or on a
-TLS listener. The server has no TLS listener yet, so a paired device is a local client
-with its own revocable token, and the pairing page, which only a TLS listener serves, is
-not reachable: no browser can pair today, although [R-SEC-002](../RULES.md#R-SEC-002)
-and SECURITY.md already describe that exception.
+TLS listener. With the daemon's `--lan` (see [Control server](#server)), devices on the
+network pair over the TLS network listener, and browsers pair on its `/pair` page.
 
 **Threats:** guessing a pairing code, a leaked device token, a cookie used cross-site,
 a device that should no longer have access.
 
 **Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
 [ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
-time, 40 bits, two minutes, void after five wrong attempts, kept only as a digest;
+time, 40 bits, two minutes, void after five wrong attempts on the host's own listener,
+kept only as a digest. From the network listener, each peer (an IPv4 address, or an
+IPv6 /64) gets five wrong attempts at the open code and is then refused for it (`429`),
+and 64 wrong attempts from the network in all void it, so a peer on the network can't
+void the host's code with five guesses (#1129); 64 guesses at 40 bits leave about one
+chance in 17 billion;
 256-bit device tokens kept as digests, revocable, dropped after 30 days unused; the
 browser's copy only as a `__Host-` cookie that is `Secure`, `HttpOnly` and
 `SameSite=Strict`, set and read only on a TLS listener, refused when a request carries
 it twice or without `Sec-Fetch-Site: same-origin` or `none`. A paired browser holds only
 its device token, and the cookie is never compared with the control token.
 
-**Accepted:** a device token has the control token's full power ("no tiers").
+**Accepted:** a device token has the control token's full power ("no tiers"). A paired
+browser whose user continues past a certificate warning for a certificate that isn't the
+host's hands that device's token to the impostor; revoking the device ends it
+([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md)). A person who skips the
+fingerprint check on first pairing can be fooled by an attacker already in the middle of
+that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)).
 
 **Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
 hardware run (#546, for #344).
