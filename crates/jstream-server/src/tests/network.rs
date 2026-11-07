@@ -309,3 +309,29 @@ fn the_pairing_page_is_served_on_the_network_listener() {
     let local = harness.http("GET", &[], "");
     assert_ne!(local.status, 200);
 }
+
+/// 0.101: `pairing.start` names where a device on the network reaches the listener, and
+/// the certificate's fingerprint, so the host can show them beside the code; without the
+/// network listener it names nothing.
+#[test]
+fn pairing_start_names_the_network_listener_and_its_fingerprint() {
+    let (harness, identity) = start_network(|_| {});
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    let (_, network) = harness.start_pairing_with_network(&control);
+    let network = network.expect("the network listener is on");
+    let port = harness.network_addr().port();
+    assert_eq!(
+        network.urls,
+        vec![
+            format!("https://{NAME}:{port}/"),
+            format!("https://127.0.0.1:{port}/")
+        ]
+    );
+    assert_eq!(network.fingerprint, identity.fingerprint());
+
+    let harness = start_with(&MockEngine::new(), |_| {});
+    let control = ok(harness.connect());
+    ok(harness.run(control.hello(hello())));
+    assert_eq!(harness.start_pairing_with_network(&control).1, None);
+}

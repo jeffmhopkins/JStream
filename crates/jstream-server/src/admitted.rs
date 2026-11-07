@@ -29,8 +29,8 @@ use crate::gate::Credential;
 use crate::ui_settings::{Refused, SetError, UiSettings};
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
-    Action, ActionResult, Call, CallResult, EntityKind, Hello, ProtocolError, Query, QueryResult,
-    RequestId, Response, SecretString, Welcome,
+    Action, ActionResult, Call, CallResult, EntityKind, Hello, NetworkAccess, ProtocolError, Query,
+    QueryResult, RequestId, Response, SecretString, Welcome,
 };
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -46,6 +46,9 @@ pub(crate) struct Admitted {
     /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
     /// Off, they reach `inner` like any other call.
     serves_devices: bool,
+    /// Where a device on the network reaches the server, while its network listener is
+    /// on: `pairing.start` answers with it (ADR-0104, 0.101).
+    network: Option<NetworkAccess>,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,
     /// Whether `hello` succeeded, which the calls answered here need too.
@@ -61,6 +64,7 @@ impl Admitted {
         devices: Arc<Devices>,
         pairing_offered: bool,
         serves_devices: bool,
+        network: Option<NetworkAccess>,
         ui_settings: Arc<UiSettings>,
     ) -> Admitted {
         Admitted {
@@ -69,6 +73,7 @@ impl Admitted {
             devices,
             pairing_offered,
             serves_devices,
+            network,
             ui_settings,
             greeted: AtomicBool::new(false),
             answered: AtomicU64::new(0),
@@ -155,6 +160,7 @@ impl Admitted {
             result: Some(ActionResult::PairingStart {
                 code: SecretString::new(code),
                 expires_in_secs: u32::try_from(CODE_LIFETIME.as_secs()).unwrap_or(u32::MAX),
+                network: self.network.clone(),
             }),
         })
     }
@@ -296,6 +302,7 @@ mod tests {
                 devices,
                 pairing_offered,
                 serves_devices,
+                None,
                 Arc::new(UiSettings::load(None)),
             ),
             name,

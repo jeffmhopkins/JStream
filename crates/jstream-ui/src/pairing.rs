@@ -12,12 +12,17 @@
 //!   pairs: while it is open the panel re-reads `device.list` every few seconds, and a
 //!   device that wasn't there when the code was drawn means the code was used. The code
 //!   is never logged or stored by the page (R-SEC-001).
+//! - **The network listener** (ADR-0130). When the server also listens on the local
+//!   network, `pairing.start` names its addresses and its certificate's fingerprint, and
+//!   the panel shows both, with when to continue past the browser's certificate warning:
+//!   only if the fingerprint matches.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0047-browser-pairing-page-and-device-cookie.md
 
 use crate::app::SessionContext;
 use jstream_control::protocol::{
-    Action, ActionResult, Call, CallResult, DeviceId, DeviceInfo, ProtocolError, Query, QueryResult,
+    Action, ActionResult, Call, CallResult, DeviceId, DeviceInfo, NetworkAccess, ProtocolError,
+    Query, QueryResult,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -35,6 +40,9 @@ pub struct OpenCode {
     pub code: String,
     /// How long it stays open, in seconds.
     pub expires_in_secs: u32,
+    /// The network listener's addresses and certificate fingerprint, when the server
+    /// listens on the local network (ADR-0130).
+    pub network: Option<NetworkAccess>,
 }
 
 impl std::fmt::Debug for OpenCode {
@@ -42,6 +50,7 @@ impl std::fmt::Debug for OpenCode {
         f.debug_struct("OpenCode")
             .field("code", &"***")
             .field("expires_in_secs", &self.expires_in_secs)
+            .field("network", &self.network)
             .finish()
     }
 }
@@ -82,10 +91,12 @@ pub async fn start(control: &dyn Control) -> Result<Option<OpenCode>, String> {
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => Ok(Some(OpenCode {
                 code: code.expose().to_owned(),
                 expires_in_secs,
+                network,
             })),
             _ => Err("the engine answered `pairing.start` without a code".into()),
         },
@@ -278,6 +289,27 @@ impl Panel {
     }
 }
 
+/// Where a device on the local network opens the pairing page, and the fingerprint
+/// that tells it the certificate warning is this host's (ADR-0130).
+fn network_view(network: NetworkAccess) -> impl IntoView {
+    view! {
+        <div class="pairing-network">
+            <p class="pairing-help">"On another device on this network, open:"</p>
+            <ul class="pairing-urls">
+                {network
+                    .urls
+                    .into_iter()
+                    .map(|url| view! { <li><code>{url}</code></li> })
+                    .collect::<Vec<_>>()}
+            </ul>
+            <p class="pairing-help">
+                "The browser warns about the certificate. Continue only if it shows this fingerprint:"
+            </p>
+            <p class="pairing-fingerprint"><code>{network.fingerprint}</code></p>
+        </div>
+    }
+}
+
 /// The pairing panel. Shows nothing until `device.list` answers, and nothing at all on
 /// a session that doesn't serve the pairing calls.
 #[component]
@@ -309,6 +341,7 @@ pub fn Pairing() -> impl IntoView {
                         "Open for " {countdown(left)} ". In a browser, open "
                         <code>"/pair"</code> " on this host's HTTPS address and type the code."
                     </p>
+                    {code.network.map(network_view)}
                 </div>
             }
         })
@@ -436,6 +469,7 @@ mod tests {
                     result: Some(ActionResult::PairingStart {
                         code: SecretString::new("7K3M-9QXA"),
                         expires_in_secs: 120,
+                        network: None,
                     }),
                 }),
                 Call::Query {
@@ -500,7 +534,8 @@ mod tests {
             code,
             Some(OpenCode {
                 code: "7K3M-9QXA".into(),
-                expires_in_secs: 120
+                expires_in_secs: 120,
+                network: None,
             })
         );
         assert!(!format!("{code:?}").contains("7K3M"), "never in Debug");

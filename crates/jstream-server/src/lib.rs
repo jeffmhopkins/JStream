@@ -143,6 +143,9 @@ struct App {
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
+    /// Where a device on the network reaches the network listener, while it is on:
+    /// `pairing.start` answers with it (0.101).
+    network_access: Option<jstream_protocol::NetworkAccess>,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
 }
@@ -161,6 +164,7 @@ impl App {
             Arc::clone(&self.devices),
             self.pairing_offered,
             self.pairing,
+            self.network_access.clone(),
             Arc::clone(&self.ui_settings),
         ))
     }
@@ -212,6 +216,15 @@ impl Server {
                 (Some(network), gate)
             }
         };
+        #[cfg(feature = "tls")]
+        let network_access = network
+            .as_ref()
+            .map(|network| jstream_protocol::NetworkAccess {
+                urls: network_urls(&network.identity, network.local_addr.port()),
+                fingerprint: network.identity.fingerprint().to_owned(),
+            });
+        #[cfg(not(feature = "tls"))]
+        let network_access = None;
         let (shutdown, stopping) = watch::channel(false);
         let mcp = config.mcp.then(|| Mcp::new(&config));
         let app = Arc::new(App {
@@ -233,6 +246,7 @@ impl Server {
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
             pairing: config.pairing,
+            network_access,
             ui_settings,
         });
         Ok(Server {
@@ -298,19 +312,10 @@ impl Server {
     /// checks the certificate's fingerprint and pairs (`GET /pair` for a browser).
     #[cfg(feature = "tls")]
     pub fn network_urls(&self) -> Vec<String> {
-        let Some(network) = &self.network else {
-            return Vec::new();
-        };
-        let port = network.local_addr.port();
-        network
-            .identity
-            .names()
-            .iter()
-            .map(|name| match name.parse::<std::net::Ipv6Addr>() {
-                Ok(v6) => format!("https://[{v6}]:{port}/"),
-                Err(_) => format!("https://{name}:{port}/"),
-            })
-            .collect()
+        match &self.network {
+            Some(network) => network_urls(&network.identity, network.local_addr.port()),
+            None => Vec::new(),
+        }
     }
 
     /// The network listener's certificate fingerprint (SHA-256, `AB:CD:…`), when it is
@@ -512,4 +517,18 @@ fn rejects_missing_token() {
 fn rejects_foreign_origin() {
     tests::check_rejects_foreign_origin();
     tests::check_mcp_rejects_foreign_origin();
+}
+
+/// The network listener's URLs on `port`, one per name or address `identity`'s
+/// certificate carries; an IPv6 address in brackets.
+#[cfg(feature = "tls")]
+fn network_urls(identity: &identity::Identity, port: u16) -> Vec<String> {
+    identity
+        .names()
+        .iter()
+        .map(|name| match name.parse::<std::net::Ipv6Addr>() {
+            Ok(v6) => format!("https://[{v6}]:{port}/"),
+            Err(_) => format!("https://{name}:{port}/"),
+        })
+        .collect()
 }

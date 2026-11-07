@@ -452,7 +452,10 @@ not remove them; they move into the prototype's look.
   dialog for the app's own engine; a browser page has none, and another engine leaves
   the button disabled.
 - Pairing ([ADR-0044](adr/0044-pairing-remote-browsers.md)): the pairing panel shows a
-  one-time code for a remote browser and lists and revokes paired devices. It is the
+  one-time code for a remote browser and lists and revokes paired devices. When the
+  server also listens on the network, it shows that listener's addresses and its
+  certificate's fingerprint beside the code
+  ([ADR-0130](adr/0130-browsers-keep-no-certificate-pin-v2.md)). It is the
   Settings dialog's Devices page ([HD-01](#header)), which says no device can pair where
   the server pairs nothing.
 - WASM automation plugins (WA1, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md),

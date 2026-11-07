@@ -909,7 +909,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   session with no server in front answers `unsupported`, and the Devices page then says
   no device can pair with this session. "Pair a device"
   calls `pairing.start` and shows the code, large, with a countdown from its
-  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
+  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address).
+  When the answer carries `network` (a server that also listens on the local network,
+  [ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)), the panel lists
+  its addresses and the certificate's fingerprint, and says to continue past the
+  browser's certificate warning only if the fingerprint matches. The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel
   re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
   means the code was used. A newer code replaces the shown one. Each device shows its
