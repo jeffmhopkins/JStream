@@ -6228,7 +6228,7 @@ stamp = { hash = "b3:801cb2d2efc458a3", by = "agent:outputs-1206", note = "Rewro
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:9b9f2642b7f6ff98", by = "agent:outputs-1206", note = "Rewrote the steps for #1206: + Add output with URL and key in one dialog, the masked key, settings by double-click or ⋯ › Settings… applying on OK/Apply, and Encoders & mixes… for encoders, mixes and the OpenH264 offer." }
+stamp = { hash = "b3:a7a9da43edb12c7e", by = "agent:outputs-1206", note = "Round 2 only added the refused-key retry to UI-FEATURES#outputs; the steps (+ Add output with URL and key, settings by double-click, Encoders & mixes…) still hold." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
@@ -6237,7 +6237,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:9b9f2642b7f6ff98", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
+stamp = { hash = "b3:a7a9da43edb12c7e", by = "agent:outputs-1206", note = "Round 2 changed only the stream-key retry; adding a recording and changing its file in its settings still hold." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6255,7 +6255,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:bdf415d0b5f0a0d5", by = "agent:cursor", note = "Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:9b9f2642b7f6ff98", by = "agent:outputs-1206", note = "Re-read: the first-scene steps touch no output UI, so #1206 changes nothing here." }
+stamp = { hash = "b3:a7a9da43edb12c7e", by = "agent:outputs-1206", note = "Round 2's UI-FEATURES change is the Add retry note in Outputs; the first-scene steps touch no output UI." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6939,7 +6939,7 @@ stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "Re-read Sum
 stamp = { hash = "b3:d76423768eb5d62f", by = "agent:obs-ui-thread", note = "Counts unchanged: lock and screenshots are notes on existing rows. Renumbered from ADR-0093 and 0.69 after merging main: #1034 took ADR-0093, and open PRs claim 0.69 (#1041) and 0.70 (#1044). The merge brought #1034 (shader sources), which this section's lock and screenshot text doesn't touch." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#outputs"]
-stamp = { hash = "b3:b7ead112b9957a6c", by = "agent:outputs-1206", note = "Outputs still counts 4 rows, 3 done, 1 blocked; the theme rows changed wording only." }
+stamp = { hash = "b3:d4abbdfce2a2b4af", by = "agent:outputs-1206", note = "Round 2 changed Outputs' prose only; it still counts 4 rows, 3 done, 1 blocked." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#scenes"]
 stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "Re-read: round 1 edits only notes in SC-08, SC-09, SC-11, OB-07 and OB-10; no status changes, so the counts hold." }
