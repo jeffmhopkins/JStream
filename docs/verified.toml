@@ -5736,7 +5736,7 @@ stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Co
 stamp = { hash = "b3:c8a34bdd85887b52", by = "agent:claude-perf-suite", note = "review N2: labels are projector#<channel>:<scene|program|source:<id>>, checked against Picture in projector.rs; the channel survives the 64-char cut" }
 
 ["CRATE-jstream-ui#views"."dep:docs/adr/0132-bench-gates-views-and-quality-probe.md"]
-stamp = { hash = "b3:13de3df12a84a9c2", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }
+stamp = { hash = "b3:11b46d17e1357226", by = "agent:claude-perf-suite", note = "ADR-0132's consequences now say Linux has no decoder (ADR-0061) and GPU-fed encoders need read-back copies (#1337); the views section describes only decisions 1 and 2, unchanged" }
 
 ["CRATE-jstream-ui#views"."file:crates/jstream-ui/src/canvas/screen.rs"]
 stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }

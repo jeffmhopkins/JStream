@@ -94,8 +94,9 @@ Three gaps remain before the bench can hold the alpha.5 bar:
 - `preview.report` costs one small call a second per view; the engine keeps one entry
   per view.
 - The probe's decode runs on the control side, never on a real-time thread, and only
-  while one is asked for. Linux needs an H.264 decoder for it (OpenH264's own, through
-  the library it already loads); until that lands there, the probe answers
-  `action_failed` on Linux and CI skips the quality gates.
+  while one is asked for. Linux has no H.264 decoder: ADR-0061 keeps OpenH264 encode-only,
+  and changing that is the maintainer's call. So the probe answers `action_failed` on
+  Linux, and CI skips the quality gates there. An encoder fed GPU frames also needs a
+  copy of each one read back, per platform, before it can be probed (#1337).
 - Thresholds stay in files the bench and `cargo xtask perf` read, never in code, so
   tightening the bar is a reviewed one-line change.
