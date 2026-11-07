@@ -8,8 +8,8 @@
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, use the light and framing filters (bloom, glow, vignette), mask, and build reflections on glossy surfaces (#1062), how
-//! to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
+//! light by role, use the light and framing filters (bloom, glow, vignette), mask, and
+//! build reflections on glossy surfaces (#1062), how to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
 //! which transition to use (including a `stinger`), and when to build a graphic as HTML
 //! in a `browser` source, animated on one clock. Numbers are for a 1920×1080 canvas and scale with it.
 
@@ -95,10 +95,11 @@ light, an opaque camera included (`threshold` about 0.7, `intensity` 0.5-1.5, `r
 16-40); `glow` lights the transparent area around a shape (a logo, text, a keyed \
 person), so on an opaque picture it shows only past its edge, as an item effect. As \
 item effects, `glow`, `drop_shadow` and `outline` draw past the item's box. A \
-`vignette` darkens the edges (`blend` `multiply`) or tints them (`normal`), as an \
-ellipse that follows the frame or a `round` circle around `center_x`, `center_y`; \
-`strength` steps evenly as it looks. Its looks: subtle (`strength` 0.3, `radius` 0.5, \
-`softness` 0.7), cinematic (0.6, 0.3, 0.7) and spotlight (0.9, 0.15, 0.45, \
+`vignette` tints the edges towards its `color` (`blend` `normal`) or darkens by it \
+(`multiply`), as an ellipse that follows the frame or a `round` circle around \
+`center_x`, `center_y`; `strength` is the linear share of the colour, so a dark one \
+looks half as bright at the edge near 0.8. Its looks: subtle (`strength` 0.55, `radius` \
+0.5, `softness` 0.7), cinematic (0.85, 0.3, 0.7) and spotlight (1, 0.15, 0.45, \
 `shape` `round`). \
 Layering: build a scene as separate layers by role (the background, what glows or \
 emits light, the light it throws onto nearby surfaces, and the foreground frame or \

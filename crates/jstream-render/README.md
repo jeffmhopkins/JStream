@@ -762,17 +762,17 @@ premultiplied linear light on the way out.
   looping axis, so a ticker's last item doesn't run into its first: the offset wraps
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
-- `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.4), `softness`
-  (0..1, default 0.6), `color` (with alpha, default opaque black), `shape` (`frame`, the
+- `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
+  (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
   default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
-  (`multiply`, the default, darkens by the colour; `normal` tints towards it) and
-  `center_x`, `center_y` (0..1 of the frame, default 0.5). The distance from the centre
-  is 0 there and 1 at the half-diagonal: in the frame's own UV for `frame`, in pixels for
-  `round`. Inside `radius` the picture is untouched; over the next `softness` it fades in
-  (a smoothstep; 0 is a hard edge). The sliders step evenly as the picture looks:
-  `strength` is the share of the edge's perceived lightness that goes, so the shader
-  takes `1 - (1 - strength)^2.2` of the colour in linear light, times its alpha (#1226;
-  a linear mix barely showed below 0.7). Coverage is kept, so a transparent pixel stays
+  (`normal`, the default, mixes towards the colour, a tint; `multiply` darkens by it)
+  and `center_x`, `center_y` (0..1 of the frame, default 0.5). The distance from the
+  centre is 0 there and 1 at the half-diagonal: in the frame's own UV for `frame`, in
+  pixels for `round`. Inside `radius` the picture is untouched; over the next
+  `softness` it fades in (a smoothstep; 0 is a hard edge) to `strength` times the
+  colour's alpha, in linear light. The settings #1226 added default to what the kind
+  drew before, so a saved vignette keeps its look and the kind stays at version 1
+  (ADR-0025 › Versioning a kind). Coverage is kept, so a transparent pixel stays
   transparent. It frames whatever its chain runs on: a source's whole frame, an item's
   cropped box or a scene's composite (ADR-0065, #529).
 

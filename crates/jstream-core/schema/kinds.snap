@@ -2662,7 +2662,7 @@ source: crates/jstream-core/src/kinds.rs
         "max": 1.0,
         "default": 0.5,
         "label": "Strength",
-        "description": "How much the edges take the color, in even steps as it looks: 0 is none, 0.5 makes a dark vignette's edge look about half as bright.",
+        "description": "How much of the color the edges take, in linear light: 0 is none. A dark vignette looks half as bright at the edge near 0.8.",
         "live": true
       },
       {
@@ -2670,7 +2670,7 @@ source: crates/jstream-core/src/kinds.rs
         "type": "float",
         "min": 0.0,
         "max": 1.0,
-        "default": 0.4,
+        "default": 0.5,
         "label": "Radius",
         "description": "Where the fade starts, as a fraction of the way from the centre to a corner.",
         "live": true
@@ -2680,7 +2680,7 @@ source: crates/jstream-core/src/kinds.rs
         "type": "float",
         "min": 0.0,
         "max": 1.0,
-        "default": 0.6,
+        "default": 0.5,
         "label": "Softness",
         "description": "How far the fade runs past the radius, as the same fraction. 0 is a hard edge.",
         "live": true
@@ -2716,15 +2716,15 @@ source: crates/jstream-core/src/kinds.rs
         "type": "enum",
         "options": [
           {
-            "value": "multiply",
-            "label": "Multiply"
-          },
-          {
             "value": "normal",
             "label": "Normal"
+          },
+          {
+            "value": "multiply",
+            "label": "Multiply"
           }
         ],
-        "default": "multiply",
+        "default": "normal",
         "label": "Blend",
         "description": "Multiply darkens by the color; Normal tints towards it.",
         "live": true

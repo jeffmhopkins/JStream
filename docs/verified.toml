@@ -195,13 +195,13 @@ stamp = { hash = "b3:8f6c25a84d2e8a73" }
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:25e75e3593afd4d3", by = "agent:filters-1226", note = "Re-read: the GPU pipeline's stages don't list filter kinds or the item layer's padding; #1226's bloom, outsets, set_pad and vignette settings don't change them" }
+stamp = { hash = "b3:b60c3d85d2747ccb", by = "agent:filters-1226", note = "Re-read: the pipeline lists no filter kinds; the vignette's restored defaults don't change it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:8a1a50c3e47dcdb8", by = "agent:claude", note = "Re-read against the GPU ingest compute pass and the ReadbackRing: CPU frames convert on the GPU, CPU-path sessions and cameras are read back through a ring collected without waiting." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/schema/kinds.snap"]
-stamp = { hash = "b3:ce6bfaff3efde93d", by = "agent:filters-1226", note = "Re-read: the GPU pipeline's capture, compose and encode stages don't list filter kinds; #1226's bloom, outsets and vignette settings don't change them" }
+stamp = { hash = "b3:ea168c9409c41b6d", by = "agent:filters-1226", note = "Re-read: the pipeline lists no filter kinds; the vignette's restored defaults don't change it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/blend.rs"]
 stamp = { hash = "b3:0f46a2b13e3171ab", by = "agent:claude-3d-cameras", note = "This branch added the depth-of-field sentence: each fragment of a flat item blurred by its distance from the focus plane, a disc of mip taps, a softened edge and no extra pass, matching composite.wgsl and the render README, and after the merge with #1113 it says a 3D model's layer isn't blurred (place.rs's Placement::Layer arm has zero dof). Round 2 (#1122 review N1, N4) adds the push-out by the shape's largest blur and the cap at it, VERTEX_STRIDE 116 and the tilted-plane goldens, render detail the sentence doesn't give. The merges brought ADR-0103's readback_wait in compositor.rs (pipeline order unchanged), #1121's place.rs draw-nothing for an overflowing neutral box (#1046), #1109's seven backdrop modes with the two _srgb ones, and #1113's model draw (ADR-0107), which follows the depth-of-field sentence. | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): seven modes read a backdrop copy, and the two _srgb modes mix sRGB-encoded values to match a browser" }
@@ -381,7 +381,7 @@ stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/vignette.rs"]
-stamp = { hash = "b3:b57f1cf0985d3eab", by = "agent:filters-1226", note = "Re-read: the GPU pipeline's capture, compose and encode stages don't list filter kinds; #1226's bloom, outsets and vignette settings don't change them" }
+stamp = { hash = "b3:b7b03bbf4bcc5064", by = "agent:filters-1226", note = "Re-read: the pipeline lists no filter kinds; the vignette's restored defaults don't change it" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/vignette.wgsl"]
 stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-read: the GPU pipeline's capture, compose and encode stages don't list filter kinds; #1226's bloom, outsets and vignette settings don't change them" }
@@ -492,7 +492,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:38f796a6709d8b0a", by = "agent:grok", note = "Re-read it. The tool snapshot includes the longer canvas.set_frame_rate description. The section does not name a frame rate." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:f52a2417e0b10721", by = "agent:filters-1226", note = "Edited: the MCP section's list of design guidance topics names the light and framing filters" }
+stamp = { hash = "b3:1e3e660044d149bf", by = "agent:filters-1226", note = "Re-read: the topic list (light and framing filters) holds after the vignette sentence's values changed" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2046,7 +2046,7 @@ stamp = { hash = "b3:24a2b1142112717f", by = "agent:claude", note = "This PR add
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:4892482fcc98431a", by = "agent:filters-1226", note = "Edited for ADR-0125: ItemBox is the box only, the chain pads at the first effect that declares an outset (Chain::pad_at, set_pad); goldens now include a vignette before a glow still framing the box. Also #1226's outsets and the glow/shadow golden | merge: #1259 changed base resolution and frame rate handling, not item effects layers; the pad-at-first-outset text holds | kept from the merged side: Page API paragraph now says each bus's post-fader levels go in the PageView, read only while a page is granted, a frame is always due while a page's bus has a reading, and attach and detach feed the pages" }
+stamp = { hash = "b3:b047f275e5a1ed46", by = "agent:filters-1226", note = "Edited: rewrapped a long line (review N2); the outset padding and golden list hold | kept from the merged side: Page API paragraph now says each bus's post-fader levels go in the PageView, read only while a page is granted, a frame is always due while a page's bus has a reading, and attach and detach feed the pages" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:14c9709fcd23f48e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76 effects space, #1122 0.77 depth of field, #1127 0.78 shared values, #1144 section split) and renumbered this PR's opacity gain from 0.79 to 0.83 per the release queue; re-read against the opacity-above-1 change and what main brought, and it holds (snapshots regenerated at 0.83) | merge: wave/alpha4 into #1104 (protocol 0.83): crates/jstream-protocol/README.md#filters re-verified on the wave after #1080 (frame sheets, video.frames and scene.switch_and_watch (0.82)); #1125 (item motion, item.set_motion (ADR-0099, 0.81)); #1082 (item.show, item.hide and item.toggle (ADR-0101, 0.80)); #1134 (file filters on master and output chains (0.79)). snapshot.rs's canvas-space track takes the motion's opacity through motion::opacity_of, so #1104's opacity gain (above 1, to MAX_OPACITY 4, #1101) holds there too; the filters dep's file-filter text doesn't change this section. | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on | kept from the merged side: File filters on master/output chains, whole PR: the graph and mock refuse only scene, source and bus references on a master or output filter, the engine loads their assets (live.rs sync_assets, plan_stages hands them over), Add filter offers Apply LUT there; protocol 0.79 (version.rs, the versions entry at the head, the filters paragraph, FilterOwner::Master's doc, parity.rs's reason, snapshots regenerated). Tests: chain.rs the_output_stage_reads_its_filters_assets, tests/sources.rs a_master_or_output_filters_asset_is_loaded_for_its_chain, graph master_and_output_chains_are_validated, mock a_master_or_output_filter_may_name_a_file (review N1). Main brought #1144 (protocol and core README split into topic sections), #1111 (0.76), #1122 (0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's text reads right in the merged sections." }
@@ -2169,7 +2169,7 @@ stamp = { hash = "b3:122185294299b4ac", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:ae4278703c1195f9", by = "agent:grok", note = "Re-read the virtual-camera sentence. A virtual_cam start still publishes the program as a webcam, and the camera stays 30 fps at either base rate." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:4892482fcc98431a", by = "agent:filters-1226", note = "Re-read against core snapshots' edit (outsets, padding at the first outset effect): the daemon's design says nothing about item effects layers | merge: Re-read after #1259: nothing in the daemon design touches item effects layers | kept from the merged side: The daemon's design doesn't describe the page API; core's snapshots section only gained the levels text" }
+stamp = { hash = "b3:b047f275e5a1ed46", by = "agent:filters-1226", note = "Re-read against core snapshots' rewrap: nothing in the daemon design changes | kept from the merged side: The daemon's design doesn't describe the page API; core's snapshots section only gained the levels text" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
@@ -2439,7 +2439,7 @@ stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d9b91e488d8d9030", by = "agent:shader-source", note = "Hot reload paragraph now names PackWatcher::mark_stale (forces the next poll to reload a folder a host replaced), load_pack (a poll's caught load on LOAD_THREAD, for checking a staged pack) and manifest_pack_id (the manifest's pack ID without shader validation), the three additions in pack.rs, watch.rs and lib.rs for ADR-0097." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:f68165d7f050c6bc", by = "agent:filters-1226", note = "Re-read against render filters' edit: packs still declare no outset; set_pad pads any VideoFilter, pack effects included, only on item chains" }
+stamp = { hash = "b3:8963f33b99ff26ae", by = "agent:filters-1226", note = "Re-read against render filters' vignette edit: packs are unaffected" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -2700,7 +2700,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:f52a2417e0b10721", by = "agent:filters-1226", note = "Edited: the design guidance paragraph now names the light and framing filters (bloom, glow past an item's box, vignette blends, shapes and three looks)" }
+stamp = { hash = "b3:1e3e660044d149bf", by = "agent:filters-1226", note = "Re-read: the guidance list (light and framing filters) holds; design.rs's vignette sentence now gives strength as the linear share and the looks in linear values" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2733,7 +2733,7 @@ stamp = { hash = "b3:d3eeb18e517f4d4c", by = "agent:grok", note = "Re-read the s
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:f52a2417e0b10721", by = "agent:filters-1226", note = "Re-read: still says the instructions end with design.rs's guidance; #1226 only adds a sentence to it" }
+stamp = { hash = "b3:1e3e660044d149bf", by = "agent:filters-1226", note = "Re-read: the instructions still end with design.rs's guidance" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -4368,7 +4368,7 @@ stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/vignette.rs"]
-stamp = { hash = "b3:b57f1cf0985d3eab", by = "agent:filters-1226", note = "Re-read: passes, resources and placement math are unchanged by the new bloom kind, the declared outsets and the vignette's uniforms" }
+stamp = { hash = "b3:b7b03bbf4bcc5064", by = "agent:filters-1226", note = "Re-read: passes and placement math unchanged by the vignette's restored defaults" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/vignette.wgsl"]
 stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-read: passes, resources and placement math are unchanged by the new bloom kind, the declared outsets and the vignette's uniforms" }
@@ -4452,7 +4452,7 @@ stamp = { hash = "b3:c073623edd813c8b", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:dd44bf109c23b7ca", by = "agent:release-thread", note = "#1101 opacity above 1: opacity bullet now describes the gain (colour times opacity, alpha times at most 1); new GPU test opacity_above_one_is_a_gain_on_the_light; blend reference handles gain | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | merge: merged main (#1111 0.76 effects space, #1122 0.77 depth of field, #1127 0.78 shared values, #1144 section split) and renumbered this PR's opacity gain from 0.79 to 0.83 per the release queue; composite.wgsl keeps the gain (alpha times min(opacity, 1)) on top of #1122's blurred colour and widened edge coverage, render tests pass | kept from the merged side: This branch added the Depth of field paragraph under Through a camera: Shape.dof, the per-fragment r = blur·|w − focus|/w capped at 64, the 16-tap golden-angle disc through textureSampleGrad at the taps' mip level, and the widened coverage, matching composite.wgsl and place.rs, plus lerp_camera's focus rule in transition.rs; boxed's corner arm is commented as a defence (#1121 review N2). Round 2 (#1122 review N1, N4, N6) edited it: every vertex is pushed by the shape's corners' largest blur, which dof carries as its third component (VERTEX_STRIDE 116), and the shader caps r there because past the edge w runs on beyond the corners'; drawn's doc comment says so, rewrapped; matches place.rs, composite.wgsl, compositor.rs and blend.rs, and three_d.rs's tilted-plane goldens check it. The merges brought ADR-0103's readback_wait, noted in the readback step, #1121's draw-nothing bullet for an overflowing neutral box (#1046), #1109's two _srgb backdrop modes, and #1113's Models paragraph, which follows Depth of field; a model's layer is placed flat with zero dof, so it isn't blurred yet, as the paragraph now says." }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:f68165d7f050c6bc", by = "agent:filters-1226", note = "Re-read and edited for #1226 and ADR-0125: vignette options and perceptual strength, bloom, glow's transparent-edge note, Bounds lists each kind's max_outset_px and VideoFilter::set_pad's padded draw; Where they run says the layer grows at the first outset effect" }
+stamp = { hash = "b3:8963f33b99ff26ae", by = "agent:filters-1226", note = "Edited for review B1: the vignette's strength stays the linear share of the colour, blend defaults to normal and radius/softness to 0.5, so a saved vignette keeps its look at version 1; the rest (bloom, outsets, set_pad, Bounds) re-read and holds" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -4608,7 +4608,7 @@ stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:9e924373fb18ef05", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/vignette.rs"]
-stamp = { hash = "b3:b57f1cf0985d3eab", by = "agent:filters-1226", note = "Re-read against #1226: vignette's new shape, blend, centre and perceptual strength with new defaults; bloom documented; glow needs a transparent edge; Bounds now gives each kind's max_outset_px (shadow 300, outline 65, glow and bloom 100) and the layer cost" }
+stamp = { hash = "b3:b7b03bbf4bcc5064", by = "agent:filters-1226", note = "Edited for review B1: the vignette's strength stays the linear share of the colour, blend defaults to normal and radius/softness to 0.5, so a saved vignette keeps its look at version 1; the rest (bloom, outsets, set_pad, Bounds) re-read and holds" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/vignette.wgsl"]
 stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-read against #1226: vignette's new shape, blend, centre and perceptual strength with new defaults; bloom documented; glow needs a transparent edge; Bounds now gives each kind's max_outset_px (shadow 300, outline 65, glow and bloom 100) and the layer cost" }
@@ -4839,7 +4839,7 @@ stamp = { hash = "b3:dffe84cc4e3d784f", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:9e924373fb18ef05", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/vignette.rs"]
-stamp = { hash = "b3:b57f1cf0985d3eab", by = "agent:filters-1226", note = "Re-read: the purpose names no filter list or outset claim that #1226's new bloom kind, outsets or vignette settings change" }
+stamp = { hash = "b3:b7b03bbf4bcc5064", by = "agent:filters-1226", note = "Re-read: no filter list or vignette semantics in the purpose; B1's revert to the old strength meaning doesn't touch it" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/vignette.wgsl"]
 stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-read: the purpose names no filter list or outset claim that #1226's new bloom kind, outsets or vignette settings change" }
@@ -5415,7 +5415,7 @@ stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "The proj
 stamp = { hash = "b3:2114eccea8f445c2", by = "agent:claude", note = "same changes; the design section names no default rate or preview state, still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:77160ef1321d7a45", by = "agent:filters-1226", note = "Edited: the Add filter dialog lists bloom under Style, and the Filters window's Preset select (filter_presets.rs) applies a preset in one filter.set_settings" }
+stamp = { hash = "b3:b1485343a957cb62", by = "agent:filters-1226", note = "Re-read: the preset select and the vignette's Subtle, Cinematic and Spotlight hold; only their strength values changed to linear ones" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:65b8f5353eddca43", by = "agent:filters-1226", note = "Edited: the Add filter dialog lists bloom under Style, and the Filters window's Preset select (filter_presets.rs) applies a preset in one filter.set_settings" }
@@ -5604,7 +5604,7 @@ stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "Projecto
 stamp = { hash = "b3:2114eccea8f445c2", by = "agent:claude", note = "8000/12000 kbps form fallback, stats test numbers, and the canvas keeping a live picture across a re-subscribe (#1205); none named in purpose, still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:77160ef1321d7a45", by = "agent:filters-1226", note = "Re-read: the purpose's panel list is unchanged by the new preset module and the bloom catalogue entry" }
+stamp = { hash = "b3:b1485343a957cb62", by = "agent:filters-1226", note = "Re-read: the panel list is unchanged by the presets' new values" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:65b8f5353eddca43", by = "agent:filters-1226", note = "Re-read: the purpose's panel list is unchanged by the new preset module and the bloom catalogue entry" }
@@ -6882,7 +6882,7 @@ stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "The doc
 stamp = { hash = "b3:ecc0af86dfec2db6", by = "agent:filters-1226", note = "Edited: new FL-11 row for filter presets (vignette Subtle, Cinematic, Spotlight) and covers widened to filter_presets.rs" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:77160ef1321d7a45", by = "agent:filters-1226", note = "Edited: new FL-11 row for filter presets (vignette Subtle, Cinematic, Spotlight) and covers widened to filter_presets.rs" }
+stamp = { hash = "b3:b1485343a957cb62", by = "agent:filters-1226", note = "Re-read: FL-11 names the vignette's three presets, whose values changed to linear strengths but whose names and behaviour hold" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:65b8f5353eddca43", by = "agent:filters-1226", note = "Edited: new FL-11 row for filter presets (vignette Subtle, Cinematic, Spotlight) and covers widened to filter_presets.rs" }

@@ -1542,7 +1542,8 @@ declare one (render › Filters). The chain grows the layer by it where the firs
 that declares one runs (`Chain::pad_at`, that effect's `VideoFilter::set_pad`), so the
 effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)). A box
-longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
+longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
+drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
