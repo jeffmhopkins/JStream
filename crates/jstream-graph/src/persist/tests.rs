@@ -451,7 +451,7 @@ fn the_v8_fixture_loads_exactly() {
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
-/// Version 7 turns on a `browser` source's page API checkbox for names or a bus it
+/// Version 8 turns on a `browser` source's page API checkbox for names or a bus it
 /// already grants (ADR-0124), and leaves every other source and setting as it was.
 #[test]
 fn the_v7_migration_keeps_a_page_api_grant() {
@@ -477,6 +477,85 @@ fn the_v7_migration_keeps_a_page_api_grant() {
     assert!(settings(1).get("page_api_shared_values").is_none());
     assert!(settings(1).get("page_api_audio").is_none());
     assert!(settings(2).get("page_api_shared_values").is_none());
+}
+
+/// A `browser` kind with the page API's settings (ADR-0124), as `jstream-sources`
+/// declares them, for loading a granted version-7 page through the graph.
+fn browser_kind() -> KindDescriptor {
+    let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        warning: None,
+        id: id.into(),
+        ty,
+        default,
+        label: id.into(),
+        description: None,
+        group: None,
+        advanced: false,
+        visible_if: None,
+        live: true,
+    };
+    KindDescriptor {
+        kind_id: "browser".into(),
+        category: KindCategory::Source,
+        name: "Browser".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![
+            param("page_api", ParamType::Bool, json!(false)),
+            param("page_api_shared_values", ParamType::Bool, json!(false)),
+            param(
+                "page_api_values",
+                ParamType::String {
+                    multiline: false,
+                    max_len: 1024,
+                },
+                json!(""),
+            ),
+            param("page_api_audio", ParamType::Bool, json!(false)),
+            param("page_api_bus", ParamType::Bus, Value::Null),
+        ],
+    }
+}
+
+/// A granted version-7 `browser` source loads through the graph with both checkboxes
+/// on, its names and bus kept, where the kind's defaults alone would turn them off.
+#[test]
+fn a_v7_page_api_grant_loads_with_its_checkboxes_on() {
+    let mut file: Value = serde_json::from_str(V7).expect("the v7 fixture");
+    file["sources"]
+        .as_array_mut()
+        .expect("sources")
+        .push(json!({
+            "id": "page",
+            "name": "Page",
+            "kind": {"type": "builtin", "kind": "browser"},
+            "kind_version": 1,
+            "settings": {
+                "page_api": true,
+                "page_api_values": "status.*",
+                "page_api_bus": {"type": "bus", "bus_id": "vod"},
+            },
+        }));
+    let mut kinds = kinds();
+    kinds.push(browser_kind());
+    let loaded = Graph::new()
+        .with_kinds(kinds)
+        .with_collection_json(&file.to_string())
+        .expect("loads");
+    let page = loaded
+        .state()
+        .source(&SourceId::new("page"))
+        .expect("the page");
+    let setting = |id: &str| page.settings().get(id).cloned();
+    assert_eq!(setting("page_api_shared_values"), Some(json!(true)));
+    assert_eq!(setting("page_api_audio"), Some(json!(true)));
+    assert_eq!(setting("page_api_values"), Some(json!("status.*")));
+    assert_eq!(
+        setting("page_api_bus"),
+        Some(json!({"type": "bus", "bus_id": "vod"}))
+    );
 }
 
 #[test]

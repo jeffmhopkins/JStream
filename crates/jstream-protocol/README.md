@@ -307,8 +307,8 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.95 because a parameter's descriptor can carry a `warning`, one
 line a client shows beside the control
-([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
-set); 0.91 because a follow camera is a `follow_pointer` filter on a
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a placeholder number the
+release queue sets); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the

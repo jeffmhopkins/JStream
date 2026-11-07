@@ -564,7 +564,7 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Co
 stamp = { hash = "b3:2c1e6a214289fcd2", by = "agent:page-api-review", note = "Collections now name version 8 (ADR-0124) and why it is a migration" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:2dc1d1649e68637a", by = "agent:page-api-review", note = "Collections now name version 8 (ADR-0124) and why it is a migration" }
+stamp = { hash = "b3:cad0394dc9f8cc8b", by = "agent:page-api", note = "Re-read against the N2/N3 test changes: version 8's page API carry-over is now also tested through Graph::with_collection_json with a granted browser source; the text holds" }
 
 ["ARCH#principles"."body"]
 stamp = { hash = "b3:5af84c5cc7c0a12d", by = "agent:claude@session_01QBbMRwRuZe7FL4ak2fU793", note = "Edited principle 8: listeners require a token and check Host, and Origin when present, matching R-SEC-002's new wording; other principles unchanged" }
@@ -2652,7 +2652,7 @@ stamp = { hash = "b3:170a35823fa167a0", by = "agent:page-api-review", note = "Sc
 stamp = { hash = "b3:2c1e6a214289fcd2", by = "agent:page-api-review", note = "Schema 8: v7_to_v8 turns a browser source's page_api_shared_values or page_api_audio on where page_api_values or page_api_bus already grant; v8.json fixture added; README's save and load text say so" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
-stamp = { hash = "b3:2dc1d1649e68637a", by = "agent:page-api-review", note = "Schema 8: v7_to_v8 turns a browser source's page_api_shared_values or page_api_audio on where page_api_values or page_api_bus already grant; v8.json fixture added; README's save and load text say so" }
+stamp = { hash = "b3:cad0394dc9f8cc8b", by = "agent:page-api", note = "Re-read: only persist tests changed (a v7 browser grant loaded through the graph, a doc comment fixed); the crate description holds" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/plan.rs"]
 stamp = { hash = "b3:dfb9a6bc447e7146", by = "agent:claude", note = "Hotkeys bullet now says bindings naming a removed item go with it (remove_missing_items), delete.plan applies its plan to a copy, and State::visible_in." }
