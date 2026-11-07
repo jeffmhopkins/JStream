@@ -3904,13 +3904,16 @@ impl State {
     /// round collects every timeline's due fires and then runs them, so a fire is
     /// skipped when an earlier cue in the round has stopped its timeline or started it
     /// again (#1172): a timeline that only reached its own end still runs the cues that
-    /// were due before that end. A round's loops and ends are sent after its cues have
-    /// fired. Returns when the next cue or pass boundary falls due, if any timeline
+    /// were due before that end. A round's loops and ends are sent in time order with its
+    /// cues, each after the cues due at or before its pass boundary, and a loop or end is
+    /// dropped when such a cue stopped its timeline or started it again (#1253), so no
+    /// client hears `looped` for a stopped timeline or an old run's `ended` after the new
+    /// run's `started`. Returns when the next cue or pass boundary falls due, if any timeline
     /// plays: no sooner than [`crate::timelines::CAPPED_WAIT_NS`] from now when every
     /// round ran with cues due, so cues that keep starting each other can't spin the
     /// ticker.
     fn timeline_tick(&mut self, wake: &mut Vec<Waker>) -> Option<jstream_media::MediaTime> {
-        use crate::timelines::{Step, schedule};
+        use crate::timelines::{Step, boundary, schedule};
         let mut capped = true;
         for _ in 0..crate::timelines::MAX_ROUNDS {
             let now_ns = crate::timelines::ns(self.live.now());
@@ -3943,6 +3946,8 @@ impl State {
                 for fire in fires {
                     due.push((id.clone(), fire, info.clone(), by.clone(), started_ns));
                 }
+                // Where the step happened: the end of the pass it was on.
+                let at_ns = boundary(&timeline, started_ns, pass_before);
                 let (change, playing, position_ms, pass) = match step {
                     Some(Step::Looped { pass, position_ms }) => (
                         jstream_protocol::TimelineChange::Looped,
@@ -3961,14 +3966,18 @@ impl State {
                     }
                     None => continue,
                 };
-                steps.push(Event::TimelineChanged {
-                    timeline_id: id.clone(),
-                    scene_id,
-                    change,
-                    playing,
-                    position_ms,
-                    pass,
-                });
+                steps.push((
+                    at_ns,
+                    started_ns,
+                    Event::TimelineChanged {
+                        timeline_id: id.clone(),
+                        scene_id,
+                        change,
+                        playing,
+                        position_ms,
+                        pass,
+                    },
+                ));
             }
             let idle = due.is_empty();
             // In time order across timelines; a sort that keeps each timeline's order.
@@ -3976,7 +3985,15 @@ impl State {
             // A cue that stops or restarts a timeline invalidates that generation from
             // the cue's time on, so a fire already collected for it does not run after.
             let mut invalidated: BTreeMap<jstream_protocol::TimelineId, i64> = BTreeMap::new();
+            steps.sort_by_key(|(at_ns, ..)| *at_ns);
+            let mut steps = steps.into_iter().peekable();
             for (id, fire, info, by, started_ns) in due {
+                // A loop or end is sent once every cue due at or before its boundary ran.
+                while let Some((_, step_started_ns, step)) =
+                    steps.next_if(|(at_ns, ..)| *at_ns < fire.at_ns)
+                {
+                    self.send_timeline_step(step_started_ns, &step, wake);
+                }
                 if invalidated.get(&id).is_some_and(|at| fire.at_ns >= *at) {
                     continue;
                 }
@@ -3998,8 +4015,8 @@ impl State {
                     invalidated.insert(target, fire.at_ns);
                 }
             }
-            for step in steps {
-                self.subscribers.emit(&step, wake);
+            for (_, step_started_ns, step) in steps {
+                self.send_timeline_step(step_started_ns, &step, wake);
             }
             if idle {
                 capped = false;
@@ -4021,6 +4038,32 @@ impl State {
             next
         };
         Some(crate::timelines::media_time(next))
+    }
+
+    /// Sends a loop or end that a tick round found for the run of a timeline that started
+    /// at `started_ns`, unless a cue the round ran first stopped that run or started the
+    /// timeline again (#1253). A `looped` needs that run still playing; an `ended` needs
+    /// the timeline not playing again, since its new run already sent `started`.
+    fn send_timeline_step(&mut self, started_ns: i64, step: &Event, wake: &mut Vec<Waker>) {
+        let Event::TimelineChanged {
+            timeline_id,
+            change,
+            ..
+        } = step
+        else {
+            return;
+        };
+        let current = self
+            .timelines
+            .get(timeline_id)
+            .map(|playing| playing.started_ns);
+        let holds = match change {
+            jstream_protocol::TimelineChange::Ended => current.is_none(),
+            _ => current == Some(started_ns),
+        };
+        if holds {
+            self.subscribers.emit(step, wake);
+        }
     }
 
     /// Starts the live ticker if a timeline plays and it isn't running, so the timeline's
