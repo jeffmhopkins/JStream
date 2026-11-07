@@ -1368,6 +1368,15 @@ pub(crate) fn actions() -> Vec<Action> {
             value: None,
         },
         Action::PrivacySet { on: true },
+        Action::CollectionOpen {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+        },
+        Action::CollectionNew {
+            path: "/home/me/shows/talk.json".into(),
+        },
+        Action::CollectionSaveAs {
+            path: "D:/Projects/show copy.json".into(),
+        },
         Action::PreviewSubscribe {
             channel: 2,
             max_width: None,
@@ -1663,6 +1672,7 @@ pub(crate) fn queries() -> Vec<Query> {
         },
         Query::PluginList,
         Query::CodecDownloads,
+        Query::CollectionInfo,
         Query::YoutubeStats,
         Query::SourceSizes,
         Query::VideoFrames {
@@ -2653,6 +2663,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::CollectionInfo {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+            recent: vec![
+                "C:/Users/me/Videos/Show/show.json".into(),
+                "C:/Users/me/AppData/Roaming/JStream/collection.json".into(),
+            ],
+        },
         QueryResult::CodecDownloads {
             downloads: vec![crate::CodecDownloadInfo {
                 download_id: "openh264".into(),
@@ -2802,6 +2819,21 @@ pub(crate) fn events() -> Vec<Event> {
             id: "tl_other".into(),
         }),
     });
+    for (path, cause) in [
+        (
+            "C:/Users/me/Videos/Show/show.json",
+            crate::CollectionCause::Open,
+        ),
+        ("/home/me/shows/talk.json", crate::CollectionCause::New),
+        ("D:/Projects/show copy.json", crate::CollectionCause::SaveAs),
+    ] {
+        events.push(Event::CollectionFileChanged {
+            path: path.into(),
+            cause,
+            client_id: ClientId::new("c1"),
+            request_id: Some(RequestId::new("r7")),
+        });
+    }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),
@@ -3087,6 +3119,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Hotkey,
         EntityKind::Plugin,
         EntityKind::Pack,
+        EntityKind::File,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
