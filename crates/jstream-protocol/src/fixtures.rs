@@ -6,6 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::ActivityEntry;
+use crate::NetworkAccess;
 use crate::PlacedKeyframe;
 use crate::SceneOptions;
 use crate::{
@@ -27,6 +28,10 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
+
+/// A certificate fingerprint as `NetworkAccess` writes it: 32 bytes, colon-separated.
+const FINGERPRINT: &str = "3F:A1:07:C2:9B:44:E8:15:6D:0A:B3:72:C9:5E:21:8F:\
+                           D4:66:0B:E7:13:A9:5C:F0:28:7D:B1:4E:93:C6:0F:52";
 use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
@@ -3291,6 +3296,10 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 result: Some(ActionResult::PairingStart {
                     code: SecretString::new("7K3M-9QXA"),
                     expires_in_secs: 120,
+                    network: Some(NetworkAccess {
+                        urls: vec!["https://studio.local:4456/".into()],
+                        fingerprint: FINGERPRINT.into(),
+                    }),
                 }),
             },
         }),

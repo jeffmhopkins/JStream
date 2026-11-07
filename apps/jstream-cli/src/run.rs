@@ -415,6 +415,7 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => {
                 // The code is the answer: printed for the user to type on the device,
@@ -424,6 +425,18 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                     out,
                     "enter it on the device within {expires_in_secs} s; it works once"
                 )?;
+                // ADR-0130: a device on the network opens one of these addresses and
+                // trusts the certificate only if its fingerprint matches.
+                if let Some(network) = network {
+                    for url in &network.urls {
+                        writeln!(out, "open on the device: {url}")?;
+                    }
+                    writeln!(out, "certificate fingerprint: {}", network.fingerprint)?;
+                    writeln!(
+                        out,
+                        "continue past the certificate warning only if the fingerprint matches"
+                    )?;
+                }
             }
             _ => writeln!(
                 out,

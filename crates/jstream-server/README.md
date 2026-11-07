@@ -422,7 +422,9 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
 - **The host's side.** `Server::network_addr`, `network_urls` (one per name the
   certificate carries) and `network_fingerprint` give what the host shows the person:
   the addresses and the SHA-256 fingerprint, as `AB:CD:…`, the way a browser's
-  certificate viewer writes it. The listener's start is logged at `info` with its
+  certificate viewer writes it. `pairing.start`'s answer carries the same two as
+  `network` (protocol 0.101), so the host UI and the CLI show them beside the code;
+  without a network listener it is absent. The listener's start is logged at `info` with its
   address and fingerprint.
 - **Where it listens.** Wherever `NetworkConfig::bind` says: the daemon binds every
   interface on port 4456 unless told otherwise (#1129 N3), and says so in its help.
@@ -667,9 +669,9 @@ tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerpri
 1. **TLS** (answered). The network listener is TLS, behind the `tls` feature, with a
    self-signed certificate made on the host and pinned by its fingerprint
    ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md), see *The network
-   listener*). The host's own listener stays plain `ws://` on loopback. Still to come:
-   the host UI's pairing panel showing the addresses and the fingerprint, and the
-   desktop app's network setting.
+   listener*). The host's own listener stays plain `ws://` on loopback. The host UI's
+   pairing panel and `jstream pair` show the addresses and the fingerprint. Still to
+   come: the desktop app's network setting.
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers

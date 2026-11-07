@@ -138,7 +138,8 @@ a stolen token, local denial of service.
     the machine's addresses. It is never renewed silently: when today's names aren't all
     on it, the daemon says so at startup, and `--lan-renew` makes a new key.
   - **Trust by fingerprint.** The daemon prints the certificate's SHA-256 fingerprint
-    with the listener's addresses. A native client pins it after the person compares it.
+    with the listener's addresses, and `pairing.start` answers both, so the host UI's
+    pairing panel and `jstream pair` show them beside the code. A native client pins it after the person compares it.
     A browser keeps no pin, so a new certificate warning on a paired host means continue
     only if the fingerprint matches the one the host shows
     ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes

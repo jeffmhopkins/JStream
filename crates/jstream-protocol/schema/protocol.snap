@@ -1059,6 +1059,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "minimum": 0,
               "type": "integer"
             },
+            "network": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NetworkAccess"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where a device on the network reaches the host, while the host's network\nlistener is on ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md),\n0.101). Absent otherwise: then only a device on this machine can pair."
+            },
             "type": {
               "const": "pairing.start",
               "type": "string"
@@ -8055,6 +8066,27 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "NetworkAccess": {
+      "description": "How a device on the network reaches the host's network listener (ADR-0104, 0.101):\nwhat the host shows beside a pairing code.",
+      "properties": {
+        "fingerprint": {
+          "description": "The SHA-256 fingerprint of the listener's certificate, as `AB:CD:…` (32 bytes in\nupper-case hex, colon-separated), the way a browser's certificate viewer writes\nit. The person compares it with the one the device's browser shows before they\npair, and again whenever a paired device warns about the certificate\n([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)).",
+          "type": "string"
+        },
+        "urls": {
+          "description": "The listener's addresses, one per name and address its certificate carries, as\n`https://<name>:<port>/`. The device opens one of them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls",
+        "fingerprint"
+      ],
+      "type": "object"
+    },
     "OutputHealth": {
       "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
       "oneOf": [
@@ -13582,5 +13614,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.96"
+  "title": "JStream protocol 0.101"
 }

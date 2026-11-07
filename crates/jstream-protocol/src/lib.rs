@@ -65,8 +65,8 @@ pub use encoder::{
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
-    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,
-    Response, ServerMessage, Welcome,
+    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello,
+    NetworkAccess, Request, Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{

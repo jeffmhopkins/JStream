@@ -2920,6 +2920,15 @@ impl Harness {
 
     /// Starts pairing over `control` and returns the code.
     fn start_pairing(&self, control: &WsControl) -> String {
+        self.start_pairing_with_network(control).0
+    }
+
+    /// Starts pairing over `control` and returns the code and where the network
+    /// listener is, as `pairing.start` answers (0.101).
+    fn start_pairing_with_network(
+        &self,
+        control: &WsControl,
+    ) -> (String, Option<jstream_protocol::NetworkAccess>) {
         let response = ok(self.run(control.call(Call::Action {
             action: Action::PairingStart,
         })));
@@ -2929,10 +2938,11 @@ impl Harness {
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => {
                 assert_eq!(expires_in_secs, 120);
-                code.expose().to_owned()
+                (code.expose().to_owned(), network)
             }
             other => panic!("expected a pairing code, got {other:?}"),
         }

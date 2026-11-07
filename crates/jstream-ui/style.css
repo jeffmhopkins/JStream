@@ -1147,6 +1147,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   letter-spacing: 0.15em;
 }
 .pairing-help { margin: 0; color: var(--muted); font-size: 0.85rem; }
+.pairing-network { display: grid; gap: 0.25rem; margin-top: 0.4rem; }
+.pairing-urls { margin: 0; padding-left: 1.2rem; }
+.pairing-fingerprint { margin: 0; overflow-wrap: anywhere; font-size: 0.8rem; }
 .device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; width: 100%; }
 .device { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .device-name { font-weight: 600; }
