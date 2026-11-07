@@ -2190,6 +2190,10 @@ pub fn fit_restore(
 /// put back in its first order; then each setting it sent goes back
 /// ([`restore_patch`]), and each switch it pressed.
 ///
+/// A filter `now` doesn't find, which another client removed while the window was open,
+/// is left out of the order and switch it puts back, so the rest still goes back (#1344);
+/// its settings were already skipped.
+///
 /// `following` lists the keyframe owners whose keyframe followed the item's own effects
 /// as the window opened (ADR-0088). The window's first edit there gave the keyframe its
 /// own effects, so for such an owner it sent edits to, Cancel sends one
@@ -2268,9 +2272,13 @@ pub fn window_restore(
                 index: u32::try_from(*i).ok(),
             });
         }
+        // A filter another client removed meanwhile is left out, or the engine would
+        // refuse the whole batch over it (#1344): it is gone either way.
+        let here = |id: &FilterId| removed.contains(id) || now(owner, id).is_some();
         if log.iter().any(|e| matches!(e, Edit::FilterReorder { .. })) {
             for which in [FilterChain::Video, FilterChain::Audio] {
-                for (i, f) in chains.chain(which).iter().enumerate() {
+                let kept = chains.chain(which).iter().filter(|f| here(&f.filter_id));
+                for (i, f) in kept.enumerate() {
                     edits.push(Edit::FilterReorder {
                         owner: owner.clone(),
                         filter_id: f.filter_id.clone(),
@@ -2311,7 +2319,7 @@ pub fn window_restore(
                 let switched = log.iter().any(|e| {
                     matches!(e, Edit::FilterSetEnabled { filter_id, .. } if *filter_id == f.filter_id)
                 });
-                if switched {
+                if switched && here(&f.filter_id) {
                     edits.push(Edit::FilterSetEnabled {
                         owner: owner.clone(),
                         filter_id: f.filter_id.clone(),
@@ -4448,7 +4456,11 @@ mod tests {
             },
         ];
         // The store hasn't caught up with the setting yet; another client turned `a` off.
-        let now = |_: &FilterOwner, f: &FilterId| (*f == id("a")).then(|| filter("a", false, 0.1));
+        let now = |_: &FilterOwner, f: &FilterId| match f.as_str() {
+            "a" => Some(filter("a", false, 0.1)),
+            "c" => Some(filter("c", true, 0.3)),
+            _ => None,
+        };
         let edits = window_restore(&opened, &log, &[], now);
         let mut back = Settings::new();
         back.insert("amount", json!(0.1));
@@ -4505,6 +4517,31 @@ mod tests {
             },
         ];
         assert!(window_restore(&opened, &log, &[], |_, _| None).is_empty());
+
+        // Another client removed `c`, whose switch the window pressed, and `a`, which it
+        // reordered: the rest still goes back, in an order without them (#1344).
+        let log = vec![
+            Edit::FilterSetEnabled {
+                owner: source.clone(),
+                filter_id: id("c"),
+                enabled: true,
+            },
+            Edit::FilterReorder {
+                owner: source.clone(),
+                filter_id: id("a"),
+                index: 2,
+            },
+            Edit::FilterSetSettings {
+                owner: source.clone(),
+                filter_id: id("a"),
+                patch: [("amount", json!(0.9))].into_iter().collect(),
+            },
+        ];
+        let now = |_: &FilterOwner, f: &FilterId| (*f == id("b")).then(|| filter("b", true, 0.2));
+        assert_eq!(
+            window_restore(&opened, &log, &[], now),
+            vec![reorder("b", 0)]
+        );
     }
 
     /// Cancel after the shader editor renamed or retyped a setting the window had sent
