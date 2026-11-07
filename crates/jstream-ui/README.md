@@ -107,7 +107,7 @@ Contents ([Design](#design) explains the choices):
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. In the desktop app,
-  File › Settings… also holds "Hear hotkeys while another app has the focus", kept as
+  the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
   the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
