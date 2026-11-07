@@ -80,6 +80,7 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("page_api", false),
             ("page_api_scenes", false),
             ("page_api_values", false),
+            ("page_api_bus", false),
         ]
     );
 }
