@@ -610,9 +610,9 @@ Docs also go stale when nothing in the repo changes. **Time-based checks never f
     reopens it if it was closed. Findings never fail the job; a tool that can't run does.
   - Not built yet: link-checking every external with lychee (cached, authenticated; 403
     and 429 count as *unknown*, not broken), due externals and `ext` facts, fact drift,
-    verify-to-edit ratios, pending enforcement past its milestone, and every Tier-1 ADR
-    decision on merged PRs, marked direct or proxy, with the quoted instruction (the
-    decision audit).
+    verify-to-edit ratios, pending enforcement past its milestone, and every
+    maintainer-tier ADR decision on merged PRs, marked direct or proxy, with the quoted
+    instruction (the decision audit).
   - A scheduled agent may pick items from that issue and open PRs. Those PRs go
     through the normal gate.
 
