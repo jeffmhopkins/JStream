@@ -2030,7 +2030,7 @@ fn a_snapshot_draws_a_display_capture() {
             *colours.entry([px[0], px[1], px[2], px[3]]).or_default() += 1;
         }
         let mut colours: Vec<_> = colours.into_iter().collect();
-        colours.sort_by(|a, b| b.1.cmp(&a.1));
+        colours.sort_by_key(|entry| std::cmp::Reverse(entry.1));
         colours.truncate(6);
         (
             count,
