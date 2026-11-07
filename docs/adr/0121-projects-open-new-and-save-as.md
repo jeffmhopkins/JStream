@@ -69,11 +69,12 @@ Three things make a switch more than a load at startup:
    - Sources restart from the new collection, with its folder behind `collection` assets.
    - Every client gets `state.changed` (so a client older than 0.93 reads the state
      again), `studio.changed` and `collection.file_changed`.
-4. **Save as keeps `collection` assets pointing at the same files.** When the new
-   folder differs, each `collection` asset reference is rewritten: relative to the new
-   folder when the file is under it, otherwise `absolute`. A rewrite is a new `rev` and
-   clears undo history, as in §3, because an inverse edit would bring back the old
-   relative path. Assets are not copied. Nothing stops.
+4. **Save as keeps assets pointing at the same files.** When the new folder differs,
+   each `collection` asset reference is rewritten: relative to the new folder when the
+   file is under it, otherwise `absolute`. An `absolute` reference to a file under the
+   new folder becomes relative to it, so a project saved next to its assets is portable.
+   A rewrite is a new `rev` and clears undo history, as in §3, because an inverse edit
+   would bring back the old path. Assets are not copied. Nothing stops.
 5. **Stream keys belong to one project file.** The file holds a random `key_scope`, and
    an output's key is stored under `<key_scope>/<output_id>`. A new file and a save as
    get a fresh scope; save as copies each output's key to it. A file opened without a
@@ -84,7 +85,8 @@ Three things make a switch more than a load at startup:
 6. **The engine keeps the recent list** in a file the host names
    (`recent-collections.json` in the data folder), updated on every open, new and save
    as. The desktop app opens the most recent project at startup if it still loads, and
-   `collection.json` otherwise. The daemon's `--collection` stays as it is.
+   `collection.json` otherwise. The daemon's `--collection` stays as it is, with no
+   recent list.
 7. **People and agents, not plugins.** MCP gets a `collection` tool, marked
    `destructiveHint` ([ADR-0098](0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
    an open stops outputs and clears undo. WASM plugins never get these commands, so a

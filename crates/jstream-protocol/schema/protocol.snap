@@ -952,6 +952,64 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.93, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped. Then every output that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the collection file.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.open",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.93, ADR-0121).\nFails with `already_exists` when a file is at `path`, `action_failed` when it\ncan't be written, and otherwise as `collection.open`.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the new collection file.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.new",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes the current project to `path` and saves there from then on (0.93,\nADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nFails with `already_exists` when a file is at `path` and `overwrite` isn't true,\n`invalid_argument` on `path` for the open file itself or a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+          "properties": {
+            "overwrite": {
+              "description": "Replace a file already at `path`. Default false.",
+              "type": "boolean"
+            },
+            "path": {
+              "description": "The absolute path to write.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.save_as",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -2523,6 +2581,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         "hardware_encoder"
       ],
       "type": "object"
+    },
+    "CollectionCause": {
+      "description": "Which call made the engine save the collection to another file\n([`Event::CollectionFileChanged`], 0.93).",
+      "oneOf": [
+        {
+          "const": "open",
+          "description": "`collection.open`: another collection was loaded.",
+          "type": "string"
+        },
+        {
+          "const": "new",
+          "description": "`collection.new`: an empty collection was created.",
+          "type": "string"
+        },
+        {
+          "const": "save_as",
+          "description": "`collection.save_as`: the same collection, saved to another file.",
+          "type": "string"
+        }
+      ]
     },
     "Crop": {
       "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
@@ -5440,6 +5518,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "timeline",
           "description": "A timeline a scene holds (ADR-0115). Only an error answering a `timeline.*`\ncommand, or a `hotkey.set` or `timeline.set` naming one, names it, so a client\nthat sends none never reads it.",
           "type": "string"
+        },
+        {
+          "const": "file",
+          "description": "A file on the engine's machine, named by its path (0.93, ADR-0121). Only an\nerror answering `collection.new` or `collection.save_as` names it, so a client\nthat sends neither never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -6223,6 +6306,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "cue",
             "pass",
             "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The engine saves the collection to another file (0.93, ADR-0121): a\n`collection.open`, `collection.new` or `collection.save_as` succeeded. After an\nopen or a new, `state.changed` and `studio.changed` come first, and the client\nreads the new collection with `state.get`.",
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/CollectionCause",
+              "description": "Which call changed it."
+            },
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "path": {
+              "description": "The absolute path of the collection file the engine saves to now.",
+              "type": "string"
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "collection.file_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "cause",
+            "client_id"
           ],
           "type": "object"
         }
@@ -9976,6 +10098,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads which project (collection file) the engine saves to, and the projects\nopened most recently (0.93, ADR-0121). Not collection state, so no `rev`. Fails\nwith `unsupported` when the host named no collection file.",
+          "properties": {
+            "type": {
+              "const": "collection.info",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
           "properties": {
             "seconds": {
@@ -10956,6 +11091,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "key"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `collection.info` (0.93). Not collection state, so it carries no\n`rev`.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the collection file the engine saves to.",
+              "type": "string"
+            },
+            "recent": {
+              "description": "Up to ten collection files opened, created or saved as, most recent first,\n`path` among them. A file may have moved or gone since.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "collection.info",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
           ],
           "type": "object"
         },
@@ -13001,5 +13161,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.89"
+  "title": "JStream protocol 0.93"
 }

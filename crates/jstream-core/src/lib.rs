@@ -51,6 +51,7 @@ mod plugins;
 mod preview;
 mod private_file;
 mod profile;
+mod projects;
 mod reactive;
 mod runtime;
 mod session;
@@ -84,6 +85,7 @@ pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
 pub use plugins::supervisor::{
     HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
 };
+pub use projects::recent_collections;
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
     connect_rtmp,

@@ -97,6 +97,33 @@ impl CollectionFile {
         }
     }
 
+    /// The collection in the file at `path`, loaded into a copy of `graph` (whose kinds
+    /// check its sources), for `collection.open` (ADR-0121). Unlike
+    /// [`open`](Self::open), a missing file is an error, and nothing is created.
+    pub(crate) fn read(path: &Path, graph: Graph) -> Result<Graph, CollectionFileError> {
+        let json = fs::read_to_string(path).map_err(|source| CollectionFileError::Read {
+            path: path.to_path_buf(),
+            source,
+        })?;
+        graph
+            .with_collection_json(&json)
+            .map_err(|source| CollectionFileError::Load {
+                path: path.to_path_buf(),
+                source,
+            })
+    }
+
+    /// Writes `graph` to `path` and returns the file that saves there from then on
+    /// (ADR-0121): the file a `collection.open`, `collection.new` or
+    /// `collection.save_as` switches to.
+    pub(crate) fn create(path: PathBuf, graph: &Graph) -> io::Result<CollectionFile> {
+        write_atomically(&path, graph.to_collection_json().as_bytes())?;
+        Ok(CollectionFile {
+            path,
+            saved: graph.rev(),
+        })
+    }
+
     /// The `rev` the file holds.
     pub(crate) fn saved(&self) -> Rev {
         self.saved

@@ -2866,6 +2866,7 @@ dependencies = [
  "arc-swap",
  "blake3",
  "futures-core",
+ "getrandom 0.4.3",
  "insta",
  "jstream-anim",
  "jstream-audio",

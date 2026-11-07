@@ -258,6 +258,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)), and the UI
   settings calls (`ui_settings.get`, `ui_settings.set`) the same way
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md));
+- the project calls (`collection.open`, `collection.new`, `collection.save_as`,
+  `collection.info`) answered with `unsupported`, as an engine whose host named no
+  collection file answers them: the mock keeps no file
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md));
 - `plugin.install` answered with `unsupported`, since the mock can't run a plugin, and
   `plugin.grant` and `plugin.enable` with `not_found` (entity `plugin`), as the engine
   answers them for a plugin that isn't installed: none ever is in the mock, so

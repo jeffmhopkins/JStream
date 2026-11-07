@@ -32,6 +32,9 @@ default = ["wasm-plugins"]
 arc-swap.workspace = true
 blake3.workspace = true
 futures-core.workspace = true
+# A project's stream-key scope, from the OS's random source (ADR-0121 §5); already in the
+# tree for the hosts' control tokens.
+getrandom.workspace = true
 # Motion modifiers, evaluated per frame on the render thread (ADR-0099).
 jstream-anim.workspace = true
 jstream-audio.workspace = true

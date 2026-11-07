@@ -97,6 +97,9 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
 | `output clear-key <id>` | action `output.clear_key` |
+| `collection info` | query `collection.info` (the project file the engine saves to, and the recent ones, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)) |
+| `collection open <path>`, `collection new <path>` | action `collection.open`, `collection.new` (an absolute path on the engine's machine; outputs stop and undo is cleared) |
+| `collection save-as <path> [--overwrite]` | action `collection.save_as` |
 | `pair` | action `pairing.start`: prints a one-time code to enter on the device |
 | `device list` | query `device.list` |
 | `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |

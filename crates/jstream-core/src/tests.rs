@@ -21,6 +21,7 @@ mod live_values;
 mod packs;
 mod page_api;
 mod preview;
+mod projects;
 mod source_sizes;
 mod sources;
 mod timelines;
