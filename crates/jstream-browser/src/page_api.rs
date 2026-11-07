@@ -108,8 +108,6 @@ pub(crate) enum ApiHome {
     Web(String),
     /// A `file:` document at or below this folder URL, which ends in `/`.
     File(String),
-    /// A `data:` document: a page given as HTML.
-    Data,
 }
 
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
@@ -128,7 +126,8 @@ impl ApiHome {
                 }
                 Some(Self::File(url))
             }
-            PageLocation::Html(_) => Some(Self::Data),
+            // Its own origin is the reserved one the helper serves it from (#1035).
+            PageLocation::Html(_) => Some(Self::Web(crate::HTML_PAGE_URL.to_owned())),
         }
     }
 
@@ -152,7 +151,6 @@ impl ApiHome {
                         }
                     })
             }
-            Self::Data => scheme.as_deref() == Some("data"),
         }
     }
 
@@ -161,7 +159,6 @@ impl ApiHome {
         match self {
             Self::Web(url) => ("web", url),
             Self::File(folder) => ("file", folder),
-            Self::Data => ("data", ""),
         }
     }
 
@@ -170,7 +167,6 @@ impl ApiHome {
         match kind {
             "web" => Some(Self::Web(value.to_owned())),
             "file" if value.ends_with('/') => Some(Self::File(value.to_owned())),
-            "data" => Some(Self::Data),
             _ => None,
         }
     }
@@ -303,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_data() {
+    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_its_own_origin() {
         let dir = std::env::temp_dir().join(format!("jstream-page-api-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
         let home = ApiHome::of(&PageLocation::File(dir.join("index.html"))).unwrap();
@@ -318,7 +314,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
 
         let html = ApiHome::of(&PageLocation::Html("<p>hi</p>".into())).unwrap();
-        assert!(html.covers("data:text/html;base64,PHA+"));
+        assert!(html.covers(crate::HTML_PAGE_URL));
+        assert!(!html.covers("data:text/html;base64,PHA+"));
         assert!(!html.covers("https://example.com/"));
         assert_eq!(ApiHome::of(&PageLocation::Blank), None);
     }
@@ -328,7 +325,6 @@ mod tests {
         for home in [
             ApiHome::Web("https://a.b/".into()),
             ApiHome::File("file:///x/".into()),
-            ApiHome::Data,
         ] {
             let (kind, value) = home.to_parts();
             assert_eq!(ApiHome::from_parts(kind, value), Some(home.clone()));

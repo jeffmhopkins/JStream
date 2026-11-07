@@ -14,8 +14,14 @@
 //! A second test serves the page over `http` from `127.0.0.1` (#1069): CEF on Linux names
 //! `null` as the initiator of a web source's own first load, which the request policy
 //! must still count as the source's own.
+//!
+//! `local_network` (in `linux_page/`) checks what pages reach on this computer through
+//! Chromium's own Local Network Access checks (#347, #1035).
 
 #![cfg(all(target_os = "linux", feature = "cef"))]
+
+#[path = "linux_page/local_network.rs"]
+mod local_network;
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;

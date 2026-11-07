@@ -56,7 +56,8 @@ pub use cef::{CefBackend, CefConfig};
 #[cfg(all(any(windows, target_os = "linux"), feature = "helper"))]
 pub use helper::run_helper;
 pub use page::{
-    DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec, css_script,
+    DEFAULT_CSS, HTML_PAGE_URL, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec,
+    css_script,
 };
 pub use page_api::{MAX_PAGE_DATA_BYTES, PageApi, PageData};
 pub use request::{RequestPolicy, Verdict};

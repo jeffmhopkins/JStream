@@ -11,10 +11,14 @@
 //!   `.local`, `.lan`, `.home.arpa` or `.internal`. The check reads the URL, whose host
 //!   Chromium has already canonicalised (an address such as `0x7f.1` arrives as
 //!   `127.0.0.1`). It can't see a public name that resolves to a local address, whether
-//!   fixed (`*.nip.io`) or by DNS rebinding. Chromium's own Local Network Access checks
-//!   are meant to, at the network layer (not yet confirmed on a Windows run, #347): they
-//!   ask the page's permission handler first, which answers with
-//!   [`local_allowed_from`](RequestPolicy::local_allowed_from) (`permission.rs`).
+//!   fixed (`*.nip.io`) or by DNS rebinding, nor a request the resource handler never
+//!   sees. Chromium's own Local Network Access checks do, at the network layer (#347):
+//!   in the pinned CEF's windowless pages they refuse a request from a public origin to a
+//!   more private address without asking the permission handler, and they refuse every
+//!   such request from a page that isn't a secure context (a plain `http` page). So the
+//!   helper tells them about an opt-in: for the source's own origin, as the top-level
+//!   origin, it allows them ([`local_network_grant`](RequestPolicy::local_network_grant)).
+//!   The Linux helper's end-to-end tests check both (`tests/linux_page/local_network.rs`).
 //!
 //!   Who may is decided by the origin that makes the request (#721), as CEF names it:
 //!   - a document whose own origin is local (a `localhost` dev server, a LAN widget) is
@@ -28,11 +32,11 @@
 //!     page: once the main frame navigates to the web
 //!     ([`main_frame_to`](RequestPolicy::main_frame_to)), an opaque frame inside it is
 //!     the web's;
-//!   - in an inline HTML source (a `data:` page, whose own origin is opaque too) an
-//!     opaque origin may when the source opts in, while the main frame is still on
-//!     `data:`. Like a file page's access, this covers every opaque frame inside the
-//!     page, so a sandboxed or `data:` frame that a third-party frame creates counts as
-//!     the page's own;
+//!   - an inline HTML source loads from a reserved origin of its own
+//!     ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL), #1035), which its opt-in covers as a web
+//!     page's covers its own. Nothing else loads from that name: only the page's own main
+//!     frame may load its URL, which the helper answers with the HTML, and every other
+//!     request to the name is refused;
 //!   - a request CEF names no origin for was started by the browser itself (the
 //!     source's own load, a reload) and is judged as the source's own. CEF on Linux names
 //!     `null` instead for the source's own first load (#1069), so a main-frame load the
@@ -46,7 +50,7 @@
 //!
 //!   Every other origin from the internet is refused. CEF can't tell one opaque origin
 //!   from another, so a sandboxed or `data:` frame that a third-party frame inside a
-//!   file page, or inside an opted-in HTML page, creates counts as that page's.
+//!   file page creates counts as that page's.
 //! - `data:` and `blob:` are allowed: they hold only what the page itself made.
 //! - `about:blank` and `about:srcdoc` are allowed; other `about:` pages are not.
 //! - `file:` is allowed only for a page loaded from a local file, and only for files in
@@ -101,12 +105,13 @@ enum Home {
     File,
     /// A blank page.
     Blank,
-    /// A page given as its HTML: a `data:` document, with an opaque origin.
+    /// A page given as its HTML, served from the reserved origin of
+    /// [`HTML_PAGE_URL`](crate::HTML_PAGE_URL) (#1035).
     Html,
 }
 
 /// A web origin, as [`Origin::parse`] reads it.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Origin {
     /// Lower case.
     scheme: String,
@@ -174,8 +179,8 @@ impl RequestPolicy {
             home_local,
             left_home: AtomicBool::new(false),
             own_load: Mutex::new(match location {
-                PageLocation::Web(url) => Some(url.clone()),
-                PageLocation::Blank | PageLocation::File(_) | PageLocation::Html(_) => None,
+                PageLocation::Web(_) | PageLocation::Html(_) => Some(location.to_url()),
+                PageLocation::Blank | PageLocation::File(_) => None,
             }),
             denied: AtomicU64::new(0),
         }
@@ -237,20 +242,74 @@ impl RequestPolicy {
         initiator: Option<&str>,
         own_load: bool,
     ) -> Verdict {
+        if is_html_host(url) {
+            // The helper answers the HTML page's own URL itself: a main frame of the page
+            // given as HTML may load it again (a reload, a link to it), and nothing else
+            // may load anything from that name.
+            return self.html_page(url);
+        }
         let browser_started = own_load
             && initiator == Some("null")
             && !self.left_home.load(Ordering::Acquire)
-            && matches!(&self.home, Home::Web(Some(own)) if Origin::parse(url).as_ref() == Some(own));
+            && self
+                .own_origin()
+                .is_some_and(|own| Origin::parse(url).as_ref() == Some(&own));
         self.check_from(url, if browser_started { None } else { initiator })
+    }
+
+    /// Whether `url` is the page given as HTML, for a main-frame request: the helper
+    /// answers it with the page's HTML ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL)), its
+    /// query and fragment ignored. Refused for every other page, and for every other path
+    /// on the reserved name.
+    pub fn html_page(&self, url: &str) -> Verdict {
+        if self.home == Home::Html && same_load(&strip_query(url), crate::HTML_PAGE_URL) {
+            Verdict::Allow
+        } else {
+            Verdict::Deny("nothing loads from the name reserved for pages given as HTML")
+        }
+    }
+
+    /// The source's own origin, which its `local_network` opt-in covers: a web page's
+    /// own, or the reserved one a page given as HTML loads from. `None` for a file or
+    /// blank page, and a web page whose origin can't be read.
+    fn own_origin(&self) -> Option<Origin> {
+        match &self.home {
+            Home::Web(Some(origin)) => Some(origin.clone()),
+            Home::Html => Origin::parse(crate::HTML_PAGE_URL),
+            Home::Web(None) | Home::File | Home::Blank => None,
+        }
+    }
+
+    /// The origin Chromium's Local Network Access checks are told to allow for this page
+    /// (as `scheme://host[:port]`), or `None`: the source's own origin, when its source
+    /// opted in and its location isn't itself local. Chromium refuses a request from a
+    /// public origin to this computer or the local network at the network layer without
+    /// asking the permission handler, in the pinned CEF's windowless pages (#347), so the
+    /// helper grants the opt-in there too, for this origin as the top-level one only
+    /// (`helper/mod.rs`). A page from a local origin needs no grant: its requests are not
+    /// checked.
+    pub fn local_network_grant(&self) -> Option<String> {
+        let own = self.own_origin()?;
+        if !self.home_local || is_local(&own.host) {
+            return None;
+        }
+        let host = if own.host.contains(':') {
+            format!("[{}]", own.host)
+        } else {
+            own.host.clone()
+        };
+        Some(match own.port {
+            Some(port) => format!("{}://{host}:{port}", own.scheme),
+            None => format!("{}://{host}", own.scheme),
+        })
     }
 
     /// Whether `initiator` (an origin, as for [`check_from`](Self::check_from)) may make
     /// requests to this computer and the local network: it is itself local, it is the
     /// source's own origin and the source's location is local or it opted in, or it is
-    /// opaque in a file or blank page whose main frame hasn't left it (or in a page given
-    /// as HTML that opted in). Chromium's Local
-    /// Network Access prompt is answered with this, for the prompt's requesting origin
-    /// (`permission.rs`).
+    /// opaque in a file or blank page whose main frame hasn't left it. Chromium's Local
+    /// Network Access prompt, should it ever ask, is answered with this, for the prompt's
+    /// requesting origin (`permission.rs`).
     pub fn local_allowed_from(&self, initiator: Option<&str>) -> bool {
         let Some(initiator) = initiator.filter(|origin| !origin.is_empty()) else {
             // The browser started it: the source's own load, or a reload.
@@ -258,15 +317,11 @@ impl RequestPolicy {
         };
         match Origin::parse(initiator) {
             Some(origin) if is_local(&origin.host) => true,
-            Some(origin) => self.home_local && self.home == Home::Web(Some(origin)),
+            Some(origin) => self.home_local && self.own_origin() == Some(origin),
             // Opaque (`null`), or a file's.
             None => {
-                let home = match self.home {
-                    Home::File | Home::Blank => true,
-                    Home::Html => self.home_local,
-                    Home::Web(_) => false,
-                };
-                home && !self.left_home.load(Ordering::Acquire)
+                matches!(self.home, Home::File | Home::Blank)
+                    && !self.left_home.load(Ordering::Acquire)
             }
         }
     }
@@ -283,8 +338,9 @@ impl RequestPolicy {
         let home = match &self.home {
             Home::File => scheme.as_deref() == Some("file"),
             Home::Blank => scheme.as_deref() == Some("about"),
-            Home::Html => scheme.as_deref() == Some("data"),
-            Home::Web(own) => own.is_some() && Origin::parse(url) == *own,
+            Home::Html | Home::Web(_) => {
+                self.own_origin().is_some() && Origin::parse(url) == self.own_origin()
+            }
         };
         self.left_home.store(!home, Ordering::Release);
     }
@@ -298,6 +354,10 @@ impl RequestPolicy {
         let Some((scheme, rest)) = url.split_once(':') else {
             return Verdict::Deny("the URL has no scheme");
         };
+        if is_html_host(url) {
+            // Only a main frame loads the HTML page ([`check_main_frame_from`]).
+            return Verdict::Deny("nothing loads from the name reserved for pages given as HTML");
+        }
         match scheme.to_ascii_lowercase().as_str() {
             "http" | "https" | "ws" | "wss" => self.network(rest, initiator),
             "data" | "blob" => Verdict::Allow,
@@ -340,6 +400,29 @@ impl RequestPolicy {
             Ok(_) => Verdict::Deny("the file resolves to outside the page's folder"),
             Err(_) => Verdict::Deny("the file does not exist or can't be read"),
         }
+    }
+}
+
+/// Whether `url` is on the name reserved for pages given as HTML
+/// ([`HTML_PAGE_URL`](crate::HTML_PAGE_URL)), in any scheme or port.
+fn is_html_host(url: &str) -> bool {
+    let reserved = url_host(
+        crate::HTML_PAGE_URL
+            .split_once(':')
+            .map_or("", |(_, rest)| rest),
+    );
+    url.split_once(':')
+        .is_some_and(|(_, rest)| reserved.is_some() && url_host(rest) == reserved)
+}
+
+/// `url` without its query, its fragment kept.
+fn strip_query(url: &str) -> String {
+    match url.split_once('?') {
+        Some((head, tail)) => match tail.split_once('#') {
+            Some((_, fragment)) => format!("{head}#{fragment}"),
+            None => head.to_owned(),
+        },
+        None => url.to_owned(),
     }
 }
 
@@ -746,24 +829,27 @@ mod tests {
             page_api: None,
             ..spec
         });
+        // Its own origin is the reserved one it loads from (#1035).
+        let own = "https://html.jstream.invalid";
         assert!(opted.local_allowed_from(None));
+        assert!(opted.local_allowed_from(Some(own)));
         assert_eq!(
-            opted.check_from("http://127.0.0.1:4455/", Some("null")),
+            opted.check_from("http://127.0.0.1:4455/", Some(own)),
             Verdict::Allow
         );
-        // Another `data:` document is still its own; a page on the web is not.
-        opted.main_frame_to("data:text/html;base64,PHA+");
-        assert!(opted.local_allowed_from(Some("null")));
+        assert_eq!(opted.local_network_grant().as_deref(), Some(own));
+        assert_eq!(page.local_network_grant(), None);
+        // A page on the web it navigates to is not its own.
         opted.main_frame_to("https://example.com/");
-        assert!(!opted.local_allowed_from(Some("null")));
+        assert!(!opted.local_allowed_from(Some("https://example.com")));
     }
 
-    /// An opted-in HTML page's access reaches every opaque frame inside it, as a file
-    /// page's does (#721): a sandboxed frame that a third-party frame creates reports
-    /// `null` like the page's own documents, so it gets the access too. A third-party
-    /// frame with a real origin does not.
+    /// #1035: an opted-in HTML page's access covers its own origin only. A third-party
+    /// frame is refused, and so is an opaque frame, such as a sandboxed one a third-party
+    /// frame creates, which counted as the page's own while the page was a `data:`
+    /// document.
     #[test]
-    fn an_opted_in_html_page_s_access_covers_every_opaque_frame_in_it() {
+    fn an_opted_in_html_page_s_access_covers_its_own_origin_only() {
         let opted = RequestPolicy::for_page(&PageSpec {
             location: PageLocation::Html("<iframe src=\"https://widget.example/\">".into()),
             size: jstream_media::FrameSize::new(16, 16).expect("size"),
@@ -772,16 +858,79 @@ mod tests {
             local_network: true,
             page_api: None,
         });
-        // The widget's own origin is refused local targets.
         assert!(deny(opted.check_from(
             "http://192.168.1.1/",
             Some("https://widget.example")
         )));
-        // A sandboxed frame it makes is opaque, indistinguishable from the page's own.
+        assert!(deny(opted.check_from("http://192.168.1.1/", Some("null"))));
+        assert!(!opted.local_allowed_from(Some("null")));
+        // Another port or scheme on the reserved name is another origin.
+        assert!(!opted.local_allowed_from(Some("https://html.jstream.invalid:8443")));
+        assert!(!opted.local_allowed_from(Some("http://html.jstream.invalid")));
         assert_eq!(
-            opted.check_from("http://192.168.1.1/", Some("null")),
+            opted.check_from("http://192.168.1.1/", Some("https://html.jstream.invalid")),
             Verdict::Allow
         );
+    }
+
+    /// #1035: the reserved name loads only the HTML page itself, as its main frame. Every
+    /// other request to it is refused, so none reaches the network.
+    #[test]
+    fn only_the_html_page_loads_from_the_reserved_name() {
+        let spec = |location| PageSpec {
+            location,
+            size: jstream_media::FrameSize::new(16, 16).expect("size"),
+            fps: 30,
+            css: String::new(),
+            local_network: false,
+            page_api: None,
+        };
+        let html = RequestPolicy::for_page(&spec(PageLocation::Html("<p>hi</p>".into())));
+        let url = crate::HTML_PAGE_URL;
+        // Its first load, which the helper starts.
+        assert!(html.take_own_load(url, true));
+        assert_eq!(html.check_main_frame_from(url, None, true), Verdict::Allow);
+        assert_eq!(
+            html.check_main_frame_from(url, Some("null"), true),
+            Verdict::Allow
+        );
+        // A reload, a link to it, with a query or a fragment.
+        for again in [
+            url,
+            "https://html.jstream.invalid/?x=1",
+            "https://HTML.jstream.invalid/#top",
+        ] {
+            assert_eq!(
+                html.check_main_frame_from(again, Some("https://html.jstream.invalid"), false),
+                Verdict::Allow,
+                "{again}"
+            );
+        }
+        // Anything else on the name: another path, scheme or port, or a subresource.
+        for other in [
+            "https://html.jstream.invalid/a.js",
+            "http://html.jstream.invalid/",
+            "https://html.jstream.invalid:444/",
+            "wss://html.jstream.invalid/",
+        ] {
+            assert!(
+                deny(html.check_main_frame_from(other, None, false)),
+                "{other}"
+            );
+        }
+        assert!(deny(html.check(url)));
+        assert!(deny(
+            html.check_from(url, Some("https://html.jstream.invalid"))
+        ));
+        // Other pages load nothing from it, not even as their main frame.
+        for location in [
+            PageLocation::Web("https://example.com/".into()),
+            PageLocation::Blank,
+        ] {
+            let page = RequestPolicy::for_page(&spec(location));
+            assert!(deny(page.check_main_frame_from(url, None, false)));
+            assert!(deny(page.check(url)));
+        }
     }
 
     /// #1069: CEF on Linux names `null` as the initiator of the source's own first load.

@@ -63,9 +63,9 @@ impl BrowserKind {
                     description: Some(
                         "The page itself, as HTML with its CSS and scripts inline: a graphic \
                          built here instead of loaded from a URL. Ignored when a local file \
-                         is set. It can load fonts and images from the web, but no local \
-                         files, and reaches this computer and the local network only when \
-                         allowed below."
+                         is set. It can load fonts, images and scripts from the web over \
+                         https, but no local files, and reaches this computer and the local \
+                         network only when allowed below."
                             .into(),
                     ),
                     ..param(
@@ -129,7 +129,8 @@ impl BrowserKind {
                         "Let a page from the internet make requests to this computer and \
                          the local network (localhost, 192.168.x.x and the like), for \
                          widgets that talk to an app running here. Off, those requests are \
-                         refused. A local file or a page on the local network may always."
+                         refused. It covers the page's own site only, and only a page loaded \
+                         over https. A local file or a page on the local network may always."
                             .into(),
                     ),
                     advanced: true,

@@ -56,7 +56,10 @@ opens no window of its own (#1186).
   empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
   including UNC and `\\?\` paths. A page can also be given as its HTML
   (`PageLocation::html`, at most 128 KiB, `MAX_HTML_BYTES`; blank text is a blank
-  page), which loads as a base64 `data:text/html` URL. The custom CSS (at most 64 KiB) goes into the page as
+  page), which loads from `HTML_PAGE_URL` (`https://html.jstream.invalid/`), a reserved
+  name the helper answers itself with the HTML, so the page has an origin of its own
+  (#1035). Being `https`, it is a secure context, and Chromium refuses its plain `http`
+  scripts and frames as mixed content. The custom CSS (at most 64 KiB) goes into the page as
   one `<style id="jstream-custom-css">` that every change replaces, through a script
   that quotes it as a JavaScript string (`css_script`). The default CSS makes the page's
   background transparent, as OBS does.
@@ -88,12 +91,13 @@ opens no window of its own (#1186).
   documents have an opaque origin, which may only while the main frame is still on a
   file or blank page: a main-frame navigation the policy allows tells it where the
   frame now is (`main_frame_to`), before the new document exists, so a file or blank
-  page that navigates to the web loses the access. A page given as HTML loads no files, and its
-  opaque `data:` documents may only when its spec sets `local_network`, and only while
-  the main frame is still on a `data:` document. CEF can't tell opaque origins apart,
-  so a sandboxed or `data:` frame made by a third-party frame inside a file page counts
-  as the file page's, and inside an opted-in HTML page as the HTML page's: there the
-  opt-in covers every opaque frame, not only the page's own documents. A request with no initiator is one the browser started (the
+  page that navigates to the web loses the access. A page given as HTML loads no files.
+  Its own origin is the reserved one it loads from, which may when its spec sets
+  `local_network`, exactly as a web page's own origin may (#1035); only its main frame
+  may load its URL, and every other request to the reserved name is refused
+  (`html_page`), so none reaches the network. CEF can't tell opaque origins apart, so a
+  sandboxed or `data:` frame made by a third-party frame inside a file page counts as
+  the file page's. A request with no initiator is one the browser started (the
   source's own load, a reload) and is judged as the source's own. CEF on Linux names
   the opaque origin `null` instead for the source's own first load (#1069), so a
   main-frame load the helper started, to the source's own web origin with a `null`
@@ -106,10 +110,13 @@ opens no window of its own (#1186).
   while a reload is pending. The check reads the
   host Chromium has already canonicalised, so it can't catch a public name that
   resolves to a local address, whether fixed (`*.nip.io`) or by DNS rebinding.
-  Chromium's Local Network Access checks are meant to: they ask the page's permission
-  handler, which answers with `RequestPolicy::local_allowed_from` for the prompt's
-  requesting origin (below). That the pinned CEF enforces them in windowless pages is
-  not yet confirmed on a Windows run (#347). `file:` URLs are
+  Chromium's Local Network Access checks do, at the network layer, for requests the
+  resource handler never sees too (#347). In the pinned CEF's windowless pages they
+  refuse a public origin's request to a more private address without asking the
+  permission handler, and refuse every one from a page that isn't a secure context. So
+  an opt-in reaches them as a setting: `local_network_grant` names the source's own
+  origin when its source opted in and it isn't itself local, and the helper allows it
+  there (below). An opted-in page must therefore be `https`. `file:` URLs are
   allowed only for a page loaded from a local file, and only for files in its folder or
   below. The path is compared by name first, with `..` applied,
   and only a path inside the folder is ever opened. So a URL naming another server (an
@@ -130,7 +137,7 @@ opens no window of its own (#1186).
   into several, each value whole in one of them. For the helper: `ApiHome`, the
   documents the API is defined in, which is the source's own web origin (scheme, host
   and port, `same_web_origin` in `request.rs`), its local file's folder and below, or
-  a `data:` document for a page given as HTML; `PageCache`, the updates merged, which
+  the reserved origin of a page given as HTML; `PageCache`, the updates merged, which
   a new document is fed whole, its clock moved on by the time since its anchor; and
   `shim`, the JavaScript (`page_api.js`) that defines a frozen `window.jstream` with
   only the granted members and returns the one function updates go in through.
@@ -235,13 +242,20 @@ What follows is Windows; **On Linux** below says what differs.
   Access prompt (CEF's `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and the deprecated
   `LOCAL_NETWORK_ACCESS` bits) asked alone: it is answered `ACCEPT` when the page's
   `RequestPolicy` lets the prompt's requesting origin (opaque when CEF names none)
-  make local requests, so a
-  source that opted in with `local_network` still reaches an app on `127.0.0.1` from
-  its own origin, and `DENY` otherwise, a third-party frame's included, so that
-  Chromium, where it enforces the checks (not yet confirmed on a Windows run), refuses
-  at the network layer what the policy can't see. The answers come from `permission.rs`
-  (`answer_prompt` and `answer_media`), whose tests pin them for every permission bit,
-  and the helper checks the three bits against CEF's when it compiles (#347). The
+  make local requests, and `DENY` otherwise, a third-party frame's included. The
+  pinned CEF never asks it in windowless pages: its checks refuse a public origin's
+  local request outright. So for a source that opted in with `local_network`, the
+  helper gives the page a request context of its own and sets Chromium's
+  `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and `LOCAL_NETWORK_ACCESS` content settings to
+  allow for the source's own origin as the top-level origin (`local_network_grant`):
+  it reaches an app on `127.0.0.1` from that origin, while a third-party frame inside
+  it, and every other source, is still refused at the network layer, a public name
+  that resolves to a local address included (#347). The Linux helper's end-to-end
+  tests check all of this (`tests/linux_page/local_network.rs`). The answers come from
+  `permission.rs` (`answer_prompt` and `answer_media`), whose tests pin them for every
+  permission bit, and the helper checks the three bits against CEF's when it compiles.
+  A page given as HTML is answered by the request handler (`HtmlPage`): its main
+  frame's `GET` of its URL gets `200`, `text/html` in UTF-8, uncached (#1035). The
   custom CSS is applied when the main frame finishes loading and again on each change.
   Every request a page makes, navigations included, goes through its `RequestPolicy`
   in `OnBeforeResourceLoad`, as the origin `GetResourceRequestHandler` names for it
@@ -261,8 +275,7 @@ What follows is Windows; **On Linux** below says what differs.
   and cache; when a JavaScript context is made in a main frame whose URL the home
   covers, it evaluates the shim before any page script runs, feeds it the cache, and
   feeds it each later update, until that context is released (only that one: an old
-  document's context can go after the new one's is made). A cross-origin navigation (a `data:` page's reload among
-  them) makes the renderer's new browser object before it destroys the old one with
+  document's context can go after the new one's is made). A cross-origin navigation makes the renderer's new browser object before it destroys the old one with
   the same ID, so the entry is counted and goes only with the last. The shim reports
   only what changed, so the state sent again fires no events. A subframe, a popup, or a main frame on any other
   document gets no `window.jstream`. It takes messages only from the browser process,
