@@ -2817,6 +2817,8 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "libc",
+ "rcgen",
+ "rustls",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
@@ -2998,6 +3000,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-jtunnel"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "jstream-midi",
+]
+
+[[package]]
 name = "jstream-mcp"
 version = "0.0.0"
 dependencies = [
@@ -3015,6 +3025,13 @@ name = "jstream-media"
 version = "0.0.0"
 dependencies = [
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jstream-midi"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
 ]
 
 [[package]]
