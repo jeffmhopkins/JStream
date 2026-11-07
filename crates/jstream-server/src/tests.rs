@@ -3818,6 +3818,78 @@ fn an_always_allowed_agent_is_let_in_until_it_is_forgotten() {
     );
 }
 
+/// MCP over HTTP subscribes to a session's events at `initialize`, before its `hello`
+/// is answered; while the person hasn't let the client in, its `events` tool reads
+/// nothing of the studio (#1334 review B1).
+#[test]
+fn a_held_mcp_session_reads_no_events() {
+    let harness = start_with(&MockEngine::new(), |config: &mut ServerConfig| {
+        config.mcp = true;
+        asking(Duration::from_secs(60))(config);
+    });
+    let (ui, mut events) = harness.ui();
+    // `initialize` sends the held `hello`, which MCP gives up on after a few seconds.
+    let id = harness.mcp_session("web-agent");
+    let _ = harness.run(approval_event(&mut events));
+    ok(harness.run(ui.call(create_scene("secret"))));
+    let read = serde_json::json!({
+        "jsonrpc": "2.0", "id": 3, "method": "tools/call",
+        "params": {"name": "events", "arguments": {}}
+    });
+    let reply = harness.mcp(Some(&id), &read);
+    assert_eq!(reply.status, 200, "{}", reply.body);
+    assert!(
+        !reply.body.contains("state.changed") && !reply.body.contains("SECRET"),
+        "a held session read the studio: {}",
+        reply.body
+    );
+}
+
+/// A held client gets one `hello` at a time: another while the first waits is refused
+/// as `malformed`, so it can't pile them up (#1334 review B2); the first still waits.
+#[test]
+fn a_held_client_cannot_queue_more_hellos() {
+    use jstream_control::protocol::ApprovalDecision;
+    let harness = start_with(&MockEngine::new(), asking(Duration::from_secs(60)));
+    let (ui, mut events) = harness.ui();
+    let bearer = format!("Bearer {TOKEN}");
+    let mut socket = match harness.raw(
+        Some(&harness.own_origin()),
+        Some(&harness.authority.clone()),
+        Some(&bearer),
+    ) {
+        Ok(socket) => socket,
+        Err(status) => panic!("refused: {status}"),
+    };
+    let id = harness.run(async {
+        if let Err(error) = socket.send(Message::Text(raw_hello().into())).await {
+            panic!("send: {error}");
+        }
+        requested(&mut events, "raw").await
+    });
+    match exchange(&harness, &mut socket, &raw_hello()) {
+        ServerMessage::Error(error) => {
+            assert_eq!(error.error.error.code(), "malformed", "{error:?}")
+        }
+        other => panic!("a second hello while held: {other:?}"),
+    }
+    ok(harness.run(ui.call(approve(&id, ApprovalDecision::AllowOnce))));
+    let welcomed = harness.run(async {
+        loop {
+            match socket.next().await {
+                Some(Ok(Message::Text(text))) => {
+                    if let Ok(ServerMessage::Welcome(_)) = serde_json::from_str(text.as_str()) {
+                        return true;
+                    }
+                }
+                Some(Ok(_)) => {}
+                _ => return false,
+            }
+        }
+    });
+    assert!(welcomed, "the first hello is welcomed once allowed");
+}
+
 /// No answer in time turns the client away with `not_allowed`, and a client that goes
 /// away while held ends its request as `closed`.
 #[test]
