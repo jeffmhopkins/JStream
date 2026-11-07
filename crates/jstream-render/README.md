@@ -114,7 +114,11 @@ and calls this crate.
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
-  `jstream-core`'s.
+  `jstream-core`'s. A paired item's effects may differ only in their settings
+  ([ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+  `settings_blend` says whether two settings maps can blend (no reference or `null`
+  differs), and `blend_settings` gives them `k` of the way, numbers and colours
+  linearly (rounded for the kind's `int` parameters, which the caller names), every other differing value switching at one half, `k` clamped to `[0, 1]`.
 
 **Where it sits on the existing APIs.**
 

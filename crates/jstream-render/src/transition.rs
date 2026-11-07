@@ -25,8 +25,9 @@
 use crate::scene::Crop;
 use jstream_protocol::{
     BlendMode, Easing, Finite32, ItemGeometry, MAX_BLUR_PX, MAX_DRAWN_PX, MAX_FOV_DEG, MIN_FOV_DEG,
-    SceneCamera, Size, Vec2, Vec3,
+    SceneCamera, Settings, Size, Vec2, Vec3,
 };
+use serde_json::Value;
 
 /// How much of its size a `scale` effect leaves at its end: 65%.
 const SCALE_TO: f32 = 0.65;
@@ -313,6 +314,106 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
     } else {
         *to
     }
+}
+
+/// Whether a Move may blend an effect's settings from `from` to `to`
+/// ([ADR-0127](../../../docs/adr/0127-moves-interpolate-effect-settings.md)): every
+/// parameter either holds the same value on both sides, or holds a plain value on each
+/// (a number, a colour, a string, a boolean). A reference (a scene, a source, a bus or a
+/// file) or `null` that differs can't be blended, since each side's effect reads only
+/// its own, so the item cross-fades instead.
+pub fn settings_blend(from: &Settings, to: &Settings) -> bool {
+    let plain = |value: Option<&Value>| {
+        matches!(
+            value,
+            Some(Value::Bool(_) | Value::Number(_) | Value::String(_))
+        )
+    };
+    from.0
+        .keys()
+        .chain(to.0.keys())
+        .all(|id| match (from.get(id), to.get(id)) {
+            (a, b) if a == b => true,
+            (a, b) => plain(a) && plain(b),
+        })
+}
+
+/// An effect's settings `k` of the way from `from` to `to`
+/// ([ADR-0127](../../../docs/adr/0127-moves-interpolate-effect-settings.md)): each
+/// number linearly, rounded for a parameter in `whole` (the kind's `int` parameters, from
+/// its descriptor: a float stored as `0` and `1` still blends through `0.5`), each colour
+/// per channel, and every other value that differs switching from `from`'s to `to`'s at
+/// `k = 0.5`. The parameters are `to`'s. `k` is clamped to `[0, 1]`, so a spring never takes a setting past its
+/// ends and out of the range its kind allows.
+pub fn blend_settings(from: &Settings, to: &Settings, k: f32, whole: &[String]) -> Settings {
+    let k = if k.is_nan() { 0.0 } else { k.clamp(0.0, 1.0) };
+    let mut out = to.clone();
+    for (id, value) in out.0.iter_mut() {
+        // A parameter only `to` has keeps `to`'s value throughout.
+        let Some(start) = from.get(id) else {
+            continue;
+        };
+        if start == value {
+            continue;
+        }
+        let whole = whole.iter().any(|w| w == id);
+        if let Some(blended) = blend_value(start, value, k, whole) {
+            *value = blended;
+        } else if k < 0.5 {
+            *value = start.clone();
+        }
+    }
+    out
+}
+
+/// `a` and `b`, two numbers or two colours, `k` of the way, a number rounded when it is
+/// `whole`; `None` for anything else.
+fn blend_value(a: &Value, b: &Value, k: f32, whole: bool) -> Option<Value> {
+    match (a, b) {
+        (Value::Number(a), Value::Number(b)) => {
+            let (a, b) = (a.as_f64()?, b.as_f64()?);
+            let v = a + (b - a) * f64::from(k);
+            if whole {
+                return Some(Value::from(v.round() as i64));
+            }
+            serde_json::Number::from_f64(v).map(Value::Number)
+        }
+        (Value::String(a), Value::String(b)) => {
+            let (a, alpha_a) = parse_color(a)?;
+            let (b, alpha_b) = parse_color(b)?;
+            let mut out = String::with_capacity(9);
+            out.push('#');
+            let channels = if alpha_a || alpha_b { 4 } else { 3 };
+            for (x, y) in a.iter().zip(b).take(channels) {
+                let v = lerp(f32::from(*x), f32::from(y), k)
+                    .round()
+                    .clamp(0.0, 255.0) as u8;
+                out.push_str(&format!("{v:02x}"));
+            }
+            Some(Value::String(out))
+        }
+        _ => None,
+    }
+}
+
+/// A `#rrggbb` or `#rrggbbaa` colour as its four channels (alpha 255 when absent), and
+/// whether it carried alpha.
+fn parse_color(text: &str) -> Option<([u8; 4], bool)> {
+    let hex = text.strip_prefix('#')?;
+    if !(hex.len() == 6 || hex.len() == 8) || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let byte = |at: usize| u8::from_str_radix(&hex[at..at + 2], 16).ok();
+    let alpha = hex.len() == 8;
+    Some((
+        [
+            byte(0)?,
+            byte(2)?,
+            byte(4)?,
+            if alpha { byte(6)? } else { 255 },
+        ],
+        alpha,
+    ))
 }
 
 fn lerp(a: f32, b: f32, k: f32) -> f32 {
@@ -756,5 +857,66 @@ mod tests {
         };
         assert_eq!(timing.progress(99.0), 0.0);
         assert_eq!(timing.progress(100.0), 1.0);
+    }
+
+    /// A Move blends numbers and colours with its progress and switches every other
+    /// differing value at the midpoint; a reference that differs can't blend (ADR-0127).
+    #[test]
+    fn effect_settings_blend_numbers_and_colours_and_switch_the_rest() {
+        use super::{blend_settings, settings_blend};
+        use jstream_protocol::Settings;
+        use serde_json::json;
+        let settings = |pairs: &[(&str, serde_json::Value)]| -> Settings {
+            pairs.iter().map(|(k, v)| (*k, v.clone())).collect()
+        };
+        let from = settings(&[
+            ("radius", json!(0.0)),
+            ("steps", json!(2)),
+            ("color", json!("#000000")),
+            ("tint", json!("#00000000")),
+            ("mode", json!("box")),
+            ("same", json!(1)),
+        ]);
+        let to = settings(&[
+            ("radius", json!(20.0)),
+            ("steps", json!(5)),
+            ("color", json!("#ff8000")),
+            ("tint", json!("#ffffffff")),
+            ("mode", json!("gauss")),
+            ("same", json!(1)),
+        ]);
+        assert!(settings_blend(&from, &to));
+        let whole = ["steps".to_owned()];
+        let mid = blend_settings(&from, &to, 0.25, &whole);
+        assert_eq!(mid.get("radius"), Some(&json!(5.0)));
+        assert_eq!(
+            mid.get("steps"),
+            Some(&json!(3)),
+            "an int parameter stays whole"
+        );
+        // A float parameter stored as whole numbers still blends smoothly (#1302 B1).
+        let floats = |v: i64| settings(&[("strength", json!(v))]);
+        let half = blend_settings(&floats(0), &floats(1), 0.5, &[]);
+        assert_eq!(half.get("strength"), Some(&json!(0.5)));
+        assert_eq!(mid.get("color"), Some(&json!("#402000")));
+        assert_eq!(mid.get("tint"), Some(&json!("#40404040")));
+        assert_eq!(mid.get("mode"), Some(&json!("box")), "before the midpoint");
+        assert_eq!(
+            blend_settings(&from, &to, 0.5, &whole).get("mode"),
+            Some(&json!("gauss"))
+        );
+        // A spring's overshoot never takes a setting past its end.
+        assert_eq!(blend_settings(&from, &to, 1.2, &whole), to);
+        assert_eq!(blend_settings(&from, &to, 0.0, &whole), from);
+        let scene = |id: &str| json!({"type": "scene", "scene_id": id});
+        let a = settings(&[("mask", scene("a"))]);
+        let b = settings(&[("mask", scene("b"))]);
+        assert!(
+            !settings_blend(&a, &b),
+            "a reference that differs can't blend"
+        );
+        assert!(settings_blend(&a, &a));
+        let none = settings(&[("mask", serde_json::Value::Null)]);
+        assert!(!settings_blend(&none, &a));
     }
 }
