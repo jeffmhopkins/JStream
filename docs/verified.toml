@@ -5388,7 +5388,7 @@ stamp = { hash = "b3:ead01b6e2c4a7074", by = "agent:release-thread", note = "Mot
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: the Mixer bullet now describes the vertical strips (MixerOrientation following the dock's side columns until MixerFlip sets it for the session; master strip with loudness filling to the target line, LUFS and dBTP, then per-source strips with short name, upward meter, stacked dB field scrubbed vertically, mute), matching mixer.rs, number.rs's vertical prop, app.rs's context and workspace.rs's title-bar button; the fader text's true minus, the announced-only-when-over true peak and the 'mixer's channels' tooltip don't contradict any sentence; style.css adds only the strip and flip rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b54c4019026c08c5", by = "agent:outputs-1206", note = "Re-read against #1206: the panel still talks only through dyn Control (one Batch per OK/Apply via send_edits, actions for keys), the stream key stays write-only and outside any form (the secret-field test still counts two), and pure helpers (OutputDraft, draft_edits, target_summary, encoder_name, HealthReading::short) are tested natively against MockEngine; style.css only restyles the outputs panel and adds a --warn token." }
+stamp = { hash = "b3:9d91a4ac5037e592", by = "agent:outputs-1206", note = "Round 2: send_settings still goes through dyn Control only, returns the created ID on a failed key step so a retry reuses it, and is tested against MockEngine; the key still moves straight from the field into a SecretString." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
@@ -5571,7 +5571,7 @@ stamp = { hash = "b3:ead01b6e2c4a7074", by = "agent:release-thread", note = "The
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: the Workspace entry now names the mixer's meter flip the dock draws in the mixer's title bar (workspace.rs shows MixerFlip when the active tab is the mixer); the mixer.rs entry adds the vertical strips; number.rs gains the stacked vertical layout under the same 'number field the panels share' entry; app.rs only provides MixerOrientation, which the App entry's 'shared state' covers." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b54c4019026c08c5", by = "agent:outputs-1206", note = "Rewrote the outputs.rs and encoders.rs entries for #1206: compact rows with health in the panel header, the per-output settings dialog applying on OK/Apply, the delete confirmation, and the profiles moving into the Encoders & mixes dialog; the rest of the contents list is unchanged." }
+stamp = { hash = "b3:9d91a4ac5037e592", by = "agent:outputs-1206", note = "Round 2: send_settings moved the OK/Apply flow into a natively tested function; the outputs.rs entry (settings dialog applying on OK or Apply, drafts and edits tested natively) still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
@@ -6831,7 +6831,7 @@ stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read HD-01
 stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b54c4019026c08c5", by = "agent:outputs-1206", note = "Go Live, End stream and Record still use go_live_targets, live_outputs and start_or_stop_all from outputs.rs, which #1206 left unchanged; nothing in the header section moved." }
+stamp = { hash = "b3:9d91a4ac5037e592", by = "agent:outputs-1206", note = "Round 2 only changed the settings dialog's send path; go_live_targets, live_outputs and start_or_stop_all are untouched." }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:1c4aa96f0efcb89d", by = "agent:cursor", note = "Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
@@ -6888,10 +6888,10 @@ stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:baa15ecc4242adff", by = "agent:claude-timelines", note = "Re-read against keyframe tracks (ADR-0116, protocol 0.88): only upstream docs or a test fixture (store.rs StudioGet keyframes: empty) changed; the UI shows no tracks yet and nothing here changes." }
 
 ["UI-FEATURES#outputs"."body"]
-stamp = { hash = "b3:b7ead112b9957a6c", by = "agent:outputs-1206", note = "Rewrote the intro for #1206: header health, compact rows (summary, ⚠, badge colours, Start/Stop, FX, ⋯), the settings dialog with OK/Apply and the edits it sends, the masked key, Add output through the same dialog, and the Encoders & mixes dialog; OU-01 to OU-03 notes now describe the rows and the tooltip." }
+stamp = { hash = "b3:d4abbdfce2a2b4af", by = "agent:outputs-1206", note = "Added the B1 behaviour: a refused key after a create keeps the dialog on that output and a retry sets only its key; a virtual camera sends no encoder, mix or bus." }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:b54c4019026c08c5", by = "agent:outputs-1206", note = "Rewrote the intro for #1206: header health, compact rows (summary, ⚠, badge colours, Start/Stop, FX, ⋯), the settings dialog with OK/Apply and the edits it sends, the masked key, Add output through the same dialog, and the Encoders & mixes dialog; OU-01 to OU-03 notes now describe the rows and the tooltip." }
+stamp = { hash = "b3:9d91a4ac5037e592", by = "agent:outputs-1206", note = "Added the B1 behaviour: a refused key after a create keeps the dialog on that output and a retry sets only its key; a virtual camera sends no encoder, mix or bus." }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "SC-11 now says Add scene uses a keyframe's parent's folder, and Scene properties and Scene filters are both off for a keyframe, as scenes.rs does; SC-08 and SC-09 say Sources panel instead of Scene objects panel." }

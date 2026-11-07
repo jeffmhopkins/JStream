@@ -384,7 +384,7 @@ as one batch (`output.set_target`, `output.set_path` (#1072), `output.set_encode
 output runs, its target and bus are off, with a note. Delete… (bottom left) and the row's
 Delete… ask first. "+ Add output" opens the same dialog with a kind picker (Stream,
 Recording, Virtual camera); OK becomes Add and sends `output.create` with the other fields
-in one batch. The Encoders & mixes dialog holds the encoder profile and video mix lists
+in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. The Encoders & mixes dialog holds the encoder profile and video mix lists
 and their forms; a new profile is named "Default H.264".
 
 | ID | Feature | Requirement | Status | Notes |

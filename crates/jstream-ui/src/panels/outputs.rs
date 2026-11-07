@@ -764,6 +764,11 @@ pub fn draft_edits(
             )
         }
     };
+    // A virtual camera has no encoder, mix or audio: its dialog hides them, so a value
+    // left from another kind is not sent.
+    if draft.kind == NewKind::VirtualCam {
+        return edits;
+    }
     if draft.encoder != encoder {
         edits.push(Edit::OutputSetEncoder {
             output_id: output_id.clone(),
@@ -780,6 +785,65 @@ pub fn draft_edits(
         edits.push(bus_edit(output_id.clone(), draft.bus.as_str()));
     }
     edits
+}
+
+/// Why [`send_settings`] failed, and the output it created before that, if it did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SendFailure {
+    /// The new output the create batch made before a later step failed. A retry must
+    /// pass it back, so it sets the key on that output instead of creating another.
+    pub created: Option<OutputId>,
+    /// What failed.
+    pub reason: String,
+}
+
+/// Sends what the settings dialog's OK or Apply asks for: the batch of what changed,
+/// then the stream key step. `existing` is the output being edited as it is now. With
+/// none, a `created` output (made by an earlier try whose key step failed) gets only
+/// the key step, since its fields went with its create; otherwise a new output is
+/// created under the first ID free now, read from the engine, as the panel's list may
+/// not have caught up with one added a moment ago. Returns the output's ID.
+pub async fn send_settings(
+    control: &dyn Control,
+    existing: Option<&OutputInfo>,
+    created: Option<OutputId>,
+    draft: &OutputDraft,
+    key: KeyChange,
+    typed: Option<SecretString>,
+) -> Result<OutputId, SendFailure> {
+    let fail = |created: Option<OutputId>| move |reason: String| SendFailure { created, reason };
+    let (output_id, made) = match (existing, created) {
+        (Some(info), _) => {
+            let output_id = info.output_id.clone();
+            send_edits(control, draft_edits(&output_id, Some(info), draft))
+                .await
+                .map_err(fail(None))?;
+            (output_id, None)
+        }
+        (None, Some(output_id)) => (output_id.clone(), Some(output_id)),
+        (None, None) => {
+            let taken = load(control).await.map_err(fail(None))?.outputs;
+            let output_id = next_output_id(taken.iter().map(|row| &row.info.output_id));
+            send_edits(control, draft_edits(&output_id, None, draft))
+                .await
+                .map_err(fail(None))?;
+            (output_id.clone(), Some(output_id))
+        }
+    };
+    let keyed = match (key, typed) {
+        (KeyChange::Replace, Some(key)) => Some(Action::OutputSetKey {
+            output_id: output_id.clone(),
+            key,
+        }),
+        (KeyChange::Clear, _) => Some(Action::OutputClearKey {
+            output_id: output_id.clone(),
+        }),
+        _ => None,
+    };
+    if let Some(keyed) = keyed {
+        action(control, keyed).await.map_err(fail(made))?;
+    }
+    Ok(output_id)
 }
 
 /// What OK or Apply does to the stream key.
@@ -1385,6 +1449,9 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
     let key_field = NodeRef::<html::Input>::new();
     let problem = RwSignal::new(None::<String>);
     let busy = RwSignal::new(false);
+    // The new output a first Add created when its key step then failed: a retry sets the
+    // key on it rather than creating another.
+    let created = RwSignal::new(None::<OutputId>);
 
     let kind = move || draft.with(|d| d.kind);
     let running = move || row.with(|row| row.as_ref().is_some_and(|row| is_running(row.state)));
@@ -1399,62 +1466,53 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
         if busy.get_untracked() {
             return;
         }
-        let before = row.get_untracked().map(|row| row.info);
+        let created_now = created.get_untracked();
+        let before = row.get_untracked().map(|row| row.info).or_else(|| {
+            let id = created_now.as_ref()?;
+            panel
+                .rows
+                .with_untracked(|rows| rows.get(id).map(|row| row.info.clone()))
+        });
         let wanted = draft.get_untracked();
-        let change = key.get_untracked();
-        let typed = match change {
-            KeyChange::Replace => {
-                let typed = key_field
-                    .get_untracked()
-                    .map(|field| {
-                        let typed = field.value();
-                        field.set_value("");
-                        typed
-                    })
-                    .unwrap_or_default();
-                match take_key(typed) {
-                    Some(key) => Some(key),
-                    None => {
-                        problem.set(Some("Type or paste a stream key, or press Cancel.".into()));
-                        return;
-                    }
-                }
-            }
+        // An empty key field keeps the key (or none), whatever was typed and erased.
+        let typed = match key.get_untracked() {
+            KeyChange::Replace => key_field.get_untracked().and_then(|field| {
+                let typed = field.value();
+                field.set_value("");
+                take_key(typed)
+            }),
             KeyChange::Keep | KeyChange::Clear => None,
+        };
+        let change = match (key.get_untracked(), &typed) {
+            (KeyChange::Replace, None) => KeyChange::Keep,
+            (change, _) => change,
         };
         let Some(session) = panel.session.get() else {
             return;
         };
         busy.set(true);
         spawn_local(async move {
-            let outcome = async {
-                // A new output takes the first ID free now, read from the engine: the
-                // panel's list may not have caught up with one added a moment ago.
-                let output_id = if is_new {
-                    let taken = load(&*session.control).await?.outputs;
-                    next_output_id(taken.iter().map(|row| &row.info.output_id))
-                } else {
-                    id.get_value()
-                };
-                let edits = draft_edits(&output_id, before.as_ref(), &wanted);
-                send_edits(&*session.control, edits).await?;
-                let keyed = match (change, typed) {
-                    (KeyChange::Replace, Some(key)) => Some(Action::OutputSetKey {
-                        output_id: output_id.clone(),
-                        key,
-                    }),
-                    (KeyChange::Clear, _) => Some(Action::OutputClearKey {
-                        output_id: output_id.clone(),
-                    }),
-                    _ => None,
-                };
-                if let Some(keyed) = keyed {
-                    action(&*session.control, keyed).await?;
-                    panel.refresh_status(&session, output_id).await?;
-                }
-                Ok::<(), String>(())
-            }
+            let sent = send_settings(
+                &*session.control,
+                before.as_ref(),
+                created_now,
+                &wanted,
+                change,
+                typed,
+            )
             .await;
+            let outcome = match sent {
+                Ok(output_id) if change != KeyChange::Keep => {
+                    panel.refresh_status(&session, output_id).await
+                }
+                Ok(_) => Ok(()),
+                Err(failure) => {
+                    if failure.created.is_some() {
+                        created.try_set(failure.created);
+                    }
+                    Err(failure.reason)
+                }
+            };
             busy.try_set(false);
             match outcome {
                 Ok(()) => {
@@ -1478,7 +1536,9 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
         format!("{output_id} settings")
     };
     let sub = move || {
-        if is_new {
+        if let Some(made) = created.get() {
+            format!("{made} was added; its stream key was not set")
+        } else if is_new {
             format!(
                 "It will be {}",
                 panel.rows.with(|rows| next_output_id(rows.keys()))
@@ -1517,7 +1577,7 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
             <div class="output-dialog-body">
                 <fieldset class="output-section">
                     <legend>"General"</legend>
-                    <Show when=move || is_new>
+                    <Show when=move || is_new && created.with(Option::is_none)>
                         <label class="output-field">
                             <span class="label">"Kind"</span>
                             <select
@@ -1529,6 +1589,12 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                                         _ => NewKind::Rtmp,
                                     };
                                     draft.update(|d| d.kind = picked);
+                                    // A key typed for a stream doesn't follow it to
+                                    // another kind.
+                                    if let Some(field) = key_field.get_untracked() {
+                                        field.set_value("");
+                                    }
+                                    key.set(KeyChange::Keep);
                                 }
                             >
                                 <option value="rtmp" prop:selected=move || kind() == NewKind::Rtmp>
@@ -2509,5 +2575,60 @@ mod tests {
         );
         assert_eq!(health.reading().short(), "Dropping (5)");
         assert!(health.reading().summary().contains("3 output packets"));
+    }
+
+    /// An Add whose key step fails leaves the output it created, and the retry sets the
+    /// key on that output instead of creating a second one (#1279 B1). A virtual camera
+    /// sends no encoder, mix or bus left from another kind.
+    #[test]
+    fn a_failed_key_after_a_create_is_retried_on_the_same_output() {
+        use super::{KeyChange, OutputDraft, SendFailure, draft_edits, send_settings};
+        use jstream_control::protocol::BusId;
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = jstream_control::protocol::Hello {
+            protocol: jstream_control::protocol::PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        let mut draft = OutputDraft::new(NewKind::Rtmp);
+        draft.target = "rtmps://live.example.com/app".into();
+        let bad = take_key("has a space".into());
+        let failed = now(send_settings(
+            &control,
+            None,
+            None,
+            &draft,
+            KeyChange::Replace,
+            bad,
+        ))
+        .expect_err("the engine refuses the key");
+        let id = OutputId::new("output-1");
+        assert_eq!(failed.created, Some(id.clone()));
+        let SendFailure { reason, .. } = failed;
+        assert!(!reason.contains("has a space"), "{reason}");
+
+        let good = take_key("abcd-1234".into());
+        let sent = now(send_settings(
+            &control,
+            None,
+            Some(id.clone()),
+            &draft,
+            KeyChange::Replace,
+            good,
+        ))
+        .expect("the key alone");
+        assert_eq!(sent, id);
+        let loaded = now(load(&control)).expect("load");
+        assert_eq!(loaded.outputs.len(), 1, "no second output");
+        assert!(loaded.outputs[0].key_set);
+
+        let mut cam = OutputDraft::new(NewKind::VirtualCam);
+        cam.bus = BusId::new("vod");
+        let cam_id = OutputId::new("cam");
+        assert_eq!(
+            draft_edits(&cam_id, None, &cam),
+            vec![create_edit(cam_id.clone(), NewKind::VirtualCam, "")]
+        );
     }
 }
