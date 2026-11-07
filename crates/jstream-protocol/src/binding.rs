@@ -115,6 +115,9 @@ impl Trigger {
                     format!("must be at most {MAX_INPUT_NAME_LEN} bytes"),
                 ));
             }
+            if name.chars().any(char::is_control) {
+                return Some(("input", "must not hold control characters".into()));
+            }
         }
         None
     }
@@ -256,6 +259,11 @@ mod tests {
                 note(1, None, Some(&long)),
                 "input",
                 "must be at most 64 bytes",
+            ),
+            (
+                note(1, None, Some("Pads\n")),
+                "input",
+                "must not hold control characters",
             ),
         ];
         for (trigger, field, reason) in cases {

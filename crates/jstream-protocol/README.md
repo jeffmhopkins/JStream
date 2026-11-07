@@ -1147,7 +1147,7 @@ No input feeds bindings yet; the MIDI and JTunnel inputs add them.
 - **Triggers** are tagged by `kind`: `midi_note {note}`, `midi_cc {controller}` and
   `midi_program {program}`, each 0 to 127, with an optional `channel` (1 to 16, as a
   device's panel shows it; missing for any channel) and an optional `input` (the name of
-  a MIDI port or JTunnel sender, at most 64 bytes; missing for any). A note fires on
+  a MIDI port or JTunnel sender, at most 64 bytes and no control characters; missing for any). A note fires on
   note-on, a control change when its value crosses from 63 or below to 64 or above (so a
   button sending 127 then 0 fires once), a program change each time. Two triggers are
   the same exactly when they are equal, so channel 1 and any channel are two bindings,
