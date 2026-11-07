@@ -15,6 +15,10 @@
 //! - [`SysexAssembler`]: whole SysEx messages from their pieces, all or nothing.
 //! - [`SeqTracker`]: which frames are new, which are redundant copies, and how many never
 //!   came.
+//! - [`SenderClock`]: the sender's clock against the media clock, from the earliest
+//!   arrivals, with the drift between them.
+//! - [`Playout`]: a stream's frames held until they're due, in order, lost ones
+//!   concealed, ready for the mixer's input.
 //! - [`dnssd`]: the mDNS query that finds senders, the announcements they answer with,
 //!   and the [`Directory`](dnssd::Directory) of senders seen.
 //!
@@ -28,10 +32,14 @@
 
 #![forbid(unsafe_code)]
 
+mod clock;
 pub mod dnssd;
+mod playout;
 mod seq;
 mod sysex;
 pub mod wire;
 
+pub use clock::{DRIFT_AFTER_S, SenderClock};
+pub use playout::{Due, MAX_JUMP_NS, Playout, PlayoutStats, Pushed, SLEW, SLOTS, SNAP_NS};
 pub use seq::{SEQ_WINDOW, SeqTracker, SeqVerdict};
 pub use sysex::SysexAssembler;
