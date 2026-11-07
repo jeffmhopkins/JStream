@@ -144,8 +144,9 @@ Contents ([Design](#design) explains the choices):
   natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
   with the followable items, the follow fields and adding a camera modifier tested
   natively), the Filters
-  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
-  shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
+  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
+  Properties dialogs' list and pane, and `FilterUndo`, what the Filters window and the
+  Properties dialogs opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
@@ -542,9 +543,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
-- **The Properties dialog** (`source_properties.rs`) is the prototype's: the name and the
-  same form on the left, on a draft instead of the stored settings, and the source's
-  filter chains on the right. OK sends only what the user changed since the dialog
+- **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
+  its filters (#1219, `filters::PropertiesAndFilters`): on the left a Properties entry,
+  the source's filter chains (the Filters panel's rows, whose click picks a filter) and
+  Add filter; on the right the name and the same form, on a draft instead of the stored
+  settings, while Properties is picked, or the picked filter's pane, as the Filters
+  window draws it. The draft's pane stays mounted while a filter shows, so nothing typed
+  is lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, the Filters
+  window's log, so Cancel puts back each one it sent and OK keeps them. OK sends only what the user changed since the dialog
   opened, so another client's edit meanwhile stays: a rename (unless the name is blank
   or as it opened) and one `source.set_settings` with each changed value and `null` for
   each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
@@ -558,7 +564,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   but a committing OK), so the output shows the stored values again and nothing
   is saved; Defaults empties it, and shows that live too. Enter in a
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
-  The filter chains are the Filters panel's rows (below), which apply at once. A double click on
+  A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
   scene's item opens the scene's Properties dialog instead. A display, window or webcam
   source shows a live picture above the name (`device_preview.rs`, DL-02): a

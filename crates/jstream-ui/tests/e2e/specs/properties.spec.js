@@ -279,3 +279,43 @@ test('dragging the header moves the dialog, and it reopens there', async ({ page
   await close.click();
   await expect(again).toBeHidden();
 });
+
+// One dialog for the source (#1219): a filter row's click shows its settings on the right,
+// where they apply at once, and Cancel puts back what the dialog changed.
+test('a filter picked in the dialog shows its settings there, and Cancel puts them back', async ({ page, daemon }) => {
+  await describeKinds(page, [
+    {
+      kind_id: 'sharpen', category: 'video_filter', name: 'Sharpen', version: 1, video: true, audio: false,
+      params: [{ id: 'amount', type: 'float', min: 0, max: 1, step: 0.05, default: 0.2, label: 'Amount', live: true }],
+    },
+  ]);
+  await connect(page, daemon);
+  const dialog = await openProperties(page);
+  const entry = dialog.getByRole('button', { name: 'Properties', exact: true });
+  await expect(entry).toHaveAttribute('aria-pressed', 'true');
+  const rows = dialog.getByRole('list', { name: 'Video filters' }).getByRole('listitem');
+  await rows.first().locator('.filter-name').click();
+  await expect(entry).toHaveAttribute('aria-pressed', 'false');
+  const pane = dialog.getByRole('group', { name: 'Sharpen settings' });
+  await expect(pane).toBeVisible();
+  // The source's own settings stay where they were, out of sight.
+  await expect(dialog.locator('.props-name')).toBeHidden();
+  await expect(dialog.locator('.modal-footer').getByRole('button', { name: 'Defaults' })).toBeHidden();
+  // No Filters window opens over it.
+  await expect(page.getByRole('dialog', { name: 'Filters', exact: true })).toHaveCount(0);
+
+  const before = await rev(page);
+  const amount = pane.getByRole('spinbutton');
+  await amount.fill('0.5');
+  await amount.press('Tab');
+  await expect(rows.first().locator('.filter-summary')).toHaveText('0.50');
+  expect(await rev(page)).toBe(before + 1);
+  await entry.click();
+  await expect(dialog.locator('.props-name input')).toHaveValue('Backdrop');
+
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => rev(page)).toBe(before + 2);
+  const again = await openProperties(page);
+  await expect(again.getByRole('list', { name: 'Video filters' }).getByRole('listitem').first().locator('.filter-summary')).toHaveText('0.20');
+});
