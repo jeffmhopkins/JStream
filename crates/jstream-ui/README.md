@@ -677,8 +677,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The Filters window's Cancel fits each settings patch to the kind as described now
   (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
-  the disk: a written pack stays. The manifest is always `version = 1` with no
-  `renames`, so a renamed setting starts from its default.
+  the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
+  manifest's version by one and adds the pair to `renames` (`Declared::version`), so a
+  filter saved before the rename loads with its value under the new ID (ADR-0025).
+  Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
+  checks it against `pack.list`) and moves only the filter being edited to the new
+  kind (`move_to_kind`: a remove and an add in its place, one batch); the old pack
+  stays for any other filter of it, and the window opens the editor on the new one.
+  The coloured copy is sized to the textarea's box inside its scrollbars, through
+  CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the

@@ -1042,6 +1042,34 @@ fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo
     })
 }
 
+/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to kind
+/// `kind`: it goes, and a filter `new_id` of that kind takes its place with its
+/// settings and on or off. Save as pack… sends them for a custom shader (#1295).
+pub fn move_to_kind(
+    owner: &FilterOwner,
+    chain: FilterChain,
+    index: usize,
+    filter: &FilterInfo,
+    new_id: FilterId,
+    kind: String,
+) -> Vec<Edit> {
+    vec![
+        Edit::FilterRemove {
+            owner: owner.clone(),
+            filter_id: filter.filter_id.clone(),
+        },
+        Edit::FilterAdd {
+            owner: owner.clone(),
+            chain,
+            filter_id: new_id,
+            kind,
+            settings: filter.settings.clone(),
+            enabled: (!filter.enabled).then_some(false),
+            index: u32::try_from(index).ok(),
+        },
+    ]
+}
+
 /// Reads the descriptor of each kind in `kinds` not yet read, once each: the mock
 /// engine and an engine without a kind describe none, and a refusal isn't news.
 fn describe_all(
@@ -2566,10 +2594,59 @@ fn FilterPane(target: Target) -> impl IntoView {
             </button>
         }
     });
+    // Save as pack… wrote pack `new`: this filter moves to its kind, as a new filter in
+    // its place, which the window then shows with the editor open on it.
+    let save_as = {
+        let target = target.clone();
+        move |new: String| {
+            let Some(s) = session.get() else {
+                return;
+            };
+            let found = studio.collection.with_untracked(|c| {
+                let chains = c.as_ref()?.chains(&target.owner)?;
+                let filters = chains.chain(chain);
+                let index = filters
+                    .iter()
+                    .position(|f| f.filter_id == target.filter_id)?;
+                Some((index, filters[index].clone()))
+            });
+            let Some((index, filter)) = found else {
+                return;
+            };
+            let owner = target.owner.clone();
+            spawn_local(async move {
+                let new_id = FilterId::new(studio.fresh_id(&s, "filter"));
+                let edits = move_to_kind(
+                    &owner,
+                    chain,
+                    index,
+                    &filter,
+                    new_id.clone(),
+                    custom_shader::kind_of(&new),
+                );
+                dialogs.sent(&edits);
+                match apply(&s, edits, None).await {
+                    Ok(rev) => {
+                        dialogs.shader.set(Some(new_id.clone()));
+                        dialogs.landed.set(Some((new_id, rev)));
+                    }
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                    }
+                }
+            });
+        }
+    };
+    let save_as = StoredValue::new(save_as);
+    let save_as = move |new: String| save_as.with_value(|f| f(new));
     let shader_editor = move || {
         let opened = shader.get()?;
         let pack = shader_pack.get_value()?;
-        Some(view! { <ShaderEditor pack=pack opened=opened close=move || shader.set(None) /> })
+        Some(view! {
+            <ShaderEditor pack=pack opened=opened close=move || shader.set(None) save_as=save_as />
+        })
     };
     let target = StoredValue::new(target);
     let switch = move |_| {
@@ -3106,6 +3183,50 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
 
 #[cfg(test)]
 mod tests {
+
+    /// Save as pack… moves a filter to the new kind in its place, with its settings
+    /// and off when it was off (#1295).
+    #[test]
+    fn a_filter_moves_to_a_kind_in_its_place() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("cam"),
+        };
+        let mut settings = Settings::new();
+        settings.insert("amount", serde_json::json!(0.25));
+        let filter = FilterInfo {
+            filter_id: FilterId::new("f1"),
+            kind: "custom-1/shader".into(),
+            enabled: false,
+            settings: settings.clone(),
+        };
+        let edits = move_to_kind(
+            &owner,
+            FilterChain::Video,
+            2,
+            &filter,
+            FilterId::new("f9"),
+            "warm/shader".into(),
+        );
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f1"),
+                },
+                Edit::FilterAdd {
+                    owner,
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("f9"),
+                    kind: "warm/shader".into(),
+                    settings,
+                    enabled: Some(false),
+                    index: Some(2),
+                },
+            ]
+        );
+    }
+
     use super::*;
     use jstream_control::protocol::{ParamDescriptor, SceneInfo};
     use serde_json::json;
