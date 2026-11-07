@@ -1143,7 +1143,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 }
 
 /* The pairing panel (pairing.rs). */
-.pairing { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.pairing { display: grid; gap: 0.6rem; justify-items: start; }
 
 .pairing .problem { margin: 0; }
 .pairing-open { display: grid; gap: 0.25rem; }
@@ -1160,7 +1160,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }
 
 /* The Plugins section and its install and grant dialogs (plugins.rs). */
-.plugins { display: grid; gap: 0.6rem; margin-top: 1rem; justify-items: start; }
+.plugins { display: grid; gap: 0.6rem; justify-items: start; }
 .plugins .problem { margin: 0; }
 .plugin-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; width: 100%; }
 .plugin { display: grid; gap: 0.2rem; min-width: 0; }
@@ -1175,7 +1175,16 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 /* The About dialog (about.rs). */
 .modal.about-dialog { width: 400px; }
 /* Check for updates and Settings (updates.rs). */
-.modal.update-dialog, .modal.settings-dialog { width: 420px; }
+.modal.update-dialog { width: 420px; }
+/* The Settings dialog (settings.rs): its pages listed on the left, the page on the right. */
+.modal.settings-dialog { width: 720px; height: min(520px, 100%); }
+.settings-main { display: flex; flex: 1; min-height: 0; }
+.settings-pages { display: flex; flex-direction: column; gap: 2px; width: 160px; flex: none; padding: 10px 8px; border-right: 1px solid var(--line); }
+.settings-page-tab { text-align: left; padding: 7px 10px; border: 0; border-radius: 5px; background: none; color: var(--muted); }
+.settings-page-tab:hover { color: var(--text); }
+.settings-page-tab.on { background: var(--hover); color: var(--text); }
+.settings-dialog .settings-body { flex: 1; min-width: 0; overflow: auto; display: grid; gap: 12px; align-content: start; }
+.settings-page-title { margin: 0; font-size: 13px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
 .update-body p, .settings-check-note { margin: 0; }
 .update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }

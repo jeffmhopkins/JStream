@@ -135,14 +135,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
   it out of About. With hardware, nothing is offered until the encoder form asks for software
   H.264 (and not for HEVC), and a saved software profile brings the section's offer.
-- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+- **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
+  Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
   sends the folder and the ID suggested from its name with no grant, and, since the
   manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
   and fixed and only the classes and host asked for, and sends just what was ticked; the
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
-  granted a class and a folder and turned on in one step.
+  granted a class and a folder and turned on in one step. The Inspector holds neither
+  plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
+  between General, Plugins and Devices, and the install dialog opens centred over a
+  moved Settings dialog and closes alone on Escape.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
