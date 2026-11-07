@@ -953,12 +953,22 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             let inputs = state.audio.inputs();
-            state
-                .routing
-                .attach(mixer, state.graph.state(), state.studio.program(), &inputs)
+            let generation =
+                state
+                    .routing
+                    .attach(mixer, state.graph.state(), state.studio.program(), &inputs);
+            drop(inputs);
+            // A page given a bus reads its levels from now on.
+            state.feed_pages();
+            generation
         };
         let shared = Arc::clone(&self.shared);
-        Box::new(move || lock(&shared.state).routing.detach(generation))
+        Box::new(move || {
+            let mut state = lock(&shared.state);
+            state.routing.detach(generation);
+            // ...and `null` once the mixer has gone.
+            state.feed_pages();
+        })
     }
 
     /// Adds an output tap for `output_id` to the program's mixer, running the output's
@@ -5141,6 +5151,7 @@ impl State {
             live,
             studio,
             values,
+            routing,
             ..
         } = self;
         let drawn = shown.as_ref().unwrap_or(graph);
@@ -5149,6 +5160,7 @@ impl State {
             studio.program(),
             studio.preview(),
             values.map(),
+            &|| routing.page_levels(),
         );
     }
 

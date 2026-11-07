@@ -186,6 +186,21 @@ impl BrowserKind {
                         json!(""),
                     )
                 },
+                ParamDescriptor {
+                    description: Some(
+                        "The bus whose levels and bands the page may read, after its \
+                         fader, with jstream.levels(). A page given a bus can follow the \
+                         shape of its sound, and a page from the web can send that \
+                         anywhere. Give it only the bus it shows."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(VisibleIf {
+                        param: "page_api".into(),
+                        equals: json!(true),
+                    }),
+                    ..param("page_api_bus", "Levels", ParamType::Bus, Value::Null)
+                },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
@@ -261,7 +276,14 @@ pub(crate) fn open(
         blank,
         audio,
         every_ms: i64::from(1000_u32.div_ceil(fps)),
-        feed: grant.map(|grant| Feed::new(grant, fps)),
+        feed: grant.map(|grant| {
+            let scope = grant
+                .bus
+                .as_ref()
+                .zip(ctx.audio.as_ref())
+                .map(|(bus, scopes)| scopes.bus(bus));
+            Feed::new(grant, fps, scope)
+        }),
         hidden: false,
     }))
 }

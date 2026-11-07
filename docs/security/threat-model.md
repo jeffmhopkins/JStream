@@ -151,6 +151,9 @@ a stolen token, local denial of service.
   they never carry their folder's inherited entries. An existing token or devices file
   is refused unless its owner is the user, SYSTEM or Administrators and its DACL grants
   no one else more than reading its descriptor or attributes (`check_private_file`).
+  App package and capability SIDs (`S-1-15-2-…`, `S-1-15-3-…`, which a packaged app's
+  redirected `%APPDATA%` puts on every file) don't count as anyone else: Windows grants
+  an app container only what its user's SIDs are granted too (#1189).
   The UI settings file holds no secret (layouts), so an existing one is read without
   that check; it is still rewritten user-only (`0600` on Unix).
   The daemon's log files and the crash reports are always new files, and the desktop
@@ -307,10 +310,10 @@ user, accepted for tester builds. Revisit it when Linux gets a package
 ([ADR-0060](../adr/0060-linux-platform-support.md) decision 9): a root-owned install
 location removes it.
 
-**Built, in part** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source
-may opt its page in to a read-only `window.jstream` with the engine animation clock and
-the page's own visibility, and, per further setting, the program and preview scenes and
-named shared values. One bus's levels and bands are decided, not built. The renderer
+**Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
+its page in to a read-only `window.jstream` with the engine animation clock and the
+page's own visibility, and, per further setting, the program and preview scenes, named
+shared values, and one bus's levels and bands (never its samples). The renderer
 defines the API only in the main frame, and only while it shows the source's own
 document: the source's web origin exactly, its file's folder or below, or the `data:`
 document of a page given as HTML. Data flows one way: the engine filters it to the
@@ -320,8 +323,8 @@ process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs
 page has no path to the engine. A compromised renderer holds only what the sources
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
-granted, a web page can send off the machine: preview scene names matter most, and once
-built, a microphone bus's bands. The engine has no studio mode to leave, so a page
+granted, a web page can send off the machine: preview scene names matter most, and a
+microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
