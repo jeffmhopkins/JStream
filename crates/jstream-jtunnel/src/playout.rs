@@ -104,6 +104,10 @@ impl<'a> Due<'a> {
     }
 }
 
+/// How far ahead of the next frame due, in stream time, a frame may be before the
+/// playout takes it as the stream starting again: 2 s.
+pub const MAX_JUMP_NS: u64 = 2_000_000_000;
+
 /// The most a frame's start moves toward the clock estimate, as a share of a frame:
 /// 0.5%, which no listener hears and which closes a millisecond in a fifth of a second.
 pub const SLEW: f64 = 0.005;
@@ -117,6 +121,8 @@ pub const SNAP_NS: f64 = 50e6;
 pub struct Playout {
     lead_ns: u64,
     stream: Option<u32>,
+    /// The stream this one replaced: its datagrams, reordered past the restart, are late.
+    replaced: Option<u32>,
     first_seq: u32,
     frame_samples: u64,
     sample_rate: u32,
@@ -150,6 +156,7 @@ impl Playout {
         Self {
             lead_ns,
             stream: None,
+            replaced: None,
             first_seq: 0,
             frame_samples: 1,
             sample_rate: 48_000,
@@ -196,20 +203,37 @@ impl Playout {
         samples: &[f32],
         arrival_ns: u64,
     ) -> Pushed {
-        let restarted = self.stream != Some(header.stream_id)
+        if self.stream.is_some() && self.replaced == Some(header.stream_id) {
+            // A datagram of the stream this one replaced, reordered past the restart.
+            self.stats.late += 1;
+            return Pushed::Late;
+        }
+        let mut restarted = self.stream != Some(header.stream_id)
             || u64::from(header.frame_samples) != self.frame_samples
             || header.sample_rate != self.sample_rate;
         if restarted {
             self.restart(header, frame.seq);
         }
-        let index = match u64::try_from(i64::from(frame.seq.wrapping_sub(self.first_seq) as i32)) {
-            Ok(i) => i,
-            // Before the stream's first frame: older than anything played.
-            Err(_) => {
-                self.stats.late += 1;
-                return Pushed::Late;
-            }
-        };
+        let mut index =
+            match u64::try_from(i64::from(frame.seq.wrapping_sub(self.first_seq) as i32)) {
+                Ok(i) => i,
+                // Before the stream's first frame: older than anything played.
+                Err(_) => {
+                    self.stats.late += 1;
+                    return Pushed::Late;
+                }
+            };
+        // A frame further ahead than a sender runs in [`MAX_JUMP_NS`] is a new start
+        // (a long gap, or a corrupt sequence number), not a stream to wait for: its
+        // position would poison the clock, and skipping to it would take a step per
+        // frame.
+        if let Some(next) = self.next
+            && index > next + self.max_jump()
+        {
+            self.restart(header, frame.seq);
+            restarted = true;
+            index = 0;
+        }
         let end = (index + 1) * self.frame_samples;
         self.clock.observe(end, arrival_ns);
         let next = *self.next.get_or_insert(index);
@@ -222,13 +246,20 @@ impl Playout {
             // Far ahead of what's due: the stream outran the playout. Skip what can't
             // be held, concealing it.
             let skip = index + 1 - SLOTS as u64;
-            for i in next..skip {
-                let slot = &mut self.slots[(i % SLOTS as u64) as usize];
-                if slot.index == Some(i) {
+            if skip - next >= SLOTS as u64 {
+                // Every slot is skipped: clear them in one step.
+                for slot in self.slots.iter_mut() {
                     slot.index = None;
                 }
-                self.stats.concealed += 1;
+            } else {
+                for i in next..skip {
+                    let slot = &mut self.slots[(i % SLOTS as u64) as usize];
+                    if slot.index == Some(i) {
+                        slot.index = None;
+                    }
+                }
             }
+            self.stats.concealed += skip - next;
             self.next = Some(skip);
         }
         let slot = &mut self.slots[(index % SLOTS as u64) as usize];
@@ -255,9 +286,20 @@ impl Playout {
         }
     }
 
+    /// The most frames a stream may jump ahead of the next due before it counts as a new
+    /// start: [`MAX_JUMP_NS`] of frames, and never fewer than the slots hold.
+    fn max_jump(&self) -> u64 {
+        let frames =
+            MAX_JUMP_NS * u64::from(self.sample_rate.max(1)) / 1_000_000_000 / self.frame_samples;
+        frames.max(SLOTS as u64)
+    }
+
     fn restart(&mut self, header: &AudioHeader, seq: u32) {
-        if self.stream.is_some() {
+        if let Some(old) = self.stream {
             self.stats.restarts += 1;
+            if old != header.stream_id {
+                self.replaced = Some(old);
+            }
         }
         self.stream = Some(header.stream_id);
         self.first_seq = seq;
@@ -453,5 +495,44 @@ mod tests {
         // Frames 0..=136 can't be held beside 200 in 64 slots.
         assert_eq!(p.stats().concealed, 137);
         assert_eq!(p.pop(u64::MAX / 2).map(|d| d.position), Some(137 * 48));
+    }
+
+    /// A sequence number billions of frames ahead (a corrupt or hostile datagram) is a
+    /// new start: one cheap step, and the clock forgets the old stream rather than
+    /// taking the far position as its floor (review of #1280).
+    #[test]
+    fn a_frame_far_beyond_the_stream_starts_it_again() {
+        let mut p = Playout::new(0);
+        push(&mut p, 0, 1, MS);
+        push(&mut p, 1, 1, 2 * MS);
+        let started = std::time::Instant::now();
+        let far = 0x7FFF_FFFF;
+        assert_eq!(push(&mut p, far, 1, 3 * MS), Pushed::Restarted);
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        assert_eq!(p.stats().restarts, 1);
+        // The frames after it play from it, with times from their own arrivals.
+        assert_eq!(push(&mut p, far + 1, 1, 4 * MS), Pushed::Stored);
+        let d = p
+            .pop(10 * MS)
+            .map(|d| (d.position, d.discontinuity, d.time_ns));
+        assert_eq!(d, Some((0, true, 2 * MS)));
+        assert_eq!(p.pop(10 * MS).map(|d| d.position), Some(48));
+        // A jump within 2 s is a gap to conceal, cheaply, however many frames it skips.
+        let mut p = Playout::new(0);
+        push(&mut p, 0, 1, MS);
+        assert_eq!(push(&mut p, 1_999, 1, 2 * MS), Pushed::Stored);
+        assert_eq!(p.stats().concealed, 1_999 + 1 - SLOTS as u64);
+    }
+
+    /// A reordered datagram of the stream a restart replaced is late; it doesn't restart
+    /// the playout back to the old stream.
+    #[test]
+    fn the_replaced_stream_does_not_come_back() {
+        let mut p = Playout::new(0);
+        push(&mut p, 5, 1, MS);
+        assert_eq!(push(&mut p, 900, 2, 2 * MS), Pushed::Restarted);
+        assert_eq!(push(&mut p, 6, 1, 3 * MS), Pushed::Late);
+        assert_eq!(push(&mut p, 901, 2, 4 * MS), Pushed::Stored);
+        assert_eq!(p.stats().restarts, 1);
     }
 }

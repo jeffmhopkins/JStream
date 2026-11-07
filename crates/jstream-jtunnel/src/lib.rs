@@ -40,6 +40,6 @@ mod sysex;
 pub mod wire;
 
 pub use clock::{DRIFT_AFTER_S, SenderClock};
-pub use playout::{Due, Playout, PlayoutStats, Pushed, SLEW, SLOTS, SNAP_NS};
+pub use playout::{Due, MAX_JUMP_NS, Playout, PlayoutStats, Pushed, SLEW, SLOTS, SNAP_NS};
 pub use seq::{SEQ_WINDOW, SeqTracker, SeqVerdict};
 pub use sysex::SysexAssembler;

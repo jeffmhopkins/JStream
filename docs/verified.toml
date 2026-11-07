@@ -2676,7 +2676,7 @@ stamp = { hash = "b3:4fd8b7119aea22fc", by = "agent:grok", note = "Re-read the S
 stamp = { hash = "b3:83974a87d69a2b5b", by = "agent:claude", note = "True at this head (#626 review B3). Its dependency ARCH data-model changed here only in the Not-yet line, which no longer names scene_mask (this PR), and in the wave's flips, privacy and output-keyed session passages. This PR changes no jstream-graph file; its body, deps and files are as on the base and hold." }
 
 ["CRATE-jstream-jtunnel#purpose"."body"]
-stamp = { hash = "b3:18f2d60ef9f282eb", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and wire::decode: SenderClock (lowest offset per 1 s, 32-point fit, drift after 15 s), Playout (64 slots, push/pop verdicts, concealment, 0.5% slew, 50 ms snap, skip-ahead) and the new tests/link.rs match the code" }
+stamp = { hash = "b3:60c3e481435022ea", by = "agent:r9bzj2", note = "Re-read after the review fix: Playout skips in one step, restarts on a frame more than 2 s (MAX_JUMP_NS) ahead before it reaches the clock, and drops the replaced stream's reordered datagrams; added those to the Playout bullet. wire.rs also carries the base's narrowed write_audio doc, which the section still matches" }
 
 ["CRATE-jstream-jtunnel#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-jtunnel"]
 stamp = { hash = "b3:e017fb4f88fdc9f8", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and wire::decode: SenderClock (lowest offset per 1 s, 32-point fit, drift after 15 s), Playout (64 slots, push/pop verdicts, concealment, 0.5% slew, 50 ms snap, skip-ahead) and the new tests/link.rs match the code" }
@@ -2688,10 +2688,10 @@ stamp = { hash = "b3:c3c44f5fb509a86d", by = "agent:r9bzj2", note = "Re-read aga
 stamp = { hash = "b3:62c3bc48e4e72629", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/lib.rs"]
-stamp = { hash = "b3:9d62c01cfe55e428", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and wire::decode: SenderClock (lowest offset per 1 s, 32-point fit, drift after 15 s), Playout (64 slots, push/pop verdicts, concealment, 0.5% slew, 50 ms snap, skip-ahead) and the new tests/link.rs match the code" }
+stamp = { hash = "b3:54b73c8a2f79b4dc", by = "agent:r9bzj2", note = "Re-read after the review fix: Playout skips in one step, restarts on a frame more than 2 s (MAX_JUMP_NS) ahead before it reaches the clock, and drops the replaced stream's reordered datagrams; added those to the Playout bullet. wire.rs also carries the base's narrowed write_audio doc, which the section still matches" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/playout.rs"]
-stamp = { hash = "b3:9347b0bc56d6cd85", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and wire::decode: SenderClock (lowest offset per 1 s, 32-point fit, drift after 15 s), Playout (64 slots, push/pop verdicts, concealment, 0.5% slew, 50 ms snap, skip-ahead) and the new tests/link.rs match the code" }
+stamp = { hash = "b3:d78e46dc14006613", by = "agent:r9bzj2", note = "Re-read after the review fix: Playout skips in one step, restarts on a frame more than 2 s (MAX_JUMP_NS) ahead before it reaches the clock, and drops the replaced stream's reordered datagrams; added those to the Playout bullet. wire.rs also carries the base's narrowed write_audio doc, which the section still matches" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/seq.rs"]
 stamp = { hash = "b3:3f73e066c99b1fda", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
@@ -2700,7 +2700,7 @@ stamp = { hash = "b3:3f73e066c99b1fda", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/wire.rs"]
-stamp = { hash = "b3:a70f3482a73f74d9", by = "agent:r9bzj2", note = "Re-read after narrowing write_audio's doc to what it checks (frame and event counts, whole events); the section's 'writes what a sender would, for tests and fuzzing' still holds" }
+stamp = { hash = "b3:9f5cc48cea3021dc", by = "agent:r9bzj2", note = "Re-read after the review fix: Playout skips in one step, restarts on a frame more than 2 s (MAX_JUMP_NS) ahead before it reaches the clock, and drops the replaced stream's reordered datagrams; added those to the Playout bullet. wire.rs also carries the base's narrowed write_audio doc, which the section still matches | kept from the merged side: Re-read after narrowing write_audio's doc to what it checks (frame and event counts, whole events); the section's 'writes what a sender would, for tests and fuzzing' still holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
 stamp = { hash = "b3:53a80f8dd2976320", by = "agent:grok", note = "Re-read the revisions paragraph: modern results still carry serverInfo, and its version is the workspace release version; build.rs is now covered." }

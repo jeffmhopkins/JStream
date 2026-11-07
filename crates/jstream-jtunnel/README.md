@@ -51,7 +51,10 @@ Contents:
   flag after a restart. The times run on from one frame to the next and slew toward the
   clock estimate by at most 0.5% of a frame, so the mixer never sees them jump; an error
   past 50 ms jumps instead and marks a discontinuity. A stream that outruns the buffer
-  skips ahead, concealing what it couldn't hold.
+  skips ahead in one step, concealing what it couldn't hold; a frame more than 2 s ahead
+  of the next due (a long gap or a corrupt sequence number) starts the stream again, so
+  its position never reaches the clock. A reordered datagram of the stream a restart
+  replaced is late, not a second restart.
 - `dnssd`: the mDNS PTR query for `_jtunnel._udp.local`, `parse_announcements` for the
   SRV and TXT records senders answer with (DNS name compression followed with a bound),
   and `Directory`, the list of senders seen, refreshed by announcements, removed by a
