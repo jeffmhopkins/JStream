@@ -47,7 +47,7 @@ test('with no item selected the panel shows the scene\'s chain, and a filter add
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await expect(add.locator('.modal-sub')).toHaveText('For “Main”');
   // Only the video chain: Gain isn't offered.
-  await expect(add.getByRole('listbox', { name: 'Filter type' }).getByRole('option')).toHaveText(['Sharpen']);
+  await expect(add.getByRole('listbox', { name: 'Filter type' }).getByRole('option')).toHaveText(['Sharpen', 'Custom shader']);
   await expect(add.locator('.add-filter-foot')).toHaveText('Applies to the whole scene.');
   const start = await rev(page);
   await add.getByRole('button', { name: 'Add filter' }).click();

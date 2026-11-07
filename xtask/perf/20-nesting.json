@@ -1,0 +1,426 @@
+[
+  {
+    "name": "nested_deep",
+    "about": "six scenes nested inside each other, each tilted and titled",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "nest_c",
+        "name": "nest_c",
+        "kind": {
+          "type": "builtin",
+          "kind": "color"
+        },
+        "settings": {
+          "color": "#335577ff",
+          "width": 640,
+          "height": 360
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_0",
+        "name": "nest_0"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_0",
+        "item_id": "nest_0_bg",
+        "source_id": "nest_c",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_0",
+        "name": "nest_t_0",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 0",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_0",
+        "item_id": "nest_0_t",
+        "source_id": "nest_t_0",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_0",
+        "name": "nest_src_0",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_0"
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_1",
+        "name": "nest_1"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_1",
+        "item_id": "nest_1_bg",
+        "source_id": "nest_src_0",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_1",
+        "name": "nest_t_1",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 1",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_1",
+        "item_id": "nest_1_t",
+        "source_id": "nest_t_1",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_1",
+        "name": "nest_src_1",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_1"
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_2",
+        "name": "nest_2"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_2",
+        "item_id": "nest_2_bg",
+        "source_id": "nest_src_1",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_2",
+        "name": "nest_t_2",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 2",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_2",
+        "item_id": "nest_2_t",
+        "source_id": "nest_t_2",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_2",
+        "name": "nest_src_2",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_2"
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_3",
+        "name": "nest_3"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_3",
+        "item_id": "nest_3_bg",
+        "source_id": "nest_src_2",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_3",
+        "name": "nest_t_3",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 3",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_3",
+        "item_id": "nest_3_t",
+        "source_id": "nest_t_3",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_3",
+        "name": "nest_src_3",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_3"
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_4",
+        "name": "nest_4"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_4",
+        "item_id": "nest_4_bg",
+        "source_id": "nest_src_3",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_4",
+        "name": "nest_t_4",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 4",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_4",
+        "item_id": "nest_4_t",
+        "source_id": "nest_t_4",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_4",
+        "name": "nest_src_4",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_4"
+        }
+      },
+      {
+        "type": "scene.create",
+        "scene_id": "nest_5",
+        "name": "nest_5"
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_5",
+        "item_id": "nest_5_bg",
+        "source_id": "nest_src_4",
+        "geometry": {
+          "$canvas": 0.9,
+          "rotation_deg": 3
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_t_5",
+        "name": "nest_t_5",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "depth 5",
+          "size": 40
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nest_5",
+        "item_id": "nest_5_t",
+        "source_id": "nest_t_5",
+        "geometry": {
+          "center": {
+            "x": 200,
+            "y": 60
+          },
+          "size": {
+            "width": 300,
+            "height": 60
+          }
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "nest_src_5",
+        "name": "nest_src_5",
+        "kind": {
+          "type": "scene",
+          "scene_id": "nest_5"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "nested_deep",
+        "item_id": "nd_i",
+        "source_id": "nest_src_5",
+        "geometry": "$canvas"
+      }
+    ]
+  },
+  {
+    "name": "nested_wide",
+    "about": "one group scene placed 16 times",
+    "edits": [
+      {
+        "type": "scene.create",
+        "scene_id": "grp",
+        "name": "grp"
+      },
+      {
+        "type": "source.create",
+        "source_id": "grp_sh",
+        "name": "grp_sh",
+        "kind": {
+          "type": "builtin",
+          "kind": "shape"
+        },
+        "settings": {
+          "width": 300,
+          "height": 200,
+          "radius": 20,
+          "color": "#33aa66ff"
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "grp",
+        "item_id": "grp_a",
+        "source_id": "grp_sh",
+        "geometry": "$canvas"
+      },
+      {
+        "type": "source.create",
+        "source_id": "grp_t",
+        "name": "grp_t",
+        "kind": {
+          "type": "builtin",
+          "kind": "text"
+        },
+        "settings": {
+          "text": "group",
+          "size": 48
+        }
+      },
+      {
+        "type": "item.add",
+        "scene_id": "grp",
+        "item_id": "grp_b",
+        "source_id": "grp_t",
+        "geometry": {
+          "$canvas": 0.25
+        }
+      },
+      {
+        "type": "source.create",
+        "source_id": "grp_src",
+        "name": "grp_src",
+        "kind": {
+          "type": "scene",
+          "scene_id": "grp"
+        }
+      },
+      {
+        "each": {
+          "count": 16,
+          "cols": 4
+        },
+        "edits": [
+          {
+            "type": "item.add",
+            "scene_id": "nested_wide",
+            "item_id": "nw_{i}",
+            "source_id": "grp_src",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  }
+]

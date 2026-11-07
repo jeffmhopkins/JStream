@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), browser-linux (the Linux browser helper's folder), e2e-stream, gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -137,7 +137,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
-| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
+| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -1117,7 +1117,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
-  countdown and grouping recipes, fitting boxes to text, animating with keyframe
+  countdown and grouping recipes, fitting boxes to text, a custom shader the UI's
+  shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
   `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
@@ -1170,7 +1171,9 @@ non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn pol
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
-anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34. A 2D
+item drawn small (a canvas pixel spanning more than 1.15 texels) samples such a chain
+too, so an inset source keeps its detail at its drawn size (#1217).
 An item in a 3D scene ([ADR-0094](adr/0094-scene-cameras.md)) carries its scene's
 camera and always takes that path: the same polygon, built through the camera's view
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
