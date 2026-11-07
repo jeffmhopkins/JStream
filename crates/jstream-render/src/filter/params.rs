@@ -25,6 +25,7 @@ pub(crate) fn filter(id: &str, name: &str, params: Vec<ParamDescriptor>) -> Kind
 
 fn param(id: &str, label: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,

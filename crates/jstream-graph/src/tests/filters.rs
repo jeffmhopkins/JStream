@@ -631,6 +631,7 @@ fn master_and_output_chains_are_validated() {
         audio: true,
         max_outset_px: None,
         params: vec![ParamDescriptor {
+            warning: None,
             id: "key".into(),
             ty: ParamType::Source { media: None },
             default: Value::Null,
@@ -651,6 +652,7 @@ fn master_and_output_chains_are_validated() {
         audio: false,
         max_outset_px: None,
         params: vec![ParamDescriptor {
+            warning: None,
             id: "lut".into(),
             ty: ParamType::Asset {
                 accept: vec!["cube".into()],
@@ -1145,6 +1147,7 @@ fn a_sidechain_key_is_an_edge_of_its_source() {
         audio: true,
         max_outset_px: None,
         params: vec![ParamDescriptor {
+            warning: None,
             id: "key".into(),
             ty: ParamType::Source { media: None },
             default: Value::Null,

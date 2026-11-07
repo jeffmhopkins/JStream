@@ -261,7 +261,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
   with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
   filters, one step up and one down), which stays at the panel's foot while the rows
-  scroll. The scene list shows each
+  scroll. A `browser` source whose page is granted the page API has an "API" badge on
+  its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
+  The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -529,7 +531,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`place_asset`, tested natively). App assets have no button. A browser page renders
   none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
-  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  ones collapsed, and hidden while their `visible_if` doesn't hold or names a field that
+  is itself hidden. A field's `warning` (protocol 0.93) shows as a line under it, not only
+  in its tooltip. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A

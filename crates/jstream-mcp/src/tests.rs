@@ -526,6 +526,8 @@ fn instructions_carry_the_design_guidance() {
         "`shadow_color`",
         "`source.sizes`",
         "`video.snapshot`",
+        "`jstream.levels()`",
+        "`page_api_audio`",
     ] {
         assert!(legacy.contains(needle), "{needle}");
     }

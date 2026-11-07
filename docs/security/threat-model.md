@@ -312,8 +312,11 @@ location removes it.
 
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
-page's own visibility, and, per further setting, the program and preview scenes, named
-shared values, and one bus's levels and bands (never its samples). The renderer
+page's own visibility, and, per further checkbox, the program and preview scenes, named
+shared values, and one bus's levels and bands (never its samples). Each checkbox shows
+its warning beside it, and the Sources panel badges a source whose page is granted
+anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
+setting ever grants). The renderer
 defines the API only in the main frame, and only while it shows the source's own
 document: the source's web origin exactly, its file's folder or below, or the `data:`
 document of a page given as HTML. Data flows one way: the engine filters it to the

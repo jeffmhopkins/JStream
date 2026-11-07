@@ -308,7 +308,10 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.102 because the engine quarantines an effect-pack kind that runs
 too long on the GPU, before the OS resets the device, and says so in `gpu.effect_slow`
 (#349, [Effect quarantine](#quarantine), a placeholder number the release queue sets);
-0.92 because `profile.get` reports past the drawers: each
+0.93 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.92 because `profile.get` reports past the drawers: each
 encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
 mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
@@ -826,7 +829,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.93: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
