@@ -199,9 +199,11 @@ above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a camera that moves on its
 own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
-pointer over a screen capture (`scene.set_camera_follow`, its zoom stepped live by
-`scene.zoom_camera`, both set on the family's scene,
-[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), choosing between
+pointer over a screen capture (a `follow_pointer` filter on the capture item, which
+keeps the pointer inside a safe margin and gives a 2D scene a camera, with
+`scene.set_camera_follow` as a shortcut, its zoom stepped live by `scene.zoom_camera`,
+[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md),
+[ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in

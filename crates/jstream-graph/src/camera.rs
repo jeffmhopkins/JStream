@@ -1,22 +1,34 @@
 //! Scene cameras (ADR-0094): `scene.set_camera`, a keyframe scene's camera override,
 //! and the effective camera a scene draws through; and a scene family's camera motion
 //! and follow camera (ADR-0113): `scene.set_camera_motion` and `scene.set_camera_follow`.
+//! The follow camera is a `follow_pointer` filter on the followed item's effects
+//! (ADR-0120), so `scene.set_camera_follow` is a set of `filter.*` edits on the scene's
+//! items, and its inverse is theirs.
 
-use crate::apply::{invalid, not_found};
+use crate::apply::{Kinds, invalid, not_found};
 use crate::model::{Scene, State};
 use jstream_protocol::{
-    CameraFollow, CameraMotionModifier, Edit, EntityKind, GeometryError, ProtocolError,
-    SceneCamera, SceneId, SourceKind, check_camera_motion,
+    CameraFollow, CameraMotionModifier, Edit, EntityKind, FOLLOW_POINTER_KIND, FilterChain,
+    FilterId, FilterOwner, GeometryError, ItemId, ProtocolError, SceneCamera, SceneId, SourceKind,
+    check_camera_motion,
 };
 
 /// The built-in source kinds a follow camera can follow: captures that report where
 /// the pointer is (ADR-0113).
 const FOLLOWABLE_KINDS: [&str; 2] = ["display", "window"];
 
+/// Whether `source_id` is a display or window capture, which a follow camera can follow.
+pub(crate) fn followable(state: &State, source_id: &jstream_protocol::SourceId) -> bool {
+    state.source(source_id).is_some_and(|source| {
+        matches!(source.kind(), SourceKind::Builtin { kind } if FOLLOWABLE_KINDS.contains(&kind.as_str()))
+    })
+}
+
 /// Applies `scene.set_camera` and returns the edits that undo it. `None` for any other
 /// edit.
 pub(crate) fn apply(
     state: &mut State,
+    kinds: &Kinds,
     edit: &Edit,
     at: usize,
 ) -> Option<Result<Vec<Edit>, ProtocolError>> {
@@ -28,7 +40,7 @@ pub(crate) fn apply(
             Some(set_motion(state, scene_id, motion, at))
         }
         Edit::SceneSetCameraFollow { scene_id, follow } => {
-            Some(set_follow(state, scene_id, follow.as_ref(), at))
+            Some(set_follow(state, kinds, scene_id, follow.as_ref(), at))
         }
         _ => None,
     }
@@ -142,8 +154,13 @@ fn set_motion(
     }])
 }
 
+/// `scene.set_camera_follow` (ADR-0120): with a follow, puts its numbers on the
+/// followed item's `follow_pointer` filter, turned on (adding one, last in its effects,
+/// when it has none); and removes every other `follow_pointer` filter of the scene's
+/// items. Without one, removes them all. Returns the inverse of those filter edits.
 fn set_follow(
     state: &mut State,
+    kinds: &Kinds,
     scene_id: &SceneId,
     follow: Option<&CameraFollow>,
     at: usize,
@@ -164,10 +181,7 @@ fn set_follow(
                     format!("item `{}` is not in scene `{scene_id}`", follow.item_id),
                 )
             })?;
-        let followable = state.source(&item.source_id).is_some_and(|source| {
-            matches!(source.kind(), SourceKind::Builtin { kind } if FOLLOWABLE_KINDS.contains(&kind.as_str()))
-        });
-        if !followable {
+        if !followable(state, &item.source_id) {
             return Err(invalid(
                 at,
                 "follow.item_id",
@@ -179,27 +193,98 @@ fn set_follow(
             ));
         }
     }
-    let old = std::mem::replace(&mut state.scenes[si].camera_follow, follow.cloned());
-    Ok(vec![Edit::SceneSetCameraFollow {
-        scene_id: scene_id.clone(),
-        follow: old,
-    }])
+    let existing: Vec<(ItemId, FilterId)> = state.scenes[si]
+        .items
+        .iter()
+        .flat_map(|item| {
+            item.effects
+                .video
+                .iter()
+                .filter(|f| f.kind == FOLLOW_POINTER_KIND)
+                .map(|f| (item.id.clone(), f.id.clone()))
+        })
+        .collect();
+    let owner = |item_id: &ItemId| FilterOwner::Item {
+        item_id: item_id.clone(),
+    };
+    let mut steps = Vec::new();
+    let mut kept = None;
+    if let Some(follow) = follow {
+        match existing.iter().find(|(item, _)| *item == follow.item_id) {
+            Some((item, id)) => {
+                kept = Some(id.clone());
+                steps.push(Edit::FilterSetSettings {
+                    owner: owner(item),
+                    filter_id: id.clone(),
+                    patch: follow.settings(),
+                });
+                steps.push(Edit::FilterSetEnabled {
+                    owner: owner(item),
+                    filter_id: id.clone(),
+                    enabled: true,
+                });
+            }
+            None => steps.push(Edit::FilterAdd {
+                owner: owner(&follow.item_id),
+                chain: FilterChain::Video,
+                filter_id: unused_id(state, &follow.item_id),
+                kind: FOLLOW_POINTER_KIND.into(),
+                settings: follow.settings(),
+                enabled: None,
+                index: None,
+            }),
+        }
+    }
+    for (item, id) in &existing {
+        let is_kept = follow.is_some_and(|f| f.item_id == *item) && kept.as_ref() == Some(id);
+        if !is_kept {
+            steps.push(Edit::FilterRemove {
+                owner: owner(item),
+                filter_id: id.clone(),
+            });
+        }
+    }
+    let mut inverse = Vec::new();
+    for step in &steps {
+        let undo = crate::filter::apply(state, kinds, step, at).unwrap_or_else(|| {
+            Err(ProtocolError::Internal {
+                reason: "invariant: a follow camera's step is a filter edit".into(),
+            })
+        })?;
+        // Undone last first.
+        inverse.splice(0..0, undo);
+    }
+    Ok(inverse)
 }
 
-/// The edits that put back a deleted scene's camera motion and follow camera, after its
-/// camera and items.
+/// A filter ID `item_id`'s chains don't use yet, for a follow camera's filter:
+/// `follow-pointer`, else `follow-pointer-2` and so on.
+fn unused_id(state: &State, item_id: &ItemId) -> FilterId {
+    let used = |id: &FilterId| {
+        state
+            .item(item_id)
+            .is_some_and(|(_, item)| item.effects.find(id).is_some())
+    };
+    (1..)
+        .map(|n| {
+            FilterId::new(if n == 1 {
+                "follow-pointer".to_owned()
+            } else {
+                format!("follow-pointer-{n}")
+            })
+        })
+        .find(|id| !used(id))
+        .unwrap_or_else(|| FilterId::new("follow-pointer"))
+}
+
+/// The edits that put back a deleted scene's camera motion, after its camera. Its
+/// follow camera comes back with its items' effects (ADR-0120).
 pub(crate) fn restore(scene: &Scene) -> Vec<Edit> {
     let mut edits = Vec::new();
     if !scene.camera_motion.is_empty() {
         edits.push(Edit::SceneSetCameraMotion {
             scene_id: scene.id.clone(),
             motion: scene.camera_motion.clone(),
-        });
-    }
-    if let Some(follow) = &scene.camera_follow {
-        edits.push(Edit::SceneSetCameraFollow {
-            scene_id: scene.id.clone(),
-            follow: Some(follow.clone()),
         });
     }
     edits

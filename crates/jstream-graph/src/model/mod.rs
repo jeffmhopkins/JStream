@@ -832,9 +832,6 @@ pub struct Scene {
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
-    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
-    /// item no longer in the scene, which leaves it inert.
-    pub(crate) camera_follow: Option<CameraFollow>,
     /// Its timelines (ADR-0115), by ID.
     pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
@@ -901,10 +898,15 @@ impl Scene {
         &self.camera_motion
     }
 
-    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
-    /// item no longer in the scene, which leaves it inert.
-    pub fn camera_follow(&self) -> Option<&CameraFollow> {
-        self.camera_follow.as_ref()
+    /// Its follow camera (ADR-0113, ADR-0120): the first enabled
+    /// [`FOLLOW_POINTER_KIND`](jstream_protocol::FOLLOW_POINTER_KIND) filter on its items'
+    /// effects, in stacking order, read as a [`CameraFollow`] of that item. `None` when
+    /// none is on, and always for a keyframe scene, which draws its parent's.
+    pub fn camera_follow(&self) -> Option<CameraFollow> {
+        if self.variant_of.is_some() {
+            return None;
+        }
+        self.items.iter().find_map(Item::follow)
     }
 
     /// Its timelines (ADR-0115), ordered by ID.
@@ -1080,6 +1082,17 @@ impl Item {
     /// placement's cropped, fitted box, before its opacity and blend.
     pub fn effects(&self) -> &[Filter] {
         &self.effects.video
+    }
+
+    /// The follow camera its first enabled
+    /// [`FOLLOW_POINTER_KIND`](jstream_protocol::FOLLOW_POINTER_KIND) effect sets
+    /// (ADR-0120), or `None`.
+    pub fn follow(&self) -> Option<CameraFollow> {
+        self.effects
+            .video
+            .iter()
+            .find(|f| f.enabled && f.kind == jstream_protocol::FOLLOW_POINTER_KIND)
+            .map(|f| CameraFollow::from_settings(self.id.clone(), &f.settings))
     }
 
     /// Where its effects run (ADR-0106): over its box before it is placed, or over the

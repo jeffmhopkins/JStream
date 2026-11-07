@@ -267,7 +267,6 @@ fn create(
         options: SceneOptions::default(),
         camera: None,
         camera_motion: Vec::new(),
-        camera_follow: None,
         timelines: BTreeMap::new(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),

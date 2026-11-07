@@ -207,8 +207,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   follow camera ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md):
   `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
   `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a
-  `display` or `window` source) belong to the family, refused on a keyframe scene, with
-  the graph's inverses, and undoing a scene's delete restores them;
+  `display` or `window` source) belong to the family, refused on a keyframe scene, and
+  undoing a scene's delete restores them. The mock keeps the follow on the scene, as
+  0.85 did, with `scene.set_camera_follow` as its own inverse: it doesn't model the
+  `follow_pointer` filter that holds it since 0.91
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md));
   `scene.zoom_camera` is `not_found` for a missing scene, `invalid_argument` for steps
   outside -16 to 16 and `action_failed` without a follow camera, and otherwise changes
   nothing the mock keeps;

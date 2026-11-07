@@ -95,8 +95,10 @@ state machine. Contents:
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
-  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds,
+  `jstream-render`'s video filter kinds, and `follow_pointer`, the follow camera, which
+  drives its scene's camera and draws nothing
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)). Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
   `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
   filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
   adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
@@ -309,12 +311,17 @@ state machine. Contents:
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot as its pass camera's
   `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
-  box at its committed geometry, its crop, fit and flips, and the capture it shows). As a
+  box at its committed geometry, its crop, fit and flips, and the capture it shows). The
+  follow camera is the family's first enabled `follow_pointer` effect
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), which the chains skip,
+  since it draws nothing; a scene with one and no camera draws through the framing
+  camera (`PassCamera`'s `supplied`), so a 2D scene follows too. As a
   pass draws, the follow camera glides after the pointer the capture reports
   (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
-  springs of the follow-cursor mock, keeping the box filling the frame, and focuses where
-  it looks when the camera has a blur; camera motion is then added, clamped to the
-  camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
+  springs of the follow-cursor mock, keeping the box filling the frame, then slides its
+  look point just far enough to keep the pointer inside its safe margin (#1216), and
+  focuses where it looks when the camera has a blur; camera motion is then added,
+  clamped to the camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
   family), step once per frame time, and are dropped after 10 s undrawn. A transition
   moves each end's camera the same way, so a Move into or out of a follow scene follows
   it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
@@ -1341,7 +1348,9 @@ time and draws the sampled items over opaque black, bottom first, the nested sce
 they show composited first. Without a scene to draw, the primary display's capture is
 scaled to fill the canvas, which is fitted the same way, or the output is black.
 A 3D scene's camera may move on its own
-([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): its pass, and a
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), and a 2D scene
+with a `follow_pointer` effect draws through the framing camera so it can
+([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): its pass, and a
 transition's ends, carry the family's `CameraMoves`, which `compose` applies to the
 camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
 once per frame time, then the camera's motion), with the zoom steps from the live
