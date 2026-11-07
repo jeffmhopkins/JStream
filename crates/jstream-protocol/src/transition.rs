@@ -465,6 +465,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
     let per_item = || {
         vec![
             ParamDescriptor {
+                warning: None,
                 id: "unmatched".into(),
                 ty: ParamType::Enum {
                     options: vec![
@@ -495,6 +496,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
                 live: true,
             },
             ParamDescriptor {
+                warning: None,
                 id: "stagger_ms".into(),
                 ty: ParamType::Int {
                     min: Some(0),
@@ -517,6 +519,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
     let stinger = {
         let mut params = vec![
             ParamDescriptor {
+                warning: None,
                 id: "scene".into(),
                 ty: ParamType::Scene,
                 default: serde_json::Value::Null,
@@ -533,6 +536,7 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
                 live: true,
             },
             ParamDescriptor {
+                warning: None,
                 id: "cut_ms".into(),
                 ty: ParamType::Int {
                     min: Some(0),

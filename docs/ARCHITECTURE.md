@@ -1433,7 +1433,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
   migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
-  scene's `camera_follow` onto its item as a `follow_pointer` effect. `jstream-core`
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
+  (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
+  settings already grant names or a bus, since loading rebuilds sources with their
+  kind's defaults. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

@@ -327,6 +327,7 @@ impl CameraFollow {
 pub fn follow_pointer_descriptor() -> KindDescriptor {
     let number =
         |id: &str, label: &str, (min, max): (f64, f64), default: f64, unit: &str| ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty: ParamType::Float {
                 min: Some(min),

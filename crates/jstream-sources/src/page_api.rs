@@ -96,13 +96,29 @@ impl Grant {
             .get("page_api_scenes")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let values = parse_values(
+        let on = |param: &str| {
             settings
-                .get("page_api_values")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        )?;
-        let bus = match settings.get("page_api_bus").unwrap_or(&Value::Null) {
+                .get(param)
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        };
+        // Each kind of data is read only while its own checkbox is on (ADR-0124).
+        let values = if on("page_api_shared_values") {
+            parse_values(
+                settings
+                    .get("page_api_values")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            )?
+        } else {
+            Vec::new()
+        };
+        let bus_setting = if on("page_api_audio") {
+            settings.get("page_api_bus").unwrap_or(&Value::Null)
+        } else {
+            &Value::Null
+        };
+        let bus = match bus_setting {
             Value::Null => None,
             value => match Reference::from_value(value) {
                 Some(Reference::Bus { bus_id }) => Some(bus_id),
@@ -477,12 +493,19 @@ mod tests {
             .unwrap(),
             None
         );
+        let names = (
+            "page_api_values",
+            json!(" status.text, counter.* ,,counter.*"),
+        );
+        // Without its checkbox, the names grant nothing (ADR-0124).
+        let unchecked = Grant::of(&settings(&[("page_api", json!(true)), names.clone()]))
+            .unwrap()
+            .unwrap();
+        assert!(unchecked.values.is_empty());
         let grant = Grant::of(&settings(&[
             ("page_api", json!(true)),
-            (
-                "page_api_values",
-                json!(" status.text, counter.* ,,counter.*"),
-            ),
+            ("page_api_shared_values", json!(true)),
+            names,
         ]))
         .unwrap()
         .unwrap();
@@ -501,6 +524,7 @@ mod tests {
                 levels: false,
             }
         );
+        let values_on = ("page_api_shared_values", json!(true));
         assert!(grant.covers("status.text"));
         assert!(grant.covers("counter.a.b"));
         assert!(!grant.covers("counter"));
@@ -510,6 +534,7 @@ mod tests {
             assert!(
                 Grant::of(&settings(&[
                     ("page_api", json!(true)),
+                    values_on.clone(),
                     ("page_api_values", json!(bad))
                 ]))
                 .is_err(),
@@ -520,6 +545,7 @@ mod tests {
         assert!(
             Grant::of(&settings(&[
                 ("page_api", json!(true)),
+                values_on,
                 ("page_api_values", json!(long))
             ]))
             .is_err()
@@ -630,15 +656,23 @@ mod tests {
     #[test]
     fn a_page_given_a_bus_reads_its_levels_each_frame() {
         let vod = BusId::new("vod");
+        let bus = (
+            "page_api_bus",
+            Reference::Bus {
+                bus_id: vod.clone(),
+            }
+            .to_value(),
+        );
+        // Without its checkbox, the bus grants nothing (ADR-0124).
+        let unchecked = Grant::of(&settings(&[("page_api", json!(true)), bus.clone()]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchecked.bus, None);
+        assert!(!unchecked.api().levels);
         let grant = Grant::of(&settings(&[
             ("page_api", json!(true)),
-            (
-                "page_api_bus",
-                Reference::Bus {
-                    bus_id: vod.clone(),
-                }
-                .to_value(),
-            ),
+            ("page_api_audio", json!(true)),
+            bus,
         ]))
         .unwrap()
         .unwrap();
@@ -647,6 +681,7 @@ mod tests {
         assert!(
             Grant::of(&settings(&[
                 ("page_api", json!(true)),
+                ("page_api_audio", json!(true)),
                 ("page_api_bus", json!("vod"))
             ]))
             .is_err()

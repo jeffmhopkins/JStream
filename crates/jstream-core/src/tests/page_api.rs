@@ -21,6 +21,7 @@ fn granted_page(id: &str) -> Edit {
         ("url", json!("https://example.com/")),
         ("page_api", json!(true)),
         ("page_api_scenes", json!(true)),
+        ("page_api_shared_values", json!(true)),
         ("page_api_values", json!("status.*")),
     ]
     .into_iter()
@@ -251,6 +252,7 @@ fn a_page_given_a_bus_reads_its_levels_while_the_mixer_runs() {
     let settings: BTreeMap<String, Value> = [
         ("url", json!("https://example.com/")),
         ("page_api", json!(true)),
+        ("page_api_audio", json!(true)),
         ("page_api_bus", json!({"type": "bus", "bus_id": "vod"})),
     ]
     .into_iter()
