@@ -55,7 +55,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
-| [Header bar](#header) | 10 | 8 | 0 | 0 | 1 | 1 |
+| [Header bar](#header) | 11 | 9 | 0 | 0 | 1 | 1 |
 | [Docking and layouts](#docking) | 10 | 9 | 1 | 0 | 0 | 0 |
 | [Canvas](#canvas) | 18 | 17 | 0 | 0 | 0 | 1 |
 | [Context menus](#menus) | 8 | 8 | 0 | 0 | 0 | 0 |
@@ -98,7 +98,7 @@ Spec: [workspace › theme](../design/ui-prototype/spec-workspace.md#theme-fonts
 <a id="header"></a>
 ## Header bar
 <!-- @section
-covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs"]
+covers = ["crates/jstream-ui/src/app.rs", "crates/jstream-ui/src/header.rs", "crates/jstream-ui/src/about.rs", "crates/jstream-ui/src/panels/outputs.rs", "crates/jstream-ui/src/updates.rs", "crates/jstream-ui/src/video_settings.rs"]
 -->
 
 Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header-bar).
@@ -115,6 +115,7 @@ Spec: [workspace › header bar](../design/ui-prototype/spec-workspace.md#header
 | HD-08 | Broadcast picker | Shows the YouTube broadcast Go Live uses; menu lists broadcasts and "+ Create new stream…". | 🔒 | YouTube sign-in needs the OAuth client (A6b, Y4, [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). |
 | HD-09 | Go Live / End stream | Red "Go Live", dark red "End stream" while live, at the right end of the header. | ✅ | Starts every stopped or failed stream output whose key is set. |
 | HD-10 | Help menu and About | Beyond the prototype: a Help menu with the project's pages and an About dialog. | ✅ | Help links to the documentation (the README), Getting started, the release notes and a new issue on GitHub, each in a new tab (the desktop app hands them to the system browser), then Check for updates, then About JStream. Check for updates compares the version the UI was built as with GitHub's public releases list, pre-releases included, which the desktop app fetches. It says "You're up to date" or names the newer version and links its release page. Nothing is downloaded. A page that isn't the desktop app says the check runs there, and a failure (offline, or a reply that can't be read) is shown in the dialog. File › Settings… ([HD-01](#header)) has "Check for updates at launch", off until the user turns it on, kept in the page's storage. When it is on, the desktop app's main window checks once as the workspace opens and shows a dismissable notice under the header only when a newer release exists; a failure shows nothing. `updates.rs`. About shows the app icon, the version the UI was built as (the workspace's), the build (the commit CI built it from, or "local build"), the protocol the engine speaks, the licence, each installed third-party codec (Cisco's OpenH264 on Linux, with Cisco's notice, licence link and full licence text, folded, as Cisco's licence asks wherever licensing information is shown), and links to the source, the documentation and the issues. `about.rs`. |
+| HD-11 | Video settings | Beyond the prototype: File › Video settings… sets the base resolution and frame rate, as OBS's Video settings do. | ✅ | The base resolution is the canvas every scene is laid out on, picked from presets (1280×720 to 3840×2160, 1080×1920 vertical, 1080×1080) or typed, each side 1 to 8192. The frame rate is 30 or 60 fps ([ADR-0119](adr/0119-base-frame-rate-option.md)). Apply sends only what changed as one batch of `canvas.set_size` and `canvas.set_frame_rate`, one undo step; a refusal shows in the dialog. Each output's video mix scales from this picture and divides this rate. A running program stage keeps its rate until every output has stopped, which the dialog says. `video_settings.rs`. |
 
 <a id="docking"></a>
 ## Docking and layouts
