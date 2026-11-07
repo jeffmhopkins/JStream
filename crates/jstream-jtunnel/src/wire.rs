@@ -277,6 +277,13 @@ fn event_size(data: &[u8]) -> Option<usize> {
     Some(size)
 }
 
+/// Decodes one event from its wire bytes (as [`Frame::raw_events`] gives them), or
+/// `None` if the bytes aren't exactly one well-formed event.
+#[must_use]
+pub fn decode(event: &[u8]) -> Option<Event<'_>> {
+    (event_size(event)? == event.len()).then(|| decode_event(event))
+}
+
 fn decode_event(event: &[u8]) -> Event<'_> {
     match event[0] {
         TAG_SYSEX => Event::SysexPiece(SysexPiece {
