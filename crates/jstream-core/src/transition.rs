@@ -86,10 +86,10 @@ pub(crate) fn resolve(
     };
     // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
     let pairs = match preset.kind() {
-        // A Move between a 3D scene and a 2D one has no one space to move in, so it
-        // fades (ADR-0094 decision 7).
-        MOVE => from
-            .is_none_or(|from| camera_of(graph, from).is_some() == camera_of(graph, to).is_some()),
+        // A Move between a 3D scene and a 2D one moves too: the 2D side is seen through
+        // the framing camera (ADR-0128). The planner fades it only when that side's items
+        // can't be drawn the same through it.
+        MOVE => true,
         FADE | STINGER => false,
         _ => return Ok((id, None)),
     };
@@ -531,10 +531,10 @@ mod tests {
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
 
-    /// A Move between a 3D scene and a 2D one runs as a Fade; between two 3D scenes, or
-    /// two 2D ones, it moves (ADR-0094 decision 7).
+    /// A Move between a 3D scene and a 2D one moves, as between two 3D scenes or two 2D
+    /// ones: the planner sees the 2D side through the framing camera (ADR-0128).
     #[test]
-    fn a_move_between_3d_and_2d_fades() {
+    fn a_move_between_3d_and_2d_moves() {
         use jstream_graph::Graph;
         use jstream_protocol::{Canvas, Edit, SceneCamera, SceneId, Settings};
 
@@ -584,8 +584,8 @@ mod tests {
         };
         assert!(pairs("set", "set2"));
         assert!(pairs("flat", "flat2"));
-        assert!(!pairs("set", "flat"));
-        assert!(!pairs("flat", "set"));
+        assert!(pairs("set", "flat"));
+        assert!(pairs("flat", "set"));
     }
 
     fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {

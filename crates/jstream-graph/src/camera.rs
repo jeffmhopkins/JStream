@@ -72,30 +72,18 @@ fn set_camera(
             let (field, reason) = camera_problem(error);
             invalid(at, field, reason)
         })?;
-        if let Some(parent) = state.scenes[si].variant_of.clone() {
-            let parent_has_one = state
-                .scene_index(&parent)
-                .is_some_and(|pi| state.scenes[pi].camera.is_some());
-            if !parent_has_one {
-                return Err(invalid(
-                    at,
-                    "camera",
-                    format!(
-                        "keyframe scene `{scene_id}` shows its parent `{parent}`, which has no \
-                         camera; set one on `{parent}` first"
-                    ),
-                ));
-            }
-        }
+        // A keyframe of a 2D scene may have a camera of its own (ADR-0128): a Move into
+        // it glides from the 2D side as the framing camera sees it.
     }
     let old = std::mem::replace(&mut state.scenes[si].camera, camera.copied());
     let mut inverse = vec![Edit::SceneSetCamera {
         scene_id: scene_id.clone(),
         camera: old,
     }];
-    if camera.is_none() && state.scenes[si].variant_of.is_none() {
-        // A 2D scene's keyframes are 2D too: their overrides go, and the inverse brings
-        // them back after the parent's camera.
+    // A parent that had a camera and loses it takes its keyframes' overrides with it
+    // (ADR-0094 §6); a 2D parent's keyframes keep their own (ADR-0128).
+    if camera.is_none() && old.is_some() && state.scenes[si].variant_of.is_none() {
+        // The inverse brings them back after the parent's camera.
         for scene in &mut state.scenes {
             if scene.variant_of.as_ref() == Some(scene_id)
                 && let Some(dropped) = scene.camera.take()

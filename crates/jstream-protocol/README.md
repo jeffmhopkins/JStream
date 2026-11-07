@@ -305,7 +305,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.92 because `profile.get` reports past the drawers: each
+`PROTOCOL_VERSION` is 0.104 because `scene.set_camera` accepts a camera on a keyframe
+of a 2D scene, which it refused before, and a Move between a 2D side and a 3D one glides
+([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md), a placeholder number
+the release queue sets); 0.92 because `profile.get` reports past the drawers: each
 encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
 mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
@@ -1151,9 +1154,10 @@ omitted removes it. The edit refuses a field of view out of range
 (`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
 position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
 not above 0 or past the drawable limit (`edits.N.camera.focus_px`) and a blur outside 0
-to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, refused
-while its parent has no camera; removing the parent's camera drops its variants'
-overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
+to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, which a
+keyframe of a 2D scene may have too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md));
+removing the parent's camera drops its variants' overrides (a removal on a parent with
+none drops nothing), and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
 is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
