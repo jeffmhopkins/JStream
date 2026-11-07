@@ -50,7 +50,10 @@ pub(crate) async fn handle(
     body: Body,
 ) -> Response {
     let peer = accepted.peer;
-    if let Err(refusal) = app.gate.admit_unauthenticated(&headers, peer) {
+    if let Err(refusal) = app
+        .gate
+        .admit_unauthenticated(&headers, peer, accepted.on())
+    {
         return refusal.into_response();
     }
     if method != Method::POST {
@@ -99,7 +102,7 @@ pub(crate) async fn handle(
         Some(Value::Bool(browser)) => *browser,
         Some(_) => return bad_request("`browser` must be true or false"),
     };
-    if browser && !app.tls {
+    if browser && !app.tls(&accepted) {
         return bad_request("a browser pairs only on a TLS listener");
     }
     match app.devices.pair(code, name, Now::current()) {

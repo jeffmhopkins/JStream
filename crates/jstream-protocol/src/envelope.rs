@@ -7,6 +7,7 @@
 //! sends exactly one `response` or `error` per request, plus `event`s at any time.
 //! Responses may arrive out of order; the request ID matches them up.
 
+use crate::binding::Binding;
 use crate::command::{Action, Batch};
 use crate::error::{ProtocolError, WireError};
 use crate::event::Event;
@@ -148,6 +149,11 @@ pub enum CallResult {
         /// parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         removed_hotkeys: Vec<HotkeyBinding>,
+        /// The controller bindings the batch removed the same way (0.96), in the order
+        /// it removed them. Omitted when there are none, and missing (from a server
+        /// older than 0.96) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        removed_bindings: Vec<Binding>,
         /// The keyframe-scene overrides the batch dropped because their item left the
         /// variant's parent (ADR-0040 §1), in the order it dropped them. Undoing the
         /// batch restores them. Omitted when there are none, and missing (from a server
@@ -196,6 +202,7 @@ impl CallResult {
         CallResult::Batch {
             rev,
             removed_hotkeys: Vec::new(),
+            removed_bindings: Vec::new(),
             dropped_overrides: Vec::new(),
         }
     }

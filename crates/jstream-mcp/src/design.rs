@@ -8,11 +8,13 @@
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, mask, and build reflections on glossy surfaces (#1062), how
-//! to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
-//! which transition to use (including a `stinger`), and when to build a graphic as HTML
-//! in a `browser` source, animated on one clock, or an audio visualiser on
-//! `jstream.levels()` (ADR-0124). Numbers are for a 1920×1080 canvas and scale with it.
+//! light by role, use the light and framing filters (bloom, glow, vignette), mask, and
+//! build reflections on glossy surfaces (#1062), how to build a 3D set with a scene camera
+//! (ADR-0094) and its depth of field (ADR-0108), which transition to use (including a
+//! `stinger`), when to build a graphic as HTML in a `browser` source, animated on one
+//! clock, or an audio visualiser on `jstream.levels()` (ADR-0124), and how to write a
+//! custom shader the Filters window's shader editor opens (#1232). Numbers are for a
+//! 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -67,6 +69,15 @@ Fit boxes to content: a new text source draws at its own size, so read it from \
 `source.sizes` (or a `source.size_changed` event) and give its item that size, rather \
 than guessing a box; with the default `fit` mode a wrong box shrinks or offsets the \
 text. \
+A look no built-in filter makes: write it as a custom shader, an effect pack from \
+`pack.write` that a person can then open and edit in the Filters window (Edit shader…). \
+Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader` whose \
+`shader` is `shader.wgsl`. In that file put a `// @name <Name>` line and one \
+`// @param <id> <type> = <default> \"Label\"` line per setting, matching the manifest's \
+`[[effect.param]]` list: `float 0..1 = 0.5`, `int 0..64 = 8`, `bool = true`, \
+`color = #ff9a3cff` or `enum soft|hard = soft`. The shader defines \
+`@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`, reads the input with \
+`src(in.uv)` (premultiplied linear) and each setting as `p.<id>`. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \
@@ -79,6 +90,10 @@ second and ease them; a cut beats a slow move. A variant that overrides an item'
 geometry stores the whole geometry, so nudging x there also fixes its size and angles \
 against later edits to the item in the parent scene; finish an item's size and angles \
 in the parent first, and override geometry only on the items that move. \
+A variant can override an item's effects too (`item.set_effects`): keep the same \
+effects in the same order and change only their numbers or colours (a blur radius, a \
+colour grade), and a `move` blends them with the item; another list, or another mask \
+scene or image, cross-fades it instead. \
 Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
 interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
 and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
@@ -91,6 +106,17 @@ item with the blended result, so a half-strength `overlay` is the mode at 0.5. \
 Opacity goes up to 4 (400%): above 1 it multiplies the item's \
 light without covering more, so an `additive` glow or a blurred, masked reflection can \
 be brighter than its source draws it. \
+Light and framing filters: `bloom` makes the bright parts of any picture give off \
+light, an opaque camera included (`threshold` about 0.7, `intensity` 0.5-1.5, `radius` \
+16-40); `glow` lights the transparent area around a shape (a logo, text, a keyed \
+person), so on an opaque picture it shows only past its edge, as an item effect. As \
+item effects, `glow`, `drop_shadow` and `outline` draw past the item's box. A \
+`vignette` tints the edges towards its `color` (`blend` `normal`) or darkens by it \
+(`multiply`), as an ellipse that follows the frame or a `round` circle around \
+`center_x`, `center_y`; `strength` is the linear share of the colour, so a dark one \
+looks half as bright at the edge near 0.8. Its looks: subtle (`strength` 0.55, `radius` \
+0.5, `softness` 0.7), cinematic (0.85, 0.3, 0.7) and spotlight (1, 0.15, 0.45, \
+`shape` `round`). \
 Layering: build a scene as separate layers by role (the background, what glows or \
 emits light, the light it throws onto nearby surfaces, and the foreground frame or \
 set in front of it), each with its own mask and blend, so lighting and reflections \

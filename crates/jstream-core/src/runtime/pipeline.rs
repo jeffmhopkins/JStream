@@ -2467,7 +2467,8 @@ fn engine_format() -> Result<AudioFormat, String> {
     .map_err(|err| format!("engine audio format: {err}"))
 }
 
-fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
+/// The base frame period at `fps` in the clock's time base, as the render thread steps.
+pub(crate) fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
     let base =
         Timebase::new(FRAME_NUM, fps.max(1)).map_err(|err| format!("frame period: {err}"))?;
     MediaTime::new(1, base)
@@ -3564,10 +3565,17 @@ fn render_loop(job: RenderJob) {
                 collector.free(Garbage::Vcam(cams.swap_remove(at)));
             }
         }
-        next = match due.checked_add(period) {
-            Ok(next) => Some(next),
-            Err(err) => {
-                report(&fail, format!("frame time overflow: {err}"));
+        // The next tick on the frame grid, where the live sources' thread plans for it
+        // (ADR-0117 §3): a period on from a tick on the grid, and sooner from the first,
+        // which is drawn at once wherever it falls.
+        let after = due
+            .checked_add(MediaTime::new(1, due.timebase()))
+            .ok()
+            .and_then(|after| on_frame_grid(after, period));
+        next = match after {
+            Some(next) => Some(next),
+            None => {
+                report(&fail, "frame time overflow: the next tick".to_string());
                 break;
             }
         };
@@ -3756,6 +3764,22 @@ impl EncodeRing {
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
 /// many whole periods before it were missed. Not late by a period: `due`, none missed.
+/// The first program tick at or after `at`: the render thread ticks on multiples of
+/// `period` on the media clock, so other threads can time their work to its ticks
+/// (ADR-0117 §3). `None` on overflow; `at` itself for a period too fine to step.
+pub(crate) fn on_frame_grid(at: MediaTime, period: MediaTime) -> Option<MediaTime> {
+    let step = period
+        .rescale(at.timebase(), Rounding::Nearest)
+        .ok()?
+        .ticks();
+    if step <= 0 {
+        return Some(at);
+    }
+    let ticks = at.ticks();
+    let frames = ticks.div_euclid(step) + i64::from(ticks.rem_euclid(step) != 0);
+    Some(MediaTime::new(frames.checked_mul(step)?, at.timebase()))
+}
+
 fn catch_up(due: MediaTime, now: MediaTime, period: MediaTime) -> Result<(MediaTime, u64), String> {
     let overflow = |err: jstream_media::MediaError| format!("frame time overflow: {err}");
     let late = now.checked_sub(due).map_err(overflow)?.ticks();

@@ -6,6 +6,7 @@
 //! `mcp` and `output set-key` also read the input they are given (stdin in the binary).
 
 use crate::args::{self, Command, Connection, Invocation, USAGE};
+use crate::bench;
 use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
@@ -225,6 +226,13 @@ pub fn execute(
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Events { count } => stream_events(control.events(), *count, json, out),
+        Command::Bench(options) => {
+            if bench::run(&*control, options, out)? {
+                Ok(())
+            } else {
+                Err(CliError::GatesFailed)
+            }
+        }
         Command::Help
         | Command::Version
         | Command::Mcp
@@ -436,12 +444,17 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
         CallResult::Batch {
             rev,
             removed_hotkeys,
+            removed_bindings,
             dropped_overrides,
         } => {
             writeln!(out, "applied: rev {rev} ({})", response.id)?;
-            // ADR-0040 §3: a delete takes the hotkeys naming its target with it.
+            // ADR-0040 §3: a delete takes the hotkeys naming its target with it, and the
+            // controller bindings (ADR-0122).
             for binding in removed_hotkeys {
                 writeln!(out, "removed hotkey {}", binding.chord)?;
+            }
+            for binding in removed_bindings {
+                writeln!(out, "removed binding {}", binding.trigger)?;
             }
             // ADR-0040 §1: an item leaving its scene takes its keyframe overrides.
             for dropped in dropped_overrides {
@@ -948,6 +961,12 @@ fn report(error: &CliError, json: bool, err: &mut dyn Write) {
             // Says which side failed, as `io` covers both.
             CliError::Read(_) => {
                 json!({"error": {"code": "io", "message": error.to_string()}})
+            }
+            CliError::GatesFailed => {
+                json!({"error": {"code": "gates_failed", "message": error.to_string()}})
+            }
+            CliError::Bench(message) => {
+                json!({"error": {"code": "bench_failed", "message": message}})
             }
         };
         writeln!(err, "{body}")

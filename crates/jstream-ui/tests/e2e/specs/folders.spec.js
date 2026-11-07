@@ -56,6 +56,10 @@ test('folders hold scenes and folders, fold, and keep a search match in view', a
   const other = await context.newPage();
   await connect(page, daemon);
   await connect(other, daemon);
+  // `other` opened last, so it is the front page, and headless Chromium can hold a page
+  // that is not in front to about one animation frame a second. The drags and carets
+  // below wait on frames of `page`, so it goes back in front. `other` is only read.
+  await page.bringToFront();
 
   await panelMenu(page);
   await page.getByRole('menuitem', { name: 'New folder' }).click();

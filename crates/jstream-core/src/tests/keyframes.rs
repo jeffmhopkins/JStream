@@ -943,6 +943,93 @@ fn a_move_within_a_family_pairs_an_item_only_with_the_same_effects() {
     );
 }
 
+/// A Move between two keyframes whose effects differ only in their settings pairs the
+/// item and blends each number with its progress (ADR-0127): a `blur` radius and a
+/// `color_correction` value glide instead of the item cross-fading.
+#[test]
+fn a_move_blends_effect_settings_that_differ() {
+    use jstream_protocol::{FilterChain, FilterId, FilterInfo, FilterOwner};
+    let engine = family();
+    let control = connected(&engine);
+    let effect = |id: &str, kind: &str, settings: serde_json::Value| FilterInfo {
+        filter_id: FilterId::new(id),
+        kind: kind.into(),
+        enabled: true,
+        settings: serde_json::from_value(settings).expect("settings"),
+    };
+    let own = |id: &str, kind: &str, settings: serde_json::Value| Edit::FilterAdd {
+        owner: FilterOwner::Item {
+            item_id: ItemId::new("a1"),
+        },
+        chain: FilterChain::Video,
+        filter_id: FilterId::new(id),
+        kind: kind.into(),
+        settings: serde_json::from_value(settings).expect("settings"),
+        enabled: None,
+        index: None,
+    };
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            own("soft", "blur", serde_json::json!({"radius": 2.0})),
+            own(
+                "grade",
+                "color_correction",
+                serde_json::json!({"brightness": 0.0}),
+            ),
+            Edit::ItemSetEffects {
+                scene_id: SceneId::new("k"),
+                item_id: ItemId::new("a1"),
+                effects: vec![
+                    effect("soft", "blur", serde_json::json!({"radius": 10.0})),
+                    effect(
+                        "grade",
+                        "color_correction",
+                        serde_json::json!({"brightness": 0.4}),
+                    ),
+                ],
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let tracks = shot.tracks().expect("a transition runs");
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. })),
+        "every item pairs: {tracks:?}"
+    );
+    let number = |settings: &Settings, id: &str| {
+        settings
+            .get(id)
+            .and_then(serde_json::Value::as_f64)
+            .expect("a number")
+    };
+    // Linear over 400 ms: halfway at 200.
+    let blended = shot.blended_effects(200.0).expect("a transition runs");
+    let [(owner, settings)] = blended.as_slice() else {
+        panic!("a1 alone blends: {blended:?}");
+    };
+    assert_eq!(
+        *owner,
+        crate::chain::ChainOwner::Item(SceneId::new("k"), ItemId::new("a1"))
+    );
+    assert!(
+        (number(&settings[0], "radius") - 6.0).abs() < 1e-4,
+        "{settings:?}"
+    );
+    assert!(
+        (number(&settings[1], "brightness") - 0.2).abs() < 1e-4,
+        "{settings:?}"
+    );
+    let ended = shot.blended_effects(400.0).expect("a transition runs");
+    assert!((number(&ended[0].1[0], "radius") - 10.0).abs() < 1e-4);
+}
+
 /// An undo of one client's step on a keyframe's effects is refused once another client
 /// has changed those effects since (ADR-0032, ADR-0088 §4): the copy's undo would clear
 /// the override, and the other client's effect with it.
