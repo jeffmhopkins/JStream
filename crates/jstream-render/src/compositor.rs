@@ -100,6 +100,10 @@ pub struct Compositor {
     /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
     /// because uploads take `&self`; only the thread drawing with the compositor takes it.
     ingest: Mutex<Option<Ingest>>,
+    /// Whether [`Self::render`] fails on an error the context's shared watch kept
+    /// ([`Self::take_error`]). Off for a compositor that catches its own
+    /// ([`Self::leave_shared_errors`], #1268).
+    shared_errors: bool,
 }
 
 impl Compositor {
@@ -284,7 +288,9 @@ impl Compositor {
         self.staged.clear();
         // wgpu validates the commands as they are recorded and submitted, so an error in
         // this frame has been raised by now; one from an earlier call fails this frame.
-        if let Some(detail) = self.take_error() {
+        if self.shared_errors
+            && let Some(detail) = self.take_error()
+        {
             return Err(RenderError::Uncaptured { detail });
         }
 
@@ -642,6 +648,42 @@ impl Compositor {
             .take()
     }
 
+    /// Leaves the errors the context's shared watch keeps to the context's other
+    /// compositors: [`Self::render`] no longer fails on one (#1268). wgpu keeps one
+    /// uncaptured-error handler per device, so on a shared [`GpuContext`] an error from
+    /// any of them would otherwise fail whichever renders next. A compositor that calls
+    /// this catches its own errors instead, with [`Self::catch_errors`] around its work.
+    /// The engine's snapshot and preview compositors do, so their errors never fail a
+    /// program frame, and the program stage's never fail a snapshot or a preview frame.
+    ///
+    /// [`GpuContext`]: jstream_platform::GpuContext
+    pub fn leave_shared_errors(&mut self) {
+        self.shared_errors = false;
+    }
+
+    /// Starts catching the wgpu errors this thread raises on the compositor's device,
+    /// validation and internal ones, until [`CaughtErrors::finish`]: they go to it rather
+    /// than to the shared watch (#1268). wgpu's error scopes are per thread, so another
+    /// thread's errors on the same device are not caught, and these never reach the
+    /// other compositors on the context. Scopes nest: the filter passes' own, inside,
+    /// still take their shader errors first.
+    #[must_use = "the errors are caught until `finish`"]
+    pub fn catch_errors(&self) -> CaughtErrors {
+        // Popped in reverse, so validation is pushed last.
+        let internal = self
+            .gpu
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Internal);
+        let validation = self
+            .gpu
+            .device
+            .push_error_scope(wgpu::ErrorFilter::Validation);
+        CaughtErrors {
+            validation,
+            internal,
+        }
+    }
+
     /// A one-line description of the adapter, for logs and test output.
     pub fn adapter_description(&self) -> String {
         self.gpu.description()
@@ -736,6 +778,7 @@ impl Compositor {
             models,
             readback_wait: std::time::Duration::ZERO,
             ingest: Mutex::new(None),
+            shared_errors: true,
         }
     }
 
@@ -1554,5 +1597,24 @@ fn color_attachment(
             load,
             store: wgpu::StoreOp::Store,
         },
+    }
+}
+
+/// The wgpu errors a thread raises on a compositor's device between
+/// [`Compositor::catch_errors`] and [`Self::finish`]. Dropping it without `finish` drops
+/// them. It stays on the thread that made it: wgpu's error scopes are per thread.
+#[derive(Debug)]
+pub struct CaughtErrors {
+    validation: wgpu::ErrorScopeGuard,
+    internal: wgpu::ErrorScopeGuard,
+}
+
+impl CaughtErrors {
+    /// Stops catching, and returns the first error caught: a validation error first,
+    /// then an internal one. wgpu has reported each by the time its call returned.
+    pub fn finish(self) -> Option<String> {
+        let validation = crate::gpu::ready(self.validation.pop()).flatten();
+        let internal = crate::gpu::ready(self.internal.pop()).flatten();
+        validation.or(internal).map(|error| error.to_string())
     }
 }

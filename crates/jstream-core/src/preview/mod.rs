@@ -88,7 +88,7 @@ use jstream_protocol::{
     BinaryFrame, BinaryHeader, KeyframeGate, PreviewCodec, PreviewSettings, ProtocolError, Rev,
     SceneId, SourceId, StreamKind,
 };
-use jstream_render::{Compositor, OpenOptions, ResourceCache};
+use jstream_render::{Compositor, OpenOptions, RenderError, ResourceCache};
 
 use jstream_platform::Capture;
 
@@ -185,6 +185,9 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
             Some(context) => Compositor::on_context(context),
             None => Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?,
         };
+        // Its errors are caught per frame below, so they never fail a program frame, and
+        // the stage's never fail a preview frame (#1268).
+        compositor.leave_shared_errors();
         tracing::info!(
             adapter = %compositor.adapter_description(),
             shared = context.is_some(),
@@ -194,6 +197,7 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
         let mut chains = Chains::default();
         let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out, meter| {
             cache.begin_frame();
+            let caught = compositor.catch_errors();
             let output = snapshot::compose_metered(
                 &mut compositor,
                 (&mut cache, &mut chains, &mut *meter),
@@ -205,6 +209,9 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
                 snapshot::DrawAt::read(size),
             );
             drop(cache.end_frame(&compositor));
+            if let Some(detail) = caught.finish() {
+                return Err(RenderError::Uncaptured { detail }.to_string());
+            }
             let output = output.map_err(|err| err.to_string())?;
             let pixels = output
                 .pixels()

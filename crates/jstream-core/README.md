@@ -1994,7 +1994,10 @@ context when it has one, so it draws the browser pages painted there
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a
 device of its own, hardware adapter first, with lavapipe or WARP as the fallback
 (`OpenOptions::hardware`). A compositor whose device was lost opens again before the
-next job, on the context as it is then.
+next job, on the context as it is then. It catches its own GPU errors per job
+(`Compositor::leave_shared_errors`, `catch_errors`; #1268): one the job raised fails
+that job as `internal`, and none reaches the program stage's frames, nor does the
+stage's fail a snapshot.
 
 The displays, windows and video devices a snapshot shows are captured by the snapshot
 thread itself (#1184), as the preview hub does: on a `jstream-capture` thread of its own,
@@ -2151,7 +2154,9 @@ gone once none is left, serves them all. It owns a compositor, on the engine's G
 context when it has one, so it draws browser pages
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), else on a device of
 its own (`Compositor::open`, hardware adapter first with the software one as the
-fallback), or the CPU stand-in under `with_cpu_compositor`, and keeps each stream's
+fallback), or the CPU stand-in under `with_cpu_compositor`, and catches its own GPU
+errors per pass, as the snapshot thread does per job (#1268), so they fail that pass,
+never a program frame. It keeps each stream's
 encoder and pacing to itself, so the stream its session holds is only flags. On each
 pass it loads the published render snapshot, `rev`, the live values on the render
 parameter channel and the media clock's time (a brief collection lock, never held while

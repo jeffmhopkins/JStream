@@ -1662,6 +1662,63 @@ fn an_uncaptured_error_fails_the_next_frame() {
     draw(&mut opened.compositor, 4, 3, Color::BLACK, &[]);
 }
 
+/// #1268: on one device, as compositors on one shared context are, a compositor that
+/// catches its own errors gets them back, and they never fail its sibling's frame; and
+/// the sibling's error, outside any catch, fails only the sibling's next frame.
+#[test]
+fn a_compositor_that_catches_its_errors_keeps_them_from_its_siblings() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let mut apart = opened.compositor.sibling();
+    apart.leave_shared_errors();
+    let caught = apart.catch_errors();
+    zero_sized_texture(apart.device());
+    let error = caught.finish();
+    assert!(
+        error.is_some(),
+        "the error comes back to the one that raised it"
+    );
+    draw(&mut opened.compositor, 4, 3, Color::BLACK, &[]);
+
+    zero_sized_texture(opened.compositor.device());
+    let caught = apart.catch_errors();
+    draw(&mut apart, 4, 3, Color::BLACK, &[]);
+    assert_eq!(
+        caught.finish(),
+        None,
+        "the sibling's error isn't caught here"
+    );
+    let scene = Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items: &[],
+    };
+    let failed = opened.compositor.render(&scene, false).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "the sibling's own error fails its next frame: {failed:?}"
+    );
+}
+
+/// Raises a validation error on `device`: a zero-sized texture.
+fn zero_sized_texture(device: &wgpu::Device) {
+    let _ = device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("zero-sized"),
+        size: wgpu::Extent3d {
+            width: 0,
+            height: 0,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[],
+    });
+}
+
 /// An image of four equal quadrants: `colors` is top-left, top-right, bottom-left,
 /// bottom-right.
 fn quadrants(compositor: &Compositor, side: u32, colors: [[u8; 4]; 4]) -> crate::Image {

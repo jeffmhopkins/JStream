@@ -196,10 +196,16 @@ and calls this crate.
   buffer can't be mapped, as on a lost device, where wgpu's `create_buffer_init`
   would panic. `render` empties
   the slot, so an error that recurs every frame is logged once per frame until the caller
-  gives up. The handler is per device: on the shared context an error that a browser or
-  capture thread, or another compositor on the context (the preview's, a snapshot's),
-  raised is taken by whichever compositor's `render` comes next and counts against its
-  frames.
+  gives up. The handler is per device, so on the shared context an error any thread
+  raised is taken by whichever compositor's `render` comes next. A compositor that
+  shouldn't take the others' errors, or hand them its own, calls
+  `Compositor::leave_shared_errors`, after which its `render` no longer fails on the
+  handler's error, and wraps its work in `Compositor::catch_errors`: wgpu error scopes
+  for validation and internal errors, which are per thread, so `CaughtErrors::finish`
+  returns what that thread raised and none of it reaches the handler (#1268).
+  `jstream-core`'s snapshot and preview compositors do this per job and per frame. The
+  program stage still takes the handler's errors: its own, and a browser or capture
+  thread's.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
@@ -1062,7 +1068,9 @@ device: after `destroy` (what wgpu reports a driver reset through too) `lost` sa
 `destroyed`, a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
-render after it draws. Without
+render after it draws. Two compositors on one device, one of them catching its own
+errors, keep each other's errors apart
+(`a_compositor_that_catches_its_errors_keeps_them_from_its_siblings`, #1268). Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.

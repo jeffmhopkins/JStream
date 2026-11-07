@@ -323,7 +323,7 @@ fn request(instance: &wgpu::Instance, fallback: bool) -> Result<wgpu::Adapter, S
 }
 
 /// Polls a future that native wgpu completes on the first poll. `None` when it doesn't.
-fn ready<F: Future>(future: F) -> Option<F::Output> {
+pub(crate) fn ready<F: Future>(future: F) -> Option<F::Output> {
     let mut future = std::pin::pin!(future);
     match future
         .as_mut()

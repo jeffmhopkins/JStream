@@ -26,7 +26,7 @@ mod scene;
 pub mod transition;
 
 pub use cache::{Reclaimed, ResourceCache};
-pub use compositor::Compositor;
+pub use compositor::{CaughtErrors, Compositor};
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{

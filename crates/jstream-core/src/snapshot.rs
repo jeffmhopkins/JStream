@@ -3782,7 +3782,8 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
         }
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
             let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
-            match &work {
+            let caught = compositor.catch_errors();
+            let result = match &work {
                 Work::Picture {
                     snapshot,
                     live,
@@ -3799,6 +3800,15 @@ fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<Previ
                 )
                 .map(|result| CallResult::Query { result }),
                 Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
+            };
+            // An error this job raised on the device fails it, as the shared watch's
+            // did before (#1268).
+            match caught.finish() {
+                Some(detail) => {
+                    tracing::warn!(error = %detail, "a snapshot raised a GPU error");
+                    Err(from_render(RenderError::Uncaptured { detail }))
+                }
+                None => result,
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -3906,7 +3916,10 @@ fn open<'a>(
             None => Compositor::open(OpenOptions::hardware()),
         };
         match opened {
-            Ok(compositor) => {
+            Ok(mut compositor) => {
+                // Its errors are caught per job (`worker`), so they never fail a program
+                // frame, and the stage's never fail a snapshot (#1268).
+                compositor.leave_shared_errors();
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
                     shared = context.is_some(),
