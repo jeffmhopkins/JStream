@@ -226,7 +226,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), and `scene.keyframe_changed` (0.88).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
@@ -305,7 +305,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.92 because `profile.get` reports past the drawers: each
+`PROTOCOL_VERSION` is 0.102 because the engine quarantines an effect-pack kind that runs
+too long on the GPU, before the OS resets the device, and says so in `gpu.effect_slow`
+(#349, [Effect quarantine](#quarantine), a placeholder number the release queue sets);
+0.92 because `profile.get` reports past the drawers: each
 encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
 mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
@@ -1810,7 +1813,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#plugins).
-- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
+  `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
@@ -1979,6 +1983,13 @@ GPU, and the OS resets the device (#349,
   kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
   second loss in one run. `recovering` is `false` when the engine stopped opening new
   devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`gpu.effect_slow {kind_id, took_us, limit_us, quarantined}`** (0.102) turns a kind
+  off before it hangs the GPU: where the program stage's GPU has timestamp queries,
+  each pack kind's pass is timed, and one that takes more than half the frame budget
+  (`limit_us`) in 30 frames running is quarantined as a blamed kind is. `took_us` is
+  its last such time; `quarantined` is the kind, or its whole pack when the pack was
+  blamed before in the run (by either event). Runtime state, with no `rev`; agents
+  see it.
 - **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
   when `false`, so an older server's list reads as none). A quarantined kind's filters
   are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.

@@ -1242,6 +1242,126 @@ fn a_device_loss_quarantines_the_pack_effect_that_was_drawing() {
     );
 }
 
+/// An effect-pack filter whose pass runs longer than half the frame budget on the GPU,
+/// tick after tick, is quarantined before it could hang the device (#349): the device
+/// is not lost, `gpu.effect_slow` names the kind, and `kind.list` marks it. Only where
+/// the GPU has timestamp queries, which lavapipe, the software adapter CI draws on, has.
+#[test]
+fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+    use jstream_protocol::{Event, FilterChain, FilterId, FilterOwner, Query, QueryResult};
+
+    /// Far more than half a 30 fps frame on any adapter, at the size below.
+    const SLOW: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    var c = src(in.uv);\n    for (var i = 0; i < 20000; i++) {\n        c = fract(c * 1.0001 + vec4<f32>(0.0001));\n    }\n    return c;\n}\n";
+    const SIZE: u32 = 128;
+
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    // The adapter the render thread opens on: one without timestamp queries times
+    // nothing, and only a device loss guards it.
+    let timed = Compositor::open(OpenOptions::hardware())
+        .map(|mut compositor| compositor.time_passes())
+        .unwrap_or(false);
+    if !timed {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the GPU-time guard test, no timestamp queries"
+        );
+        return;
+    }
+    let temp = Temp::new("slow");
+    test_pack::write(&temp.pack(), SLOW);
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    // A draw that never loses its device.
+    let engine = losing_engine(
+        &clock,
+        Arc::new(FakeGpuInterop),
+        GpuMode::None,
+        losing_draw(0, 0, Arc::clone(&opens)),
+    );
+    engine.watch_effect_packs(&temp.0);
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("bg"),
+                    name: "bg".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                add("main", "item", "bg"),
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("bg"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("tint"),
+                    kind: KIND.into(),
+                    settings: Settings::default(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene drawing a pack filter");
+    let pixels = vec![255; (SIZE * SIZE * 4) as usize];
+    engine
+        .set_source_frame(&SourceId::new("bg"), SIZE, SIZE, &pixels)
+        .expect("a frame for bg");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let mut event = None;
+    let heard = tick_until(&clock, || {
+        event = event.take().or_else(|| {
+            super::drain(&mut events)
+                .into_iter()
+                .find_map(|event| match event {
+                    Event::GpuEffectSlow {
+                        kind_id,
+                        took_us,
+                        limit_us,
+                        quarantined,
+                    } => Some((kind_id, took_us, limit_us, quarantined)),
+                    _ => None,
+                })
+        });
+        event.is_some()
+    });
+    let stats = engine.output_stats().expect("still running");
+    assert!(heard, "no gpu.effect_slow: {stats:?}");
+    let (kind_id, took_us, limit_us, quarantined) = event.expect("heard");
+    assert_eq!(kind_id, KIND);
+    assert!(took_us > limit_us, "{took_us} µs over {limit_us} µs");
+    assert_eq!(quarantined, vec![KIND.to_owned()]);
+    assert_eq!(stats.gpu_device_losses, 0, "turned off before any loss");
+    let Ok(QueryResult::KindList { kinds }) = super::query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    assert!(
+        kinds
+            .iter()
+            .any(|kind| kind.kind_id == KIND && kind.quarantined),
+        "kind.list marks it"
+    );
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
 /// When the platform context's device is lost mid-run, the render thread leaves the GPU
 /// path at once, without waiting for [`GPU_FALLBACK_ERRORS`]: the compositor opens on a
 /// device of its own and the capture moves to the CPU path (#349, #451).

@@ -1444,7 +1444,12 @@ so a copy of that pack under another ID draws them (only the blamed one stays of
 for the kind and its pack and for every entry whose digests the kind draws, run before
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
-it is recovering. The GPU-time guard of #349 is not built.
+it is recovering. A kind whose pass runs too long on the GPU (the guard in
+[Runtime](#runtime)) is blamed and quarantined the same way, alone (`blame_slow`), and
+the engine sends `gpu.effect_slow` with the kind, its time, the limit and the kinds
+quarantined. A report of a kind already quarantined, drawn again before the quarantine
+reached the render thread, is dropped: it is no second blame, so it can't take the
+pack.
 
 **Page API** (`LiveSources::feed_pages`, ADR-0102 decisions 4 to 7). After every plan
 (where the engine also syncs source sizes), after `studio.set_preview`, after a
@@ -3431,6 +3436,19 @@ render thread does none of it. It doesn't adopt the new device until the engine 
 handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
 is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
 isn't drawn again.
+
+The GPU-time guard (#349, `runtime/pass_guard.rs`) turns a pack kind off before it
+hangs the device. The program stage's meter carries a `PassGuard`
+(`DrawMeter::guard_passes`; a preview's doesn't), and while it does, the draw asks its
+compositor to time each pack kind's pass with timestamp queries
+(`Compositor::time_passes`, where the GPU has them). At the start of each tick it hands
+the guard the times that came back, a tick or two late and without waiting
+(`Compositor::gpu_times`). A kind whose longest pass in a tick ran over half the frame
+budget in 30 ticks running (a tick within the limit starts the count again, one with
+no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slow`,
+beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
+sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
+without timestamp queries times nothing, and only a device loss guards it.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the

@@ -97,6 +97,9 @@ pub struct Compositor {
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
+    /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
+    /// (#349, `timer.rs`).
+    timer: Option<crate::timer::PassTimer>,
     /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
     /// because uploads take `&self`; only the thread drawing with the compositor takes it.
     ingest: Mutex<Option<Ingest>>,
@@ -531,6 +534,10 @@ impl Compositor {
                 label: Some("jstream-render-filter"),
             });
         let (pass, scratch) = filter.parts();
+        let timing = match (&mut self.timer, pass.timed()) {
+            (Some(timer), Some(kind)) => timer.begin(&mut encoder, kind),
+            _ => None,
+        };
         scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
@@ -553,7 +560,13 @@ impl Compositor {
         ctx.scratch.end();
         if let Err(err) = encoded {
             self.staged.clear();
+            if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                timer.abandon(timing);
+            }
             return Err(err);
+        }
+        if let (Some(timer), Some(timing)) = (&self.timer, &timing) {
+            timer.end(&mut encoder, timing);
         }
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
@@ -563,12 +576,18 @@ impl Compositor {
         for (sync, _) in &self.staged {
             if let Err(err) = sync.stage(&self.gpu.queue) {
                 self.staged.clear();
+                if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                    timer.abandon(timing);
+                }
                 return Err(RenderError::Sync(err));
             }
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         drop(submitting);
+        if let (Some(timer), Some(timing)) = (&self.timer, timing) {
+            timer.submitted(timing);
+        }
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -582,6 +601,28 @@ impl Compositor {
                 what: "image",
                 detail: "the filter input was made by another compositor".into(),
             })
+        }
+    }
+
+    /// Starts timing each effect-pack filter or shader source this compositor applies
+    /// on the GPU (#349), for [`Self::gpu_times`] to collect, and says whether it does:
+    /// `false` on a device without timestamp queries. A compositor times nothing until
+    /// asked, so one whose times nobody collects (a preview's) spends nothing on them.
+    pub fn time_passes(&mut self) -> bool {
+        if self.timer.is_none() {
+            self.timer = crate::timer::PassTimer::new(&self.gpu.device, &self.gpu.queue);
+        }
+        self.timer.is_some()
+    }
+
+    /// Hands `measured` the GPU time of each effect-pack filter or shader source applied
+    /// since the last call whose time has come back, with its kind ID (#349). A time
+    /// comes back a frame or two after its draw, read without waiting, and allocates
+    /// nothing. Nothing before [`Self::time_passes`], or on a device without timestamp
+    /// queries.
+    pub fn gpu_times(&mut self, measured: impl FnMut(&str, std::time::Duration)) {
+        if let Some(timer) = &mut self.timer {
+            timer.collect(&self.gpu.device, measured);
         }
     }
 
@@ -735,6 +776,7 @@ impl Compositor {
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
+            timer: None,
             ingest: Mutex::new(None),
         }
     }

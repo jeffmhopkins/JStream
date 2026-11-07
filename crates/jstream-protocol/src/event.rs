@@ -290,6 +290,27 @@ pub enum Event {
         /// losses, or nothing it could switch to): the outputs that drew on it fail.
         recovering: bool,
     },
+    /// An effect-pack kind ran too long on the program stage's GPU (0.102, #349): its
+    /// pass took more than half the frame budget in 30 frames running, as timestamp
+    /// queries measure it where the GPU has them. The engine quarantines it before the
+    /// OS resets a device it hangs, as after a device loss (`gpu.device_lost`): its
+    /// filters are bypassed until a person re-enables it (`effect.enable`), and a kind
+    /// blamed a second time in a run quarantines its whole pack. Runtime state: a client
+    /// that misses it sees the quarantine in `kind.list`.
+    #[serde(rename = "gpu.effect_slow")]
+    GpuEffectSlow {
+        /// The kind that ran too long.
+        kind_id: String,
+        /// Its pass's GPU time in the last of those frames, in microseconds.
+        took_us: u64,
+        /// The limit it ran over, half the frame budget, in microseconds.
+        limit_us: u64,
+        /// The kinds this quarantined, ordered by ID: the slow one, or every kind of its
+        /// pack when the pack was blamed before in this run. Empty when its pack was
+        /// unloaded meanwhile.
+        #[serde(default)]
+        quarantined: Vec<String>,
+    },
     /// A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,
     /// since 0.87): never once a frame. Playing is studio state, so it carries no `rev`.
     #[serde(rename = "timeline.changed")]
@@ -350,6 +371,7 @@ impl Event {
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
             Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
+            Event::GpuEffectSlow { .. } => Some("gpu.effect_slow"),
             Event::StudioChanged { .. } => Some("studio.changed"),
             Event::SceneKeyframeChanged { .. } => Some("scene.keyframe_changed"),
             Event::PrivacyChanged { .. } => Some("privacy.changed"),
