@@ -393,6 +393,23 @@ impl Boxed {
         })
     }
 
+    /// This box with effects that need `outset` pixels instead.
+    fn with_outset(self, outset: u32) -> Option<Self> {
+        let outset = outset as f32;
+        let padded = [self.size[0] + 2.0 * outset, self.size[1] + 2.0 * outset];
+        if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
+            return None;
+        }
+        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
+        Some(Self {
+            outset,
+            layer: [side(self.size[0]), side(self.size[1])],
+            scale,
+            ..self
+        })
+    }
+
     /// The layer for an item whose effects run in canvas space (ADR-0106): the canvas,
     /// scaled down to fit [`MAX_LAYER_SIDE`] when larger, with no outset, since what the
     /// effects draw outside the canvas is never seen.
@@ -710,6 +727,27 @@ fn effect_blends(
             timing: *timing,
         });
     }
+}
+
+/// Grows the layer of `owner`'s item, and its chain's pad, to hold what its effects
+/// draw at the settings `from` a Move blends from as well as at their own: an effect's
+/// outset follows its settings (ADR-0125 › Amendment), and the blend passes through
+/// both looks.
+fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
+    let (Some(chain), Some(planned)) = (shot.chains.get_mut(owner), shot.boxes.get_mut(owner))
+    else {
+        return;
+    };
+    let boxed = planned.boxed;
+    let outset = chain.outset_also(Some(from));
+    if boxed.canvas || boxed.model || outset as f32 <= boxed.outset {
+        return;
+    }
+    let Some(boxed) = boxed.with_outset(outset) else {
+        return;
+    };
+    planned.boxed = boxed;
+    chain.pad = chain.pad_at_also(boxed.scale, Some(from));
 }
 
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
@@ -1511,6 +1549,9 @@ fn plan_inner(
             planner.wake = earliest(planner.wake, end);
             let mut blends = Vec::new();
             effect_blends(&planned.tracks, &shot.chains, &mut blends);
+            for blend in &blends {
+                widen(&mut shot, &blend.owner, &blend.from);
+            }
             let tracks = planned
                 .tracks
                 .into_iter()

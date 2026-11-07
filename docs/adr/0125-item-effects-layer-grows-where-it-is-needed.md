@@ -55,3 +55,23 @@ is the recipe for a framed card, so that would break it.
   large as ADR-0065's.
 - **Amends** ADR-0065 §5's render order for box-space item effects.
 - **Docs to change:** core › Snapshots, render › Filters, ARCHITECTURE's data model.
+
+<a id="amendment"></a>
+## Amendment: the outset follows the settings
+Decision 2's outset was each kind's `max_outset_px`, the most it draws at any settings:
+300 px for a drop shadow, 65 for an outline. A shadow and an outline at their defaults
+then grew a 320×216 item's layer to about 1050×946, and the perf suite's
+`effects_many` scene (30 such items) fell under its lavapipe floor (#1362).
+
+1. **An effect's outset is what it draws at its settings**, as render measures it
+   (`jstream_render::video_filter_outset`): a drop shadow its larger offset plus its
+   blur, a glow or a bloom its radius, an outline outside the shape its width plus a
+   pixel, inside it nothing. It is rounded up to a 16 px step, so a Move blending a
+   setting (ADR-0127) resizes the layer only when it crosses a step, and it never
+   passes the kind's `max_outset_px`. A kind render doesn't measure (an effect pack's)
+   takes its `max_outset_px` whole.
+2. **A Move pads for both looks:** while it blends an item's effects, each effect's
+   outset is the larger of the two looks', so the layer holds what it draws at every
+   point of the blend.
+3. `max_outset_px` stays what [ADR-0065](0065-scene-chains-and-item-effects.md) §5 and
+   the protocol make it: the bound an outset never passes.

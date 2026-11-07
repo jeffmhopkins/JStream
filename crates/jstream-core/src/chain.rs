@@ -98,7 +98,7 @@ impl std::fmt::Display for ChainOwner {
 
 /// The most `kind` draws beyond each edge of its input at any settings
 /// (`max_outset_px`, ADR-0065 §5): 0 for a kind that declares none.
-fn outset_of(kind: &str) -> u32 {
+fn max_outset_of(kind: &str) -> u32 {
     static OUTSETS: OnceLock<BTreeMap<String, u32>> = OnceLock::new();
     OUTSETS
         .get_or_init(|| {
@@ -110,6 +110,24 @@ fn outset_of(kind: &str) -> u32 {
         .get(kind)
         .copied()
         .unwrap_or(0)
+}
+
+/// The step an outset is rounded up to, px: a Move that blends a shadow's blur or a
+/// glow's radius (ADR-0127) resizes the padded layer only when it crosses a step.
+const OUTSET_STEP: u32 = 16;
+
+/// How far a filter of `kind` draws beyond each edge of its input at `settings`
+/// (ADR-0125 › Amendment), rounded up to [`OUTSET_STEP`] and never more than the kind's
+/// `max_outset_px`: a kind render doesn't measure takes that whole.
+fn outset_of(kind: &str, settings: &Settings) -> u32 {
+    let most = max_outset_of(kind);
+    if most == 0 {
+        return 0;
+    }
+    match jstream_render::video_filter_outset(kind, settings) {
+        Some(px) => ((px.max(0.0).ceil() as u32).div_ceil(OUTSET_STEP) * OUTSET_STEP).min(most),
+        None => most,
+    }
 }
 
 /// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
@@ -320,13 +338,31 @@ impl Chain {
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
-    /// sum of their kinds' `max_outset_px`. Only an item's effects layer is padded by it;
-    /// a source's or a scene's chain draws at its input's size (ADR-0065 §5).
+    /// sum of what each draws past its input at its settings (ADR-0125 › Amendment).
+    /// Only an item's effects layer is padded by it; a source's or a scene's chain draws
+    /// at its input's size (ADR-0065 §5).
     pub(crate) fn outset(&self) -> u32 {
+        self.outset_also(None)
+    }
+
+    /// [`Self::outset`], each filter taking the larger of its own settings' outset and
+    /// that of `also`'s settings at its place: the look a Move blends from (ADR-0127),
+    /// so the layer holds what the filters draw at any point of the blend.
+    pub(crate) fn outset_also(&self, also: Option<&[Settings]>) -> u32 {
+        self.outsets(also).into_iter().fold(0, u32::saturating_add)
+    }
+
+    /// Each filter's outset, as [`Self::outset_also`] takes it.
+    fn outsets(&self, also: Option<&[Settings]>) -> Vec<u32> {
         self.filters
             .iter()
-            .map(|filter| outset_of(&filter.kind))
-            .fold(0, u32::saturating_add)
+            .enumerate()
+            .map(|(at, filter)| {
+                let own = outset_of(&filter.kind, &filter.settings);
+                also.and_then(|also| also.get(at))
+                    .map_or(own, |other| own.max(outset_of(&filter.kind, other)))
+            })
+            .collect()
     }
 
     /// Where an item's effects layer grows, for a layer of `scale` pixels per canvas
@@ -335,14 +371,20 @@ impl Chain {
     /// box itself, so rounded corners or a vignette frame the box, not the room a
     /// later drop shadow needs. `None` when no filter draws past its input.
     pub(crate) fn pad_at(&self, scale: f32) -> Option<(usize, u32)> {
-        let first = self
-            .filters
+        self.pad_at_also(scale, None)
+    }
+
+    /// [`Self::pad_at`] with the outsets of [`Self::outset_also`].
+    pub(crate) fn pad_at_also(
+        &self,
+        scale: f32,
+        also: Option<&[Settings]>,
+    ) -> Option<(usize, u32)> {
+        let outsets = self.outsets(also);
+        let first = outsets.iter().position(|px| *px > 0)?;
+        let outset = outsets[first..]
             .iter()
-            .position(|filter| outset_of(&filter.kind) > 0)?;
-        let outset = self.filters[first..]
-            .iter()
-            .map(|filter| outset_of(&filter.kind))
-            .fold(0, u32::saturating_add);
+            .fold(0u32, |sum, px| sum.saturating_add(*px));
         Some((first, (outset as f32 * scale).ceil() as u32))
     }
 
@@ -2901,6 +2943,27 @@ mod tests {
         );
     }
 
+    /// An item's layer grows by what its effects draw at their settings, not the most
+    /// their kinds could (ADR-0125 › Amendment): a drop shadow and an outline at their
+    /// defaults (8 px offset and blur, a 4 px stroke) pad it by 16 px each, not 300 and
+    /// 65.
+    #[test]
+    fn effects_at_their_defaults_pad_by_what_they_draw() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect("cam", "drop_shadow", serde_json::json!({})),
+                effect("cam", "outline", serde_json::json!({})),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        assert_eq!(chain.map(super::Chain::outset), Some(32));
+        assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
+    }
+
     /// A vignette before an effect that draws past the box (a glow, here an invisible
     /// one) frames the box itself, as it does alone: the layer grows only where the glow
     /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep
@@ -2924,7 +2987,8 @@ mod tests {
         );
         let shot = shot(&graph);
         let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
-        assert_eq!(chain.and_then(|c| c.pad), Some((1, 100)));
+        // The glow's radius, 50, rounded up to the 16 px step (ADR-0125 › Amendment).
+        assert_eq!(chain.and_then(|c| c.pad), Some((1, 64)));
         assert_golden(
             &shot,
             "

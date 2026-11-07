@@ -91,6 +91,27 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
     })
 }
 
+/// How far a filter of this group's `kind_id` draws past its input at `settings`, px,
+/// for the kinds that declare an outset; `None` for any other kind.
+pub(crate) fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    Some(match kind_id {
+        drop_shadow::KIND => drop_shadow::outset(settings),
+        outline::KIND => outline::outset(settings),
+        glow::KIND => glow::outset(settings),
+        bloom::KIND => bloom::outset(settings),
+        _ => return None,
+    })
+}
+
+/// `v` clamped to `0..=max`, and `max` when it isn't finite.
+fn within(v: f32, max: f32) -> f32 {
+    if v.is_finite() {
+        v.clamp(0.0, max)
+    } else {
+        max
+    }
+}
+
 /// A straight-alpha linear colour, premultiplied, as shaders take it.
 fn premultiplied([r, g, b, a]: [f32; 4]) -> [f32; 4] {
     [r * a, g * a, b * a, a]
@@ -128,4 +149,53 @@ pub(crate) fn copy(ctx: &mut Ctx<'_>, input: &Image, output: &Image) -> Result<(
         params: &Uniforms::new().finish(),
         target: output,
     })
+}
+
+#[cfg(test)]
+mod outset_tests {
+    use jstream_protocol::Settings;
+    use serde_json::json;
+
+    use super::{descriptors, outset};
+
+    fn settings(pairs: &[(&str, serde_json::Value)]) -> Settings {
+        let mut out = Settings::new();
+        for (id, value) in pairs {
+            out.insert(*id, value.clone());
+        }
+        out
+    }
+
+    /// Each kind's outset follows its settings, and never passes the `max_outset_px`
+    /// it declares (ADR-0125 › Amendment), at its defaults, at its largest settings and
+    /// at values out of range.
+    #[test]
+    fn an_outset_follows_the_settings_within_the_declared_most() {
+        let none = Settings::new();
+        assert_eq!(outset("drop_shadow", &none), Some(16.0));
+        assert_eq!(outset("outline", &none), Some(5.0));
+        assert_eq!(outset("glow", &none), Some(16.0));
+        assert_eq!(outset("bloom", &none), Some(24.0));
+        let shadow = settings(&[
+            ("offset_x", json!(-30)),
+            ("offset_y", json!(12)),
+            ("blur", json!(20)),
+        ]);
+        assert_eq!(outset("drop_shadow", &shadow), Some(50.0));
+        let inside = settings(&[("width", json!(40)), ("position", json!("inside"))]);
+        assert_eq!(outset("outline", &inside), Some(0.0));
+        assert_eq!(outset("blur", &none), None);
+        let huge = settings(&[
+            ("offset_x", json!(1e9)),
+            ("offset_y", json!(-1e9)),
+            ("blur", json!(1e9)),
+            ("width", json!(1e9)),
+            ("radius", json!(1e9)),
+        ]);
+        for kind in descriptors() {
+            let declared = kind.max_outset_px.map(f64::from);
+            let at_most = outset(&kind.kind_id, &huge).map(f64::from);
+            assert_eq!(at_most, declared, "{}", kind.kind_id);
+        }
+    }
 }
