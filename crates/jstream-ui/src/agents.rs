@@ -202,19 +202,23 @@ pub fn AgentPrompt() -> impl IntoView {
         });
     };
     // Escape and the × leave the agent waiting: the prompt comes back while it does.
-    let hidden = RwSignal::new(None::<String>);
-    let first = move || {
-        pending.with(|p| p.first().cloned()).filter(|first| {
-            hidden.with(|h| h.as_deref() != Some(first.approval_id.as_str()))
-        })
-    };
+    // The next shown is the first one not dismissed, so dismissing one doesn't hide the
+    // rest of the queue.
+    let hidden = RwSignal::new(Vec::<String>::new());
+    let first = Memo::new(move |_| {
+        pending.with(|p| hidden.with(|h| p.iter().find(|a| !h.contains(&a.approval_id)).cloned()))
+    });
     view! {
-        {move || first().map(|approval| {
+        {move || first.get().map(|approval| {
             let id = approval.approval_id.clone();
             let shown = StoredValue::new(id.clone());
-            let hide = move || hidden.set(Some(shown.get_value()));
+            let hide = move || hidden.update(|h| h.push(shown.get_value()));
             let (once, always, deny) = (id.clone(), id.clone(), id);
-            let more = pending.with(Vec::len).saturating_sub(1);
+            // Read inside the body, so a growing queue doesn't rebuild the dialog.
+            let more = move || {
+                pending.with(|p| hidden.with(|h| p.iter().filter(|a| !h.contains(&a.approval_id)).count()))
+                    .saturating_sub(1)
+            };
             view! {
                 <Modal label="Agent wants to connect" class="agent-prompt" cancel=hide>
                     <div class="modal-header">
@@ -233,8 +237,8 @@ pub fn AgentPrompt() -> impl IntoView {
                         <p>
                             "An agent with full control can change scenes, sources and outputs, and go live. Allow it only if you set it up."
                         </p>
-                        {(more > 0).then(|| view! {
-                            <p class="agent-more">{format!("{more} more waiting")}</p>
+                        {move || (more() > 0).then(|| view! {
+                            <p class="agent-more">{format!("{} more waiting", more())}</p>
                         })}
                         {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
                     </div>

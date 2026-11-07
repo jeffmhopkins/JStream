@@ -203,7 +203,9 @@ Contents ([Design](#design) explains the choices):
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on
-  `agent.approval_requested` and gone on `agent.approval_resolved`;
+  `agent.approval_requested` and gone on `agent.approval_resolved`. Closing it leaves
+  the agent waiting and shows the next request in the queue. It holds no session of its
+  own, so Disconnect still closes the socket;
   `AskAgentsSetting`, the General page's "Ask before a new agent connects" (the UI
   setting `agents.ask`); and `ApprovedAgents`, the Devices page's list of always-allowed
   agents with Remove. Each shows only where the server asks (`agent.approved`'s

@@ -459,6 +459,7 @@ not remove them; they move into the prototype's look.
   app with agents on, an agent the person hasn't always allowed waits at its hello while
   the window shows "Agent wants to connect", naming the client and how it connects, with
   Deny, Allow once and Always allow. Deny, or no answer within two minutes, turns it away.
+  Closing the dialog leaves that agent waiting and shows the next one, if any.
   The General page's "Ask before a new agent connects" turns asking off (on by default,
   kept as the UI setting `agents.ask`), and the Devices page lists the always-allowed
   agents under "Approved agents", each with Remove. Neither shows where the server
