@@ -20,8 +20,10 @@
 
 use crate::app::SessionContext;
 use crate::dialog::Modal;
-use crate::store::Studio;
-use jstream_control::protocol::{Action, Call, PackContent, PackFile, PackFileInfo, PackInfo};
+use crate::store::{Studio, query};
+use jstream_control::protocol::{
+    Action, Call, PackContent, PackFile, PackFileInfo, PackInfo, Query, QueryResult,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::time::Duration;
@@ -60,6 +62,9 @@ pub const TEMPLATE: &str = r#"// @name Custom shader
 //   // @param <id> bool = true "Label"            (a u32: 1 is on)
 //   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
 //   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
+// Give a setting a new ID with a `// @renamed <old> <new>` line: Save as pack… carries
+// the value over, and the pack records the rename (the engine doesn't move saved
+// values yet). Never delete the line: each one is a version.
 //
 // Built in: src(uv) is the input at uv (premultiplied linear light), texel(px) one of
 // its pixels, frame.in_size and frame.out_size the sizes in pixels, frame.time the
@@ -130,6 +135,17 @@ pub struct Declared {
     pub name: String,
     /// The settings, in order.
     pub params: Vec<Param>,
+    /// Each `// @renamed <old> <new>` line, in order: a setting saved under `old` is
+    /// read as `new` (ADR-0025 › Versioning a kind).
+    pub renames: Vec<(String, String)>,
+}
+
+impl Declared {
+    /// The effect's version: 1, and one more for each `@renamed` line, so each rename
+    /// moves the settings saved before it.
+    pub fn version(&self) -> usize {
+        1 + self.renames.len()
+    }
 }
 
 /// A problem with one annotation, at a line of the shader (from 1).
@@ -341,6 +357,7 @@ fn param(body: &str) -> Result<Param, String> {
 pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
     let mut name = None;
     let mut params: Vec<Param> = Vec::new();
+    let mut renames: Vec<(String, String, usize)> = Vec::new();
     for (at, line) in wgsl.lines().enumerate() {
         let fail = |message: String| LineError {
             line: at + 1,
@@ -376,11 +393,50 @@ pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
                 return Err(fail("a shader has at most 64 settings".into()));
             }
             params.push(p);
+        } else if let Some(rest) = text.strip_prefix("@renamed") {
+            if !rest.starts_with(char::is_whitespace) {
+                continue;
+            }
+            let ids: Vec<&str> = rest.split_whitespace().collect();
+            let [old, new] = ids[..] else {
+                return Err(fail("a rename is `// @renamed <old id> <new id>`".into()));
+            };
+            if !good_id(old) || !good_id(new) || old == new {
+                return Err(fail(
+                    "a rename names two different setting IDs: `// @renamed <old id> <new id>`"
+                        .into(),
+                ));
+            }
+            if renames.iter().any(|(o, _, _)| o == old) {
+                return Err(fail(format!("`{old}` is already renamed")));
+            }
+            if renames.len() >= 32 {
+                return Err(fail("a shader has at most 32 renames".into()));
+            }
+            renames.push((old.to_owned(), new.to_owned(), at + 1));
+        }
+    }
+    // Checked against every setting, wherever its line is.
+    for (old, new, line) in &renames {
+        let fail = |message: String| LineError {
+            line: *line,
+            message,
+        };
+        if params.iter().any(|p| p.id == *old) {
+            return Err(fail(format!(
+                "`{old}` is still a setting: a renamed ID is no longer declared"
+            )));
+        }
+        if !params.iter().any(|p| p.id == *new) {
+            return Err(fail(format!(
+                "`{new}` is not a setting; after another rename, point this line at the newest ID"
+            )));
         }
     }
     Ok(Declared {
         name: name.unwrap_or_else(|| DEFAULT_NAME.to_owned()),
         params,
+        renames: renames.into_iter().map(|(o, n, _)| (o, n)).collect(),
     })
 }
 
@@ -411,15 +467,24 @@ fn toml_float(n: f64) -> String {
 }
 
 /// The `effect.toml` for pack `pack` with these declarations: one effect, `shader`,
-/// version 1, drawn by `shader.wgsl`.
+/// drawn by `shader.wgsl`, at [`Declared::version`] with its renames.
 pub fn effect_toml(pack: &str, declared: &Declared) -> String {
     let name = toml_string(&declared.name);
     let mut out = format!(
         "# Made by the Custom shader editor from the `// @` lines of {SHADER_FILE}.\n\
          [pack]\nid = {}\nname = {name}\n\n[[effect]]\nid = \"{EFFECT}\"\nname = {name}\n\
-         version = 1\nshader = \"{SHADER_FILE}\"\n",
-        toml_string(pack)
+         version = {}\nshader = \"{SHADER_FILE}\"\n",
+        toml_string(pack),
+        declared.version()
     );
+    if !declared.renames.is_empty() {
+        let pairs: Vec<String> = declared
+            .renames
+            .iter()
+            .map(|(old, new)| format!("{old} = {}", toml_string(new)))
+            .collect();
+        out.push_str(&format!("renames = {{ {} }}\n", pairs.join(", ")));
+    }
     for p in &declared.params {
         out.push_str(&format!(
             "\n[[effect.param]]\nid = {}\nlabel = {}\n",
@@ -502,6 +567,31 @@ pub fn pack_of(kind: &str) -> Option<&str> {
     kind.strip_suffix(EFFECT)?
         .strip_suffix('/')
         .filter(|p| !p.is_empty() && !p.contains('/') && *p != "clap")
+}
+
+/// Why `id` can't be the pack a custom shader is saved as, or `None` when it can: a
+/// pack ID (`a-z`, `0-9` and `-`, starting with a letter or digit, at most 32
+/// characters) that no pack in `pack.list` has, loaded or not, and not `clap`, whose
+/// kinds are the CLAP plugins' (ADR-0035).
+pub fn save_as_problem(id: &str, packs: &[PackInfo]) -> Option<String> {
+    let good = !id.is_empty()
+        && id.len() <= 32
+        && id.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
+        && id
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+    if !good {
+        return Some(
+            "A pack ID is 1 to 32 of a-z, 0-9 and -, starting with a letter or digit.".into(),
+        );
+    }
+    if id == "clap" {
+        return Some("`clap` is reserved for CLAP plugins.".into());
+    }
+    if packs.iter().any(|p| p.id == id || p.folder == id) {
+        return Some(format!("A pack called `{id}` already exists."));
+    }
+    None
 }
 
 /// The first `custom-<n>` that no pack in `pack.list` has, loaded or not, so a new
@@ -639,7 +729,7 @@ pub enum Tok {
     Plain,
     /// A `//` or `/* */` comment.
     Comment,
-    /// A `// @name` or `// @param` line, which the editor reads.
+    /// A `// @name`, `// @param` or `// @renamed` line, which the editor reads.
     Annotation,
     /// A WGSL keyword (`fn`, `let`, `return`, …).
     Keyword,
@@ -768,7 +858,10 @@ pub fn highlight(text: &str) -> Vec<(Tok, &str)> {
         let tok = if bytes[at..].starts_with(b"//") {
             at = text[at..].find('\n').map_or(bytes.len(), |n| at + n);
             let line = text[start..at].trim_start_matches('/').trim_start();
-            if line.starts_with("@name") || line.starts_with("@param") {
+            if ["@name", "@param", "@renamed"]
+                .iter()
+                .any(|a| line.starts_with(a))
+            {
                 Tok::Annotation
             } else {
                 Tok::Comment
@@ -852,6 +945,10 @@ pub fn ShaderEditor(
     opened: Opened,
     /// Closes the editor.
     close: impl Fn() + Copy + Send + Sync + 'static,
+    /// Moves the filter being edited to the custom shader in the pack named, carrying
+    /// its settings through the shader's renames, once Save as pack… has written and
+    /// loaded it (#1295).
+    save_as: impl Fn(String, Vec<(String, String)>) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
@@ -963,8 +1060,15 @@ pub fn ShaderEditor(
         changed(next);
     };
     let shade = NodeRef::<leptos::html::Pre>::new();
+    // The copy has no scrollbars: sized to the text's box inside them (as CSSOM, which
+    // the page's CSP allows), it scrolls as far as the text does, to the last pixel.
+    let inner = RwSignal::new(None::<(i32, i32)>);
     let on_scroll = move |_| {
         if let Some(el) = area.get() {
+            let size = Some((el.client_width(), el.client_height()));
+            if inner.get_untracked() != size {
+                inner.set(size);
+            }
             if let Some(g) = gutter.get() {
                 g.set_scroll_top(el.scroll_top());
             }
@@ -1016,6 +1120,60 @@ pub fn ShaderEditor(
             studio.enable_effect(&s, kind_of(&pack.get_value()));
         }
     };
+    // Save as pack…: the shader written again under a pack ID of the person's choosing,
+    // and this filter moved to it. The old pack stays for any other filter of it.
+    let naming = RwSignal::new(false);
+    let new_id = RwSignal::new(String::new());
+    let save_problem = RwSignal::new(None::<String>);
+    let saving = RwSignal::new(false);
+    let save = move || {
+        let Some(s) = session.get() else {
+            return;
+        };
+        let id = new_id.get_untracked().trim().to_owned();
+        let wgsl = text.get_untracked();
+        let found = pack_files(&id, &wgsl).and_then(|files| Ok((files, declared(&wgsl)?.renames)));
+        let (files, renames) = match found {
+            Ok(found) => found,
+            Err(error) => {
+                save_problem.set(Some(format!("The shader’s {error}.")));
+                return;
+            }
+        };
+        saving.set(true);
+        save_problem.set(None);
+        spawn_local(async move {
+            let result = async {
+                let packs = match query(&s, Query::PackList).await {
+                    Ok(QueryResult::PackList { packs }) => packs,
+                    Ok(_) => Vec::new(),
+                    Err(error) => return Err(error.to_string()),
+                };
+                if let Some(problem) = save_as_problem(&id, &packs) {
+                    return Err(problem);
+                }
+                let action = Action::PackWrite {
+                    pack: id.clone(),
+                    files,
+                };
+                s.control
+                    .call(Call::Action { action })
+                    .await
+                    .map_err(|error| error.to_string())?;
+                studio.relist_kinds(&s).await;
+                Ok(renames)
+            }
+            .await;
+            _ = saving.try_set(false);
+            match result {
+                Ok(renames) => {
+                    save_as(id, renames);
+                    close();
+                }
+                Err(error) => _ = save_problem.try_set(Some(error)),
+            }
+        });
+    };
     let sub = format!("Effect pack “{}”", pack.get_value());
     view! {
         <Modal label="Custom shader" class="shader-editor" cancel=finish undimmed=true>
@@ -1038,7 +1196,13 @@ pub fn ShaderEditor(
                 <div class="shader-code">
                     <div class="shader-gutter" node_ref=gutter aria-hidden="true">{numbers}</div>
                     <div class="shader-stack">
-                    <pre class="shader-text shader-shade" node_ref=shade aria-hidden="true">{coloured}</pre>
+                    <pre
+                        class="shader-text shader-shade"
+                        node_ref=shade
+                        aria-hidden="true"
+                        style:width=move || inner.get().map(|(w, _)| format!("{w}px"))
+                        style:height=move || inner.get().map(|(_, h)| format!("{h}px"))
+                    >{coloured}</pre>
                     <textarea
                         node_ref=area
                         class="shader-text shader-input"
@@ -1067,7 +1231,54 @@ pub fn ShaderEditor(
                     "The // @name line names this shader in Add filter, where any item can use it."
                 </p>
             </div>
+            {move || naming.get().then(|| view! {
+                <form
+                    class="shader-save-as"
+                    on:submit=move |ev| {
+                        ev.prevent_default();
+                        save();
+                    }
+                >
+                    <label class="shader-save-as-row">
+                        <span>"Pack ID"</span>
+                        <input
+                            type="text"
+                            aria-label="Pack ID"
+                            spellcheck="false"
+                            autocomplete="off"
+                            placeholder="my-look"
+                            prop:value=move || new_id.get()
+                            on:input=move |ev| new_id.set(event_target_value(&ev))
+                        />
+                        <button type="submit" class="primary" disabled=move || saving.get()>
+                            {move || if saving.get() { "Saving…" } else { "Save" }}
+                        </button>
+                        <button type="button" class="secondary" on:click=move |_| naming.set(false)>
+                            "Cancel"
+                        </button>
+                    </label>
+                    <p class="add-note">
+                        "Writes this shader as a new pack and moves this filter to it. The \
+                         current pack stays, for any other filter that uses it."
+                    </p>
+                    {move || save_problem.get().map(|p| view! {
+                        <p class="shader-status problem" role="alert">{p}</p>
+                    })}
+                </form>
+            })}
             <div class="modal-footer">
+                {move || (!naming.get() && !unsaved.get()).then(|| view! {
+                    <button
+                        type="button"
+                        class="secondary shader-save-as-open"
+                        on:click=move |_| {
+                            save_problem.set(None);
+                            naming.set(true);
+                        }
+                    >
+                        "Save as pack…"
+                    </button>
+                })}
                 {move || unsaved.get().then(|| view! {
                     <span class="shader-unsaved">
                         "This text hasn’t compiled, so the filter keeps the last version that did."
@@ -1266,6 +1477,95 @@ mod tests {
                 "[[effect.param.options]]\nvalue = \"hard_edge\"\nlabel = \"Hard edge\"\n"
             )
         );
+    }
+
+    /// Each `@renamed` line raises the version by one and lands in `renames`, so saved
+    /// filters keep their values (ADR-0025 › Versioning a kind).
+    #[test]
+    fn a_rename_bumps_the_version_and_carries_the_value() {
+        let plain = declared("// @param amount float = 0.5").unwrap();
+        assert_eq!(plain.version(), 1);
+        assert!(effect_toml("custom-1", &plain).contains("version = 1\n"));
+        assert!(!effect_toml("custom-1", &plain).contains("renames"));
+
+        let d = declared(
+            "// @renamed amount strength\n\
+             // @param strength float = 0.5\n\
+             // @param tint color = #ffffff\n\
+             // @renamed color tint\n",
+        )
+        .unwrap();
+        assert_eq!(
+            d.renames,
+            vec![
+                ("amount".to_owned(), "strength".to_owned()),
+                ("color".to_owned(), "tint".to_owned())
+            ]
+        );
+        assert_eq!(d.version(), 3);
+        let toml = effect_toml("custom-1", &d);
+        assert!(toml.contains(
+            "version = 3\nshader = \"shader.wgsl\"\nrenames = { amount = \"strength\", color = \"tint\" }\n"
+        ));
+    }
+
+    /// A rename's problem names its line: one that still declares the old ID, names no
+    /// setting, or repeats an old ID.
+    #[test]
+    fn a_bad_rename_names_its_line() {
+        let cases = [
+            (
+                "// @param a float = 1\n// @renamed a b",
+                2,
+                "`a` is still a setting",
+            ),
+            (
+                "// @param b float = 1\n// @renamed a c",
+                2,
+                "`c` is not a setting",
+            ),
+            (
+                "// @param b float = 1\n// @renamed a b\n// @renamed a b",
+                3,
+                "`a` is already renamed",
+            ),
+            ("// @renamed a", 1, "a rename is"),
+            ("// @renamed a a", 1, "two different"),
+            ("// @renamed A b", 1, "two different"),
+        ];
+        for (text, line, says) in cases {
+            let error = declared(text).unwrap_err();
+            assert_eq!(error.line, line, "{text}");
+            assert!(error.message.contains(says), "{text}: {}", error.message);
+        }
+        // `@renamedx` isn't an annotation.
+        assert!(declared("// @renamedx a b").unwrap().renames.is_empty());
+    }
+
+    #[test]
+    fn save_as_takes_a_new_pack_id() {
+        let packs = [PackInfo {
+            id: "glow".into(),
+            folder: "my-glow".into(),
+            kinds: vec![],
+            loaded: true,
+            written_by: None,
+        }];
+        assert_eq!(save_as_problem("warm-look", &packs), None);
+        assert_eq!(save_as_problem("2x", &packs), None);
+        for (id, says) in [
+            ("glow", "already exists"),
+            ("my-glow", "already exists"),
+            ("clap", "reserved"),
+            ("", "1 to 32"),
+            ("Warm", "1 to 32"),
+            ("-warm", "1 to 32"),
+            ("warm_look", "1 to 32"),
+            (&"a".repeat(33), "1 to 32"),
+        ] {
+            let problem = save_as_problem(id, &packs).unwrap_or_default();
+            assert!(problem.contains(says), "{id}: {problem}");
+        }
     }
 
     /// A problem names its line and what is wrong, before anything is sent.

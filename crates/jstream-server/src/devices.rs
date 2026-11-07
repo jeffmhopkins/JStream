@@ -5,6 +5,10 @@
 //!   and a new one replaces it. It is open for [`CODE_LIFETIME`], is used once, and is
 //!   void after [`MAX_WRONG_ATTEMPTS`] wrong attempts. Only its BLAKE3 digest is kept, and
 //!   a presented code is compared digest to digest, as the control token is.
+//! - **Attempts from the network** (ADR-0104) count toward the same five: a code
+//!   is void after [`MAX_WRONG_ATTEMPTS`] wrong attempts from either listener together,
+//!   as ADR-0044 sets. So a peer on the network can void the host's open code, and the
+//!   host starts pairing again; it can't get more guesses at a code than ADR-0044 allows.
 //! - **Device tokens.** A right code gets a new 256-bit token, written as 64 hex digits
 //!   like the control token. The server keeps only its BLAKE3 digest, with the device's
 //!   ID, its name, when it paired and when its token was last presented. A token unused
@@ -117,6 +121,7 @@ struct Pairing {
     /// The digest of the code, normalized (8 symbols, no dash).
     digest: blake3::Hash,
     expires: Instant,
+    /// Wrong attempts, from either listener.
     wrong: u32,
 }
 
@@ -424,12 +429,21 @@ pub(crate) fn check_name(name: &str) -> Result<&str, &'static str> {
 }
 
 /// Reads the device file: a missing one holds no devices. A file other users may access
-/// is refused, as the token file is: on Unix one group or others have any permission on,
-/// on Windows one `jstream_platform_windows::check_private_file` refuses.
+/// is refused, as the token file is ([`read_private`]).
 fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
+    match read_private(path)? {
+        Some(text) => parse_file(&text),
+        None => Ok(BTreeMap::new()),
+    }
+}
+
+/// Reads a user-only file whole, `None` when there is none. A file other users may
+/// access is refused, as the token file is: on Unix one group or others have any
+/// permission on, on Windows one `jstream_platform_windows::check_private_file` refuses.
+pub(crate) fn read_private(path: &Path) -> Result<Option<String>, String> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
     if !metadata.is_file() {
@@ -452,7 +466,7 @@ fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
         .map_err(|why| format!("it may be accessible to other users: {why}; make it user-only"))?;
     let mut text = String::new();
     io::Read::read_to_string(&mut file, &mut text).map_err(|error| error.to_string())?;
-    parse_file(&text)
+    Ok(Some(text))
 }
 
 fn parse_file(text: &str) -> Result<BTreeMap<DeviceId, Device>, String> {
@@ -504,9 +518,14 @@ fn render_file(devices: &BTreeMap<DeviceId, Device>) -> String {
     text
 }
 
-/// Writes the device file whole: to `<path>.tmp`, created user-only, synced, then
-/// renamed over `path`, so a crash leaves the old file or the new one.
+/// Writes the device file whole ([`write_private`]).
 fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<()> {
+    write_private(path, &render_file(devices))
+}
+
+/// Writes a user-only file whole: to `<path>.tmp`, created user-only, synced, then
+/// renamed over `path`, so a crash leaves the old file or the new one.
+pub(crate) fn write_private(path: &Path, text: &str) -> io::Result<()> {
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
@@ -516,7 +535,7 @@ fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<(
         _ => {}
     }
     let written = create_private(&tmp).and_then(|mut file| {
-        file.write_all(render_file(devices).as_bytes())?;
+        file.write_all(text.as_bytes())?;
         file.sync_all()
     });
     let renamed = written.and_then(|()| fs::rename(&tmp, path));

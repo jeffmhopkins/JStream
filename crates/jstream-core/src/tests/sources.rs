@@ -790,6 +790,51 @@ fn a_waveform_source_is_painted_by_the_sources_thread() {
     );
 }
 
+/// A painted source's new frames reach the picture through its frame slot, with no
+/// re-plan (ADR-0117 §3, #1138): the waveform keeps changing while the plans stand.
+#[test]
+fn a_painted_frame_of_the_same_size_needs_no_plan() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(shown(&engine, "wave"), Some([0, 0, 0xff, 0xff]), "silence");
+    let plans = engine.plans();
+    let painted = engine.paints("wave");
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline
+        && (shown(&engine, "wave") != Some([0xff, 0, 0, 0xff])
+            || engine.paints("wave") < painted + 5)
+    {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        shown(&engine, "wave"),
+        Some([0xff, 0, 0, 0xff]),
+        "full scale"
+    );
+    assert!(engine.paints("wave") >= painted + 5, "painted on its own");
+    assert_eq!(engine.plans(), plans, "and never re-planned for it");
+}
+
 /// A scope no mix draws is not painted while the program re-plans for another source,
 /// and is painted for the current time once a scene that shows it goes on program.
 #[test]
