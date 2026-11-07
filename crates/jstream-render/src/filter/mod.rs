@@ -12,6 +12,7 @@ mod aspect;
 mod assets;
 mod external;
 mod multipass;
+pub(crate) use multipass::pad;
 mod pack;
 mod params;
 mod pass;
@@ -64,6 +65,8 @@ pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
     scratch: Scratch,
+    /// Transparent pixels the input is grown by on every side before the pass draws.
+    pad: u32,
 }
 
 impl VideoFilter {
@@ -80,6 +83,7 @@ impl VideoFilter {
             kind: kind.to_owned(),
             pass,
             scratch: Scratch::default(),
+            pad: 0,
         }
     }
 
@@ -135,9 +139,24 @@ impl VideoFilter {
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
     /// the size; aspect ratio reshapes it, which changes the source's reported size for
     /// every placement. An effect that draws outside its input (a drop shadow, an outside
-    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5).
+    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5),
+    /// unless it is padded ([`Self::set_pad`]).
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.pass.output_size(width, height)
+        let grow = |side: u32| side.saturating_add(self.pad.saturating_mul(2));
+        self.pass.output_size(grow(width), grow(height))
+    }
+
+    /// Grows the input by `pad` transparent pixels on every side before the filter
+    /// draws, so it sees and keeps that room: 0 (the default) for none. An item's
+    /// effects pad their layer at the first effect that draws past its input, so the
+    /// ones before it frame the item's box itself (ADR-0065 §5).
+    pub fn set_pad(&mut self, pad: u32) {
+        self.pad = pad;
+    }
+
+    /// The padding [`Self::set_pad`] set.
+    pub(crate) fn pad(&self) -> u32 {
+        self.pad
     }
 
     /// Sets the image an asset or scene-reference filter reads (`apply_lut`'s table,

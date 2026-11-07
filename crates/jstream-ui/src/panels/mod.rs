@@ -17,6 +17,7 @@ mod confirm;
 pub mod custom_shader;
 pub mod device_preview;
 pub mod encoders;
+pub mod filter_presets;
 pub mod filters;
 pub mod inspector;
 pub mod labels;

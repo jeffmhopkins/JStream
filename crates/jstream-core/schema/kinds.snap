@@ -414,6 +414,56 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "bloom",
+    "category": "video_filter",
+    "name": "Bloom",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "threshold",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.7,
+        "label": "Threshold",
+        "description": "How bright a part of the picture must be to bloom, as it looks: 0 blooms everything, 1 only pure white.",
+        "live": true
+      },
+      {
+        "id": "intensity",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "label": "Intensity",
+        "description": "How much light the bright parts add. Above 1 they flare.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 24.0,
+        "label": "Radius",
+        "description": "How far the light spreads.",
+        "live": true
+      },
+      {
+        "id": "tint",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Tint",
+        "live": true
+      }
+    ],
+    "max_outset_px": 100
+  },
+  {
     "kind_id": "blur",
     "category": "video_filter",
     "name": "Blur",
@@ -1197,7 +1247,8 @@ source: crates/jstream-core/src/kinds.rs
         "label": "Blur",
         "live": true
       }
-    ]
+    ],
+    "max_outset_px": 300
   },
   {
     "kind_id": "follow_pointer",
@@ -1319,6 +1370,7 @@ source: crates/jstream-core/src/kinds.rs
         "unit": "px",
         "default": 16.0,
         "label": "Radius",
+        "description": "How far the light reaches from the shape's edge. A glow lights the transparent area around a shape, so an opaque picture shows it only past its edge, around an item; for the light of a picture's bright parts, use Bloom.",
         "live": true
       },
       {
@@ -1331,7 +1383,8 @@ source: crates/jstream-core/src/kinds.rs
         "description": "Multiplies the glow's opacity before it is clamped, so values above 1 widen its bright core.",
         "live": true
       }
-    ]
+    ],
+    "max_outset_px": 100
   },
   {
     "kind_id": "image",
@@ -1777,7 +1830,8 @@ source: crates/jstream-core/src/kinds.rs
         "label": "Position",
         "live": true
       }
-    ]
+    ],
+    "max_outset_px": 65
   },
   {
     "kind_id": "pixelate",
@@ -2827,7 +2881,7 @@ source: crates/jstream-core/src/kinds.rs
         "max": 1.0,
         "default": 0.5,
         "label": "Strength",
-        "description": "How much of the color the edges take: 0 is none.",
+        "description": "How much of the color the edges take, in linear light: 0 is none. A dark vignette looks half as bright at the edge near 0.8.",
         "live": true
       },
       {
@@ -2837,7 +2891,7 @@ source: crates/jstream-core/src/kinds.rs
         "max": 1.0,
         "default": 0.5,
         "label": "Radius",
-        "description": "Where the fade starts, from the centre (0) to the corners (1).",
+        "description": "Where the fade starts, as a fraction of the way from the centre to a corner.",
         "live": true
       },
       {
@@ -2847,7 +2901,7 @@ source: crates/jstream-core/src/kinds.rs
         "max": 1.0,
         "default": 0.5,
         "label": "Softness",
-        "description": "How far the fade runs past the radius. 0 is a hard edge.",
+        "description": "How far the fade runs past the radius, as the same fraction. 0 is a hard edge.",
         "live": true
       },
       {
@@ -2856,6 +2910,62 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": true,
         "default": "#000000ff",
         "label": "Color",
+        "live": true
+      },
+      {
+        "id": "shape",
+        "type": "enum",
+        "options": [
+          {
+            "value": "frame",
+            "label": "Follow the frame"
+          },
+          {
+            "value": "round",
+            "label": "Round"
+          }
+        ],
+        "default": "frame",
+        "label": "Shape",
+        "description": "Follow the frame: an ellipse of the frame's shape. Round: a circle.",
+        "live": true
+      },
+      {
+        "id": "blend",
+        "type": "enum",
+        "options": [
+          {
+            "value": "normal",
+            "label": "Normal"
+          },
+          {
+            "value": "multiply",
+            "label": "Multiply"
+          }
+        ],
+        "default": "normal",
+        "label": "Blend",
+        "description": "Multiply darkens by the color; Normal tints towards it.",
+        "live": true
+      },
+      {
+        "id": "center_x",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Centre X",
+        "description": "The centre, from the left edge (0) to the right (1).",
+        "live": true
+      },
+      {
+        "id": "center_y",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Centre Y",
+        "description": "The centre, from the top edge (0) to the bottom (1).",
         "live": true
       }
     ]

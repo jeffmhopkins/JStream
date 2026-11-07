@@ -166,8 +166,8 @@ Contents ([Design](#design) explains the choices):
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
-  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens and
-  the line an error names tested natively), the number
+  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
+  the line an error names and the WGSL colouring (`highlight`) tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
@@ -682,7 +682,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Edit shader…, which reads the pack with `pack.read` and opens only a pack of
   `effect.toml` and `shader.wgsl`. The shader file is the whole of it: its `// @name`
   line and `// @param` lines make the manifest, so one file is edited, and an agent that
-  follows the MCP guidance writes a pack the editor opens. A change compiles 400 ms after
+  follows the MCP guidance writes a pack the editor opens. The text shows in colour
+  (#1295) without a code-editor dependency: `highlight`, a small WGSL tokenizer (not a
+  parser; the engine reports what doesn't compile), splits it into runs, which a
+  `<pre>` draws under the textarea in the same font, padding and box. The textarea's
+  own text is transparent, with a visible caret and selection, and its scroll moves the
+  copy. A change compiles 400 ms after
   the last keystroke, with `pack.write`: an annotation's problem is reported with its
   line before anything is sent, the engine's names its line in `shader.wgsl`, and the
   engine keeps drawing the last version that loaded. A write that loads drops the
@@ -727,7 +732,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette under Style.
+  belongs to the item in every scene. The Add filter dialog lists the vignette and bloom
+  under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
+  and Spotlight) has a Preset select above its form in the Filters window, which sets the
+  preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
   A failed call shows in a

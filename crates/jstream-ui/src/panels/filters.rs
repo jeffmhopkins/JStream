@@ -23,6 +23,7 @@ use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::custom_shader::{self, ShaderEditor};
+use crate::panels::filter_presets::{preset_patch, presets};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
@@ -157,7 +158,16 @@ const KNOWN: [(&str, Known); 24] = {
         ),
         (
             "glow",
-            k(Video, "Style", "Glow", "Soft light around the shape"),
+            k(
+                Video,
+                "Style",
+                "Glow",
+                "Soft light around a shape’s edge, past an item’s box",
+            ),
+        ),
+        (
+            "bloom",
+            k(Video, "Style", "Bloom", "Bright parts give off light"),
         ),
         (
             "vignette",
@@ -2650,6 +2660,51 @@ fn FilterPane(target: Target) -> impl IntoView {
             }]);
         }
     };
+    // A preset: its settings, and every other one back to its default.
+    let kind_presets = StoredValue::new(presets(&kind_id));
+    let choose_preset = move |name: String| {
+        let Some(kind) = descriptor.get_untracked() else {
+            return;
+        };
+        let Some(preset) = kind_presets.with_value(|p| p.iter().find(|p| p.name == name).cloned())
+        else {
+            return;
+        };
+        errors.set(HashMap::new());
+        send(vec![Edit::FilterSetSettings {
+            owner: target.with_value(|t| t.owner.clone()),
+            filter_id: target.with_value(|t| t.filter_id.clone()),
+            patch: preset_patch(&kind, &preset),
+        }]);
+    };
+    // Always shows "Choose…": a preset is an action, not a state the filter is in.
+    let unpicked = RwSignal::new(());
+    let preset_picker = kind_presets.with_value(|p| !p.is_empty()).then(|| {
+        view! {
+            <label class="select-field filter-preset">
+                <span class="field-label">"Preset"</span>
+                <select
+                    aria-label="Apply a preset"
+                    prop:value=move || {
+                        unpicked.track();
+                        ""
+                    }
+                    on:change=move |event| {
+                        let name = event_target_value(&event);
+                        if !name.is_empty() {
+                            choose_preset(name);
+                        }
+                        unpicked.set(());
+                    }
+                >
+                    <option value="">"Choose…"</option>
+                    {kind_presets.with_value(|p| p.iter().map(|p| {
+                        view! { <option value=p.name>{p.name}</option> }
+                    }).collect_view())}
+                </select>
+            </label>
+        }
+    });
     let remove = move |_| {
         send(vec![Edit::FilterRemove {
             owner: target.with_value(|t| t.owner.clone()),
@@ -2717,6 +2772,7 @@ fn FilterPane(target: Target) -> impl IntoView {
             </div>
             <div class="filter-dialog-body">
                 {(!hint.is_empty()).then(|| view! { <p class="filter-hint">{hint}</p> })}
+                {preset_picker}
                 {form}
                 {zoom_keys}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
