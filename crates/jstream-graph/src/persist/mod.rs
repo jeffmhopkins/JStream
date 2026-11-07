@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 7;
+pub const SCHEMA_VERSION: u32 = 8;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -57,8 +57,9 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] =
-    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7];
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -213,6 +214,40 @@ fn v6_to_v7(value: &mut Value) -> Result<(), String> {
             settings: follow.settings(),
         };
         effects.push(serde_json::to_value(filter).map_err(|e| e.to_string())?);
+    }
+    Ok(())
+}
+
+/// Version 8 gives each kind of data a `browser` page may read its own checkbox
+/// (ADR-0124): `page_api_shared_values` for the names in `page_api_values`, and
+/// `page_api_audio` for the bus in `page_api_bus`. Loading rebuilds each source with its
+/// kind's defaults, which would turn both off, so a version 7 source whose names or bus
+/// are set gets its checkbox on: nothing a user granted is taken away, and nothing new
+/// is granted.
+fn v7_to_v8(value: &mut Value) -> Result<(), String> {
+    let sources = value.get_mut("sources").and_then(Value::as_array_mut);
+    for source in sources.into_iter().flatten() {
+        let browser =
+            source.get("kind") == Some(&serde_json::json!({"type": "builtin", "kind": "browser"}));
+        let Some(settings) = source
+            .get_mut("settings")
+            .and_then(Value::as_object_mut)
+            .filter(|_| browser)
+        else {
+            continue;
+        };
+        let names = settings
+            .get("page_api_values")
+            .and_then(Value::as_str)
+            .is_some_and(|names| !names.trim().is_empty());
+        let bus = settings
+            .get("page_api_bus")
+            .is_some_and(|bus| !bus.is_null());
+        for (checkbox, granted) in [("page_api_shared_values", names), ("page_api_audio", bus)] {
+            if granted && !settings.contains_key(checkbox) {
+                settings.insert(checkbox.to_owned(), Value::Bool(true));
+            }
+        }
     }
     Ok(())
 }

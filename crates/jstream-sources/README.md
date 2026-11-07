@@ -439,16 +439,35 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
   `html` too. `youtube_chat` never sets
-  it. The **Page API** group (ADR-0102, none of it live, all off by default):
+  it. The **Page API** group (ADR-0102 and ADR-0124, none of it live, all off by
+  default, each kind of data its own checkbox shown under `page_api`, and each with a
+  `warning` the Properties dialog shows beside it):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;
-  `page_api_values` (at most 1 KiB) names the shared values it may read, as names or
+  `page_api_shared_values` adds the shared values that `page_api_values` (at most 1 KiB,
+  read only while the checkbox is on) names, as names or
   prefixes ending in `.*`, separated by commas, each name checked as `values.set`
-  checks one; `page_api_bus` (a bus, default none) gives it `jstream.levels()`, that
+  checks one; `page_api_audio` adds `jstream.levels()` for the bus `page_api_bus` names
+  (read only while the checkbox is on), that
   bus's post-fader peak and RMS per channel, as `meters.tick` meters them, and 64
   log-spaced bands from 20 Hz to 20 kHz, lowest first, each 0 to 1 on the dB scale from
   -90 to 0 dBFS, from the bus's scope (`AudioMeter`); or `null` while no mixer runs or
-  the bus is gone.
+  the bus is gone. A spectrogram page, for example, draws each reading as a column:
+
+  ```js
+  const g = document.querySelector("canvas").getContext("2d");
+  jstream.addEventListener("levels", (r) => {
+    const { width: w, height: h } = g.canvas;
+    g.drawImage(g.canvas, -1, 0);      // scroll left a column
+    g.clearRect(w - 1, 0, 1, h);
+    if (r === null) return;            // no output runs, or the bus is gone
+    r.bands.forEach((b, i) => {        // 64 bands, lowest first, 0 to 1
+      g.fillStyle = `hsl(${240 - 240 * b} 90% ${50 * b}%)`;
+      g.fillRect(w - 1, h - (i + 1) * h / 64, 1, h / 64);
+    });
+  });
+  ```
+
   The source sends its page only what changed (`page_api.rs`, `Feed`):
   the visibility with the clock time each part last became true, the scenes, the
   levels, and the
