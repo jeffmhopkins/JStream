@@ -1650,9 +1650,22 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
         let mut readbacks = Readbacks::default();
+        // Whether the compositor was asked to time the pack passes yet: once a meter
+        // guards them (#349).
+        let mut timing = false;
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
+            }
+            // The pack passes' GPU times that came back since the last tick, a tick or
+            // two late, go to the guard (#349).
+            if let Some(guard) = meter.pass_guard() {
+                if !timing {
+                    timing = true;
+                    compositor.time_passes();
+                }
+                compositor.gpu_times(|kind, took| guard.measured(kind, took));
+                guard.end_tick();
             }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
@@ -1886,6 +1899,16 @@ pub(crate) enum PipelineEvent {
     LinkDown,
     /// The publish link is up again: `active`.
     LinkUp,
+}
+
+/// What the program stage's render thread tells the engine about the effect packs it
+/// draws (#349), on the engine's `jstream-device-losses` thread.
+#[derive(Debug)]
+pub(crate) enum GpuEvent {
+    /// The device was lost.
+    Lost(DeviceLoss),
+    /// A pack kind's pass ran too long ([`PassGuard`](crate::runtime::PassGuard)).
+    Slow(crate::runtime::SlowPass),
 }
 
 /// A lost GPU device on the program stage's render thread (#349), for the engine to
@@ -2124,7 +2147,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
             losses: loss_tx,
-            meter: engine.profiler().program_meter(),
+            meter: {
+                let mut meter = engine.profiler().program_meter();
+                meter.guard_passes();
+                meter
+            },
         };
         move || {
             let _raised = raise(priority.as_deref(), ThreadRole::Video);
@@ -2889,10 +2916,12 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
-    /// Told of each lost device, with the pack kinds drawn before it (#349): the
-    /// engine handles it on its `jstream-device-losses` thread, never on this one.
-    losses: Sender<DeviceLoss>,
-    /// Times each tick and its units for `profile.get` (ADR-0103).
+    /// Told of each lost device, with the pack kinds drawn before it, and of each pack
+    /// kind whose pass ran too long (#349): the engine handles them on its
+    /// `jstream-device-losses` thread, never on this one.
+    losses: Sender<GpuEvent>,
+    /// Times each tick and its units for `profile.get` (ADR-0103), and guards the pack
+    /// passes' GPU time (#349, [`PassGuard`](crate::runtime::PassGuard)).
     meter: DrawMeter,
 }
 
@@ -3375,6 +3404,12 @@ fn render_loop(job: RenderJob) {
                 // A tick that failed part-way leaves its units' time uncounted.
                 meter.discard_frame();
             }
+            // A pack kind that ran too long on the GPU is quarantined by the engine, on
+            // its own thread, as a lost device's are (#349). Its passes draw until the
+            // engine publishes the snapshot without it, a tick or two.
+            if let Some(slow) = meter.pass_guard().and_then(|guard| guard.take()) {
+                let _unsent = loss_sender.send(GpuEvent::Slow(slow));
+            }
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).
@@ -3430,12 +3465,12 @@ fn render_loop(job: RenderJob) {
                     // writes no file. A loss it can't take is handled (dropped) here.
                     let (handled, flag) = LossHandled::new();
                     loss_handled = Some(flag);
-                    let _unsent = loss_sender.send(DeviceLoss {
+                    let _unsent = loss_sender.send(GpuEvent::Lost(DeviceLoss {
                         cause,
                         drawn: reader.held().0.shot().pack_kinds(),
                         recovering: started.is_ok(),
                         handled,
-                    });
+                    }));
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {

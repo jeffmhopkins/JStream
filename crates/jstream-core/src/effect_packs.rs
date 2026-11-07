@@ -344,8 +344,9 @@ impl Packs {
     }
 
     /// Blames a GPU device loss on the pack kinds in `drawn`, the ones drawn in the
-    /// frames before it: each loaded one is quarantined, and the whole pack of one
-    /// blamed for a second loss in this run. Kinds no loaded pack has are not blamed:
+    /// frames before it, or a pass that ran too long on the one kind it ran (#349):
+    /// each loaded one is quarantined, and the whole pack of one blamed a second time
+    /// in this run. Kinds no loaded pack has are not blamed:
     /// they drew nothing.
     pub(crate) fn blame(&mut self, drawn: &BTreeSet<String>) -> Blame {
         let blamed: Vec<String> = drawn
@@ -378,7 +379,7 @@ impl Packs {
             tracing::warn!(
                 ?blamed,
                 ?quarantined,
-                "GPU device loss blamed on effect-pack kinds; quarantined"
+                "GPU device loss or slow pass blamed on effect-pack kinds; quarantined"
             );
             self.update(Vec::new(), Vec::new())
         });

@@ -363,6 +363,10 @@ impl Program {
 }
 
 impl super::pass::Pass for Program {
+    fn timed(&self) -> Option<&str> {
+        Some(self.program.label())
+    }
+
     fn update(&mut self, settings: &Settings) {
         self.params = self.program.uniforms(settings);
         self.size = clamp_size(self.program.size(settings));

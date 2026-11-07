@@ -591,7 +591,9 @@ the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick
 Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
 which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
 high-performance adapter without `force_fallback_adapter`, then the software adapter,
-then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+then `RenderError::NoAdapter`. The device asks for `TIMESTAMP_QUERY` when the adapter
+has it (the pack passes' GPU time, [Filters](#filters)), and no other optional feature.
+A hardware adapter whose device refuses to open (limits
 below the defaults, a removed or hung GPU) falls back to the software adapter too, and
 the error names both when that fails as well. When the pick already was the software
 adapter (no GPU), its device error is returned without a second try. A machine with no
@@ -726,6 +728,21 @@ bytes and the bind group's entries live in kept or fixed-size storage, bounded b
 feedback on the pass itself and on a later pass with a restart, images and slots, the
 audio image, and
 `sys`, and a program over the cap, on the test adapter.
+
+**GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
+bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU
+before the OS resets the device. `Compositor::time_passes` turns the timing on (it
+reports `false` on a device without `TIMESTAMP_QUERY`, which times nothing; a
+compositor nobody asked times nothing either). Then each external filter or shader
+source application (`Pass::timed`, which returns the kind ID; the built-in kinds
+return `None`) is bracketed by two empty compute passes that write a timestamp each,
+resolved and copied to a small mappable buffer in the same submit, one of 32 slots.
+`Compositor::gpu_times` polls without waiting and hands back each time whose map has
+finished, with its kind, a frame or two after its draw; an application with every slot
+on its way isn't timed. It allocates nothing: a slot's label string is reused. A
+device opened by this crate, or by the platform crates' contexts, asks for
+`TIMESTAMP_QUERY` when the adapter has it. A test times a pack filter on the test
+adapter (lavapipe has the feature) and checks a built-in one isn't timed.
 
 **The kinds.** Each group documents its kinds here as it lands.
 
