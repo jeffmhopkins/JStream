@@ -21,8 +21,8 @@ use crate::gpu::Gpu;
 use crate::ingest::{Ingest, Planes};
 use crate::mips::{Mips, Region};
 
-/// How many mip chains an image keeps, one per crop it was placed in 3D with, the most
-/// recently used first. An animated crop makes a chain per crop, so older ones go.
+/// How many mip chains an image keeps, one per crop it was placed in 3D or drawn small
+/// with, the most recently used first. An animated crop makes a chain per crop, so older ones go.
 const MAX_CHAINS: usize = 4;
 
 /// The format uploaded images are stored in: premultiplied linear light.
@@ -177,12 +177,20 @@ impl Image {
         self.generation.load(Ordering::Relaxed)
     }
 
-    /// The mip chain of `region`, made by `make` the first time it is asked for. The
-    /// chain stays on the image, and goes when the image does or when [`MAX_CHAINS`]
-    /// newer regions pushed it out.
-    pub(crate) fn chain(&self, region: Region, make: impl FnOnce() -> Mips) -> Arc<Mips> {
+    /// The mip chain of `region` starting `skip` levels down, made by `make` the first
+    /// time it is asked for. The chain stays on the image, and goes when the image does
+    /// or when [`MAX_CHAINS`] newer ones pushed it out.
+    pub(crate) fn chain(
+        &self,
+        region: Region,
+        skip: u32,
+        make: impl FnOnce() -> Mips,
+    ) -> Arc<Mips> {
         let mut chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
-        let chain = match chains.iter().position(|chain| chain.region() == region) {
+        let found = chains
+            .iter()
+            .position(|chain| chain.region() == region && chain.skip() == skip);
+        let chain = match found {
             Some(index) => chains.remove(index),
             None => Arc::new(make()),
         };
@@ -205,6 +213,14 @@ impl Image {
             chains.len(),
             chains.iter().map(|chain| chain.builds()).sum(),
         )
+    }
+
+    /// How many levels down each chain the image keeps starts, the most recently used
+    /// first.
+    #[cfg(test)]
+    pub(crate) fn chain_skips(&self) -> Vec<u32> {
+        let chains = self.mips.lock().unwrap_or_else(PoisonError::into_inner);
+        chains.iter().map(|chain| chain.skip()).collect()
     }
 
     pub(crate) fn alpha(&self) -> Alpha {
