@@ -256,6 +256,17 @@ pub enum Inverse<G, C, E = (), M = (), T = ()> {
     Clear(Field),
 }
 
+/// One item's whole override, as [`Keyframe::drop_unless`] returns it and
+/// [`Keyframe::restore`] takes it back.
+pub type Dropped<K, G, C, E = (), M = (), T = ()> = (K, Override<G, C, E, M, T>);
+
+/// One item's write that undoes a [`Keyframe::reset`].
+pub type ResetUndo<K, G, C, E = (), M = (), T = ()> = (K, Inverse<G, C, E, M, T>);
+
+/// What [`Keyframe::undo`] gives: the edit that redoes it, or why the value was refused.
+pub type Undone<G, C, E = (), M = (), T = ()> =
+    Result<Option<Inverse<G, C, E, M, T>>, InvalidValue>;
+
 /// [`Keyframe::restore`] found an item that already has overrides. Nothing was restored.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RestoreConflict<K>(pub K);
@@ -352,7 +363,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone, E: Clone, M: Clone, T: Clone> Keyframe<
     /// Returns the writes that undo it, item by item in ID order, each item's fields in
     /// [`Field::ALL`] order. They restore the keyframe in any order, since no two name
     /// the same field of the same item.
-    pub fn reset(&mut self) -> Vec<(K, Inverse<G, C, E, M, T>)> {
+    pub fn reset(&mut self) -> Vec<ResetUndo<K, G, C, E, M, T>> {
         let overrides = std::mem::take(&mut self.overrides);
         overrides
             .into_iter()
@@ -371,7 +382,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone, E: Clone, M: Clone, T: Clone> Keyframe<
     pub fn drop_unless(
         &mut self,
         mut keep: impl FnMut(&K) -> bool,
-    ) -> Vec<(K, Override<G, C, E, M, T>)> {
+    ) -> Vec<Dropped<K, G, C, E, M, T>> {
         let mut dropped = Vec::new();
         self.overrides.retain(|item, o| {
             let stays = keep(item);
@@ -388,7 +399,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone, E: Clone, M: Clone, T: Clone> Keyframe<
     /// later edit). Empty overrides are skipped, so the keyframe still never stores one.
     pub fn restore(
         &mut self,
-        dropped: Vec<(K, Override<G, C, E, M, T>)>,
+        dropped: Vec<Dropped<K, G, C, E, M, T>>,
     ) -> Result<(), RestoreConflict<K>> {
         if let Some((item, _)) = dropped
             .iter()
@@ -406,11 +417,7 @@ impl<K: Ord + Clone, G: Clone, C: Clone, E: Clone, M: Clone, T: Clone> Keyframe<
 
     /// Applies an [`Inverse`] to `item`: a write or a clear. A convenience for undo; an
     /// inverse that came from this keyframe always applies.
-    pub fn undo(
-        &mut self,
-        item: K,
-        inverse: Inverse<G, C, E, M, T>,
-    ) -> Result<Option<Inverse<G, C, E, M, T>>, InvalidValue> {
+    pub fn undo(&mut self, item: K, inverse: Inverse<G, C, E, M, T>) -> Undone<G, C, E, M, T> {
         match inverse {
             Inverse::Write(v) => self.write(item, v).map(Some),
             Inverse::Clear(f) => Ok(self.clear(&item, f)),
