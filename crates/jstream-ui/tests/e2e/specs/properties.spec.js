@@ -310,6 +310,11 @@ test('a filter picked in the dialog shows its settings there, and Cancel puts th
   await amount.press('Tab');
   await expect(rows.first().locator('.filter-summary')).toHaveText('0.50');
   expect(await rev(page)).toBe(before + 1);
+  // The keyboard picks a row too: Enter on Blur's name shows its settings.
+  await rows.nth(1).getByRole('button', { name: 'Blur', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(dialog.getByRole('group', { name: 'Blur settings' })).toBeVisible();
+  await expect(rows.nth(1).getByRole('button', { name: 'Blur', exact: true })).toHaveAttribute('aria-pressed', 'true');
   await entry.click();
   await expect(dialog.locator('.props-name input')).toHaveValue('Backdrop');
 

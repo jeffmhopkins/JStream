@@ -617,9 +617,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
   shows neither, since it draws its parent's.
   Duplicate scene copies the scene's options and camera with it, and its camera motion
-  and follow camera, the follow on the copy of the item it follows. On the right, in the source Properties dialog's shell, are the
-  scene's filters: the Filters panel's rows on its video chain, which apply at once (a
-  keyframe shows its parent's).
+  and follow camera, the follow on the copy of the item it follows. As in the source Properties dialog
+  (`PropertiesAndFilters`), the left side lists a Properties entry, then the scene's
+  video chain (a keyframe shows its parent's), whose rows pick a filter whose settings
+  then take the right side; filter edits apply at once and Cancel puts them back.
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
   Filters panel shows the primary selected item's source's chains (ADR-0026): video
   unless the source is audio-only, audio when it has a mixer channel and isn't a

@@ -256,7 +256,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   where it was left; a double-click on the title centres it, and the header's × still
   closes it. With Sharpen described, a click on its row shows its settings on the
   right, no Filters window opening, the name and the footer's Defaults hidden; a change
-  there is one edit at once, and Cancel puts it back in one more.
+  there is one edit at once, Enter on Blur's name picks Blur from the keyboard, and
+  Cancel puts the change back in one more.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively. A video capture device created through Add source, with its descriptor
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`

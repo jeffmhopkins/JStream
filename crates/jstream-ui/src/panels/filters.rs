@@ -1751,7 +1751,23 @@ fn Row(
                 >
                     <Icon name=if enabled { "eye" } else { "eye-off" } size=14 />
                 </button>
-                <span class="filter-name">{name.clone()}</span>
+                {if pick.is_some() {
+                    let chosen = chosen.clone();
+                    // Picked from the keyboard too: Enter or Space presses the name, whose
+                    // click reaches the row's.
+                    view! {
+                        <button
+                            type="button"
+                            class="filter-name filter-pick"
+                            aria-pressed=move || chosen().to_string()
+                        >
+                            {name.clone()}
+                        </button>
+                    }
+                    .into_any()
+                } else {
+                    view! { <span class="filter-name">{name.clone()}</span> }.into_any()
+                }}
                 {held_view}
                 {summary_view}
                 {move || caret().map(|c| view! { <span class="filter-caret" aria-hidden="true">{c}</span> })}
