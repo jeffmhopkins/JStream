@@ -9,6 +9,7 @@
 
 mod captures;
 mod devices;
+mod gpu;
 mod pipeline;
 mod publish;
 mod render;
@@ -20,6 +21,7 @@ pub(crate) use captures::Backends as CaptureBackends;
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
 pub(crate) use devices::SharedVideoDevices;
+pub(crate) use gpu::SharedGpu;
 pub(crate) use pipeline::DeviceLoss;
 pub use pipeline::OutputStats;
 #[cfg(test)]

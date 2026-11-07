@@ -492,9 +492,11 @@ state machine. Contents:
   fallback, the video-device backend asked onto the platform's device and
   `SharedVideoDevices` passing that through, an output compositing GPU capture frames (opaque, whatever alpha the
   texture holds), a browser page painting on
-  the stage's context, composited as premultiplied red and given back the device when
-  the stage stops, an output leaving the GPU path mid-run when every GPU frame
-  fails to import or the context breaks (taking the context from browser pages, and
+  the engine's context, composited as premultiplied red by the stage and drawn by
+  `video.snapshot` with no output running, the page keeping the context when the stage
+  stops, `video.snapshot` capturing a display itself with no output running, waiting for
+  its first frame and keeping it across snapshots, an output leaving the GPU path mid-run when every GPU frame
+  fails to import or the context breaks (the pages staying on the engine's context, and
   failing when that fallback fails, or at its deadline when it hangs, still repeating
   the last frame meanwhile), a recording started after that fallback, whose encoder
   could take GPU frames, encoding the readback with every output staying up, an output
@@ -1348,10 +1350,11 @@ camera as it draws (a follow camera's springs in that compositor's `Chains`, ste
 once per frame time, then the camera's motion), with the zoom steps from the live
 values. Such a shot changes with time, so it redraws each frame. Each compositor keeps
 its own springs. The preview thread draws with the captures, so its follow camera
-follows the pointer apart from the render thread, from rest. The snapshot thread draws
-with no captures (`NoCaptures`), so it gets no pointer: `video.snapshot` and a frame
-sheet show a follow camera at rest, aimed at the box's centre, though the camera's motion
-still plays.
+follows the pointer apart from the render thread, from rest. The snapshot thread now
+draws with captures of its own (*Snapshots* below), so it gets the pointer too; its
+springs are its compositor's own, stepped only as it draws, so `video.snapshot` and a
+frame sheet can show a follow camera short of where the program's has moved, starting
+from rest, aimed at the box's centre, on the first picture.
 
 **Video chains** (`chain.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md),
 roadmap V0). Planning copies each reached source's video chain into the `Shot`: its
@@ -1715,15 +1718,21 @@ it they are checked every 250 ms rather than every frame. A `browser` source ope
 its page in the backend the host gave `with_browser` (none by default, so it draws
 nothing and logs `NoBackend`); giving one rebuilds the sources already there that
 open through it (`browser` and its `youtube_chat` preset,
-`jstream_sources::opens_browser`). Its page's picture is a GPU frame (`Source::gpu_frame`): while a program stage runs on
-a platform GPU context, the stage hands that context to the live sources
-(`Engine::use_gpu`, `LiveSources::use_gpu`), which pass it to the browser engine
-(`BrowserBackend::use_device`), and takes it back first when the stage stops, or
-when its render thread leaves the GPU path mid-run (see [Runtime](#runtime)). The plan
+`jstream_sources::opens_browser`). Its page's picture is a GPU frame (`Source::gpu_frame`) on the
+engine's one GPU context ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5,
+`runtime/gpu.rs`), which `with_browser` hands the browser engine
+(`LiveSources::set_browser`, `BrowserBackend::use_device`) before any page opens. A
+program stage lends the live sources its context (`Engine::use_gpu`,
+`LiveSources::use_gpu`), the same one, so nothing moves; when the stage stops or its
+render thread leaves the GPU path mid-run (see [Runtime](#runtime)) they are handed the
+engine's context as it is then, which is new only after a loss, and a context that
+replaces a lost one is handed over whichever holder saw the loss
+(`SharedGpu::on_replaced`). The plan
 then shows the page's newest texture in place of its transparent stand-in, as a
 `Frame` that carries the context's `ContextKey`. `compose` imports it, premultiplied
-sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context;
-anywhere else, `video.snapshot` included, it draws nothing. A page repaints on its
+sRGB (`ResourceCache::import_premultiplied`), only on a compositor of that context:
+the program stage's, the preview's and `video.snapshot`'s all open on it. A compositor
+on a device of its own (no interop, or a stage after a fallback) draws it as nothing. A page repaints on its
 own, so while a context is set a source that opens through the browser engine asks for a re-plan every
 1/30 s, painted yet or not, as an animation asks at its next frame. That is every program frame at the default rate, and every other frame when the collection runs at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
@@ -1980,8 +1989,23 @@ or a size that does not fit in memory is `SourceFrameError`.
 
 The work runs on `jstream-snapshot`, a thread the engine starts on the first
 snapshot. It owns the compositor, serves requests in order, and stops when the
-engine goes away. The compositor opens on the first snapshot, hardware adapter first,
-with lavapipe or WARP as the fallback (`OpenOptions::hardware`). No adapter is `action_failed` (#1073), as for
+engine goes away. The compositor opens on the first snapshot, on the engine's GPU
+context when it has one, so it draws the browser pages painted there
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), and otherwise on a
+device of its own, hardware adapter first, with lavapipe or WARP as the fallback
+(`OpenOptions::hardware`). A compositor whose device was lost opens again before the
+next job, on the context as it is then.
+
+The displays, windows and video devices a snapshot shows are captured by the snapshot
+thread itself (#1184), as the preview hub does: on a `jstream-capture` thread of its own,
+on the CPU path, with the engine's capture backends (`SnapshotWorker::set_capture`) and
+the shared video devices, so a webcam the program or the preview has open is read, not
+opened again. It can't read the program stage's captures, and a snapshot is taken with no
+stage running too. The first job that shows one starts them; a job waits until each it
+shows has a frame or has failed to start (`RenderCaptures::settled`), for at most 1.5 s,
+and one still starting after that draws as nothing (logged at `info`). The captures keep
+running between jobs and stop after 10 s without one. A frame sheet's pictures all draw
+each capture's frame at the time the sheet is drawn, not at each sample's time. No adapter is `action_failed` (#1073), as for
 `output.start`, and the reason starts with `no wgpu adapter` and, on Linux, ends naming
 the software Vulkan driver to install (`mesa-vulkan-drivers`). On Linux the daemon asks
 the same thing at startup through `no_adapter_warning` (`lib.rs`): it lists the adapters wgpu can
@@ -2123,9 +2147,11 @@ is `not_found`, a request with `scene_id` or `source` too (or both) is
 The codec is picked when the client subscribes: the first of its `codecs` the engine
 can encode, H.264 when `codecs.list()` names an H.264 encoder (only with backends), and
 JPEG and PNG always. One `jstream-preview` thread per engine, started by the first stream and
-gone once none is left, serves them all. It owns a compositor (`Compositor::open`,
-hardware adapter first with the software one as the fallback, or the CPU stand-in
-under `with_cpu_compositor`) and keeps each stream's
+gone once none is left, serves them all. It owns a compositor, on the engine's GPU
+context when it has one, so it draws browser pages
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5), else on a device of
+its own (`Compositor::open`, hardware adapter first with the software one as the
+fallback), or the CPU stand-in under `with_cpu_compositor`, and keeps each stream's
 encoder and pacing to itself, so the stream its session holds is only flags. On each
 pass it loads the published render snapshot, `rev`, the live values on the render
 parameter channel and the media clock's time (a brief collection lock, never held while
@@ -2170,8 +2196,9 @@ The hub captures the displays, windows, webcams and capture cards the program mi
 each streamed scene show itself, so they show with no output running: once the engine has backends, it
 runs the program stage's `RenderCaptures` (`runtime/captures.rs`) on a
 `jstream-capture` thread of its own, started the first time a stream shows one and
-stopped when the `jstream-preview` thread ends (its last stream gone), on the CPU path
-(its compositor isn't on the platform's GPU context). The program's captures run only
+stopped when the `jstream-preview` thread ends (its last stream gone), on the CPU path:
+GPU capture frames come from the stage's capture backend on the context, and the hub
+has none. The program's captures run only
 while a stream the hub draws itself shows the program. A stream showing a capture
 is due when one of the captures it shows took a new frame since its last picture
 (`CaptureFrame::version`), so a still desktop costs no redraw. While an output runs, its stage
@@ -3079,7 +3106,10 @@ lock, then takes the collection lock only to install a build or re-plan, which a
 each live source for a frame it already has, apart from one catch-up paint of a painter
 a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
-collection lock is released. The preview thread takes its own state lock, and the
+collection lock is released. The engine's GPU context (`SharedGpu`, `runtime/gpu.rs`)
+has locks of its own, never taken under the collection lock: it opens a device holding
+only its own, and tells the engine of a replaced context after releasing them, which
+then takes the collection lock to hand it to the browser engine. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
 drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
@@ -3360,16 +3390,22 @@ through the CPU backend, on CPU frames. Each fallback is logged and keeps the ou
 CPU frames: no device (the fakes, CI, a machine without interop; the compositor then
 opens its own device, hardware adapter first with the software one as the fallback), a
 backend with no GPU path or one that refuses the context, and a GPU capture that does not start (that capture then runs on
-CPU frames). With a context, the stage also lends it to the browser engine, so
-`browser` pages paint on it and the render thread samples them there too (*Live
-sources* in Design); the stage takes it back first when it stops, and on a failed
-open.
+CPU frames). The device is the engine's one context
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5): the engine wraps
+the platform's interop in `SharedGpu` (`runtime/gpu.rs`), which opens the device once
+and lends a clone of the same `GpuContext` to every stage, the preview hub's compositor,
+the snapshot thread's and the browser engine. It opens a new one only when the one it
+lent is lost (`jstream_render::context_lost`, the watch the context's compositors
+share), and tells the engine, which hands the new one to the browser engine; a failed
+open is not kept. `browser` pages paint on it, so the render thread samples them there
+too (*Live sources* in Design); the stage lends it to the live sources as it starts and
+hands them the engine's context again when it stops, and on a failed open.
 
 The GPU path can also break mid-run: every GPU frame fails to import (a format the
 compositor can't take), or the context's device goes away. After 10 composite errors in
 a row on the context, a third of a second, the render thread leaves it once. A
-`jstream-gpu-fallback` thread tells browser pages to stop painting on the context (that
-takes the collection lock) and opens the compositor on a device of its own, while the
+`jstream-gpu-fallback` thread hands browser pages the engine's context as it is then, a
+new one if this one was lost (that takes the collection lock), and opens the compositor on a device of its own, while the
 render thread keeps repeating the last frames and adopting snapshots. Then the render
 thread lets go of the frames it holds on the context's device, has the `jstream-capture` thread drop its GPU
 backends and start every display and window capture again on the CPU path (a start asked

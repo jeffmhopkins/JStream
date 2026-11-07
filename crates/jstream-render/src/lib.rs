@@ -35,7 +35,7 @@ pub use filter::{
     PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage,
     ProgramInput, ProgramPass, VideoFilter, descriptors as video_filter_descriptors, lut_image,
 };
-pub use gpu::{OpenOptions, adapter_available};
+pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{GpuModel, Lighting, ModelDraw};

@@ -571,9 +571,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`Engine::with_browser`), so `browser` sources open their pages
   ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
   so after `with_backends`, through a clone of the live engine (clones share its
-  sources), so pages start on the media clock. First
-  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
-  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  sources), so pages start on the media clock. The engine hands the backend its one GPU
+  context, on the media adapter, with `use_device` before any page opens, so a page's
+  first paint already lands on the device every compositor draws on
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). CEF
   runs only in the sandboxed browser helper, which the backend starts with the first
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and

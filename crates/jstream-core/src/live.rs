@@ -100,8 +100,8 @@ pub(crate) struct LiveSources {
     /// Whether a source's sound came, went or moved on the clock since
     /// [`take_audio`](Self::take_audio) last said.
     audio_changed: bool,
-    /// The program stage's GPU context, which the browser engine paints on, while one
-    /// runs.
+    /// The GPU context the browser engine paints on: the engine's (ADR-0117 §5), which
+    /// the program stage draws on too, or `None` when there is none.
     context: Option<ContextKey>,
     /// Every asset a video filter of the collection reads, and what loading it gave.
     assets: HashMap<AssetKey, AssetEntry>,
@@ -341,8 +341,19 @@ impl LiveSources {
     }
 
     /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
-    /// pages in. Sources of those kinds built before have none, so they are built again.
-    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+    /// pages in, painting on `context`, the engine's GPU context (ADR-0117 §5), which it is
+    /// given before any page opens. Sources of those kinds built before have none, so
+    /// they are built again.
+    pub(crate) fn set_browser(
+        &mut self,
+        browser: Arc<dyn BrowserBackend>,
+        context: Option<&GpuContext>,
+    ) {
+        browser.use_device(context);
+        self.context = context.map(GpuContext::key);
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
+        }
         self.ctx.browser = Some(browser);
         for entry in self
             .entries
@@ -353,11 +364,16 @@ impl LiveSources {
         }
     }
 
-    /// Gives the browser engine the program stage's GPU context to paint on, or takes
-    /// it away (`None`) when the stage stops. A browser engine set after this gets the
-    /// device from the next stage.
+    /// Gives the browser engine the GPU context to paint on: the engine's, as the browser
+    /// engine is set and again once a lost one is replaced, or `None` when there is
+    /// none. The context it already paints on is not given again, so pages keep their
+    /// frames (ADR-0117 §5).
     pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
-        self.context = context.map(GpuContext::key);
+        let key = context.map(GpuContext::key);
+        if key == self.context {
+            return;
+        }
+        self.context = key;
         if let Some(browser) = &self.ctx.browser {
             browser.use_device(context);
         }
