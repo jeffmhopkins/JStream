@@ -64,13 +64,13 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Sources panel](#objects) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
-| [Filters](#filters) | 10 | 10 | 0 | 0 | 0 | 0 |
+| [Filters](#filters) | 11 | 11 | 0 | 0 | 0 | 0 |
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **133** | **121** | **3** | **0** | **5** | **4** |
+| **Total** | **134** | **122** | **3** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -311,7 +311,7 @@ All of it is client-side geometry, sent as `item.set_geometry` edits (Clear crop
 <a id="filters"></a>
 ## Filters
 <!-- @section
-covers = ["crates/jstream-ui/src/panels/filters.rs"]
+covers = ["crates/jstream-ui/src/panels/filters.rs", "crates/jstream-ui/src/panels/filter_presets.rs"]
 -->
 
 Spec: [panels › filters](../design/ui-prototype/spec-panels.md#filters-panel). The protocol
@@ -335,6 +335,7 @@ chain (FL-06), and so does each item: its effects (FL-09,
 | FL-08 | CLAP plugin filter | Host a CLAP audio effect. | ✅ | [ADR-0035](adr/0035-clap-plugins-out-of-process.md): each effect the engine's scan finds is its own kind, `clap/<plugin id>`, so the Add filter dialog lists each plugin by name under Plugins with the hint "A CLAP audio effect", rather than the prototype's one "CLAP plugin" with a Plugin select. It goes on any audio chain: a source's, the program output's and an output's ([FL-07](#filters)); on the program output's the plugin runs once for each bus an output carries ([ADR-0086](adr/0086-master-clap-filter-one-host-per-output-bus.md)), so every output hears it. Its settings are the plugin's parameters, from the kind's descriptor (FL-05). The live-audio run on Windows is #912. |
 | FL-09 | Item effects | One placement's own video chain, after its crop. | ✅ | Beyond the prototype, which has no item effects ([ADR-0065](adr/0065-scene-chains-and-item-effects.md), the `item` owner, `ItemInfo.effects`). Under the selected item's source's chains, the Filters panel shows "This item’s effects" with "Only this item, after its crop, top to bottom.", an "Effects" chain ("No effects.", "N effects") and "+ Add effect…", for an item whose source has a picture, while no FX button's or scene's pick is shown. Rows, the Add filter dialog (video kinds only, "For this item of “Backdrop”", foot "Applies to this item only, after its crop.") and the Filters window ("Effect on “Backdrop”") work as on a source's chain. In a keyframe scene they are the item's effects there (the `keyframe` owner, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)): "This item’s effects in this keyframe" with "Only this item in this keyframe, after its crop, top to bottom.", and either "Follows the item’s own effects. A change here gives this keyframe its own." or "This keyframe has its own effects for this item." with a Follow the item button, which clears the override. A Filters window that opened while the keyframe followed the item clears the override its edits made on Cancel, rather than putting the keyframe's filters back, so it follows the item again (#1028). The Add filter dialog says "For this item of “Backdrop” in this keyframe" and "Applies to this item in this keyframe only.", and the scene picker leaves out the scenes whose picture holds the keyframe. Reset to the parent clears it with the other overrides. On an item's effects the Uses the scene picker offers the scenes whose picture doesn't hold the item's scene. The Properties dialog shows the source's chains only. Under the effects, an "Over the canvas" check sends `item.set_effects_space` ([ADR-0106](adr/0106-item-effects-in-canvas-space.md), protocol 0.76): on, the effects run after the item is placed, so a canvas-sized mask lines up with the canvas however the item is moved or flipped. It isn't shown under a keyframe's effects, as the space belongs to the item in every scene. |
 | FL-10 | Quarantined effect | A filter whose effect-pack kind is quarantined says so, and a person can turn it back on. | ✅ | Beyond the prototype ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md)): a row whose kind `kind.list` marks `quarantined` shows a "quarantined" badge and a Re-enable button, which sends `effect.enable` and reads `kind.list` again; a `gpu.device_lost` that quarantined kinds reads it again too. |
+| FL-11 | Filter presets | A filter kind's ready-made looks, one click away. | ✅ | Beyond the prototype (#1226). `filter_presets.rs` names them per kind: the vignette's Subtle, Cinematic and Spotlight. The Filters window shows a Preset select above the kind's form; choosing one sends one `filter.set_settings` with the preset's values and every other setting but a scene reference back to its default (`null`), and the select goes back to Choose…. A preset is plain settings, so an agent sets the same values over MCP. |
 
 <a id="mixer"></a>
 ## Mixer

@@ -1532,8 +1532,8 @@ as the scene that draws the item draws it: a keyframe scene's items have chains 
 their own, at their effective values, with the keyframe's own effects where it
 overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
-every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
-built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
+every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`: drop shadow,
+outline, glow and bloom declare one (render › Filters). A layer longer than 8192 pixels on a side is scaled
 down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
@@ -1557,7 +1557,8 @@ only when their effects are the same kinds with the same settings in order
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
-item turned 90°, whose ellipse stands with its box. Each `stats.tick` reports what
+item turned 90°, whose ellipse stands with its box. Another draws a glow and a drop shadow
+on an opaque item, which show past its box in the outset (#1226). Each `stats.tick` reports what
 they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
 steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
 plus one layer and pass per filter, and each item's effects as its box layer and pass

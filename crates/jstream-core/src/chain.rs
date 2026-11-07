@@ -2469,6 +2469,88 @@ mod tests {
         );
     }
 
+    /// `effect` of `kind` with `settings` on item `id`'s effects.
+    fn effect(id: &str, kind: &str, settings: serde_json::Value) -> Edit {
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new(id),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(kind),
+            kind: kind.into(),
+            settings: serde_json::from_value(settings).expect("an object"),
+            enabled: Some(true),
+            index: None,
+        }
+    }
+
+    /// `cam`, opaque white, in a 24x12 box in the middle of the canvas, with a strong
+    /// blue glow or a hard blue drop shadow on the item. The glow's samples 2 px past
+    /// the box are a partly lit blue over black, so they read `?`; cut at the box, as
+    /// before, they read `.`. The effects layer has room past
+    /// the box (the kinds' `max_outset_px`, ADR-0065 §5), so the light and the shadow of
+    /// an opaque picture show around it instead of being cut at its edge (#1226).
+    #[test]
+    fn golden_a_glow_and_a_shadow_show_past_an_opaque_items_box() {
+        let graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        let mut glow = graph.clone();
+        apply(
+            &mut glow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff", "radius": 4.0, "strength": 4.0}),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&glow),
+            "
+            ................
+            ................
+            ....????????....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....????????....
+            ................
+            ................
+            ",
+            "the glow rings the box",
+        );
+        let mut shadow = graph;
+        apply(
+            &mut shadow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "drop_shadow",
+                    serde_json::json!({
+                        "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&shadow),
+            "
+            ................
+            ................
+            ................
+            .....WWWWWW.....
+            .....WWWWWW.....
+            .....WWWWWWBB...
+            .......BBBBBB...
+            .......BBBBBB...
+            ................
+            ",
+            "the shadow falls past the box, below and to the right",
+        );
+    }
+
     /// `cam` in the left half of the canvas, flipped upside down, with a vignette on the
     /// item. In box space the vignette is the box's ellipse; with its effects in canvas
     /// space (ADR-0106) it is drawn over the placed item, so it is the canvas's ellipse,

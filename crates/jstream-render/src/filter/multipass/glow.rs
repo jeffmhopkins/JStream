@@ -1,6 +1,10 @@
 //! `glow`: soft light around the shape. It is a drop shadow with no offset, a colour
-//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input,
-//! within the input's frame (ADR-0065 §5).
+//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input.
+//! It lights the transparent area around an alpha shape (a logo, text, a keyed camera),
+//! so on an opaque picture it shows only past the picture's edge: on an item, in the
+//! room its `max_outset_px` gives the effects layer; on a source or scene chain, whose
+//! output is the input's frame (ADR-0065 §5), not at all. `bloom` is the light that
+//! bright parts of any picture give off.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
@@ -15,23 +19,39 @@ pub(super) const KIND: &str = "glow";
 /// White, straight linear RGBA.
 const DEFAULT_COLOR: [f32; 4] = [1.0; 4];
 
+/// The largest radius a setting takes, px: also the most the glow draws past an item's
+/// box.
+const MAX_RADIUS: f64 = 100.0;
+
 pub(super) fn descriptor() -> KindDescriptor {
-    filter(
-        KIND,
-        "Glow",
-        vec![
-            color("color", "Color", true, "#ffffff"),
-            float("radius", "Radius", 0.0, 100.0, 16.0, "px"),
-            ParamDescriptor {
-                description: Some(
-                    "Multiplies the glow's opacity before it is clamped, so values above \
+    KindDescriptor {
+        max_outset_px: Some(MAX_RADIUS as u32),
+        ..filter(
+            KIND,
+            "Glow",
+            vec![
+                color("color", "Color", true, "#ffffff"),
+                ParamDescriptor {
+                    description: Some(
+                        "How far the light reaches from the shape's edge. A glow lights the \
+                     transparent area around a shape, so an opaque picture shows it only \
+                     past its edge, around an item; for the light of a picture's bright \
+                     parts, use Bloom."
+                            .into(),
+                    ),
+                    ..float("radius", "Radius", 0.0, MAX_RADIUS, 16.0, "px")
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Multiplies the glow's opacity before it is clamped, so values above \
                      1 widen its bright core."
-                        .into(),
-                ),
-                ..float("strength", "Strength", 0.0, 4.0, 1.0, "")
-            },
-        ],
-    )
+                            .into(),
+                    ),
+                    ..float("strength", "Strength", 0.0, 4.0, 1.0, "")
+                },
+            ],
+        )
+    }
 }
 
 pub(super) struct Glow(Under);
