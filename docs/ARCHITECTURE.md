@@ -187,6 +187,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
 ├── hotkeys        [{ chord, action }]   chord → protocol action request
+├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -483,14 +484,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
-  and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
+  and hotkey bindings (protocol 0.25) and controller bindings (protocol 0.96,
+  schema version 9), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller bindings and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -722,6 +724,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
+  `binding.set` and `binding.clear` (protocol 0.96,
+  [ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)) do the same
+  for a controller `Trigger` (a MIDI note, controller or program change), with the
+  hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
+  No input fires them yet.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -918,7 +925,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
   label) with everything
-  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25) and the controller bindings (protocol 0.96); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
@@ -1042,7 +1049,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1069,10 +1076,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 799 KB
-  of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
-  of the edit schemas `item` and `batch` do, because `live.set` takes edits and
-  `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.08 MB
+  of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
+  of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
+  `hotkey` and `binding` each carry every action's, because `hotkey.set` and
+  `binding.set` take any action), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
@@ -1451,7 +1459,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   bump: a `cut` already showed the new scene on the next frame. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
-  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
+  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) and a
+  collection's controller `bindings` (version 9, ADR-0122) bumped it
   instead, each with a
   migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
   scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8

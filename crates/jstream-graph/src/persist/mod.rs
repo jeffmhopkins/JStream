@@ -21,7 +21,7 @@ use jstream_protocol::{
     FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
     ItemTransform, ItemTransition, LabelId, MotionModifier, OutputId, OutputKind, ProtocolError,
     Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, VideoMix, VideoMixId,
+    SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, Trigger, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 8;
+pub const SCHEMA_VERSION: u32 = 9;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -58,7 +58,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -252,6 +252,15 @@ fn v7_to_v8(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 9 adds controller bindings (`bindings`, ADR-0122). A version 8 file has none,
+/// so it upgrades unchanged; one there is refused, as version 8 refused it.
+fn v8_to_v9(value: &mut Value) -> Result<(), String> {
+    if value.get("bindings").is_some() {
+        return Err("a version 8 file has no `bindings`".into());
+    }
+    Ok(())
+}
+
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -358,6 +367,10 @@ struct File {
     /// a collection without hotkeys saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hotkeys: Vec<FileHotkey>,
+    /// Controller bindings (ADR-0122), ordered by trigger; omitted when there are none,
+    /// like `hotkeys`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bindings: Vec<FileBinding>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
     /// `cut` preset a new collection starts with, so such a collection saves as it did
     /// before presets existed.
@@ -679,6 +692,15 @@ struct FileHotkey {
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct FileBinding {
+    trigger: Trigger,
+    /// The action request, as `binding.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct FileEncoder {
     id: EncoderProfileId,
     name: String,
@@ -902,6 +924,14 @@ impl Graph {
                     action: action.clone(),
                 })
                 .collect(),
+            bindings: state
+                .bindings
+                .iter()
+                .map(|(trigger, action)| FileBinding {
+                    trigger: trigger.clone(),
+                    action: action.clone(),
+                })
+                .collect(),
         };
         let mut json = serde_json::to_string_pretty(&file).expect(
             "invariant: the file holds only strings, finite numbers, bools, and maps with \
@@ -1082,8 +1112,8 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// transition overrides, video mixes, and outputs, each with its profile, mix and
 /// filters; then the master's filters; then the sends (the sources made their default
 /// master sends, so when the file lists sends a source without one has it removed), and
-/// each source's audio settings; and last the hotkey bindings, whose actions name
-/// scenes, outputs and presets.
+/// each source's audio settings; and last the hotkey and controller bindings, whose
+/// actions name scenes, outputs and presets.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -1477,6 +1507,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             Edit::HotkeySet {
                 chord: hotkey.chord.clone(),
                 action: hotkey.action.clone(),
+            },
+        ));
+    }
+    for binding in &file.bindings {
+        edits.push((
+            format!("binding `{}`", binding.trigger),
+            Edit::BindingSet {
+                trigger: binding.trigger.clone(),
+                action: binding.action.clone(),
             },
         ));
     }
