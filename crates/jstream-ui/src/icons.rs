@@ -30,6 +30,7 @@ pub fn path(name: &str) -> &'static str {
             "M9 18V5l11-2v13 M9 18a3 3 0 1 1-6 0a3 3 0 1 1 6 0z M20 16a3 3 0 1 1-6 0a3 3 0 1 1 6 0z"
         }
         "layers" => "M12 3l9 5-9 5-9-5z M3 13l9 5 9-5",
+        "cube" => "M12 3l8 4.5v9L12 21l-8-4.5v-9z M4 7.5l8 4.5 8-4.5 M12 12v9",
         "spout" => "M3 6h12v12H3z M15 10l6-3v10l-6-3",
         "wave" => "M2 12h2l2-6 3 12 3-14 3 16 3-10 2 4h2",
         "bars" => "M4 20V12 M8 20V6 M12 20V9 M16 20V4 M20 20V14",
@@ -90,7 +91,7 @@ const NAMES: &[&str] = &[
     "music", "layers", "spout", "wave", "bars", "chat", "tag", "keyframe", "folder", "play",
     "coffee", "gamepad", "flag", "clock", "user", "hash", "star", "heart", "bolt", "sparkle",
     "bell", "eye", "eye-off", "lock", "wrench", "out", "search", "funnel", "close", "reset",
-    "image",
+    "image", "cube",
 ];
 
 /// The tool bars' icons, which aren't offered as a scene's icon.

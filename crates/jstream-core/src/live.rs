@@ -1000,6 +1000,9 @@ impl LiveSources {
             .source
             .next_change(at)
             .and_then(|change| after(running.start, change, now.timebase()));
+        // A model source's frame is its model's stand-in (ADR-0107): the item draws the
+        // model in its place.
+        let frame = frame.with_model(running.source.model());
         Some((frame, next))
     }
 

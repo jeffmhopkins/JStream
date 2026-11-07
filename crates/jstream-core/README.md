@@ -1543,7 +1543,21 @@ the plan is made again. An item whose `effects_space` is `canvas`
 ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
 layer instead, with no outset, scaled down the same way: the item is drawn into it
 where it is placed, turned, flipped and tilted as it is (a live resize redraws it
-there), and the layer covers the canvas flat. Its transition visual never glides. A layer that can't be made or drawn (too large for the
+there), and the layer covers the canvas flat. Its transition visual never glides.
+An item that shows a 3D model ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6;
+its source's frame carries the model, from `Source::model`, beside the transparent
+stand-in) always has a canvas-sized layer, effects or not. The chain phase draws the
+model into it with `Compositor::draw_model`: posed by the item's geometry with its live
+values and motion applied, seen through its scene's camera with the camera's live value,
+motion and follow applied as the scene's pass resolves them, and lit as the source says.
+`Chains` uploads each source's model once per version and lets go of one no frame drew.
+Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
+input, as for canvas space, so they run over the canvas. The item is placed as
+`Placement::Layer`, flat at the canvas's top-left, sorting in a 3D scene by the model's
+pose. Like a canvas-space layer it never glides in a transition. A model that can't be
+uploaded blanks its item, logged once. Goldens in `chain.rs` draw an unlit plane in its
+box, moved by its motion, with a `vignette` over its layer, and turned 60° through a
+scene camera, where it covers the cells a flat item in the same pose covers. A layer that can't be made or drawn (too large for the
 adapter) blanks only its item that frame, logged once until a frame draws it, as a
 failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or
