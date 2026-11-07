@@ -68,5 +68,8 @@ glides instead.
   vignette tightening) with a native Move, without a browser source.
 - Effects keep no live values, so this is still the only way an effect's setting moves
   over time; motion modifiers on filter settings would be a separate decision.
+- A setting that is a rate over the effect's whole running clock (a `scroll`'s speed) sweeps
+  its offset while it blends, since the offset is the rate times the clock. Two keyframes
+  that change such a rate glide best in a short Move, or by switching the rate with a cut.
 - A blended frame applies new settings to each blended filter once per frame, which is
   the same work a settings edit does, for the length of the transition.
