@@ -302,7 +302,7 @@ impl Control for Admitted {
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
         let served_here = (self.serves_devices && about_devices(&call))
             || about_ui_settings(&call)
-            || about_agents(&call);
+            || (self.approvals.enabled() && about_agents(&call));
         if !served_here {
             return self.inner.call(call);
         }

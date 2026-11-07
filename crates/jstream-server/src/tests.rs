@@ -3944,4 +3944,11 @@ fn no_agent_is_held_when_asking_is_off() {
     let plain = start(&MockEngine::new());
     let agent = plain.connect_as(TOKEN);
     ok(plain.run(agent.hello(named("claude-code"))));
+    // A server that never asks (no `ask_agents`, as the desktop app without `--mcp`)
+    // leaves the agent calls to the engine, which doesn't serve them, so a UI hides
+    // the setting and the list (#1338 review N4).
+    let approved = plain.run(agent.call(Call::Query {
+        query: Query::AgentApproved,
+    }));
+    assert_eq!(protocol_code(approved), "unsupported");
 }
