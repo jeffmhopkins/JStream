@@ -284,7 +284,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   in and out show, and a second selected item shows "+1"; an item's sections are in
   the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
   section, the arrow keys moving along the strip with the focus, the tab kept across a
-  reload, and the header's Properties & filters… opening the Properties dialog. The mock
+  reload, and the header's Properties & filters… opening the Properties dialog; X and
+  Y, W and H, and W % and H % each on one row of its group, the crop's four sides on
+  one row, and no sideways scroll in the Transform tab. The mock
   engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source

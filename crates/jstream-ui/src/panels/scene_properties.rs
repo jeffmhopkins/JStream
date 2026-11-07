@@ -419,7 +419,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             view! {
                 <div class="camera-fields">
                     <h3 class="camera-head">"Camera"</h3>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Position"</span>
                         <div class="camera-axes">
                             {number("X", "Position X", CameraField::Position(0), "1")}
@@ -427,7 +427,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             {number("Z", "Position Z", CameraField::Position(2), "1")}
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Looks at"</span>
                         <div class="camera-axes">
                             {number("X", "Target X", CameraField::Target(0), "1")}
@@ -435,14 +435,14 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             {number("Z", "Target Z", CameraField::Target(2), "1")}
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Field of view"</span>
                         <div class="camera-control">
                             {number("", "Field of view", CameraField::Fov, "0.5")}
                             <span class="unit">"°"</span>
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Roll"</span>
                         <div class="camera-control">
                             {number("", "Roll", CameraField::Roll, "0.5")}
@@ -487,11 +487,11 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     </label>
                     {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
                         <div class="camera-sub">
-                            <div class="camera-row">
+                            <div class="axis-row camera-row">
                                 <span class="label">"Focus distance"</span>
                                 {number("", "Focus distance", CameraField::Focus, "1")}
                             </div>
-                            <div class="camera-row">
+                            <div class="axis-row camera-row">
                                 <span class="label">"Blur"</span>
                                 <div class="camera-control">
                                     {number("", "Blur", CameraField::Blur, "0.5")}
