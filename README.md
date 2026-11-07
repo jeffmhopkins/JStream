@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `░░░░░░░░░░` 0% | 0 | 0 | 19 | 0 |
+| `░░░░░░░░░░` 0% | 0 | 0 | 20 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -196,6 +196,17 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 |  |
 |  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 |  |
 
+<details open>
+<summary><b>Roadmap items in 0.1.0-alpha.5</b>: 0 of 1 merged</summary>
+
+A gate item (🚧) is one the release waits for.
+
+| ID | Item | Gate | Milestone | Status | PRs |
+|---|---|---|---|---|---|
+| PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) |  | M3 | ⏳ planned | #1263 |
+
+</details>
+
 ### Whole app
 
 Every roadmap item, by milestone.
@@ -208,12 +219,12 @@ Every roadmap item, by milestone.
 | [M1c: Virtual camera](ROADMAP.md#m1) | `██████████` 100% | 7 | 0 | 0 |
 | [M1d: Hardening](ROADMAP.md#m1) | `█████████░` 91% | 10 | 0 | 1 |
 | [M2: UI](ROADMAP.md#m2) | `██████████` 96% | 27 | 0 | 1 |
-| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 79% | 33 | 0 | 9 |
+| [M3: Depth and reach](ROADMAP.md#m3) | `████████░░` 77% | 33 | 0 | 10 |
 
-145 of 156 items are merged; 21 of those still wait on a run on Windows hardware.
+145 of 157 items are merged; 21 of those still wait on a run on Windows hardware.
 
 <details open>
-<summary><b>What's left</b>: 32 items, by next step: 🔨 build 12, 🧪 Windows run 19, 👤 maintainer 1</summary>
+<summary><b>What's left</b>: 33 items, by next step: 🔨 build 12, 🧪 Windows run 19, 👤 maintainer 1, ❔ not set 1</summary>
 
 The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMAP.md#endgame).
 
@@ -249,6 +260,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | HK1 | Hotkeys show, hide and toggle one item, with the item's own effects (ADR-0101) | M3 | 🧪 Windows run | Protocol 0.80; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1082, #1176 |
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | M3 | 🧪 Windows run | Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | M3 | 🧪 Windows run | Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
+| PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | M3 | ❔ not set |  | #1263 |
 | CB3 | Opacity above 1 as a gain, so additive items can add more than their source | M3 | 🧪 Windows run | Protocol 0.83; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1104, #1176 |
 | RL4 | Release 0.1.0-alpha.4: the version bump, then the acceptance run on Windows | M3 | 🧪 Windows run | Released as v0.1.0-alpha.4 (#1179); the acceptance run on Windows, building a layered, animated scene over MCP and reading its profile, runs on the released build | #1179 |
 
@@ -417,7 +429,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 </details>
 
 <details>
-<summary><b>M3</b> Depth and reach: 33 of 42 merged</summary>
+<summary><b>M3</b> Depth and reach: 33 of 43 merged</summary>
 
 | ID | Item | Status | PRs |
 |---|---|---|---|
@@ -454,6 +466,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | FS1 | Frame sheets, so an agent can check motion (video.frames, scene.switch_and_watch) | 🧪 merged, Windows run pending: Protocol 0.82; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1080, #1176 |
 | PA1 | Page API part 1: ADR-0102 and shared values (values.set, values.list) | ✅ merged | #1077, #1127 |
 | PA2 | Page API part 2: window.jstream with clock, visibility, scenes and values | 🧪 merged, Windows run pending: Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147) | #1146, #1178 |
+| PA3 | Page API part 3: a bus's levels and bands for pages (jstream.levels) | ⏳ planned | #1263 |
 | PF1 | Per-item, per-source and per-thread performance profile over the protocol and MCP (ADR-0103) | ✅ merged | #1087 |
 | PS1 | A hidden browser page rests while no mix draws it | ✅ merged | #1100 |
 | PS2 | Software compositing: a nested scene drawn once a frame, and blur taps bounded lower | ✅ merged | #1106 |

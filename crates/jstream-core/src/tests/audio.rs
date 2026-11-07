@@ -51,7 +51,7 @@ fn engine_with(audio: &FakeAudioIo, clock: &FakeClock, media: FakeMediaDecoders)
         .with_publish(Box::new(RecordingPublish::new()))
 }
 
-fn audio_source(id: &str, kind: &str, setting: Option<(&str, &str)>) -> Edit {
+pub(super) fn audio_source(id: &str, kind: &str, setting: Option<(&str, &str)>) -> Edit {
     Edit::SourceCreate {
         source_id: SourceId::new(id),
         name: id.into(),
