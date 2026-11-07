@@ -1921,4 +1921,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .hl-call { color: var(--code-call); }
 .shader-status { margin: 0; font-size: 12px; color: var(--muted); }
 .shader-status.problem { margin: 0; color: var(--problem); white-space: pre-wrap; }
+.shader-save-as { display: grid; gap: 6px; padding: 0 16px 12px; }
+.shader-save-as .add-note, .shader-save-as .shader-status { margin: 0; }
+.shader-save-as-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.shader-save-as-row input { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.shader-save-as-open { margin-right: auto; }
 .shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }
