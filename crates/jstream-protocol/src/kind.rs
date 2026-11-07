@@ -134,7 +134,7 @@ pub struct ParamDescriptor {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// One line a client shows beside the control, not only in a tooltip: what setting
-    /// it gives away (0.95, ADR-0124). A client that predates it ignores it.
+    /// it gives away (0.93, ADR-0124). A client that predates it ignores it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub warning: Option<String>,
     /// UI hint: the group to show it in.

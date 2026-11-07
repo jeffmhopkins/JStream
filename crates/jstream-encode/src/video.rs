@@ -5,7 +5,7 @@ use jstream_platform::{
     CodecInfo, Codecs, GpuContext, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
 
-use crate::session::{Core, Counters, Driver, InputHandle};
+use crate::session::{Core, Counters, Driver, InputHandle, StatsHandle};
 use crate::{
     EncodeError, EncoderSettings, PushError, SessionOptions, SessionStats, StreamInfo, Subscription,
 };
@@ -232,6 +232,12 @@ impl VideoSession {
     /// The session's counters now.
     pub fn stats(&self) -> SessionStats {
         self.core.stats()
+    }
+
+    /// A handle that reads the session's counters from anywhere, without keeping the
+    /// session or its encode thread alive.
+    pub fn stats_handle(&self) -> StatsHandle {
+        self.core.stats_handle()
     }
 
     /// Ends the session: refuses further input, encodes the frames still queued, drains

@@ -35,8 +35,8 @@ use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
-    Drawer, DrawerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
@@ -1790,6 +1790,47 @@ fn profile_info() -> ProfileInfo {
                 cpu_pct: ms(6.5),
             },
         ],
+        streams: vec![
+            StreamProfile {
+                stream: ProfileStream::Output {
+                    output_id: OutputId::new("out_yt"),
+                },
+                fps: ms(30.0),
+                frames_in: 150,
+                encoded: 149,
+                frames_out: 148,
+                dropped: 2,
+                late: 3,
+                encode_ms: ms(4.5),
+                kbps: 6_210,
+                target_kbps: 6_160,
+            },
+            StreamProfile {
+                stream: ProfileStream::Preview {
+                    channel: 1,
+                    scene_id: Some(SceneId::new("scn_2")),
+                    source_id: None,
+                },
+                fps: ms(15.0),
+                frames_in: 75,
+                encoded: 75,
+                frames_out: 75,
+                dropped: 0,
+                late: 0,
+                encode_ms: ms(2.0),
+                kbps: 1_700,
+                target_kbps: 1_728,
+            },
+        ],
+        mixer: Some(MixerProfile {
+            blocks: 234,
+            late_blocks: 1,
+            block_max_ms: ms(22.5),
+            block_ms: ms(21.333),
+            skipped_frames: 0,
+            underrun_frames: 480,
+            dropped_frames: 0,
+        }),
     }
 }
 

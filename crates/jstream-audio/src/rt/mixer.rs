@@ -477,6 +477,20 @@ impl Mixer {
         self.position
     }
 
+    /// When [`poll`](Self::poll) will next mix a block: the clock time the next block's
+    /// end plus the latency falls on, or `None` before the first poll starts the time
+    /// line. A real-time loop sleeps until then instead of polling.
+    pub fn next_due(&self) -> Option<MediaTime> {
+        let block = self.config.block_frames as i64;
+        let latency = self.config.latency_frames as i64;
+        self.position.map(|pos| {
+            MediaTime::new(
+                pos.saturating_add(block).saturating_add(latency),
+                self.timebase,
+            )
+        })
+    }
+
     /// The engine frame at media time `t` (rounded down), or `None` if it doesn't fit.
     pub fn engine_frame(&self, t: MediaTime) -> Option<i64> {
         t.rescale(self.timebase, Rounding::Down)
@@ -1187,6 +1201,28 @@ mod tests {
                 "{c:?}"
             );
         }
+    }
+
+    /// `next_due` is when `poll` mixes next: none before the first poll, then the next
+    /// block's end plus the latency, and `poll` mixes exactly from that time.
+    #[test]
+    fn next_due_is_when_poll_mixes_next() {
+        let mut m = Mixer::new(MixerConfig::default()).unwrap();
+        let config = m.config();
+        let mut out = vec![0.0f32; config.block_frames * 2];
+        let at = |frame: i64| MediaTime::new(frame, Timebase::per_second(RATE).unwrap());
+        assert_eq!(m.next_due(), None);
+        let start = 10_000;
+        assert!(m.poll(at(start), &mut out).unwrap().is_none());
+        let due = m.next_due().expect("started");
+        let expected = start + config.block_frames as i64;
+        assert_eq!(due, at(expected));
+        assert!(m.poll(at(expected - 1), &mut out).unwrap().is_none());
+        assert!(m.poll(due, &mut out).unwrap().is_some());
+        assert_eq!(
+            m.next_due(),
+            Some(at(expected + config.block_frames as i64))
+        );
     }
 
     #[test]
