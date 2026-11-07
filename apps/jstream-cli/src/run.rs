@@ -954,6 +954,9 @@ fn report(error: &CliError, json: bool, err: &mut dyn Write) {
             CliError::GatesFailed => {
                 json!({"error": {"code": "gates_failed", "message": error.to_string()}})
             }
+            CliError::Bench(message) => {
+                json!({"error": {"code": "bench_failed", "message": message}})
+            }
         };
         writeln!(err, "{body}")
     } else {

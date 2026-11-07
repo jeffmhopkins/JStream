@@ -239,7 +239,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `--json` (found among the global options even when parsing fails): an object
   `{"error": {"code": …, "message": …}}`. For an engine error it is the protocol's wire
   error, with its detail fields; otherwise the code is one of the CLI's own, `usage`,
-  `disconnected`, `io` or `gates_failed`, which appear only in JSON output.
+  `disconnected`, `io`, `gates_failed` or `bench_failed`, which appear only in JSON output.
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
   When the server dropped events because the CLI read too slowly, it prints
@@ -295,7 +295,10 @@ measured the same way on every machine (#1220).
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.
-- **Gates.** Every count is over the window. By default (the alpha.5 bar) a run fails on
+- **Gates.** Every count is over the window, except two that only make the gates
+  stricter: the recording's own dropped frames and packets are its run's totals, so
+  they include its start before the first recorded frame, and `profile.get` covers the
+  last `--seconds` before it is read, up to one more tick after the window closes. By default (the alpha.5 bar) a run fails on
   any dropped frame or packet at any stage of `stats.tick`'s drop counts or the
   recording's own, a skipped render tick, a program frame over its budget, a recording
   under 98% of the program's frame rate, or a switch without a frame sheet. `--gates
@@ -308,8 +311,13 @@ measured the same way on every machine (#1220).
   gate's measured value, limit and verdict, and writes `<dir>/report.json` with
   everything measured: the drops, the recording's frames, rate, bit rate and drops, the
   switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
-  when one failed (the files are written either way); an engine that refuses the
-  scenario exits with that error's code. `--json` changes only the error format.
+  when one failed (the files are written either way). It exits 5 when a run couldn't
+  finish: the recording sent no frame within 20 seconds (on an engine with no H.264
+  encoder, say), or the engine answered with something the bench can't read. An engine
+  that refuses the scenario exits with that error's code.
+- **The engine writes the recording**, to the path the CLI made of `--out`. So the
+  engine must be able to write there: it runs on the same machine, or the path is one
+  both share. Otherwise its recording fails to start and the run exits 5. `--json` changes only the error format.
 - **Not yet:** media, browser, display and webcam scenarios; per-output and preview
   stream stats in `profile.get`; the clients' received frame rate; an image-quality
   probe; a CI job (#1220).
@@ -324,6 +332,7 @@ measured the same way on every machine (#1220).
 | 2 | Usage: the command line could not be parsed, or names no engine or no readable token file |
 | 3 | `Disconnected`: no connection to the engine (unreachable, or it refused the token, `Origin` or `Host`), or it was lost (whether the call took effect is unknown) |
 | 4 | `bench` ran, and at least one of its gates failed |
+| 5 | `bench` couldn't finish a run: the recording sent no frame, or the engine answered with something it can't read |
 | 10 | `unsupported_version` |
 | 11 | `handshake_required` |
 | 12 | `malformed` |
@@ -402,7 +411,7 @@ depends_on = ["crates/jstream-control/README.md#design"]
   geometry.
 - **The bench is a client like the rest.** It measures only what the protocol reports
   (`stats.tick`, `profile.get`, `scene.switch_and_watch`), so it runs against any engine
-  the CLI can reach and needs no engine code. It reads events between its calls by
+  the CLI can reach that can write to `--out`, and needs no engine code. It reads events between its calls by
   polling the stream with a no-op waker, which never blocks, and decodes the frame
   sheets' base64 PNG by hand rather than adding a crate for it. Its tests run it on the
   mock with synthetic `stats.tick` events: the mock has no profile and no frame sheets,
@@ -432,7 +441,8 @@ depends_on = ["crates/jstream-control/README.md#design"]
    its state (a file option) until a real engine can be reached?
 3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
    or remove it once an engine host serves the WebSocket API.
-4. **Exit codes.** The numbering (2 usage, 3 disconnected, 4 a failed bench gate, 10 and up
+4. **Exit codes.** The numbering (2 usage, 3 disconnected, 4 a failed bench gate, 5 a bench
+   that couldn't run, 10 and up
    for protocol codes) is provisional until the maintainer confirms it. A refused token exits 3
    with a reason naming HTTP 401; a code of its own may be clearer for scripts.
 5. **Defaults.** No default `--url` (the daemon's port is not chosen yet; it listens

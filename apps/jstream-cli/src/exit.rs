@@ -20,6 +20,9 @@ pub const USAGE: u8 = 2;
 pub const DISCONNECTED: u8 = 3;
 /// `bench` ran, and at least one of its gates failed.
 pub const GATES_FAILED: u8 = 4;
+/// `bench` couldn't finish its run: the recording sent no frame, or the engine answered
+/// with something the bench can't read.
+pub const BENCH_FAILED: u8 = 5;
 
 /// The exit code for an error the engine answered with: 10 plus a fixed number per
 /// protocol error code. A code this CLI doesn't know yet (from a newer engine) is 20.
@@ -53,6 +56,8 @@ pub enum CliError {
     /// `bench` ran to the end, and at least one of its gates failed. Its summary says
     /// which.
     GatesFailed,
+    /// `bench` couldn't finish a run. The message says why.
+    Bench(String),
 }
 
 impl CliError {
@@ -61,6 +66,7 @@ impl CliError {
         match self {
             CliError::Usage(_) => USAGE,
             CliError::GatesFailed => GATES_FAILED,
+            CliError::Bench(_) => BENCH_FAILED,
             CliError::Io(_) | CliError::Read(_) => IO,
             CliError::Control(ControlError::Protocol(wire)) => for_protocol(&wire.error),
             CliError::Control(_) => DISCONNECTED,
@@ -82,6 +88,7 @@ impl fmt::Display for CliError {
             CliError::Io(error) => write!(f, "could not write the output: {error}"),
             CliError::Read(error) => write!(f, "could not read the input: {error}"),
             CliError::GatesFailed => f.write_str("the bench failed at least one gate"),
+            CliError::Bench(message) => write!(f, "the bench couldn't run: {message}"),
         }
     }
 }
@@ -100,7 +107,7 @@ impl From<io::Error> for CliError {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliError, DISCONNECTED, GATES_FAILED, IO, USAGE, for_protocol};
+    use super::{BENCH_FAILED, CliError, DISCONNECTED, GATES_FAILED, IO, USAGE, for_protocol};
     use jstream_control::ControlError;
     use jstream_control::protocol::{EntityKind, ProtocolError, ProtocolVersion, Rev};
     use std::collections::BTreeSet;
@@ -158,7 +165,7 @@ mod tests {
             ]
         );
         let mut all: BTreeSet<u8> = codes.iter().map(|(_, c)| *c).collect();
-        for fixed in [0, IO, USAGE, DISCONNECTED, GATES_FAILED] {
+        for fixed in [0, IO, USAGE, DISCONNECTED, GATES_FAILED, BENCH_FAILED] {
             assert!(all.insert(fixed), "exit code {fixed} is reused");
         }
     }

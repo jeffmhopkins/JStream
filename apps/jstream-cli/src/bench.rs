@@ -338,7 +338,7 @@ fn program_scene(control: &dyn Control) -> Result<Option<SceneId>, CliError> {
 fn query(control: &dyn Control, query: Query) -> Result<QueryResult, CliError> {
     match block_on(control.call(Call::Query { query }))?.result {
         CallResult::Query { result } => Ok(result),
-        other => Err(CliError::Usage(format!(
+        other => Err(CliError::Bench(format!(
             "the engine answered a query with {other:?}"
         ))),
     }
@@ -736,7 +736,7 @@ fn measure(
             break tick;
         }
         if started.elapsed() > START_TIMEOUT {
-            return Err(CliError::Usage(format!(
+            return Err(CliError::Bench(format!(
                 "the recording sent no frame within {}s",
                 START_TIMEOUT.as_secs()
             )));
@@ -830,7 +830,7 @@ fn switch(
     );
     let saved = watched.and_then(|result| match result {
         Some(ActionResult::SceneSwitchAndWatch { sheet }) => save_sheet(&sheet, dir, n),
-        _ => Err(CliError::Usage("no frame sheet came back".into())),
+        _ => Err(CliError::Bench("no frame sheet came back".into())),
     });
     match saved {
         Ok(file) => Switch {
@@ -850,7 +850,7 @@ fn switch(
 
 fn save_sheet(sheet: &FrameSheet, dir: &Path, n: usize) -> Result<String, CliError> {
     let png = decode_base64(&sheet.png)
-        .ok_or_else(|| CliError::Usage("the frame sheet's PNG is not base64".into()))?;
+        .ok_or_else(|| CliError::Bench("the frame sheet's PNG is not base64".into()))?;
     let file = format!("switch-{n}.png");
     std::fs::write(dir.join(&file), png)?;
     Ok(file)
@@ -1316,6 +1316,7 @@ mod tests {
         options.scenarios = vec![Scenario::Layered];
         let error = run(&control, &options, &mut Vec::new()).expect_err("no stats ticks");
         assert!(error.to_string().contains("no frame"), "{error}");
+        assert_eq!(error.exit_code(), crate::exit::BENCH_FAILED);
         assert_eq!(leftovers(&control), Vec::<String>::new());
         let _ = std::fs::remove_dir_all(&dir);
     }

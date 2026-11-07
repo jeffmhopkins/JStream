@@ -87,8 +87,9 @@ Commands:
                                    fails: by default any dropped frame or packet,
                                    a skipped render tick, a program frame over
                                    budget or a recording under 98% of the
-                                   program's rate. <file> is JSON naming other
-                                   limits (see the README)
+                                   program's rate; 5 when a run couldn't finish.
+                                   <file> is JSON naming other limits (see the
+                                   README)
   mcp                              serve MCP on stdin/stdout (one JSON-RPC message
                                    per line) over this connection, until stdin ends
   help                             print this help
@@ -133,7 +134,8 @@ Edits (each is its protocol command name followed by its arguments):
   item.add fits a display, window or webcam source to the canvas, and places any
   other source at 1:1; item.set_geometry in the same batch overrides either.
 
-Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 4 bench gate failed, 10-20 engine errors
+Exit codes: 0 ok, 1 output error, 2 usage, 3 disconnected, 4 bench gate failed,
+5 bench couldn't run, 10-20 engine errors
 (see the README for the full table).
 ";
 
