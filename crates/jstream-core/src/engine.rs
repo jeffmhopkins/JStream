@@ -1805,9 +1805,10 @@ impl Engine {
         {
             // Outside the collection lock: reading the threads makes system calls.
             let cpu = self.shared.load.cpu_time();
+            let inputs = drops::lock_ledger(&self.drops).input_totals();
             Ok(CallResult::Query {
                 result: QueryResult::ProfileGet {
-                    profile: self.shared.profile.profile(*seconds, *top, cpu),
+                    profile: self.shared.profile.profile(*seconds, *top, cpu, inputs),
                 },
             })
         } else if let Call::Action {
@@ -2069,6 +2070,7 @@ impl Engine {
                         scene: scene_id.clone(),
                         source_id: source_id.clone(),
                         draft,
+                        streams: Some(self.shared.profile.stream_registry()),
                     },
                 )?;
                 if scene_id.is_some() || source_id.is_some() {
@@ -3613,7 +3615,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     // And the outputs' meters, whose lock is never taken with the collection's.
     let outputs = lock(&shared.output_meters).sample(Instant::now());
     // A profile reading too (ADR-0103), whose locks are its own.
-    shared.profile.sample(cpu);
+    let inputs = drops::lock_ledger(ledger).input_totals();
+    shared.profile.sample(cpu, inputs);
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);

@@ -4274,6 +4274,71 @@ mod cpu_pipeline {
         );
     }
 
+    /// `profile.get` (protocol 0.92) lists a running output's stream, from its encoder
+    /// to what it published, and the mixer's blocks; a stopped output is left out of a
+    /// window that starts after it.
+    #[test]
+    fn profile_get_lists_a_running_outputs_stream_and_the_mixer() {
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(publish.clone()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        let profile = || match query(
+            &control,
+            Query::ProfileGet {
+                seconds: Some(60),
+                top: None,
+            },
+        )
+        .expect("profile.get")
+        {
+            QueryResult::ProfileGet { profile } => profile,
+            other => panic!("not a profile: {other:?}"),
+        };
+        let mut last = None;
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                let info = profile();
+                let ready = info.mixer.is_some_and(|mixer| mixer.blocks > 0)
+                    && info.streams.iter().any(|stream| stream.frames_out >= 2);
+                last = Some(info);
+                ready
+            }),
+            "no stream or mixer in {last:?}"
+        );
+        let info = last.expect("a profile");
+        let stream = info
+            .streams
+            .iter()
+            .find(|stream| {
+                stream.stream
+                    == jstream_protocol::ProfileStream::Output {
+                        output_id: OutputId::new("yt"),
+                    }
+            })
+            .expect("the output's stream");
+        assert!(stream.frames_in >= stream.frames_out, "{stream:?}");
+        assert!(stream.encoded >= 1, "{stream:?}");
+        assert_eq!(stream.dropped, 0, "{stream:?}");
+        assert!(stream.target_kbps > 0, "{stream:?}");
+        assert!(stream.fps.get() > 0.0, "{stream:?}");
+        let mixer = info.mixer.expect("the mixer");
+        assert!(mixer.block_ms.get() > 0.0, "{mixer:?}");
+        assert!(mixer.late_blocks <= mixer.blocks, "{mixer:?}");
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert!(
+            wait_until(|| profile().streams.is_empty()),
+            "a stopped output is left out"
+        );
+    }
+
     // --- Item: a failed start's teardown does not overlap the next start.
 
     /// Fails its first tag, the FLV header the output thread sends before the start

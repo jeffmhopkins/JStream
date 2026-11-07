@@ -127,8 +127,8 @@ pub use preview::{
 };
 pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
-    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,

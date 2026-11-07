@@ -22,6 +22,7 @@ use crate::project::{OpenProject, ProjectAsk, ProjectDialog, open_now, project_n
 use crate::projector::{self, Request, Target};
 use crate::store::Studio;
 use crate::updates::{SettingsDialog, UpdateDialog};
+use crate::video_settings::VideoSettingsDialog;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -310,6 +311,7 @@ pub fn Header(
     let open = RwSignal::new(None::<Menu>);
     let about_open = RwSignal::new(false);
     let settings_open = RwSignal::new(false);
+    let video_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
     // The project dialog, with the path its field starts with.
     let project_ask = RwSignal::new(None::<(ProjectAsk, String)>);
@@ -649,6 +651,16 @@ pub fn Header(
                         >
                             "Settings…"
                         </button>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
+                                video_open.set(true);
+                            }
+                        >
+                            "Video settings…"
+                        </button>
                         <button class="menuitem" role="menuitem" on:click=move |_| disconnect.with_value(|d| d())>
                             "Disconnect"
                         </button>
@@ -816,6 +828,9 @@ pub fn Header(
             </Show>
             <Show when=move || settings_open.get()>
                 <SettingsDialog close=move || settings_open.set(false) />
+            </Show>
+            <Show when=move || video_open.get()>
+                <VideoSettingsDialog close=move || video_open.set(false) />
             </Show>
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />

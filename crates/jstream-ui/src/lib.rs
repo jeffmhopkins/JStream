@@ -38,6 +38,7 @@ pub mod session;
 pub mod store;
 pub mod ui_settings;
 pub mod updates;
+pub mod video_settings;
 pub mod workspace;
 
 pub use app::{App, SessionContext};
