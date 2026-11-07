@@ -5517,7 +5517,7 @@ impl State {
         }
         // Every mix and preview has looked at what it draws: the rest can rest.
         live.rest_undrawn();
-        live.wake_at(wake);
+        live.wake_at(wake, graph.state().base_fps());
         live.meters().planned(started.elapsed());
         planning.end_ms
     }
