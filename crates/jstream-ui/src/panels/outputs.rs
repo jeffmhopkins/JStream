@@ -1502,10 +1502,18 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
             )
             .await;
             let outcome = match sent {
-                Ok(output_id) if change != KeyChange::Keep => {
-                    panel.refresh_status(&session, output_id).await
+                Ok(output_id) => {
+                    // From here on a retry edits this output: if the status read below
+                    // fails, Add again must not create a second one.
+                    if is_new {
+                        created.try_set(Some(output_id.clone()));
+                    }
+                    if change == KeyChange::Keep {
+                        Ok(())
+                    } else {
+                        panel.refresh_status(&session, output_id).await
+                    }
                 }
-                Ok(_) => Ok(()),
                 Err(failure) => {
                     if failure.created.is_some() {
                         created.try_set(failure.created);
@@ -1537,7 +1545,7 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
     };
     let sub = move || {
         if let Some(made) = created.get() {
-            format!("{made} was added; its stream key was not set")
+            format!("{made} was added; Add again retries only what failed")
         } else if is_new {
             format!(
                 "It will be {}",
