@@ -427,19 +427,43 @@ impl Engine {
                     scan: self.shared.clap.info(),
                 },
             })),
-            Call::Action {
-                action: Action::PluginClapRescan,
-            } => Some(match self.shared.clap.hosts() {
-                Some(hosts) => {
-                    self.rescan_clap(hosts);
-                    Ok(CallResult::action())
-                }
-                None => Err(ProtocolError::Unsupported {
-                    call: "plugin.clap_rescan".into(),
-                }),
-            }),
             _ => None,
         }
+    }
+
+    /// `plugin.clap_rescan` (0.95): scans on a `jstream-clap-scan` thread, as the startup
+    /// scan runs, and answers once it ends. Each plugin file is scanned in its own host
+    /// process, so a scan can take seconds; the session that asked keeps its events,
+    /// frames and other answers meanwhile. The call is audited when it answers.
+    fn clap_rescan(
+        &self,
+        audit: audit::Pending,
+        client_id: &ClientId,
+        request_id: &RequestId,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        let Some(hosts) = self.shared.clap.hosts() else {
+            let result = Err(ProtocolError::Unsupported {
+                call: "plugin.clap_rescan".into(),
+            });
+            self.record(audit.finish(client_id, request_id, &result));
+            reply.send(result);
+            return waiting;
+        };
+        let engine = self.clone();
+        let (client_id, request_id) = (client_id.clone(), request_id.clone());
+        let spawned = thread::Builder::new()
+            .name("jstream-clap-scan".into())
+            .spawn(move || {
+                engine.rescan_clap(hosts);
+                let result = Ok(CallResult::action());
+                engine.record(audit.finish(&client_id, &request_id, &result));
+                reply.send(result);
+            });
+        if let Err(error) = spawned {
+            tracing::warn!(%error, "could not start a thread to rescan the CLAP plugins");
+        }
+        waiting
     }
 
     /// Loads the WGSL effect packs in `root`, a folder of pack folders (ADR-0035), and
@@ -1741,9 +1765,10 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot` runs to completion here. A snapshot is queued
-    /// for the snapshot thread and comes back [`Executed::Pending`], with its span; its
-    /// outcome is logged when it completes.
+    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// `plugin.clap_rescan` runs to completion here. Those are answered from another
+    /// thread and come back [`Executed::Pending`], with their span; their outcome is
+    /// logged when they complete.
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
@@ -1766,6 +1791,16 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if matches!(
+            call,
+            Call::Action {
+                action: Action::PluginClapRescan
+            }
+        ) {
+            let audit = self.audit_context(client_id, &call);
+            drop(_entered);
+            return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },

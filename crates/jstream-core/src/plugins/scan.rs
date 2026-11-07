@@ -34,6 +34,18 @@ impl Drop for Scanning<'_> {
     }
 }
 
+/// The most of a failure reason `plugin.clap_scan` reports, in characters. A plugin
+/// host's error can carry a long stderr; the whole of it is in the log.
+const REASON_MAX: usize = 300;
+
+/// `reason`, cut to [`REASON_MAX`] characters with an ellipsis when longer.
+fn clipped(reason: &str) -> String {
+    match reason.char_indices().nth(REASON_MAX) {
+        Some((end, _)) => format!("{}…", &reason[..end]),
+        None => reason.to_owned(),
+    }
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -99,7 +111,7 @@ impl ClapScans {
         let failed = scan
             .failed
             .iter()
-            .map(|(file, reason)| ClapFailed::new(file.display().to_string(), reason.clone()))
+            .map(|(file, reason)| ClapFailed::new(file.display().to_string(), clipped(reason)))
             .collect();
         ClapScanInfo::available(
             folders,
@@ -114,6 +126,15 @@ impl ClapScans {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_long_failure_reason_is_clipped() {
+        assert_eq!(clipped("short"), "short");
+        let long = "é".repeat(REASON_MAX + 5);
+        let clipped = clipped(&long);
+        assert_eq!(clipped.chars().count(), REASON_MAX + 1);
+        assert!(clipped.ends_with('…'));
+    }
     use crate::plugins::kinds::ClapKind;
     use jstream_platform::PlatformError;
     use jstream_plugin_proto::control::PluginDesc;

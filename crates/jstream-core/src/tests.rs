@@ -668,6 +668,72 @@ fn clap_rescan_finds_a_plugin_installed_since_and_the_scan_reports_it() {
     assert!(kinds.iter().any(|k| k.kind_id == "clap/org.example.verb"));
 }
 
+/// `plugin.clap_rescan` scans on its own thread: while it runs, the session that asked
+/// still gets answers, and `plugin.clap_scan` reports it as scanning (#1288).
+#[test]
+fn a_clap_rescan_does_not_hold_up_the_session_that_asked() {
+    use jstream_platform::plugin_host::fake::FakePluginHosts;
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Mutex};
+
+    /// Hosts whose scan waits while the test holds `gate`.
+    struct Gated(PathBuf, Arc<Mutex<()>>, FakePluginHosts);
+    impl PluginHosts for Gated {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            let _wait = self
+                .1
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.2.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.2.start(request)
+        }
+    }
+    let scanning = |control: &dyn Control| match query(control, Query::PluginClapScan) {
+        Ok(QueryResult::PluginClapScan { scan }) => scan.scanning,
+        other => panic!("plugin.clap_scan: {other:?}"),
+    };
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let dir =
+        std::env::temp_dir().join(format!("jstream-engine-clap-gated-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.clap"), b"").unwrap();
+    let gate = Arc::new(Mutex::new(()));
+    engine.scan_clap_plugins(Arc::new(Gated(
+        dir.clone(),
+        Arc::clone(&gate),
+        FakePluginHosts::new(),
+    )));
+    assert!(!scanning(&control));
+
+    let held = gate.lock().unwrap();
+    let rescan = control.call(Call::Action {
+        action: Action::PluginClapRescan,
+    });
+    // The rescan waits on the gate; the session still answers, and reports it.
+    assert!(query(&control, Query::KindList).is_ok());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !scanning(&control) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never reported scanning"
+        );
+        std::thread::yield_now();
+    }
+    drop(held);
+    block_on(rescan).expect("rescan");
+    assert!(!scanning(&control));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
 /// The engine takes scene filters and item effects (ADR-0065), which run on the scene's
 /// composite and the item's box, reports them, and refuses a missing owner as the graph
 /// does.

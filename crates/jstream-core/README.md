@@ -143,8 +143,12 @@ state machine. Contents:
     `plugin.clap_scan`, which reports the folders the hosts search
     (`PluginHosts::folders`, with whether each exists), the effects found and the files
     that failed, and `plugin.clap_rescan` (protocol 0.95), which scans again with the
-    same hosts and answers once it ends. One scan runs at a time; a rescan during the
-    start-up scan waits for it, and the query says `scanning` meanwhile. Without hosts
+    same hosts and answers once it ends. The rescan runs on a `jstream-clap-scan`
+    thread, as the start-up scan runs on the host's, so the session that asked keeps
+    its events, frames and other answers meanwhile, and the call is audited when it
+    answers. One scan runs at a time; a rescan during another scan waits for it, and the
+    query says `scanning` meanwhile. The query cuts each failure reason to 300
+    characters; the log keeps the whole of it. Without hosts
     the query says CLAP is unavailable, with the reason a host gave
     `Engine::set_clap_unavailable`, and the rescan is `unsupported`. The scan logs each
     file that failed and how many effects it found.
@@ -740,7 +744,8 @@ WebSocket API does, minus serialization:
   come back in the `Response` and in the `state.changed` event a batch causes.
 - Calls run to completion inside `call`, so their futures are already complete,
   except `video.snapshot`'s: it completes, and wakes its waker, when the snapshot
-  thread has drawn the frame (see *Snapshots*). Any executor drives the session, or
+  thread has drawn the frame (see *Snapshots*). Frame sheets and `plugin.clap_rescan`
+  complete the same way, from their own threads. Any executor drives the session, or
   a poll loop that parks until woken, and it needs no async runtime. It never fails
   with `Disconnected`. `output.start` and `output.stop` still block inside `call`
   while devices open and threads join.
