@@ -10,7 +10,9 @@
 //! other system libraries are (ADR-0060 §8).
 //!
 //! A grab names exact modifiers, so each chord is grabbed four times: alone, with Caps
-//! Lock, with Num Lock and with both, which X counts as modifiers too. Holding a chord
+//! Lock, with Num Lock and with both, which X counts as modifiers too. Num Lock, Alt and
+//! Super may sit on any of Mod1 to Mod5, so their masks come from the server's modifier
+//! map, read again (and the chords grabbed again) when it changes. Holding a chord
 //! runs it once: X's auto-repeat sends a release and a press with the same timestamp,
 //! and that press is dropped, as `MOD_NOREPEAT` does on Windows.
 //!
@@ -346,6 +348,9 @@ mod listener {
     /// `XCB_KEY_PRESS` and `XCB_KEY_RELEASE`.
     const KEY_PRESS: u8 = 2;
     const KEY_RELEASE: u8 = 3;
+    /// `XCB_MAPPING_NOTIFY`, and its `request` when the modifier map changed.
+    const MAPPING_NOTIFY: u8 = 34;
+    const MAPPING_MODIFIER: u8 = 0;
     /// `XCB_GRAB_MODE_ASYNC`.
     const GRAB_MODE_ASYNC: u8 = 1;
     /// `BadAccess`: another client has grabbed the chord.
@@ -577,25 +582,31 @@ mod listener {
             let _ = unsafe { (self.xcb.flush)(self.connection) };
         }
 
-        /// The next queued key press or release, as (press, keycode, state, time), and
-        /// `Some(None)` for any other event; `None` when nothing is queued.
-        fn next_event(&self) -> Option<Option<(bool, u8, u16, u32)>> {
+        /// The next queued event, or `None` when nothing is queued.
+        fn next_event(&self) -> Option<XEvent> {
             // SAFETY: the connection is open.
             let event = unsafe { (self.xcb.poll_for_event)(self.connection) };
             if event.is_null() {
                 return None;
             }
             // SAFETY: every event is 32 bytes, the size of `KeyEvent`, and starts with
-            // its response type; the key fields are read only for key events.
-            let (kind, keycode, state, time) = unsafe {
+            // its response type; the key fields are read only for key events, and
+            // `MappingNotify`'s `request` is its fifth byte.
+            let (kind, keycode, state, time, request) = unsafe {
                 let e = &*event;
-                (e.response_type & 0x7F, e.detail, e.state, e.time)
+                let request = event.cast::<u8>().add(4).read();
+                (e.response_type & 0x7F, e.detail, e.state, e.time, request)
             };
             free(event.cast());
             Some(match kind {
-                KEY_PRESS => Some((true, keycode, state, time)),
-                KEY_RELEASE => Some((false, keycode, state, time)),
-                _ => None,
+                KEY_PRESS | KEY_RELEASE => XEvent::Key {
+                    press: kind == KEY_PRESS,
+                    keycode,
+                    state,
+                    time,
+                },
+                MAPPING_NOTIFY if request == MAPPING_MODIFIER => XEvent::ModifiersChanged,
+                _ => XEvent::Other,
             })
         }
     }
@@ -661,6 +672,22 @@ mod listener {
     /// and answer with the ones that couldn't be.
     type Request = (Vec<String>, mpsc::Sender<Vec<(String, String)>>);
 
+    /// What the listener reads from the X server.
+    enum XEvent {
+        /// A key press or release.
+        Key {
+            press: bool,
+            keycode: u8,
+            state: u16,
+            time: u32,
+        },
+        /// The modifier map changed (`xmodmap`, `setxkbmap`): Num Lock, Alt or Super
+        /// may be on another mask now.
+        ModifiersChanged,
+        /// Anything else.
+        Other,
+    }
+
     /// One grabbed chord: its keycode, its modifiers without the locks, and its name.
     struct Grab {
         keycode: u8,
@@ -696,7 +723,7 @@ mod listener {
                 .spawn({
                     let wake = Arc::clone(&wake);
                     let stop = Arc::clone(&stop);
-                    move || run(&display, &wake, &stop, &incoming, &on_press)
+                    move || run(display, &wake, &stop, &incoming, &on_press)
                 })
                 .map_err(|error| PlatformError::Os {
                     call: "std::thread::spawn",
@@ -741,10 +768,11 @@ mod listener {
     }
 
     /// The listener thread: grabs what it is asked to and hands each press to
-    /// `on_press` until it is stopped or the X server goes away. Lets every grab go
-    /// before it returns (and the connection's close would too).
+    /// `on_press` until it is stopped or the X server goes away. When the modifier map
+    /// changes it reads the masks again and grabs the same chords on them. Lets every
+    /// grab go before it returns (and the connection's close would too).
     fn run(
-        display: &Display,
+        mut display: Display,
         wake: &Wake,
         stop: &AtomicBool,
         incoming: &mpsc::Receiver<Request>,
@@ -766,33 +794,56 @@ mod listener {
             },
         ];
         loop {
-            while let Some(event) = display.next_event() {
-                let Some((press, keycode, state, time)) = event else {
-                    continue;
-                };
-                if !press {
-                    last_release = Some((keycode, time));
-                    continue;
-                }
-                if last_release.take() == Some((keycode, time)) {
-                    continue;
-                }
-                let held = display.masks.relevant(state);
-                if let Some(grab) = grabs
-                    .iter()
-                    .find(|g| g.keycode == keycode && g.modifiers == held)
-                {
-                    on_press(&grab.chord);
-                }
-            }
             if stop.load(Ordering::SeqCst) || display.failed() {
                 break;
             }
+            // Requests first: their grabs wait on the server's answers, which can queue
+            // key events, and the drain below hands those on before the thread sleeps.
             while let Ok((chords, reply)) = incoming.try_recv() {
-                ungrab(display, &grabs);
-                let (kept, failed) = grab(display, chords);
+                ungrab(&display, &grabs);
+                let (kept, failed) = grab(&display, chords);
                 grabs = kept;
                 let _ = reply.send(failed);
+            }
+            let mut remapped = false;
+            while let Some(event) = display.next_event() {
+                match event {
+                    XEvent::Key {
+                        press: false,
+                        keycode,
+                        time,
+                        ..
+                    } => last_release = Some((keycode, time)),
+                    XEvent::Key {
+                        keycode,
+                        state,
+                        time,
+                        ..
+                    } => {
+                        if last_release.take() == Some((keycode, time)) {
+                            continue;
+                        }
+                        let held = display.masks.relevant(state);
+                        if let Some(grab) = grabs
+                            .iter()
+                            .find(|g| g.keycode == keycode && g.modifiers == held)
+                        {
+                            on_press(&grab.chord);
+                        }
+                    }
+                    XEvent::ModifiersChanged => remapped = true,
+                    XEvent::Other => {}
+                }
+            }
+            if remapped {
+                ungrab(&display, &grabs);
+                display.masks = display.read_masks();
+                let chords = grabs.drain(..).map(|g| g.chord).collect();
+                // A chord the new masks can't grab is heard only while JStream has the
+                // focus, as one refused at `set` is.
+                grabs = grab(&display, chords).0;
+                // The grabs' answers may have queued events: drain again first.
+                continue;
             }
             display.flush();
             for fd in &mut fds {
@@ -809,7 +860,7 @@ mod listener {
                 wake.clear();
             }
         }
-        ungrab(display, &grabs);
+        ungrab(&display, &grabs);
         display.flush();
     }
 
@@ -1039,6 +1090,61 @@ mod x11_tests {
             }
         }
 
+        /// Moves Num Lock's key onto modifier row `row` (3 is Mod1, 7 is Mod5), off
+        /// every other row, as `xmodmap` would.
+        fn move_num_lock(&self, row: usize) {
+            /// Xlib's `XModifierKeymap`.
+            #[repr(C)]
+            struct ModifierKeymap {
+                max_keypermod: i32,
+                modifiermap: *mut u8,
+            }
+            const NUM_LOCK: u8 = 77;
+            // SAFETY: `XModifierKeymap *XGetModifierMapping(Display *)`, `int
+            // XSetModifierMapping(Display *, XModifierKeymap *)`, `int
+            // XFreeModifiermap(XModifierKeymap *)` and `XSync(Display *, Bool)` on the
+            // open display; the map holds `8 * max_keypermod` keycodes.
+            unsafe {
+                let get = self
+                    .lib_x11
+                    .get::<unsafe extern "C" fn(*mut std::ffi::c_void) -> *mut ModifierKeymap>(
+                        b"XGetModifierMapping",
+                    )
+                    .unwrap_or_else(|e| panic!("XGetModifierMapping: {e}"));
+                let set = self
+                    .lib_x11
+                    .get::<unsafe extern "C" fn(*mut std::ffi::c_void, *mut ModifierKeymap) -> i32>(
+                        b"XSetModifierMapping",
+                    )
+                    .unwrap_or_else(|e| panic!("XSetModifierMapping: {e}"));
+                let free = self
+                    .lib_x11
+                    .get::<unsafe extern "C" fn(*mut ModifierKeymap) -> i32>(b"XFreeModifiermap")
+                    .unwrap_or_else(|e| panic!("XFreeModifiermap: {e}"));
+                let sync = self
+                    .lib_x11
+                    .get::<unsafe extern "C" fn(*mut std::ffi::c_void, i32) -> i32>(b"XSync")
+                    .unwrap_or_else(|e| panic!("XSync: {e}"));
+                let map = get(self.display);
+                assert!(!map.is_null(), "a modifier map");
+                let per = usize::try_from((*map).max_keypermod).unwrap_or(0);
+                let keys = std::slice::from_raw_parts_mut((*map).modifiermap, 8 * per);
+                for key in keys.iter_mut() {
+                    if *key == NUM_LOCK {
+                        *key = 0;
+                    }
+                }
+                let slot = keys[row * per..(row + 1) * per]
+                    .iter_mut()
+                    .find(|k| **k == 0)
+                    .unwrap_or_else(|| panic!("room on row {row}"));
+                *slot = NUM_LOCK;
+                set(self.display, map);
+                free(map);
+                sync(self.display, 0);
+            }
+        }
+
         fn tap(&self, keys: &[&str]) {
             let codes: Vec<u8> = keys
                 .iter()
@@ -1047,6 +1153,7 @@ mod x11_tests {
                     "Shift" => 50,
                     "Alt" => 64,
                     "CapsLock" => 66,
+                    "NumLock" => 77,
                     code => super::key_code(code).unwrap_or_else(|| panic!("{code}")),
                 })
                 .collect();
@@ -1132,6 +1239,16 @@ mod x11_tests {
         assert!(hotkeys.set(vec!["F7".into()]).is_empty());
         keyboard.tap(&["F9"]);
         keyboard.tap(&["F7"]);
+        assert_eq!(pressed(&presses), ["F7"]);
+
+        // Num Lock moved to another modifier (as `xmodmap` can) still hears it: the
+        // listener reads the map again and grabs on the new mask.
+        keyboard.move_num_lock(5);
+        std::thread::sleep(Duration::from_millis(200));
+        keyboard.tap(&["NumLock"]);
+        keyboard.tap(&["F7"]);
+        keyboard.tap(&["NumLock"]);
+        keyboard.move_num_lock(4);
         assert_eq!(pressed(&presses), ["F7"]);
 
         // Holding a chord down runs it once, however long X auto-repeats it.

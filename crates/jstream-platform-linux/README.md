@@ -114,8 +114,11 @@ It has:
   application has the focus. A thread with its own X connection (libxcb, loaded at run
   time) grabs exactly the bound chords on the root window with `xcb_grab_key`, so it
   never sees any other key, and hands each press to a callback. Each chord is grabbed
-  with and without Caps Lock and Num Lock, whose masks, like Alt's and Super's, are read
-  from the server's modifier map. Auto-repeat's press (the one with the same timestamp
+  with and without Caps Lock and Num Lock. Caps Lock is always `LockMask`; Num Lock's
+  mask, like Alt's and Super's, is read from the server's modifier map, and read again
+  when the map changes (`MappingNotify`), when the chords are grabbed again on the new
+  masks. Requests are handled before queued events are read, so a press that arrives
+  while the chords are being grabbed again isn't held back. Auto-repeat's press (the one with the same timestamp
   as the release before it) is dropped, so a held chord runs once. A chord another
   client holds (`BadAccess`) is returned with the reason; `set` swaps the whole set, and
   dropping the listener lets every grab go. Keys go by keycode, a chord key's evdev code
