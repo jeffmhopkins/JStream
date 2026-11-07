@@ -1950,10 +1950,18 @@ quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
 `timer`, which redraws when the value it shows changes)
-is painted by that thread just before each re-plan, holding no engine
-lock, so under the collection lock the plan only takes the frame painted last;
-`install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. The thread paints only the painters the latest round of plans looked at, the
+is painted by that thread, holding no engine lock, so under the collection lock the
+plan only takes the frame painted last; `install`, `sync` and a clock swap hand the
+thread the running painters and their time zeros. A painter's frames go through a
+**frame slot** (`slot.rs`, ADR-0117 §3): a one-frame mailbox made when the source is
+installed, which the plan shows as the source's frame (`Frame::from_slot`). The thread
+paints on its own wake, the earliest `Painter::next_change` rounded to the frame grid
+like a plan's, and stores each new frame in the slot (`FrameSlot::store`) with no
+re-plan; every draw uploads what the slot holds then, by the slot frame's own version,
+and a preview stream that skips an unchanged picture draws one whose slots changed
+(`Shot::slot_stamp`). Only a frame of another size waits for a plan, which the thread
+asks for, since where it is placed depends on its size. A painter whose frames aren't
+packed RGBA8 has no slot and re-plans as other animations do. The thread paints only the painters the latest round of plans looked at, the
 program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
 while something else re-plans every frame; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was

@@ -2638,6 +2638,12 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many plans of the program mix ran (ADR-0103's meters), for tests.
+    #[cfg(test)]
+    pub(crate) fn plans(&self) -> u64 {
+        lock(&self.shared.state).live.meters().plans()
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]

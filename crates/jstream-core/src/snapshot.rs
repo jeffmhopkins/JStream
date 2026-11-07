@@ -127,6 +127,9 @@ enum Pixels {
         frame: GpuFrame,
         context: ContextKey,
     },
+    /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
+    /// by that frame's own version, so a new frame of the same size needs no plan.
+    Slot(Arc<crate::slot::FrameSlot>),
 }
 
 impl PartialEq for Frame {
@@ -202,6 +205,20 @@ impl Frame {
         })
     }
 
+    /// A live source's frame slot, at the size of the frame it holds now: each draw
+    /// shows the slot's latest frame ([`crate::slot`]).
+    pub(crate) fn from_slot(slot: Arc<crate::slot::FrameSlot>, version: u64) -> Self {
+        let size = slot.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Slot(slot),
+            version,
+            model: None,
+        }
+    }
+
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
@@ -251,7 +268,8 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            Pixels::Gpu { .. } => &[],
+            // Read through the slot at a draw ([`compose`]); none to borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) => &[],
         }
     }
 
@@ -264,13 +282,17 @@ impl Frame {
     /// Every pixel, tightly packed, for tests that compare what a source shows.
     #[cfg(test)]
     pub(crate) fn pixels(&self) -> Vec<u8> {
-        self.rgba().to_vec()
+        match &self.pixels {
+            // What a draw would upload now.
+            Pixels::Slot(slot) => crate::slot::rgba(&slot.latest().0).to_vec(),
+            _ => self.rgba().to_vec(),
+        }
     }
 
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
-        self.rgba().get(..4)?.try_into().ok()
+        self.pixels().get(..4)?.try_into().ok()
     }
 }
 
@@ -875,6 +897,19 @@ impl Shot {
     /// source has a video chain, whose filters may move or hold frames (scroll, video
     /// delay), or an item it draws has motion (ADR-0099). Every chain counts, which
     /// redraws a still filtered picture too.
+    /// What the frame slots this shot draws hold now ([`crate::slot`]): it changes when
+    /// any of them takes a new frame, so a stream that skips an unchanged picture draws
+    /// one that changed only there. Zero with no slot.
+    pub(crate) fn slot_stamp(&self) -> u64 {
+        self.frames
+            .values()
+            .filter_map(|frame| match &frame.pixels {
+                Pixels::Slot(slot) => Some(slot.latest().1),
+                _ => None,
+            })
+            .fold(0, u64::wrapping_add)
+    }
+
     pub(crate) fn changes_with_time(&self) -> bool {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
     }
@@ -4392,6 +4427,25 @@ pub(crate) fn compose_metered(
             Pixels::Gpu { frame, context } => {
                 if compositor.context() == Some(context) {
                     cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            Pixels::Slot(slot) => {
+                let (latest, version) = slot.latest();
+                let size = latest.info().size;
+                // Only a frame of the planned size is placed as planned; one of another
+                // size waits for the plan its producer asked for.
+                if [size.width(), size.height()] == [frame.width, frame.height] {
+                    cache.upload(
+                        compositor,
+                        key,
+                        version,
+                        size.width(),
+                        size.height(),
+                        crate::slot::rgba(&latest),
+                    )?;
+                    if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                        cache.set_extent(key, extent);
+                    }
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
