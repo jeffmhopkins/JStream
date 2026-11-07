@@ -30,7 +30,7 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
@@ -41,6 +41,11 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Video settings** (`video_settings.rs`): File › Video settings… sets the
+  collection's base resolution (the canvas, from presets or typed) and its base frame
+  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
+  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
@@ -766,8 +771,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  system browser), then Check for updates and About JStream. Check for updates is
+  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
+  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
