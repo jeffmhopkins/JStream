@@ -123,4 +123,33 @@ mod tests {
         assert!(out.pixel(4, 10).expect("inside")[3] > a(4, 10));
         near(&out, 10, 10, [0, 0, 255, 255], 0);
     }
+
+    /// Padded, as an item's effects pad their layer (ADR-0065 §5): an opaque frame is
+    /// placed in the middle of a larger transparent one, and the glow shows around it,
+    /// where unpadded it is hidden under the frame (#1226).
+    #[test]
+    fn padded_the_glow_of_an_opaque_frame_shows_around_it() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let input = crate::tests::solid(&opened.compositor, 8, 8, [255, 255, 255, 255]);
+        let mut glow = filter(
+            "glow",
+            json!({"color": "#0000ff", "radius": 4.0, "strength": 4.0}),
+        );
+        let out = run(&mut opened, &mut glow, &input, 0.0);
+        near(&out, 0, 0, [255, 255, 255, 255], 0);
+        glow.set_pad(6);
+        assert_eq!(glow.output_size(8, 8), (20, 20));
+        let out = run(&mut opened, &mut glow, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (20, 20));
+        near(&out, 10, 10, [255, 255, 255, 255], 0);
+        near(&out, 6, 6, [255, 255, 255, 255], 0);
+        let ring = out.pixel(4, 10).expect("inside");
+        assert!(
+            ring[2] > 200 && ring[0] < 10 && ring[3] > 100,
+            "blue: {ring:?}"
+        );
+        assert!(out.pixel(0, 0).expect("inside")[3] < 40);
+    }
 }

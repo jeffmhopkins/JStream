@@ -96,6 +96,29 @@ fn premultiplied([r, g, b, a]: [f32; 4]) -> [f32; 4] {
     [r * a, g * a, b * a, a]
 }
 
+const PAD: Shader = Shader {
+    label: "multipass-pad",
+    source: wgsl!("pad.wgsl"),
+    blend: Blend::Replace,
+};
+
+/// Draws `input` into `output`, `pad` pixels larger on every side, centred, with
+/// transparent around it.
+pub(crate) fn pad(
+    ctx: &mut Ctx<'_>,
+    input: &Image,
+    pad: u32,
+    output: &Image,
+) -> Result<(), RenderError> {
+    ctx.draw(&Draw {
+        shader: PAD,
+        input,
+        aux: None,
+        params: &Uniforms::new().i32(pad as i32).finish(),
+        target: output,
+    })
+}
+
 /// Copies `input` texel for texel into `output`, the same size.
 pub(crate) fn copy(ctx: &mut Ctx<'_>, input: &Image, output: &Image) -> Result<(), RenderError> {
     ctx.draw(&Draw {

@@ -325,7 +325,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
   no scene filters of its own, but may override an item's effects, the `keyframe` owner
   of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
-  effects over its box in a layer grown by their outset, before its opacity and blend,
+  effects over its box in a layer grown by their outset where the first effect that
+  draws past the box runs ([ADR-0125](adr/0125-item-effects-layer-grows-where-it-is-needed.md)),
+  before its opacity and blend,
   or with its `effects_space` `canvas` over a canvas-sized layer it is placed into
   ([ADR-0106](adr/0106-item-effects-in-canvas-space.md)).
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a

@@ -619,8 +619,8 @@ defaults pass its descriptor, and that they build its pass.
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
-scene's over its composite, of an item's effects over its box, drawn into a layer
-grown by their summed `max_outset_px`
+scene's over its composite, of an item's effects over its box, in a layer
+grown by their summed `max_outset_px` at the first effect that declares one
 ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
@@ -849,7 +849,12 @@ glow is cut away whole; on a shape with transparent margins (a keyed camera, a l
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-ADR-0065 pads by the chain's summed `max_outset_px`. Each of these kinds declares the
+grows by the chain's summed `max_outset_px` where the first kind that declares one
+runs ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+`VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
+before the pass's own, and `apply_filter_into` first draws the input centred into a
+scratch layer that size, transparent around it, then runs the pass over that. Each of
+these kinds declares the
 most it can draw past its input at any settings: drop shadow 300 (the largest offset
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
 and bloom 100 (the largest radius). So on an item the glow and shadow of an opaque

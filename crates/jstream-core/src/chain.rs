@@ -195,6 +195,9 @@ fn make(kind: &str, settings: &Settings, effect: Option<&PackEffect>) -> Option<
 pub(crate) struct Chain {
     pub(crate) input: GpuKey,
     pub(crate) filters: Vec<ChainFilter>,
+    /// For an item's effects: the filter whose input is padded, and by how many layer
+    /// pixels on every side (ADR-0065 §5, [`Self::pad_at`]). `None` for any other chain.
+    pub(crate) pad: Option<(usize, u32)>,
 }
 
 impl Chain {
@@ -256,6 +259,7 @@ impl Chain {
         let mut chain = chain.unwrap_or(Self {
             input,
             filters: Vec::new(),
+            pad: None,
         });
         chain.filters.insert(0, first);
         Some(chain)
@@ -298,7 +302,11 @@ impl Chain {
                 })
             })
             .collect();
-        (!filters.is_empty()).then_some(Self { input, filters })
+        (!filters.is_empty()).then_some(Self {
+            input,
+            filters,
+            pad: None,
+        })
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
@@ -309,6 +317,31 @@ impl Chain {
             .iter()
             .map(|filter| outset_of(&filter.kind))
             .fold(0, u32::saturating_add)
+    }
+
+    /// Where an item's effects layer grows, for a layer of `scale` pixels per canvas
+    /// pixel (ADR-0065 §5): at the first filter that draws past its input, by the
+    /// outset of it and every filter after it. The filters before it see the item's
+    /// box itself, so rounded corners or a vignette frame the box, not the room a
+    /// later drop shadow needs. `None` when no filter draws past its input.
+    pub(crate) fn pad_at(&self, scale: f32) -> Option<(usize, u32)> {
+        let first = self
+            .filters
+            .iter()
+            .position(|filter| outset_of(&filter.kind) > 0)?;
+        let outset = self.filters[first..]
+            .iter()
+            .map(|filter| outset_of(&filter.kind))
+            .fold(0, u32::saturating_add);
+        Some((first, (outset as f32 * scale).ceil() as u32))
+    }
+
+    /// The padding filter `index` draws with: [`Self::pad`]'s when it names it, else 0.
+    fn pad_of(&self, index: usize) -> u32 {
+        match self.pad {
+            Some((at, px)) if at == index => px,
+            _ => 0,
+        }
     }
 
     /// The kinds of its filters an effect pack draws: its effects, and the shader
@@ -377,8 +410,10 @@ impl Chain {
         let mut size = (width, height);
         self.filters
             .iter()
-            .map(|filter| {
-                if let Some(drawn) = filter.video_filter() {
+            .enumerate()
+            .map(|(index, filter)| {
+                if let Some(mut drawn) = filter.video_filter() {
+                    drawn.set_pad(self.pad_of(index));
                     size = drawn.output_size(size.0, size.1);
                 }
                 size
@@ -539,7 +574,8 @@ impl Chains {
         // carried through the filters' sizes (ADR-0073), as the input's own size is.
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
-        for filter in running.iter_mut() {
+        for (index, filter) in running.iter_mut().enumerate() {
+            filter.filter.set_pad(chain.pad_of(index));
             size = filter.filter.output_size(size.0, size.1);
             placed = filter.filter.output_size(placed.0, placed.1);
             let made = cache
@@ -2548,6 +2584,47 @@ mod tests {
             ................
             ",
             "the shadow falls past the box, below and to the right",
+        );
+    }
+
+    /// A vignette before an effect that draws past the box (a glow, here an invisible
+    /// one) frames the box itself, as it does alone: the layer grows only where the glow
+    /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep
+    /// their shape (#1226).
+    #[test]
+    fn golden_effects_before_a_glow_frame_the_box_itself() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff00", "radius": 50.0}),
+                ),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        assert_eq!(chain.and_then(|c| c.pad), Some((1, 100)));
+        assert_golden(
+            &shot,
+            "
+            BBWWWWWWWWWWWWBB
+            WWWWWWWWWWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            BWWWWWWWWWWWWWWB
+            BBBWWWWWWWWWWBBB
+            ",
+            "the vignette frames the box, not the glow's room",
         );
     }
 
