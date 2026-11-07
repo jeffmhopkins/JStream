@@ -135,6 +135,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("item.set_motion", Class(E)),
+    ("item.set_timing", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),

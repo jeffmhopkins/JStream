@@ -3255,6 +3255,7 @@ mod tests {
         };
         let item = |source: &str| ItemInfo {
             motion: Default::default(),
+            timing: None,
             item_id: format!("i-{source}").as_str().into(),
             source_id: source.into(),
             placement: PlacementForm::Legacy,
@@ -3316,6 +3317,7 @@ mod tests {
         };
         let item = |source: &str| ItemInfo {
             motion: Default::default(),
+            timing: None,
             item_id: format!("i-{source}").as_str().into(),
             source_id: source.into(),
             placement: PlacementForm::Legacy,
@@ -3414,6 +3416,7 @@ mod tests {
         };
         let item = |source: &str, effects: Vec<FilterInfo>| ItemInfo {
             motion: Default::default(),
+            timing: None,
             item_id: format!("i-{source}").as_str().into(),
             source_id: source.into(),
             placement: PlacementForm::Legacy,
@@ -3604,6 +3607,7 @@ mod tests {
         };
         let item = ItemInfo {
             motion: Default::default(),
+            timing: None,
             item_id: "i-cam".into(),
             source_id: "cam".into(),
             placement: PlacementForm::Legacy,
@@ -3645,6 +3649,7 @@ mod tests {
         };
         let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: "i-cam".into(),
             geometry: None,
             transform: None,

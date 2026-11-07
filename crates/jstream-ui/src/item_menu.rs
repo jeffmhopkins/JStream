@@ -1623,6 +1623,7 @@ mod tests {
     fn placing(id: &str, source: &str) -> ItemInfo {
         ItemInfo {
             motion: Default::default(),
+            timing: None,
             item_id: id.into(),
             source_id: source.into(),
             placement: jstream_control::protocol::PlacementForm::Legacy,
@@ -1967,6 +1968,7 @@ mod tests {
         };
         let none = |item: &str| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: ItemId::new(item),
             geometry: None,
             transform: None,

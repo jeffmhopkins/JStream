@@ -224,6 +224,7 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
     );
     let o = ItemOverride {
         motion: Default::default(),
+        timing: None,
         transform: None,
         item_id: ItemId::new("a1"),
         geometry: None,
@@ -1478,4 +1479,163 @@ fn a_fire_names_an_item_and_a_well_formed_modifier() {
     }
     // A modifier the item doesn't hold is no error: a keyframe can override its list.
     trigger(&control, "a1", Some("elsewhere")).expect("fires nothing");
+}
+
+/// `item.set_timing` of `item` in keyframe `scene`: its delay, easing and duration in
+/// moves into it (ADR-0129).
+fn timing(
+    scene: &str,
+    item: &str,
+    delay_ms: u32,
+    easing: jstream_protocol::ItemEasing,
+    duration_ms: Option<u32>,
+) -> Edit {
+    Edit::ItemSetTiming {
+        scene_id: SceneId::new(scene),
+        item_id: ItemId::new(item),
+        timing: jstream_protocol::KeyframeTiming {
+            delay_ms: Some(delay_ms),
+            easing: Some(easing),
+            duration_ms,
+        },
+    }
+}
+
+/// Each track's delay, duration and easing, in the shot's order.
+fn timings(engine: &Engine) -> Vec<(f32, f32, Easing)> {
+    let hub = engine.render_hub().load();
+    hub.shot()
+        .tracks()
+        .expect("a transition runs")
+        .iter()
+        .map(|track| match track {
+            Track::Pair { timing, .. } => (timing.delay_ms, timing.duration_ms, timing.easing),
+            other => panic!("every item glides: {other:?}"),
+        })
+        .collect()
+}
+
+/// Two keyframes of one scene stagger its items in opposite orders (ADR-0129): a Move
+/// into `k1` starts `a1` first and `a2` last, a Move into `k2` the other way round, and
+/// each keyframe's easing and duration replace the item's and the preset's only in moves
+/// into it. A Move back into the parent uses the items' own timing.
+#[test]
+fn two_keyframes_stagger_the_same_items_in_opposite_orders() {
+    use jstream_protocol::ItemEasing;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            variant("k2", "a"),
+            geometry("a1", Some("k"), 300.0),
+            geometry("a2", Some("k"), 700.0),
+            geometry("a1", Some("k2"), 200.0),
+            geometry("a2", Some("k2"), 600.0),
+            timing("k", "a1", 0, ItemEasing::EaseIn, None),
+            timing("k", "a2", 300, ItemEasing::EaseIn, Some(200)),
+            timing("k2", "a1", 300, ItemEasing::Hold, Some(200)),
+            timing("k2", "a2", 0, ItemEasing::Hold, None),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(0.0, 400.0, Easing::EaseIn), (300.0, 200.0, Easing::EaseIn)]
+    );
+    switch(&control, "k2", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(300.0, 200.0, Easing::Hold), (0.0, 400.0, Easing::Hold)]
+    );
+    switch(&control, "a", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(0.0, 400.0, Easing::Linear), (0.0, 400.0, Easing::Linear)]
+    );
+}
+
+/// `item.set_timing` is undone by the edit it returns, a timing with no field clears the
+/// override, and the item's own scene or an out-of-range curve is refused.
+#[test]
+fn a_keyframe_timing_is_undone_cleared_and_checked() {
+    use jstream_protocol::{Bezier, ItemEasing, KeyframeTiming};
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![timing("k", "a1", 120, ItemEasing::Hold, Some(50))],
+    );
+    let override_of =
+        |control: &dyn Control| match super::query(control, jstream_protocol::Query::StateGet)
+            .expect("state")
+        {
+            jstream_protocol::QueryResult::StateGet { scenes, .. } => scenes
+                .into_iter()
+                .find(|scene| scene.scene_id == SceneId::new("k"))
+                .and_then(|scene| scene.overrides.into_iter().next())
+                .and_then(|o| o.timing),
+            other => panic!("not a state: {other:?}"),
+        };
+    let undo = |control: &dyn Control| {
+        let call = jstream_protocol::HistoryCall::new(jstream_protocol::HistoryOp::Undo);
+        block_on(control.call(Call::History(call))).expect("undoes");
+    };
+    let set = override_of(&control);
+    assert_eq!(
+        set.map(|t| (t.delay_ms, t.duration_ms)),
+        Some((Some(120), Some(50)))
+    );
+    apply(
+        &control,
+        vec![Edit::ItemSetTiming {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("a1"),
+            timing: KeyframeTiming::default(),
+        }],
+    );
+    assert_eq!(override_of(&control), None, "an empty timing clears it");
+    undo(&control);
+    assert_eq!(override_of(&control), set, "undo writes it back");
+    undo(&control);
+    assert_eq!(override_of(&control), None, "undo clears what it set");
+    let refused = |timing: KeyframeTiming, scene: &str| {
+        block_on(control.call(Call::Batch(edits(vec![Edit::ItemSetTiming {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("a1"),
+            timing,
+        }]))))
+        .err()
+        .and_then(|error| error.protocol().cloned())
+    };
+    let own = refused(
+        KeyframeTiming {
+            delay_ms: Some(10),
+            ..KeyframeTiming::default()
+        },
+        "a",
+    );
+    assert!(
+        matches!(&own, Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) if field.ends_with("scene_id")),
+        "{own:?}"
+    );
+    let f = |v: f32| jstream_protocol::Finite32::new(v).expect("finite");
+    let curve = refused(
+        KeyframeTiming {
+            easing: Some(ItemEasing::CubicBezier(Bezier {
+                x1: f(1.5),
+                y1: f(0.0),
+                x2: f(0.5),
+                y2: f(1.0),
+            })),
+            ..KeyframeTiming::default()
+        },
+        "k",
+    );
+    assert!(
+        matches!(&curve, Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) if field.ends_with("timing.easing.cubic_bezier.x1")),
+        "{curve:?}"
+    );
 }

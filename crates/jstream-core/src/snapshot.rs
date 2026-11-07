@@ -1900,7 +1900,12 @@ impl<'a> Planner<'a, '_> {
                 .collect(),
         };
         let to = self.endpoint(&running.to, flatten, out);
-        let (mut planned, partners) = transition::plan(&from, &to, &running.run, running.by_item);
+        // A keyframe's timing applies to switches into it (ADR-0129).
+        let into = self
+            .keyframe_of(&running.to)
+            .map(|keyframe| keyframe.overrides());
+        let (mut planned, partners) =
+            transition::plan(&from, &to, &running.run, running.by_item, into);
         if running.by_item && flatten {
             self.move_inside(&mut planned, &from, &partners, &running.run, out);
         }
@@ -1996,7 +2001,9 @@ impl<'a> Planner<'a, '_> {
                 }
             };
             let arriving = self.visuals(&to_layer, false, out);
-            let (mut inner, inner_partners) = transition::plan(&children, &arriving, run, true);
+            // The children follow the group item's progress, whatever their own timing.
+            let (mut inner, inner_partners) =
+                transition::plan(&children, &arriving, run, true, None);
             for (_, track) in &mut inner.tracks {
                 *track = transition::with_timing(*track, timing);
             }
