@@ -915,7 +915,7 @@ stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:1f6e2ff586d5963f", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
+stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Re-read the PR loop against REVIEW › output's new lines (gate re-reads only on PR events and marker comments; a push cancels earlier heads' after-review runs): builders never post markers and auto-merge still lands on green, so it holds" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d", by = "agent:release-thread", note = "Step 3 says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; REVIEW#rounds and #gather are back to main's text (no merge-only reviewer round), consistent with that" }
@@ -6531,10 +6531,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:1f6e2ff586d5963f", by = "agent:release-thread", note = "Gate paragraph now adds ADR-0109: with no marker for the head, a pass from the latest round carries when the head only merges the base branch into the reviewed head with the PR diff unchanged; matches review-gate.yml's carryCandidate/sameChange/decide (ledger ignored, fails closed on missing patch, 300 files or API error); marker format, one verdict per round and after-review dispatch text unchanged and still hold" }
+stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Added that review-gate re-reads the PR only on PR events and marker comments (its new job if and per-run skip group), and that a push cancels after-review runs for earlier heads; markers, rounds and carry unchanged" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:bc5ef3676199eab8", by = "agent:release-thread", note = "Gate paragraph adds ADR-0109: with no marker for the head, a pass from the latest round carries if the head only merges the base branch into the reviewed head with the PR diff unchanged; matches review-gate.yml (carryCandidate; onlyBaseMerges skips the base's own commits a merge brought in and requires each of the PR's own later commits to be a merge with a parent in the base or a ledger-only restamp; sameChange: same files and +/- lines, ledger ignored; fails closed on missing files, a missing patch, 300 files, over 100 commits or an API error)" }
+stamp = { hash = "b3:c9b757436ac5df6a", by = "agent:issues-burndown", note = "The push-time cancel now runs only for a same-repo head; fork PRs never get after-review runs (dispatch skips them), so 'a push cancels those runs for the PR's earlier heads' still holds as written." }
 
 ["ROADMAP#beta"."body"]
 stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
