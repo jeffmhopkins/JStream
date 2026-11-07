@@ -37,10 +37,15 @@ const V5: &str = include_str!("fixtures/v5.json");
 /// hotkey that plays it (ADR-0115). It must keep loading as version 1 must.
 const V6: &str = include_str!("fixtures/v6.json");
 
-/// A collection file at schema version 7, the current one: version 6 with its follow
-/// camera saved as a `follow_pointer` effect on the screen item (ADR-0120). The same rule
-/// applies once version 8 exists.
+/// A collection file at schema version 7: version 6 with its follow camera saved as a
+/// `follow_pointer` effect on the screen item (ADR-0120). It must keep loading as version
+/// 1 must.
 const V7: &str = include_str!("fixtures/v7.json");
+
+/// A collection file at schema version 8, the current one: version 7, whose `browser`
+/// sources (it has none) would carry a checkbox per kind of page data (ADR-0124). The
+/// same rule applies once version 9 exists.
+const V8: &str = include_str!("fixtures/v8.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -435,7 +440,43 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V7);
+    assert_eq!(v6_graph().to_collection_json(), V8);
+}
+
+#[test]
+fn the_v8_fixture_loads_exactly() {
+    let expected = v6_graph();
+    let loaded = load(V8);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 7 turns on a `browser` source's page API checkbox for names or a bus it
+/// already grants (ADR-0124), and leaves every other source and setting as it was.
+#[test]
+fn the_v7_migration_keeps_a_page_api_grant() {
+    let browser = json!({"type": "builtin", "kind": "browser"});
+    let bus = json!({"type": "bus", "bus_id": "mic"});
+    let mut file = json!({
+        "schema_version": 7,
+        "sources": [
+            {"id": "both", "kind": browser, "settings": {
+                "page_api": true, "page_api_values": "status.*", "page_api_bus": bus}},
+            {"id": "none", "kind": browser, "settings": {
+                "page_api": true, "page_api_values": "  ", "page_api_bus": null}},
+            {"id": "other", "kind": {"type": "builtin", "kind": "color"}, "settings": {
+                "page_api_values": "status.*"}},
+        ],
+    });
+    assert_eq!(super::migrate(&mut file), Ok(()));
+    assert_eq!(file["schema_version"], json!(8));
+    let settings = |n: usize| file["sources"][n]["settings"].clone();
+    assert_eq!(settings(0)["page_api_shared_values"], json!(true));
+    assert_eq!(settings(0)["page_api_audio"], json!(true));
+    assert_eq!(settings(0)["page_api_values"], json!("status.*"));
+    assert!(settings(1).get("page_api_shared_values").is_none());
+    assert!(settings(1).get("page_api_audio").is_none());
+    assert!(settings(2).get("page_api_shared_values").is_none());
 }
 
 #[test]
