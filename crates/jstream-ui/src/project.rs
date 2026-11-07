@@ -167,7 +167,7 @@ impl ProjectAsk {
 }
 
 /// `collection.info`, or `None` when the engine has no collection file or is older
-/// than 0.93.
+/// than 0.94.
 pub async fn info(control: &dyn Control) -> Option<Project> {
     let answer = control
         .call(Call::Query {

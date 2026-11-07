@@ -326,7 +326,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         error: Option<ProtocolError>,
     },
-    /// The engine saves the collection to another file (0.93, ADR-0121): a
+    /// The engine saves the collection to another file (0.94, ADR-0121): a
     /// `collection.open`, `collection.new` or `collection.save_as` succeeded. After an
     /// open or a new, `state.changed` and `studio.changed` come first, and the client
     /// reads the new collection with `state.get`.
@@ -379,7 +379,7 @@ impl Event {
 }
 
 /// Which call made the engine save the collection to another file
-/// ([`Event::CollectionFileChanged`], 0.93).
+/// ([`Event::CollectionFileChanged`], 0.94).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]

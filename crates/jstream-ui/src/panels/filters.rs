@@ -2975,6 +2975,7 @@ mod tests {
 
     fn param(id: &str, label: &str, ty: ParamType, default: Value) -> ParamDescriptor {
         ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty,
             default,

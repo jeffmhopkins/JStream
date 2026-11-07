@@ -39,7 +39,7 @@ Three things make a switch more than a load at startup:
    `schema_version` the engine reads, and its name is any name. The UI suggests `.json`.
    Assets with the `collection` root are relative to the file's folder, so a folder
    holding the file and its assets moves or is shared as one.
-2. **Protocol 0.93 adds three actions, a query and an event.** All answer `unsupported`
+2. **Protocol 0.94 adds three actions, a query and an event.** All answer `unsupported`
    when the host named no collection file.
    - `collection.open { path }` loads the file at `path` and saves there from then on.
    - `collection.new { path }` creates an empty collection at `path` (the four sample
@@ -71,7 +71,7 @@ Three things make a switch more than a load at startup:
      Shared values ([ADR-0102](0102-page-api-for-browser-sources.md)) are not collection
      state and stay.
    - Sources restart from the new collection, with its folder behind `collection` assets.
-   - Every client gets `state.changed` (so a client older than 0.93 reads the state
+   - Every client gets `state.changed` (so a client older than 0.94 reads the state
      again), `studio.changed` and `collection.file_changed`.
 4. **Save as keeps assets pointing at the same files.** When the new folder differs,
    each `collection` asset reference is rewritten: relative to the new folder when the
@@ -113,5 +113,5 @@ Three things make a switch more than a load at startup:
 - The UI's File menu (New project…, Open project…, Save project as…, Open recent, and
   the open project's name) builds on this in its own change.
 - The file format doesn't change, so there is no `schema_version` bump. An engine
-  before 0.93 reads a project file, but finds no key under the scoped names, so its
+  before 0.94 reads a project file, but finds no key under the scoped names, so its
   outputs ask for keys again.

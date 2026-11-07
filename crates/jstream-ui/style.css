@@ -408,6 +408,7 @@ a.menuitem:focus-visible { outline: none; }
 .muted { color: var(--muted); }
 .panel + .panel { margin-top: 1.25rem; }
 .panel .problem { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.field-warning { grid-column: 1 / -1; margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--text-soft); }
 .panel button, .panel-inspector button { padding: 0.15rem 0.45rem; }
 select, textarea {
   font: inherit;
@@ -523,6 +524,7 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .tree-row .ref-badge { display: inline-flex; flex: 0 0 18px; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; }
 .tree-row .row-main .ref-badge .icon { color: inherit; }
 .ref-badge.mask { color: #b07cff; background: #b07cff33; }
+.tree-row .page-api-badge { flex: 0 0 auto; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 600; line-height: 16px; color: var(--link); background: #4c8dff26; }
 .ref-badge.fx { color: #e8a33d; background: #e8a33d33; }
 .ref-badge.off { color: var(--faint); background: #5a606b33; }
 /* Folders (S13, S18): a caret that folds them, and a dim name. */

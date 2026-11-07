@@ -1901,6 +1901,7 @@ fn color_settings() -> Settings {
 /// A descriptor using every parameter type and hint.
 fn color_kind() -> KindDescriptor {
     let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,

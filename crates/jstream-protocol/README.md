@@ -229,7 +229,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
-  `collection.file_changed` (with `CollectionCause`, 0.93).
+  `collection.file_changed` (with `CollectionCause`, 0.94).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -307,11 +307,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.93 because of projects: the actions `collection.open`,
+`PROTOCOL_VERSION` is 0.94 because of projects: the actions `collection.open`,
 `collection.new` and `collection.save_as`, the query `collection.info`, the event
 `collection.file_changed` and the `file` entity kind
-([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a placeholder number
-the release queue sets); 0.92 because `profile.get` reports past the drawers: each
+([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
+queue set); 0.93 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.92 because `profile.get` reports past the drawers: each
 encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
 mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
@@ -829,7 +832,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.93: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
@@ -1426,7 +1431,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `collection.info`: the project file the engine saves to (`path`) and up to ten
-  `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.93
+  `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.94
   (see *Projects* below).
 - `codec.downloads`: the codec libraries the engine can download on a person's request,
   ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
@@ -1514,7 +1519,7 @@ the engine answers them and keeps them in its settings file, with pairing off to
 `action_failed` when the file can't be written, and the value is then kept until the
 server stops.
 
-**Projects** (0.93, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
+**Projects** (0.94, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 A project is one collection file on the engine's machine. `collection.open {path}` loads
 the file at `path` and saves there from then on; `collection.new {path}` creates an empty
 one there; `collection.save_as {path}` writes the current collection there and saves
@@ -2172,7 +2177,7 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
   answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
-  0.93 adds `file` the same way: only an error answering `collection.new` or
+  0.94 adds `file` the same way: only an error answering `collection.new` or
   `collection.save_as` names it.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,

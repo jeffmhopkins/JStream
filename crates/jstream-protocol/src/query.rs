@@ -297,7 +297,7 @@ pub enum Query {
     #[serde(rename = "codec.downloads")]
     CodecDownloads,
     /// Reads which project (collection file) the engine saves to, and the projects
-    /// opened most recently (0.93, ADR-0121). Not collection state, so no `rev`. Fails
+    /// opened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails
     /// with `unsupported` when the host named no collection file.
     #[serde(rename = "collection.info")]
     CollectionInfo,
@@ -738,7 +738,7 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
-    /// The result of `collection.info` (0.93). Not collection state, so it carries no
+    /// The result of `collection.info` (0.94). Not collection state, so it carries no
     /// `rev`.
     #[serde(rename = "collection.info")]
     CollectionInfo {

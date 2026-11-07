@@ -3909,6 +3909,7 @@ mod tests {
             audio: false,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "lut".into(),
                 ty: ParamType::Asset {
                     accept: vec!["cube".into()],

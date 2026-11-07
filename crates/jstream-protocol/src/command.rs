@@ -1885,7 +1885,7 @@ pub enum Action {
         value: Option<serde_json::Value>,
     },
     /// Opens the project (collection file) at `path` on the engine's machine and saves
-    /// there from then on (0.93, ADR-0121). The file is loaded and checked first; a file
+    /// there from then on (0.94, ADR-0121). The file is loaded and checked first; a file
     /// the engine can't read or load (a newer `schema_version`, a broken file) fails with
     /// `action_failed` and its reason, and the open project stays open with nothing
     /// stopped, as it does when the open project can't be saved first. Then every
@@ -1903,7 +1903,7 @@ pub enum Action {
         path: String,
     },
     /// Creates a new, empty project at `path` (the four sample labels, the default
-    /// canvas and frame rate) and opens it as `collection.open` would (0.93, ADR-0121).
+    /// canvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).
     /// It never replaces a file: fails with `already_exists` when anything is at `path`,
     /// `action_failed` when it can't be written, and otherwise as `collection.open`.
     #[serde(rename = "collection.new")]
@@ -1912,7 +1912,7 @@ pub enum Action {
         path: String,
     },
     /// Writes the current project to a new file at `path` and saves there from then on
-    /// (0.93, ADR-0121). Every client gets `collection.file_changed`. When the new folder
+    /// (0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder
     /// differs, each `collection` asset reference is rewritten to keep naming the same
     /// file: relative to the new folder when the file is under it, otherwise
     /// `absolute`; an `absolute` reference to a file under the new folder becomes

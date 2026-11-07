@@ -792,7 +792,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
-- **Projects** (protocol 0.93, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
+- **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
   the actions `collection.open`, `collection.new` and `collection.save_as` switch the
   collection file the engine saves to, the query `collection.info` reports it and the
   recent ones, and the event `collection.file_changed` tells every client. An open or a
@@ -1443,7 +1443,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
   migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
-  scene's `camera_follow` onto its item as a `follow_pointer` effect. `jstream-core`
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
+  (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
+  settings already grant names or a bus, since loading rebuilds sources with their
+  kind's defaults. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to
