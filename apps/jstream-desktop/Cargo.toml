@@ -71,6 +71,11 @@ jstream-platform-windows.workspace = true
 jstream-sources.workspace = true
 tauri.workspace = true
 
+# On Linux, the global hotkeys' X11 listener and the session kind that decides whether
+# it starts (ADR-0112).
+[target.'cfg(target_os = "linux")'.dependencies]
+jstream-platform-linux.workspace = true
+
 # Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
 [target.'cfg(windows)'.build-dependencies]
 tauri-build.workspace = true
