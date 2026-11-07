@@ -83,8 +83,9 @@ Commands:
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
-  bench --out <dir> [--scenario basic|layered|all] [--seconds <n>]
+  bench --out <dir> [--scenario <name>|all] [--seconds <n>]
         [--switch-every <ms>] [--preset <preset-id>] [--gates <file>]
+        [--media <file>]
                                    run a standard load on the engine for <n>
                                    seconds (default 20, 5 to 60): record the
                                    program to <dir>, switch scenes every <ms>
@@ -461,6 +462,7 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
         preset: bench::DEFAULT_PRESET.into(),
         out: String::new(),
         gates: None,
+        media: None,
     };
     let mut out = None;
     while let Some((&option, rest)) = args.split_first() {
@@ -471,7 +473,11 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
             "--out" => out = Some((*value).to_owned()),
             "--scenario" => {
                 options.scenarios = Scenario::parse(value).ok_or_else(|| {
-                    usage(format!("unknown scenario `{value}`: basic, layered or all"))
+                    let names: Vec<&str> = Scenario::ALL.iter().map(|s| s.name()).collect();
+                    usage(format!(
+                        "unknown scenario `{value}`: {} or all",
+                        names.join(", ")
+                    ))
                 })?;
             }
             "--seconds" => {
@@ -487,6 +493,7 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
             "--switch-every" => options.switch_ms = number(value, "--switch-every")?,
             "--preset" => options.preset = (*value).to_owned(),
             "--gates" => options.gates = Some((*value).to_owned()),
+            "--media" => options.media = Some((*value).to_owned()),
             _ => return Err(usage(format!("unexpected `{option}` after `bench`"))),
         }
         args = rest;
@@ -1622,6 +1629,7 @@ mod tests {
                 preset: "fade".into(),
                 out: "runs".into(),
                 gates: None,
+                media: None,
             })
         );
         assert_eq!(
@@ -1637,6 +1645,8 @@ mod tests {
                 "cut",
                 "--gates",
                 "g.json",
+                "--media",
+                "/clips/loop.mp4",
                 "--out",
                 "o",
             ])
@@ -1648,6 +1658,7 @@ mod tests {
                 preset: "cut".into(),
                 out: "o".into(),
                 gates: Some("g.json".into()),
+                media: Some("/clips/loop.mp4".into()),
             })
         );
         assert_eq!(err(&["bench"]), "`bench` needs `--out <dir>`");
@@ -1656,8 +1667,8 @@ mod tests {
             "`--seconds` is 5 to 60"
         );
         assert_eq!(
-            err(&["bench", "--out", "o", "--scenario", "webcam"]),
-            "unknown scenario `webcam`: basic, layered or all"
+            err(&["bench", "--out", "o", "--scenario", "tv"]),
+            "unknown scenario `tv`: basic, layered, small_2d, media, browser, display, webcam or all"
         );
         assert_eq!(err(&["bench", "--out"]), "unexpected `--out` after `bench`");
     }
