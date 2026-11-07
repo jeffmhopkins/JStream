@@ -5292,7 +5292,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: the Help paragraph now says About lists each codec codec.downloads reports installed (OpenH264 on Linux) with name, version, notice, licence link and folded full text, read each time it opens and absent with none installed or before 0.69, matching InstalledCodecs in codec_downloads.rs, about.rs and the .about-codecs styles in style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read the dialog-frame paragraph against dialog.rs and app.rs: a primary press on that dialog's own header drags it by a translate from the centred place, clamped inside the window (a wider box keeps covering it; the top never goes above the window). The offset is the shell's DialogPlaces context, not a thread_local and not ADR-0084 settings. A double-click is timed from the pointer event's timeStamp, because Instant traps on wasm32. Escape, the backdrop and Enter are unchanged. The rest of Design does not describe where a dialog sits. | merge: #1244 turns a canvas item's name with its box along the top edge, staying upright when that edge is behind the viewer. #1249 adds Help › Check for updates, File › Settings…, and the launch notice under the header. #1252 adds Browse… beside a collection or absolute asset path, a recording's save dialog, and the plugin folder dialog, and App records the connected engine URL. The dialog-frame drag paragraph, DialogPlaces, and the pointer-event double-click are unchanged. | kept from the merged side: Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields. | merge: merge #1249: the shell can show an update notice under the header, and Help's Check for updates is updates.rs. The Browse paragraphs are unchanged. | kept from the merged side: Re-read the shell, header and styles paragraphs against app.rs, header.rs, updates.rs and style.css: the notice sits under the header, Help lists Check for updates then About, and Settings is described under Purpose. Styles stay classes with no style attribute. Other paragraphs describe modules this change does not alter." }
+stamp = { hash = "b3:c13e88b27b9468d7", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the design's Browse text says a file under the collection folder is stored relative to it, which still holds now that the folder is the open project's (collection_folder)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:4b30ff93418392c4", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields. | merge: merge #1249: the shell can show an update notice under the header, and Help's Check for updates is updates.rs. The Browse paragraphs are unchanged." }
@@ -5340,7 +5340,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the d
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the design section's only Editing-layout detail (Transitions beside Outputs under the canvas) is unchanged, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read the shell, header and styles paragraphs against app.rs, header.rs, updates.rs and style.css: the notice sits under the header, Help lists Check for updates then About, and Settings is described under Purpose. Styles stay classes with no style attribute. Other paragraphs describe modules this change does not alter." }
+stamp = { hash = "b3:6ed9a70906c9a823", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the design's Browse text says a file under the collection folder is stored relative to it, which still holds now that the folder is the open project's (collection_folder)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
@@ -5355,7 +5355,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Blending submenu line now names its amount entries (item.set_opacity at 100/75/50/25%), matching item_menu.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:12c360ed66987ef4", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields. | merge: merge #1249: the shell can show an update notice under the header, and Help's Check for updates is updates.rs. The Browse paragraphs are unchanged. | kept from the merged side: Re-read the shell, header and styles paragraphs against app.rs, header.rs, updates.rs and style.css: the notice sits under the header, Help lists Check for updates then About, and Settings is described under Purpose. Styles stay classes with no style attribute. Other paragraphs describe modules this change does not alter." }
+stamp = { hash = "b3:423e0c2631049588", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the design's Browse text says a file under the collection folder is stored relative to it, which still holds now that the folder is the open project's (collection_folder)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5412,7 +5412,7 @@ stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR
 stamp = { hash = "b3:fc1faebd6f633620", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
+stamp = { hash = "b3:70be6262868d985e", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the design's Browse text says a file under the collection folder is stored relative to it, which still holds now that the folder is the open project's (collection_folder)" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:4995dc2bf42cfc69", by = "agent:lane-d", note = "Re-read after cargo fmt reformatted the ADR-0120 / #1216 code: formatting only, the section still holds as noted." }
@@ -5441,6 +5441,9 @@ stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-r
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/plugins.rs"]
 stamp = { hash = "b3:091a1ac0f9162e7f", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
 
+["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/project.rs"]
+stamp = { hash = "b3:c45879e10ecd2523", by = "agent:claude", note = "cargo fmt reflowed two expressions in project.rs; re-read the section against it, nothing it says changed" }
+
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/projector.rs"]
 stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it." }
 
@@ -5463,10 +5466,10 @@ stamp = { hash = "b3:e413d256438ca8c8", by = "agent:lane-d", note = "Hotkeys par
 stamp = { hash = "b3:c2d21e7dc85691ba", by = "agent:claude-wa1", note = "Docking names Plugins under the Inspector, and a Plugins bullet describes the section: plugin.list on open and on plugin.state_changed or events.dropped, the row texts, install with no grant and the grant dialog opened when the manifest asks for more than read, only requested classes, hosts and folders offered, and Grant and turn on for needs_grant; style.css adds the section's and dialogs' rules. | merge: #969 (pop out a source alone: preview.subscribe's source_id, 0.56) and #972 (per-output stats in stats.tick and the Stream stats panel, 0.57) added the source pop-out and the Stream stats panel (workspace.rs's Stats panel, style.css); the Inspector still shows Pairing and Plugins, and the Plugins text still holds. | kept from the merged side: docking paragraph: Live chat alone waits on YouTube; Stream stats reads stats.tick outputs, picks the output, keeps 120 kbps samples per output and resets on a stop or restart; Live layout has Stream stats, Outputs and Agent as tabs; style.css adds the stats panel rules" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:6da92bafd90eb612", by = "agent:lane-d", note = "Hotkeys paragraph now names the desktop's Hear hotkeys while another app has the focus check, its hotkeys.global setting, and that a registered chord doesn't reach the page; style.css only spaces the Settings checks." }
+stamp = { hash = "b3:910bfe3819e6bb7d", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the design's Browse text says a file under the collection folder is stored relative to it, which still holds now that the folder is the open project's (collection_folder)" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:518d8f341970b84d", by = "agent:lane-d", note = "updates.rs' Settings dialog gains the desktop-only global hotkeys check and ui_settings.rs the hotkeys.global key; the purpose text holds." }
+stamp = { hash = "b3:327a1b3e42eee123", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the Projects bullet (OpenProject, ProjectDialog, collection_folder) and the File menu's project items to the Header bullet, matching project.rs and header.rs" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -5475,7 +5478,7 @@ stamp = { hash = "b3:8b72f650cbef12f9" }
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: the About contents entry now says the dialog lists each installed third-party codec through codec_downloads::InstalledCodecs, as about.rs renders it; codec_downloads.rs gained installed() and InstalledCodecs, which the Outputs entry's codec_downloads already covers" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read the contents list: dialog.rs now names Modal and DialogPlaces, the shell's map of each dialog's place for the page. Header dragging and the pointer-event double-click are described under Design. app.rs still describes the shell. The rest of the file map is unchanged. | merge: #1249 names Settings… and Check for updates on the header line and adds the Updates bullet. #1252 adds the Browse bullet and host browse and same_engine. #1244's name rotation is under Design, not this file map. The dialog.rs line still names Modal and DialogPlaces. | kept from the merged side: Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules. | merge: merge #1249: Help has Check for updates and File has Settings. The Browse bullet is unchanged. app.rs mounts the launch notice. | kept from the merged side: Re-read: the header bullet names Settings and Check for updates; the new Updates bullet matches updates.rs (compare with the desktop app's releases list, launch check off until turned on, quiet on failure, nothing downloaded); app.rs mounts LaunchNotice, header.rs opens both dialogs, lib.rs lists the module." }
+stamp = { hash = "b3:c13e88b27b9468d7", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the Projects bullet (OpenProject, ProjectDialog, collection_folder) and the File menu's project items to the Header bullet, matching project.rs and header.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/browse.rs"]
 stamp = { hash = "b3:4b30ff93418392c4", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules. | merge: merge #1249: Help has Check for updates and File has Settings. The Browse bullet is unchanged. app.rs mounts the launch notice." }
@@ -5523,7 +5526,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the purpose section's account of dock.rs (Dock, zones, groups, saved layouts with Editing and Live built in) names no group layout, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read: the header bullet names Settings and Check for updates; the new Updates bullet matches updates.rs (compare with the desktop app's releases list, launch check off until turned on, quiet on failure, nothing downloaded); app.rs mounts LaunchNotice, header.rs opens both dialogs, lib.rs lists the module." }
+stamp = { hash = "b3:6ed9a70906c9a823", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the Projects bullet (OpenProject, ProjectDialog, collection_folder) and the File menu's project items to the Header bullet, matching project.rs and header.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
@@ -5538,7 +5541,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Re-read: crate purpose unchanged by the Blending submenu's amount entries" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:12c360ed66987ef4", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules. | merge: merge #1249: Help has Check for updates and File has Settings. The Browse bullet is unchanged. app.rs mounts the launch notice. | kept from the merged side: Re-read: the header bullet names Settings and Check for updates; the new Updates bullet matches updates.rs (compare with the desktop app's releases list, launch check off until turned on, quiet on failure, nothing downloaded); app.rs mounts LaunchNotice, header.rs opens both dialogs, lib.rs lists the module." }
+stamp = { hash = "b3:423e0c2631049588", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the Projects bullet (OpenProject, ProjectDialog, collection_folder) and the File menu's project items to the Header bullet, matching project.rs and header.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5595,7 +5598,7 @@ stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR
 stamp = { hash = "b3:fc1faebd6f633620", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
+stamp = { hash = "b3:70be6262868d985e", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the Projects bullet (OpenProject, ProjectDialog, collection_folder) and the File menu's project items to the Header bullet, matching project.rs and header.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
 stamp = { hash = "b3:4995dc2bf42cfc69", by = "agent:lane-d", note = "Re-read after cargo fmt reformatted the ADR-0120 / #1216 code: formatting only, the section still holds as noted." }
@@ -5623,6 +5626,9 @@ stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-r
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/plugins.rs"]
 stamp = { hash = "b3:091a1ac0f9162e7f", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
+
+["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/project.rs"]
+stamp = { hash = "b3:c45879e10ecd2523", by = "agent:claude", note = "cargo fmt reflowed two expressions in project.rs; re-read the section against it, nothing it says changed" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/projector.rs"]
 stamp = { hash = "b3:1091316418ee6580", by = "agent:ui-parity", note = "Projectors bullet now names one source alone and pop_out_source (an object's Pop out) beside pop_out, as projector.rs and item_menu.rs have them; canvas/preview.rs and device_preview.rs only add source_id: None." }
@@ -6234,7 +6240,7 @@ stamp = { hash = "b3:29d6f9dd081a01ba", by = "agent:claude", note = "review roun
 stamp = { hash = "b3:8c6e1fe555a69b15", by = "agent:claude", note = "The CLI usage gained collection commands only; the agent setup steps still hold." }
 
 ["GETTING-STARTED#install"."body"]
-stamp = { hash = "b3:352a0a7dfac91438", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: zip name jstream-v<version>-windows-x64.zip matches release.yml's --revision tag and dist's naming; ui and browser folders beside jstream.exe per ARCH Packaging; unsigned SmartScreen steps; %APPDATA%\JStream and the portable marker/data folder per desktop Usage''' }
+stamp = { hash = "b3:2cdaed18c7a7e0b8", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added the paragraph on project files: Save project as, Open project, Open recent, New project, the last project opened at start, outputs stopped on open and keys per project, per ADR-0121 and the desktop host's startup_collection" }
 
 ["GETTING-STARTED#install"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:8c6e1fe555a69b15", by = "agent:claude", note = "Install steps unchanged; the platform paths constant adds no step." }
@@ -6249,7 +6255,7 @@ stamp = { hash = "b3:302d01fa61544c5e", by = "agent:claude", note = "Added the L
 stamp = { hash = "b3:8c6e1fe555a69b15", by = "agent:claude", note = "Going live steps unchanged; keys are still set per output in the open project." }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:c74c47c68fea251c", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the UI README changed for projects only; the going-live steps don't touch the File menu's project items" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read recording: the desktop app's Browse opens a save dialog on add and on Edit, and a browser still types the path. Record and Stop recording are unchanged." }
@@ -6258,7 +6264,7 @@ stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read rec
 stamp = { hash = "b3:8c6e1fe555a69b15", by = "agent:claude", note = "Recording steps unchanged." }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:c74c47c68fea251c", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the UI README changed for projects only; the recording steps still hold" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6276,7 +6282,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:bdf415d0b5f0a0d5", by = "agent:cursor", note = "Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:147024dfd6664d14", by = "agent:lane-d", note = "Re-read after the KB-07 and HD-10 edits for global hotkeys: this guide doesn't mention hotkeys or Settings, so it holds." }
+stamp = { hash = "b3:c74c47c68fea251c", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); the UI README changed for projects only; the first-scene steps still hold" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6825,7 +6831,7 @@ stamp = { hash = "b3:4b8b8e0611017176", by = "agent:obs-ui-thread", note = "Edit
 stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-08's notes now say Editing puts the Inspector, Filters and Transform as tabs of one full-height group on the right, Inspector shown, unlike the prototype, so the Filters panel gets the whole column." }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read DK-01 through DK-10 and the intro. Shell now also provides DialogPlaces, which is not dock state and is not kept in the engine's UI settings. The zones, tabs, resize, collapse, close, drag, homes, Editing and Live, and layout persistence still match. | merge: #1249 adds the update LaunchNotice in Shell. #1252 records the connected engine URL on App for Browse. Neither is dock state. DK-01 through DK-10 are unchanged, and DialogPlaces is still not the dock. | kept from the merged side: Re-read the docking rows against app.rs: the only change there is the connected-engine context for Browse. Zones, layouts and persistence are unchanged. | merge: merge #1249: app.rs mounts the update notice. The dock zones, layouts and persistence are unchanged. | kept from the merged side: Re-read: app.rs only mounts LaunchNotice under the header; dock zones, layouts and workspace.rs are unchanged." }
+stamp = { hash = "b3:c13e88b27b9468d7", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); app.rs now provides OpenProject; the docking rows are unaffected" }
 
 ["UI-FEATURES#docking"."file:crates/jstream-ui/src/dock.rs"]
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "editing() now builds the right zone as one group [Inspector, Filters, Transform] with weight 1; checked DK-08 says so and that DK-01 to DK-07 and DK-09 don't depend on the old split." }
@@ -6840,19 +6846,22 @@ stamp = { hash = "b3:7052d5d7b0a120f9", by = "agent:lane-d", note = "Added FL-11
 stamp = { hash = "b3:be994279d933063d", by = "agent:lane-d", note = "Re-read after cargo fmt reformatted the ADR-0120 / #1216 code: formatting only, the section still holds as noted." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:a45af348d85ae372", by = "agent:lane-d", note = "HD-10 now names the desktop-only Hear hotkeys while another app has the focus check, on by default, kept as hotkeys.global (ADR-0112 §6)." }
+stamp = { hash = "b3:38a918d2ea22e31a", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added HD-11 Projects and project.rs to covers, matching the menu, dialog, recent list, warnings and file_changed follow-up in header.rs and project.rs" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: HD-10 now lists each installed third-party codec in About (OpenH264 on Linux with notice, licence link and folded full text), matching about.rs and InstalledCodecs" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/app.rs"]
-stamp = { hash = "b3:c4c4151906d26fbe", by = "agent:grok", note = "Re-read HD-01 through HD-10. Shell now also provides DialogPlaces. None of these rows describe where a dialog sits: the brand and menus, stats, studio mode, Record, Go Live and About still match. About still opens from Help. | merge: #1249 puts LaunchNotice in the shell and adds Check for updates and Settings… to HD-01 and HD-10. #1252 gives App the connected-engine URL for Browse. DialogPlaces is still provided beside them. The header rows match those additions. | kept from the merged side: Re-read the header rows against app.rs and outputs.rs: app.rs now provides the connected-engine URL for Browse, and outputs.rs adds Browse on recording paths. The header menus, Record, Go Live and About are unchanged. | merge: merge #1249: File has Settings and Help has Check for updates, matching header.rs and updates.rs. app.rs shows the launch notice. Record and Go Live are unchanged. | kept from the merged side: Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
+stamp = { hash = "b3:c13e88b27b9468d7", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added HD-11 Projects and project.rs to covers, matching the menu, dialog, recent list, warnings and file_changed follow-up in header.rs and project.rs" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:ba9defb4b46415b7", by = "agent:cursor", note = "Re-read HD-01 and HD-10 against header.rs, app.rs and updates.rs: File lists Settings then Disconnect, Help lists Check for updates before About, the dialog reports up to date or a newer version or the error, and LaunchNotice shows only a newer release when the stored setting is on." }
+stamp = { hash = "b3:6ed9a70906c9a823", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); added HD-11 Projects and project.rs to covers, matching the menu, dialog, recent list, warnings and file_changed follow-up in header.rs and project.rs" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:fc1faebd6f633620", by = "agent:cursor", note = "Re-read the header rows against app.rs and outputs.rs: app.rs now provides the connected-engine URL for Browse, and outputs.rs adds Browse on recording paths. The header menus, Record, Go Live and About are unchanged." }
+
+["UI-FEATURES#header"."file:crates/jstream-ui/src/project.rs"]
+stamp = { hash = "b3:c45879e10ecd2523", by = "agent:claude", note = "cargo fmt reflowed two expressions in project.rs; re-read the section against it, nothing it says changed" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/updates.rs"]
 stamp = { hash = "b3:e413d256438ca8c8", by = "agent:lane-d", note = "HD-10 now names the desktop-only Hear hotkeys while another app has the focus check, on by default, kept as hotkeys.global (ADR-0112 §6)." }
@@ -6864,7 +6873,7 @@ stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the
 stamp = { hash = "b3:f237892ba27ff266", by = "agent:claude-3d-cameras", note = "Re-read against ADR-0113: inspector.rs only makes HotkeyRow crate-visible for the scene dialog's zoom rows; the Inspector's own rows and sections behave as described. | merge: wave/alpha4 brought #1080 (frame sheets: video.frames and scene.switch_and_watch, protocol 0.82) and #1104 (an opacity above 1 is a gain on an item's light, protocol 0.83); re-read against them: this PR's camera motion, follow camera and scene.zoom_camera text still holds beside them, the merged lists keep both sides' entries, and the protocol is 0.84 over 0.83 and 0.82. | kept from the merged side: IN-10's note now says a keyframe changes placement, visibility, opacity, effects and motion; the Motion section itself is listed beyond the prototype; inspector.rs renders MotionSection after Placement and its comment says the same | merge: Merged main's #1109 (ADR-0105 normal_srgb and additive_srgb blend modes at protocol 0.75: BlendMode values, the composite shader, Inspector's blend select, and doc lines in protocol, core, graph, render, UI and ARCH); main's stamp was taken, and this PR's IN-10 keyframe note, KB-05 paste and Motion-beyond-the-prototype text still hold beside the new blend modes | merge: wave/alpha4 into #1125 (protocol 0.81): the merge brought into crates/jstream-ui/src/panels/inspector.rs #1082 (item.show, item.hide and item.toggle actions (ADR-0101, 0.80)). IN-10 takes the wave's text with #1082's Hotkeys sentence and keeps #1125's 'placement, visibility, opacity, effects and motion'. | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): IN-07 says the select lists eleven modes, the two browser modes from 0.75 | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | kept from the merged side: inspector.rs's Hotkeys fold matches IN-10: three rows, and a keyframe scene's binding names the keyframe. | kept from the merged side: #1101 opacity above 1: IN-07 says Opacity goes 0 to 400%, above 100% multiplying the item's light | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: IN-07 lists eleven modes with the two browser modes (#1109) and 0 to 400% opacity (this PR); inspector.rs matches | merge: wave/alpha4 into #1104 (protocol 0.83): the merge brought into crates/jstream-ui/src/panels/inspector.rs #1125 (item motion, item.set_motion (ADR-0099, 0.81)); #1082 (item.show, item.hide and item.toggle (ADR-0101, 0.80)). The Inspector rows keep #1104's opacity gain (above 1, to MAX_OPACITY 4, #1101)'s opacity range beside #1082's Hotkeys and #1125's Motion; inspector.rs matches." }
 
 ["UI-FEATURES#inspector"."file:crates/jstream-ui/src/panels/properties.rs"]
-stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read the inspector intro and rows against properties.rs: an asset path in the desktop app has Browse, and a file under the collection folder is stored relative to it. The placement, crop, blend and hotkey rows are unchanged." }
+stamp = { hash = "b3:70be6262868d985e", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); properties.rs Browse now places collection assets under the open project's folder; the inspector rows' wording (the collection folder) still holds" }
 
 ["UI-FEATURES#keyboard"."body"]
 stamp = { hash = "b3:68584d21b17ee306", by = "agent:lane-d", note = "KB-07 now says the desktop app on Windows hears bound chords while another app has the focus, the page doesn't see them, a held chord is focus-only, and Settings turns it off." }
@@ -6924,7 +6933,7 @@ stamp = { hash = "b3:ff4277dd64b296d5", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
 
 ["UI-FEATURES#summary"."body"]
-stamp = { hash = "b3:682467b9425c97d7", by = "agent:lane-d", note = "Filters count raised to 11 (FL-11 Follow pointer), total 134/122." }
+stamp = { hash = "b3:93e6566552991bcb", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); Header bar is 11 rows, 9 done, and the total 135 and 123, counted from the header table" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#canvas"]
 stamp = { hash = "b3:d8d9054ffde9ad73", by = "agent:cursor", note = "Re-read Summary. CV-04 is still built, so the Canvas row stays 18 rows, 17 built and 1 paused, and the total stays 133, 121, 3, 0, 5, 4. The extra clause about a mirrored name does not change a status." }
@@ -6939,7 +6948,7 @@ stamp = { hash = "b3:58b68f0c40555406", by = "agent:obs-ui-thread", note = "DK-0
 stamp = { hash = "b3:7052d5d7b0a120f9", by = "agent:lane-d", note = "Filters count raised to 11 (FL-11 Follow pointer), total 134/122." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:a45af348d85ae372", by = "agent:lane-d", note = "Counts unchanged: HD-10 and KB-07 only gained text." }
+stamp = { hash = "b3:38a918d2ea22e31a", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); Header bar is 11 rows, 9 done, and the total 135 and 123, counted from the header table" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the counts against the inspector and outputs tables: no status cell changed, so the row counts and the total still match. Browse is prose in those sections, not a new row." }
@@ -6987,7 +6996,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:6da92bafd90eb612", by = "agent:lane-d", note = "style.css adds a column gap to .settings-body for its two checks; theme tokens unchanged." }
+stamp = { hash = "b3:910bfe3819e6bb7d", by = "agent:claude", note = "File menu projects UI (project.rs, header.rs, properties Browse folder); style.css gained the project dialog and name classes using the existing tokens; the theme rows still hold" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }

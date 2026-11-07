@@ -31,6 +31,7 @@ pub mod menu;
 pub mod pairing;
 pub mod panels;
 pub mod plugins;
+pub mod project;
 pub mod projector;
 pub mod screenshot;
 pub mod session;
