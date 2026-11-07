@@ -11,7 +11,7 @@ review_every = "90d"
 <a id="purpose"></a>
 ## Purpose
 <!-- @section
-covers = ["crates/jstream-core/src/**", "crates/jstream-core/tests/**"]
+covers = ["crates/jstream-core/src/lib.rs"]
 depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-core"]
 -->
 
@@ -29,7 +29,29 @@ sheets (`video.frames`, `scene.switch_and_watch`).
 `with_backends` and gives it a publish target (`with_publish` or
 `with_publish_opener`); a recording output needs no publish target, nor does a
 virtual camera, which publishes to the backends' `VcamSink`. Without backends, an output action stays the placeholder
-state machine. Contents:
+state machine.
+
+Its modules are listed by area, each area a section of its own that covers its files, so
+a change to one module stales only its area: [the engine, sessions and
+history](#contents-engine), [sign-in, logs and the collection file](#contents-records),
+[audio filters and plugins](#contents-plugins), [live sources and
+snapshots](#contents-sources), [motion, scenes and timelines](#contents-motion), [the
+pipeline, outputs and stats](#contents-media) and [tests](#contents-tests).
+
+Not here yet: live audio values (faders), the audio and outputs snapshots, and the
+platform's Windows devices. See
+[Not yet](#not-yet).
+
+Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
+every subsystem, and it must sit above `jstream-server` and `jstream-mcp` so that none
+of the clients can reach it.
+
+<a id="contents-engine"></a>
+## Contents: the engine, sessions and history
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.rs", "crates/jstream-core/src/gesture.rs", "crates/jstream-core/src/history.rs", "crates/jstream-core/src/kinds.rs", "crates/jstream-core/src/session.rs"]
+-->
+
 - **Engine** (`engine.rs`): `Engine`, a cloneable handle to one engine, built with
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
@@ -55,6 +77,35 @@ state machine. Contents:
   history, the open gestures and the subscribers behind one lock, and the drop ledger behind another, and executes
   batches, history calls, actions and queries. The real-time pipeline threads (render,
   mixer) do not take the collection lock.
+- **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
+  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
+  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
+  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
+  filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
+  adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
+  rewrites it.
+- **History** (`history.rs`): per-client undo and redo
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
+  stacks, built from the inverse batches `Graph::apply` returns, and the log of what
+  each recent change touched, which `undo_conflict` is checked against. A batch with an
+  empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
+  is logged but is no step, and the redo stack is kept.
+- **Gestures** (`gesture.rs`): live values
+  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
+  gestures, which one holds each parameter, the `live.changed` events each owes, and
+  the values of committed gestures the render thread has not caught up with (see *Live
+  values* in [Design](#design)).
+- **Session** (`session.rs`): `InProcessControl`, one client session. Its undo history
+  ends with it, and its open gestures expire.
+- **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
+
+<a id="contents-records"></a>
+## Contents: sign-in, logs and the collection file
+<!-- @section
+covers = ["crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/audit.rs", "crates/jstream-core/src/collection.rs", "crates/jstream-core/src/youtube.rs"]
+-->
+
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `with_youtube(YoutubeSetup)` gives the engine a Google OAuth client, the HTTPS
   transport and the `OAuthTokenStore`. `YoutubeSetup::built_in` uses JStream's built-in
@@ -93,14 +144,13 @@ state machine. Contents:
   names with `with_collection_file` (or creates it, with the four sample labels,
   `Graph::with_sample_labels`, at the same `rev`), and saves it atomically after every
   change (see *Collection file* in [Design](#design)).
-- **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
-  against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
-  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
-  `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
-  filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
-  adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
-  rewrites it.
+
+<a id="contents-plugins"></a>
+## Contents: audio filters and plugins
+<!-- @section
+covers = ["crates/jstream-core/src/filters.rs", "crates/jstream-core/src/plugins/**"]
+-->
+
 - **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
   one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
@@ -182,6 +232,13 @@ state machine. Contents:
   them. With a plugin folder
   (`open_plugin_dir`), the installed plugins and their grants are saved in its
   `plugins.json` and loaded again at the next start. See *WASM plugins* under Design.
+
+<a id="contents-sources"></a>
+## Contents: live sources and snapshots
+<!-- @section
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/transition.rs"]
+-->
+
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. The program
@@ -251,6 +308,13 @@ state machine. Contents:
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
+
+<a id="contents-motion"></a>
+## Contents: motion, scenes and timelines
+<!-- @section
+covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+-->
+
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
   motion modifiers, turned into `jstream-anim`'s once when the shot is planned, are
@@ -334,6 +398,18 @@ state machine. Contents:
   [ADR-0118](../../docs/adr/0118-placed-keyframes-on-the-graph.md)): the keyframe each
   placed scene is switched to, runtime state on the engine's graph that a batch keeps,
   which `scene.set_keyframe` sets ([Keyframe tracks](#keyframe-tracks)).
+- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
+  which preset a switch runs (`resolve`), and the plan that pairs what is on screen
+  with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
+  a group that moves as one item within a family its children's tracks inside its
+  layer (`Inside`, ADR-0049 §3).
+
+<a id="contents-media"></a>
+## Contents: the pipeline, outputs and stats
+<!-- @section
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/runtime/**"]
+-->
+
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
   mix, one scene, one of the collection's sources alone (`snapshot::plan_source`) or a
   draft source the collection doesn't hold as small pictures sent to the session that asked as binary frames
@@ -344,11 +420,6 @@ state machine. Contents:
   compositor and its own captures of what the mix shows, a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
-- **Transitions** (`transition.rs`, [ADR-0029](../../docs/adr/0029-transitions.md)):
-  which preset a switch runs (`resolve`), and the plan that pairs what is on screen
-  with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
-  a group that moves as one item within a family its children's tracks inside its
-  layer (`Inside`, ADR-0049 §3).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
   display, window and webcam the program mix or a video mix shows
@@ -387,20 +458,6 @@ state machine. Contents:
   on its output device: the program stage's audio sources thread opens the device and
   the mixer thread feeds it each block the bus makes, before or after its filters as
   its tap says (see *Bus monitors* in [Design](#design)).
-- **History** (`history.rs`): per-client undo and redo
-  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): each client's undo and redo
-  stacks, built from the inverse batches `Graph::apply` returns, and the log of what
-  each recent change touched, which `undo_conflict` is checked against. A batch with an
-  empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
-  is logged but is no step, and the redo stack is kept.
-- **Gestures** (`gesture.rs`): live values
-  ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
-  gestures, which one holds each parameter, the `live.changed` events each owes, and
-  the values of committed gestures the render thread has not caught up with (see *Live
-  values* in [Design](#design)).
-- **Session** (`session.rs`): `InProcessControl`, one client session. Its undo history
-  ends with it, and its open gestures expire.
-- **Events** (`events.rs`): the per-subscription queues behind `Control::events`.
 - **Outputs** (`outputs.rs`): the outputs' runtime state, following the collection's
   outputs after each batch and keeping the ones the host declared. The placeholder path steps
   `starting` to `active` at once. The pipeline path emits `starting`, then `active`
@@ -441,6 +498,13 @@ state machine. Contents:
   (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
   and each `profile.get`, keeps a minute of samples, and answers a window as the
   difference between the newest and the one from that long ago.
+
+<a id="contents-tests"></a>
+## Contents: tests
+<!-- @section
+covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
+-->
+
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
@@ -669,14 +733,6 @@ state machine. Contents:
   starts again at its duration when its `restart` counter changes
   (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
-
-Not here yet: live audio values (faders), the audio and outputs snapshots, and the
-platform's Windows devices. See
-[Not yet](#not-yet).
-
-Why a crate: it is the crate map's layer-5 engine, the one crate allowed to depend on
-every subsystem, and it must sit above `jstream-server` and `jstream-mcp` so that none
-of the clients can reach it.
 
 <a id="design"></a>
 ## Design
@@ -1540,10 +1596,14 @@ An item's effects (ADR-0065 §5, in v1 under
 as the scene that draws the item draws it: a keyframe scene's items have chains of
 their own, at their effective values, with the keyframe's own effects where it
 overrides them (ADR-0088). The chain phase draws the item into
-`GpuKey::ItemBox`, a layer the size of its planned box plus the effects' outset on
-every side, in canvas pixels. The outset is the sum of their kinds' `max_outset_px`; no
-built-in kind declares one yet. A layer longer than 8192 pixels on a side is scaled
-down uniformly. The item is drawn cropped and fitted, centred, flat and unrotated,
+`GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
+outset is the sum of their kinds' `max_outset_px`: drop shadow, outline, glow and bloom
+declare one (render › Filters). The chain grows the layer by it where the first effect
+that declares one runs (`Chain::pad_at`, that effect's `VideoFilter::set_pad`), so the
+effects before it frame the box itself
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)). A box
+longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
+drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
 `GpuKey::Filtered`. The item's layer in its scene shows that output, stretched over the
 item's box grown by the outset in proportion, and turned and projected as the box is,
@@ -1588,7 +1648,9 @@ clamped to `[0, 1]`), which updates the running filters in place. Goldens in `ch
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
-item turned 90°, whose ellipse stands with its box. Each `stats.tick` reports what
+item turned 90°, whose ellipse stands with its box. Another draws a glow and a drop shadow
+on an opaque item, which show past its box in the outset (#1226), and a vignette
+before a glow, which still frames the box. Each `stats.tick` reports what
 they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
 steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
 plus one layer and pass per filter, and each item's effects as its box layer and pass
@@ -1950,10 +2012,22 @@ quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
 `timer`, which redraws when the value it shows changes)
-is painted by that thread just before each re-plan, holding no engine
-lock, so under the collection lock the plan only takes the frame painted last;
-`install`, `sync` and a clock swap hand the thread the running painters and their time
-zeros. The thread paints only the painters the latest round of plans looked at, the
+is painted by that thread, holding no engine lock, so under the collection lock the
+plan only takes the frame painted last; `install`, `sync` and a clock swap hand the
+thread the running painters and their time zeros. A painter's frames go through a
+**frame slot** (`slot.rs`, ADR-0117 §3): a one-frame mailbox made when the source is
+installed, which the plan shows as the source's frame (`Frame::from_slot`). The thread
+paints on its own wake, the earliest `Painter::next_change` rounded to the frame grid
+like a plan's, and stores each new frame in the slot (`FrameSlot::store_latest`) with no
+re-plan; every draw uploads what the slot holds then, by the slot frame's own version,
+reading it without a lock (an `ArcSwap`). The slot's writers, the plan and this
+thread, keep each frame they replace until no draw holds it and free it themselves, so
+the render thread never frees one (R-RT-003), and each stores the painter's frame as it
+is when it writes, so the slot never goes back to an older one;
+and a preview stream that skips an unchanged picture draws one whose slots changed
+(`Shot::slot_stamp`). Only a frame of another size waits for a plan, which the thread
+asks for, since where it is placed depends on its size. A painter whose frames aren't
+packed RGBA8 has no slot and re-plans as other animations do. The thread paints only the painters the latest round of plans looked at, the
 program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
 while something else re-plans every frame; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
@@ -2029,7 +2103,9 @@ sheet gets a `jstream-frames` thread, which wakes when each picture is due (the 
 what `video.snapshot` would draw then (`Shared::sample`): the published program
 render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
 it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
-`rev` and the media clock's time. A scene sheet also follows its audio modifiers on
+`rev` and the media clock's time, and what each frame slot it shows holds then
+(`Shot::pin`), which the picture draws in place of what the slot holds when the sheet
+is drawn. A scene sheet also follows its audio modifiers on
 the way, so they hear the mix instead of staying at silence. Its envelope starts at
 silence and takes one 50 ms step before the first picture, so a modifier whose attack
 is much longer than that reads lower on the first picture or two than the same item
@@ -3090,7 +3166,9 @@ atomics the mixer thread writes and the sampler reads, with no lock. The `jstrea
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter
-a plan reaches after the thread skipped it (*Live sources*). The snapshot compositor belongs to the snapshot
+a plan reaches after the thread skipped it (*Live sources*). A painter's frame slot has
+a leaf mutex its writers take, the plan under the collection lock and that thread alone;
+no draw takes it, and the render thread reads the slot with no lock at all. The snapshot compositor belongs to the snapshot
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while

@@ -184,9 +184,20 @@ pub struct ShownModel {
 /// paint it once under its lock, to catch it up before it is shown again. The `waveform` and `spectrum` painters allocate only while their
 /// pool of frames grows, or when every frame in it is still held; `chat_message`'s
 /// allocates when it redraws for a newly featured message.
+///
+/// A host can also take the painted frame from the painter itself ([`frame`](Self::frame)),
+/// and ask it when to paint next ([`next_change`](Self::next_change)), without the
+/// source: so a new frame reaches the compositor without a re-plan (ADR-0117 §3).
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
+
+    /// The frame painted last, as [`Source::frame`] hands it out. Never draws.
+    fn frame(&self) -> Arc<VideoFrame>;
+
+    /// When the frame shown at `at` is next replaced, as [`Source::next_change`] says
+    /// for its source.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime>;
 }
 
 /// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer

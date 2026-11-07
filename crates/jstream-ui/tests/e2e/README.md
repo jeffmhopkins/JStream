@@ -66,6 +66,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   (or the directory `JSTREAM_E2E_DIST` names). It does not run trunk.
 - **The browser** is Playwright's Chromium, or the executable `JSTREAM_E2E_CHROMIUM`
   names. `@playwright/test` is pinned exactly in `package.json` and `package-lock.json`.
+  Headless Chromium can hold a page that is not in front to about one animation frame a
+  second, so a test with a second client calls `bringToFront()` on the page it drives
+  with drags or clicks that wait on frames.
 
 <a id="tests"></a>
 ## What the tests cover
@@ -316,6 +319,23 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+- **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
+  `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
+  the test writes (the mock engine loads no packs), Add filter › Custom shader writes
+  the template as `custom-1` and opens the editor on it; the coloured copy holds exactly
+  the text, with the annotations, an attribute, a keyword, a call and a type coloured,
+  under a transparent textarea in the same box; Tab indents at the caret and the change
+  compiles ("Compiled."); a line the fake engine refuses is marked in the gutter and
+  named under the text while the colours follow the new text; and scrolling the text
+  scrolls the copy, to the very end both ways. Then, on a second shader whose `amount`
+  the Filters window set to 0.25, an `@renamed amount mix_amount` line sends a manifest
+  at version 2 with its `renames` and is coloured as an annotation; Save as pack…
+  refuses a taken ID and a bad one, then writes `warm-look` with the same shader, and
+  the filter moves to its kind in the old one's place (the chain reads Sharpen, Blur,
+  Warm look) with the editor open on `warm-look`, its add carrying exactly
+  `mix_amount: 0.25`. The fake kinds declare the shader's own `@param` lines, and a
+  `filter.add` of a written pack with a setting its kind doesn't declare is refused, as
+  the engine refuses it.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
