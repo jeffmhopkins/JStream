@@ -2019,14 +2019,38 @@ fn a_snapshot_draws_a_display_capture() {
         let QueryResult::VideoSnapshot { png, .. } = result else {
             panic!("not a snapshot: {result:?}");
         };
-        let (_, _, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
-        rgba.chunks_exact(4)
+        let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        let count = rgba
+            .chunks_exact(4)
             .filter(|px| px[1] > 200 && px[0] < 40 && px[2] < 40)
-            .count()
+            .count();
+        // What the picture holds instead, for a failure message.
+        let mut colours = std::collections::BTreeMap::<[u8; 4], usize>::new();
+        for px in rgba.chunks_exact(4) {
+            *colours.entry([px[0], px[1], px[2], px[3]]).or_default() += 1;
+        }
+        let mut colours: Vec<_> = colours.into_iter().collect();
+        colours.sort_by(|a, b| b.1.cmp(&a.1));
+        colours.truncate(6);
+        (
+            count,
+            format!(
+                "{width}x{height}, most common colours {colours:?}, {} capture start(s)",
+                starts.load(Ordering::Relaxed)
+            ),
+        )
     };
     // The first snapshot waits for the capture's first frame rather than drawing none.
-    assert!(green() > 0, "the first snapshot did not draw the display");
+    let (count, seen) = green();
+    assert!(
+        count > 0,
+        "the first snapshot did not draw the display: {seen}"
+    );
     clock.advance(50_000);
-    assert!(green() > 0, "the second snapshot did not draw the display");
+    let (count, seen) = green();
+    assert!(
+        count > 0,
+        "the second snapshot did not draw the display: {seen}"
+    );
     assert_eq!(starts.load(Ordering::Relaxed), 1, "started once for both");
 }
