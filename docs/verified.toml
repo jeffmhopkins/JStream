@@ -5259,7 +5259,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:cee026a46c028fc7", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+stamp = { hash = "b3:303cc55f900603a6", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens | merge: main added File › Video settings… (#1259); the menus paragraph now says updates.rs holds Check for updates, settings.rs the Settings dialog, video_settings.rs Video settings; header.rs keeps Video settings… between Settings… and Plugins… | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read Design against the control dependency. The UI still drives the engine through the protocol. It does not set the base frame rate yet." }
@@ -5319,7 +5319,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the d
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the design section's only Editing-layout detail (Transitions beside Outputs under the canvas) is unchanged, so it holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+stamp = { hash = "b3:c1f54150f8929221", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens | merge: main added File › Video settings… (#1259); the menus paragraph now says updates.rs holds Check for updates, settings.rs the Settings dialog, video_settings.rs Video settings; header.rs keeps Video settings… between Settings… and Plugins… | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
@@ -5334,7 +5334,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Blending submenu line now names its amount entries (item.set_opacity at 100/75/50/25%), matching item_menu.rs" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:bcb66f78dde4cf09", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+stamp = { hash = "b3:848776f10bd9d408", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens | merge: main added File › Video settings… (#1259); the menus paragraph now says updates.rs holds Check for updates, settings.rs the Settings dialog, video_settings.rs Video settings; header.rs keeps Video settings… between Settings… and Plugins… | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5448,10 +5448,10 @@ stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "The shell p
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:76fdafe34bbc674a", by = "agent:claude", note = "The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
+stamp = { hash = "b3:d32881f07e065b68", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens | merge: main added File › Video settings… (#1259); the menus paragraph now says updates.rs holds Check for updates, settings.rs the Settings dialog, video_settings.rs Video settings; header.rs keeps Video settings… between Settings… and Plugins… | kept from the merged side: The shell paragraph now names video_settings.rs beside updates.rs for the File menu dialogs; style.css adds settings-field/size/error rules for it; nothing else in Design changed" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:b1bd9452d9471e7f", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
+stamp = { hash = "b3:79f420a302dc0ac4", by = "agent:claude-settings", note = "Contents now lists settings.rs (Settings, SettingsPage, SettingsDialog); Header names File › Settings… and Plugins…; Pairing and Plugins are pages of the Settings dialog, not under the Inspector; Updates says the launch check is on the General page | merge: main added video_settings.rs (#1259); the Header bullet now lists Settings…, Video settings…, Plugins… and Disconnect, and lib.rs has both video_settings and settings modules | kept from the merged side: Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
@@ -5508,7 +5508,7 @@ stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read the c
 stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "dock.rs: the Editing layout's right zone is now one full-height group with the Inspector, Filters and Transform as tabs (Inspector shown) in place of the Inspector over a Filters and Transform group; the purpose section's account of dock.rs (Dock, zones, groups, saved layouts with Editing and Live built in) names no group layout, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
+stamp = { hash = "b3:c1f54150f8929221", by = "agent:claude-settings", note = "Contents now lists settings.rs (Settings, SettingsPage, SettingsDialog); Header names File › Settings… and Plugins…; Pairing and Plugins are pages of the Settings dialog, not under the Inspector; Updates says the launch check is on the General page | merge: main added video_settings.rs (#1259); the Header bullet now lists Settings…, Video settings…, Plugins… and Disconnect, and lib.rs has both video_settings and settings modules | kept from the merged side: Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/host.rs"]
 stamp = { hash = "b3:d09c1058d9ee2331", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
@@ -5523,7 +5523,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:a400d5d7e61734f9", by = "agent:blend-amount", note = "Re-read: crate purpose unchanged by the Blending submenu's amount entries" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:bcb66f78dde4cf09", by = "agent:claude", note = "Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
+stamp = { hash = "b3:848776f10bd9d408", by = "agent:claude-settings", note = "Contents now lists settings.rs (Settings, SettingsPage, SettingsDialog); Header names File › Settings… and Plugins…; Pairing and Plugins are pages of the Settings dialog, not under the Inspector; Updates says the launch check is on the General page | merge: main added video_settings.rs (#1259); the Header bullet now lists Settings…, Video settings…, Plugins… and Disconnect, and lib.rs has both video_settings and settings modules | kept from the merged side: Added the Video settings entry for video_settings.rs (File › Video settings…: base resolution and 30/60 fps, one batch); store.rs's Collection now carries base_fps; header.rs only adds the menu item" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -5769,7 +5769,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:d1fd904a5b5e881f", by = "agent:claude", note = "Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
+stamp = { hash = "b3:c1baeaac401c1918", by = "agent:claude-settings", note = "Plugins entry says the spec opens the Settings dialog's Plugins page via File › Plugins…, and adds the new test: no plugins or pairing in the Inspector, page switching by click and arrows, the install dialog centred over a moved Settings dialog and closing alone on Escape; Browse's Install plugin text still holds | merge: main's video-settings spec and menus.spec exact locators merged in; the Plugins bullet still matches plugins.spec.js | kept from the merged side: Added the Video settings bullet for video-settings.spec.js, matching what the spec checks (preset, refused 0, one revision, no-op Apply, one Undo)" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/browse.spec.js"]
 stamp = { hash = "b3:d5f8fbfcd30861e5", by = "agent:claude-settings", note = "Plugins entry says the spec opens the Settings dialog's Plugins page via File › Plugins…, and adds the new test: no plugins or pairing in the Inspector, page switching by click and arrows, the install dialog centred over a moved Settings dialog and closing alone on Escape; Browse's Install plugin text still holds" }
@@ -6246,7 +6246,7 @@ stamp = { hash = "b3:302d01fa61544c5e", by = "agent:claude", note = "Added the L
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
+stamp = { hash = "b3:58b52edc2f857ad3", by = "agent:claude-settings", note = "Re-read: File › Settings… still holds the launch check (now its General page, where the dialog opens); nothing here names plugins or pairing | merge: main added Video settings (HD-11); File › Settings… still opens on General with the launch check, as this section says | kept from the merged side: Re-read: the RTMP steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read recording: the desktop app's Browse opens a save dialog on add and on Edit, and a browser still types the path. Record and Stop recording are unchanged." }
@@ -6255,7 +6255,7 @@ stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read rec
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Re-read: the recording steps don't depend on HD-11; nothing changed" }
+stamp = { hash = "b3:58b52edc2f857ad3", by = "agent:claude-settings", note = "Re-read: the agent steps still hold; installing plugins stays a person's action, now from File › Plugins…, which this section does not name | merge: main's Video settings row doesn't touch the agent steps | kept from the merged side: Re-read: the recording steps don't depend on HD-11; nothing changed" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6273,7 +6273,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:54d5843586051feb", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:71a6130fa08d0c3a", by = "agent:claude", note = "Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
+stamp = { hash = "b3:58b52edc2f857ad3", by = "agent:claude-settings", note = "Re-read: the scene steps name the Inspector for item edits only, nothing about plugins or pairing; holds after HD-01 and the docking line changed | merge: main's HD-11 Video settings row joined UI-FEATURES; the scene steps name neither dialog | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6837,7 +6837,7 @@ stamp = { hash = "b3:59d14d49d4679afa", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:13ec6a2f4a167e5a", by = "agent:claude-timelines", note = "Re-read against the timelines change: the only UI code change adds timelines: Vec::new() to SceneInfo and StudioGet initializers and .. to patterns; nothing described here changed (the UI has no timeline editor yet, ADR-0114 leaves it open)." }
 
 ["UI-FEATURES#header"."body"]
-stamp = { hash = "b3:375362858aaad229", by = "agent:claude", note = "Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
+stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; HD-10's File › Settings… launch check still holds (General page) | merge: main added HD-11 and video_settings.rs to covers; HD-01 now names Video settings… (HD-11) in the File menu alongside Settings… and Plugins…, and covers keeps both files | kept from the merged side: Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/about.rs"]
 stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: HD-10 now lists each installed third-party codec in About (OpenH264 on Linux with notice, licence link and folded full text), matching about.rs and InstalledCodecs" }
@@ -6846,7 +6846,7 @@ stamp = { hash = "b3:482e6252b6530f88", by = "agent:claude", note = "#1119: HD-1
 stamp = { hash = "b3:33caa45ba2cbbc33", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; HD-10's File › Settings… launch check still holds (General page)" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/header.rs"]
-stamp = { hash = "b3:cd43ac207b182b0b", by = "agent:claude", note = "Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
+stamp = { hash = "b3:c1f54150f8929221", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; HD-10's File › Settings… launch check still holds (General page) | merge: main added HD-11 and video_settings.rs to covers; HD-01 now names Video settings… (HD-11) in the File menu alongside Settings… and Plugins…, and covers keeps both files | kept from the merged side: Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:fc1faebd6f633620", by = "agent:cursor", note = "Re-read the header rows against app.rs and outputs.rs: app.rs now provides the connected-engine URL for Browse, and outputs.rs adds Browse on recording paths. The header menus, Record, Go Live and About are unchanged." }
@@ -6942,7 +6942,7 @@ stamp = { hash = "b3:e562ed3306cd0292", by = "agent:claude-settings", note = "No
 stamp = { hash = "b3:59d14d49d4679afa", by = "agent:claude@session_01FGswf8bzTLhyPknQqo7a9J", note = "Only FL-07's note changed; no status, so the totals hold. | merge: Main brought #1144 (protocol and core README split into topic sections), #1111 (item effects in canvas space, 0.76), #1122 (depth of field, 0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's change, file filters (asset references) allowed on master and output chains at protocol 0.79, still reads right in the merged text. | kept from the merged side: #1075 adds item.set_effects_space and ItemInfo.effects_space (box or canvas, protocol 0.76 from the release queue, ADR-0106): re-read; FL-09 stays done, counts unchanged" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
-stamp = { hash = "b3:375362858aaad229", by = "agent:claude", note = "Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
+stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match | merge: main added HD-11 (Video settings), counted in its header totals; this branch adds no row | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#inspector"]
 stamp = { hash = "b3:a437e78f33b7d3dc", by = "agent:cursor", note = "Re-read the counts against the inspector and outputs tables: no status cell changed, so the row counts and the total still match. Browse is prose in those sections, not a new row." }
@@ -6990,7 +6990,7 @@ stamp = { hash = "b3:88be9db25a48df24", by = "agent:obs-ui-thread", note = "Re-r
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:76fdafe34bbc674a", by = "agent:claude", note = "style.css only adds the Video settings dialog's field, size-row and error rules, using the existing --danger token; the palette and shared controls are unchanged" }
+stamp = { hash = "b3:d32881f07e065b68", by = "agent:claude-settings", note = "style.css only adds the Settings dialog's page list and pane using the existing --line, --hover, --text and --muted tokens, and drops the plugins/pairing top margin; the palette and controls rows are unchanged | merge: main added video settings styles beside this branch's settings dialog styles; tokens unchanged | kept from the merged side: style.css only adds the Video settings dialog's field, size-row and error rules, using the existing --danger token; the palette and shared controls are unchanged" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }
