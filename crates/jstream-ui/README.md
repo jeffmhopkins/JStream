@@ -30,7 +30,7 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
@@ -49,7 +49,7 @@ Contents ([Design](#design) explains the choices):
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
-  its release page. File › Settings… holds "Check for updates at launch", off until the
+  its release page. The Settings dialog's General page holds "Check for updates at launch", off until the
   user turns it on; the desktop app's main window then checks once as the workspace
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
@@ -173,12 +173,16 @@ Contents ([Design](#design) explains the choices):
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
-  Inspector, shown only when the server pairs devices (start pairing and show the code, list and
+- **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Devices)
+  listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
+  Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
-- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
-  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
+  Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
+  page's top level), the calls behind
   them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
   and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
   texts, tested natively, the section's re-reads and grants against a fake engine that
@@ -693,7 +697,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Sources (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
+  Sources (`Sources`), the Inspector (`Inspector`), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
@@ -768,9 +772,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), and File › Video settings… is
-  [`video_settings.rs`](src/video_settings.rs), both described under
+  system browser), then Check for updates and About JStream. Check for updates is
+  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
+  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
@@ -844,8 +849,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
-  calls `device.list` when it opens and shows only if that is served: a session with no
-  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `device.list` when it opens and shows its controls only if that is served: a
+  session with no server in front answers `unsupported`, and the Devices page then says
+  no device can pair with this session. "Pair a device"
   calls `pairing.start` and shows the code, large, with a countdown from its
   `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel
