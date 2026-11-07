@@ -84,8 +84,12 @@ impl<'a> Reply<'a> {
     ///
     /// # Errors
     ///
-    /// [`Error::Syntax`] for bytes that aren't a VISCA reply.
+    /// [`Error::Syntax`] for bytes that aren't a VISCA reply, including any longer than
+    /// [`MAX_MESSAGE`](crate::MAX_MESSAGE).
     pub fn parse(bytes: &'a [u8]) -> Result<(Address, Self), Error> {
+        if bytes.len() > crate::MAX_MESSAGE {
+            return Err(Error::Syntax);
+        }
         let [first, body @ .., 0xFF] = bytes else {
             return Err(Error::Syntax);
         };
@@ -110,9 +114,18 @@ impl<'a> Reply<'a> {
     ///
     /// # Errors
     ///
-    /// [`Error::OutOfRange`] for a socket above 15, or data too long for a message or
-    /// containing `FF`.
+    /// [`Error::OutOfRange`] for the broadcast address (a camera replies from its own
+    /// address, never from the one a broadcast was sent to), a socket above 15, data too
+    /// long for a message or containing `FF`, or an error code of `FF`.
     pub fn encode(&self, from: Address) -> Result<Bytes, Error> {
+        if from == Address::BROADCAST {
+            return Err(Error::OutOfRange("reply address"));
+        }
+        if let Self::Error { kind, .. } = self
+            && kind.code() == 0xFF
+        {
+            return Err(Error::OutOfRange("error code"));
+        }
         let mut b = Bytes::new();
         b.push(from.reply_byte());
         match *self {
@@ -227,6 +240,25 @@ impl InquiryValue {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn refuses_what_it_could_not_write_back() {
+        // Inquiry data longer than a message: found by the review, the fuzz target's
+        // round trip would panic on it.
+        let mut long = vec![0x90, 0x50];
+        long.extend([0; 14]);
+        long.push(0xFF);
+        assert_eq!(Reply::parse(&long), Err(Error::Syntax));
+        assert_eq!(
+            Reply::Ack { socket: 1 }.encode(Address::BROADCAST),
+            Err(Error::OutOfRange("reply address"))
+        );
+        let bad = Reply::Error {
+            socket: 1,
+            kind: ErrorKind::Other(0xFF),
+        };
+        assert!(bad.encode(cam1()).is_err());
+    }
 
     fn cam1() -> Address {
         Address::new(1).unwrap_or(Address::BROADCAST)

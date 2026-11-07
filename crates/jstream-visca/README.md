@@ -38,6 +38,8 @@ Contents:
   which a camera answers with a syntax error) from a well-formed message this crate
   doesn't know (`Error::Unsupported`, answered "not executable"), such as exposure.
 - `Reply`: ACK, completion, inquiry data and errors (`ErrorKind`), parsed and encoded.
+  Parsing refuses anything longer than a message; encoding refuses what it couldn't
+  write as one (the broadcast address, an `FF` code), so whatever parses encodes back.
   `InquiryValue` decodes the data for the inquiry asked, and encodes the reply a virtual
   camera answers with.
 - `ip`: Sony-style VISCA over IP (UDP port 52381): the 8-byte header (payload type,
