@@ -174,7 +174,8 @@ async function fakePlugins(page, plugins) {
 test('installing a plugin browses for its folder', async ({ page, daemon }) => {
   const sent = await fakePlugins(page, []);
   await asDesktop(page, daemon);
-  await showPanel(page, 'Inspector');
+  await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
+  await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Plugins…' }).click();
   await page.locator('section.plugins').getByRole('button', { name: 'Install plugin' }).click();
   const install = page.getByRole('dialog', { name: 'Install plugin' });
   await queuePick(page, 'C:\\plugins\\Chat Switcher');
