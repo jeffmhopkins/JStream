@@ -68,7 +68,7 @@ The rest of ADR-0102 is unchanged.
 - Each HTML page has its own storage, cookies and permissions, as a separate web origin
   would. Two HTML sources no longer share anything through their origin.
 - An HTML page that loaded `http` scripts or frames from the web stops loading them.
-  It has to use `https`, or inline them. The alpha.5 release notes say so.
+  It has to use `https`, or inline them, and the release that ships this has to say so.
 - Where ADR-0102 decision 2 says "a `data:` document", read this ADR. The browser
   crate's README, the threat model and the `jstream-sources` descriptor already describe
   the new origin (#1301).
