@@ -1356,7 +1356,7 @@ stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1X
 stamp = { hash = "b3:b7a2be0f4047b582", by = "agent:perf-thread", note = "The bench bullet now says the engine must be able to write to --out; open question 4 lists exit 5 as provisional" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:f0df8d0cb9880ba8", by = "agent:perf-thread", note = "The bench bullet now says the engine must be able to write to --out; open question 4 lists exit 5 as provisional" }
+stamp = { hash = "b3:9be7c0e83d08ba56", by = "agent:perf-thread", note = "Re-read: the bench bullet (a client the engine writes --out for) holds with the absolute, non-canonical path." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1386,7 +1386,7 @@ stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH
 stamp = { hash = "b3:b7a2be0f4047b582", by = "agent:perf-thread", note = "The bench's run failures now exit 5 through CliError::Bench (exit.rs, run.rs report); Contents still matches" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:f0df8d0cb9880ba8", by = "agent:perf-thread", note = "The bench's run failures now exit 5 through CliError::Bench (exit.rs, run.rs report); Contents still matches" }
+stamp = { hash = "b3:9be7c0e83d08ba56", by = "agent:perf-thread", note = "Re-read after the bench resolves --out with path::absolute instead of canonicalize: the purpose's bench sentence still holds." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1407,13 +1407,13 @@ stamp = { hash = "b3:0e89cd8dd27e919c", by = "agent:perf-thread", note = "The be
 stamp = { hash = "b3:de0b3626106044e3", by = "agent:grok", note = "Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:0a83222e114becc0", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
+stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Bench: the engine gets an absolute --out path, not a Windows verbatim one it refuses (the Windows test failure); --json moved to the Output bullet; long lines rewrapped (N4)." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
 stamp = { hash = "b3:b7a2be0f4047b582", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:f0df8d0cb9880ba8", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
+stamp = { hash = "b3:9be7c0e83d08ba56", by = "agent:perf-thread", note = "Bench: the engine gets an absolute --out path, not a Windows verbatim one it refuses (the Windows test failure); --json moved to the Output bullet; long lines rewrapped (N4)." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:c3e2bb63c14b238a", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
@@ -6216,7 +6216,7 @@ stamp = { hash = "b3:cbc148f78a6a98ff" }
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:0a83222e114becc0", by = "agent:perf-thread", note = "Usage only gains the bench's exit 5 and output-path note; the MCP proxy steps are unchanged" }
+stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Usage changed only in the bench's Output and recording-path bullets; nothing here describes the bench." }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
@@ -6390,7 +6390,7 @@ stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-r
 stamp = { hash = "b3:ff104372d728d024", by = "agent:claude-linux-daemon", note = "Re-read for the whole PR: Linux now runs the same steps as Windows (sink, set-key into the Secret Service else ~/.config/jstream/secrets, start, stats.tick, sink check, clear-key); without an H.264 encoder the start, live, events (states starting > failed) and stats.tick are SKIP with the daemon's reason, the sink too, and the snapshot and graceful stop still run; -RtmpUrl is no longer Windows only. Matches smoke.ps1; the script has not been run (no PowerShell here)" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:0a83222e114becc0", by = "agent:perf-thread", note = "Usage only gains the bench's exit 5 and output-path note; the smoke script's commands are unchanged" }
+stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Usage changed only in the bench's bullets; smoke.ps1 runs no bench command." }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }
@@ -6402,7 +6402,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:0a83222e114becc0", by = "agent:perf-thread", note = "Usage only gains the bench's exit 5 and output-path note; the mcp command line and exit 3 the steps use are unchanged" }
+stamp = { hash = "b3:0aeaf4792c5cce7a", by = "agent:perf-thread", note = "Usage changed only in the bench's bullets; the go-live steps use no bench command." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:3310840b33c3c51e", by = "agent:shader-source", note = "Re-read: daemon usage only gained a clause naming shader source kinds under --effects-dir (ADR-0093 part 2); nothing this runbook relies on changed." }

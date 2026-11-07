@@ -286,7 +286,9 @@ pub fn run(
     let gates = Gates::load(options.gates.as_deref())?;
     let dir = PathBuf::from(&options.out);
     std::fs::create_dir_all(&dir)?;
-    let dir = dir.canonicalize()?;
+    // Absolute for the engine, another process, but not `canonicalize`d: on Windows
+    // that gives a `\\?\` path, which the engine refuses as a recording path.
+    let dir = std::path::absolute(&dir)?;
     let canvas = canvas(control)?;
     let program = program_scene(control)?;
     let mut runs = Vec::new();

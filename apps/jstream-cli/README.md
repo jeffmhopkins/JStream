@@ -298,10 +298,11 @@ measured the same way on every machine (#1220).
 - **Gates.** Every count is over the window, except two that only make the gates
   stricter: the recording's own dropped frames and packets are its run's totals, so
   they include its start before the first recorded frame, and `profile.get` covers the
-  last `--seconds` before it is read, up to one more tick after the window closes. By default (the alpha.5 bar) a run fails on
-  any dropped frame or packet at any stage of `stats.tick`'s drop counts or the
-  recording's own, a skipped render tick, a program frame over its budget, a recording
-  under 98% of the program's frame rate, or a switch without a frame sheet. `--gates
+  last `--seconds` before it is read, up to one more tick after the window closes. By
+  default (the alpha.5 bar) a run fails on any dropped frame or packet at any stage of
+  `stats.tick`'s drop counts or the recording's own, a skipped render tick, a program
+  frame over its budget, a recording under 98% of the program's frame rate, or a
+  switch without a frame sheet. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
   `output_packets`, `recording_dropped_frames`, `recording_dropped_packets` and
@@ -314,10 +315,12 @@ measured the same way on every machine (#1220).
   when one failed (the files are written either way). It exits 5 when a run couldn't
   finish: the recording sent no frame within 20 seconds (on an engine with no H.264
   encoder, say), or the engine answered with something the bench can't read. An engine
-  that refuses the scenario exits with that error's code.
-- **The engine writes the recording**, to the path the CLI made of `--out`. So the
-  engine must be able to write there: it runs on the same machine, or the path is one
-  both share. Otherwise its recording fails to start and the run exits 5. `--json` changes only the error format.
+  that refuses the scenario exits with that error's code. `--json` changes only the
+  error format.
+- **The engine writes the recording**, to the absolute path the CLI made of `--out`
+  (not a Windows `\\?\` one, which the engine refuses). So the engine must be able to
+  write there: it runs on the same machine, or the path is one both share. Otherwise
+  its recording fails to start and the run exits 5.
 - **Not yet:** media, browser, display and webcam scenarios; per-output and preview
   stream stats in `profile.get`; the clients' received frame rate; an image-quality
   probe; a CI job (#1220).
