@@ -5709,7 +5709,7 @@ stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "Added the V
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Contents now lists settings.rs (Settings, SettingsPage, SettingsDialog); Header names File › Settings… and Plugins…; Pairing and Plugins are pages of the Settings dialog, not under the Inspector; Updates says the launch check is on the General page" }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
-stamp = { hash = "b3:9c9084095dcbe850", by = "agent:obs-ui-thread", note = "Harness body: the openAddSource bullet now says it right-clicks under the last Sources row or on an empty scene's hint, since the tool bar opens no menu; Scene objects renamed Sources throughout." }
+stamp = { hash = "b3:90042879b6527b4c", by = "agent:issues-burndown", note = "Added the bringToFront note: headless Chromium holds a page that is not in front to about 1 frame/s, which stalled folders.spec.js's drags on page while other was in front; rest of the harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
 stamp = { hash = "b3:cd846fff4169fb2d", by = "agent:obs-ui-thread", note = "fixtures.js: openAddSource right-clicks just under the last Sources row, or on the empty scene's .placeholder, since a right-click on the tool bar opens no menu; doc comments say Sources. The harness text says the same." }
@@ -5760,7 +5760,7 @@ stamp = { hash = "b3:39529f85996a31a3", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:158ff2f88b1bc0fe", by = "agent:claude", note = "Re-read: the specs' option lists now include Custom shader; harness, mock daemon and fixtures are unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
-stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
+stamp = { hash = "b3:ec347db4bfaa5c29", by = "agent:issues-burndown", note = "Added the bringToFront note: headless Chromium holds a page that is not in front to about 1 frame/s, which stalled folders.spec.js's drags on page while other was in front; rest of the harness unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/groups.spec.js"]
 stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "groups.spec.js: the empty-panel right-click lands 10px above the Sources .tool-bar instead of at the panel's foot, and the doc comment says Sources; in-spec only, so the harness holds." }
@@ -5874,7 +5874,7 @@ stamp = { hash = "b3:39529f85996a31a3", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:158ff2f88b1bc0fe", by = "agent:claude", note = "Re-read: the effects, filters, output-chains and scene-filters specs still test what the section lists; their catalogue assertions now expect Custom shader under Effect packs" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/folders.spec.js"]
-stamp = { hash = "b3:1cdd53ac5e952fe6", by = "agent:obs-ui-thread", note = "folders.spec.js: the drag helper scrolls both rows clear of the sticky tool bar, and the panel right-click lands 10px above .tool-bar, since the bar opens no menu; both are in-spec, so no fixture or daemon change and the harness holds." }
+stamp = { hash = "b3:ec347db4bfaa5c29", by = "agent:issues-burndown", note = "Re-read the Scene folders bullet: folders.spec.js only brings its driving page to the front; what it covers is unchanged" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/groups.spec.js"]
 stamp = { hash = "b3:ef9f6d4510d7fc0d", by = "agent:obs-ui-thread", note = "groups.spec.js: the empty-panel right-click lands 10px above the Sources .tool-bar instead of at the panel's foot, and the doc comment says Sources; in-spec only, and the Tests list, which names no Scene objects any more, holds." }
