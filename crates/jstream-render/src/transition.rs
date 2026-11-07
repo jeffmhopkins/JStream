@@ -340,11 +340,12 @@ pub fn settings_blend(from: &Settings, to: &Settings) -> bool {
 
 /// An effect's settings `k` of the way from `from` to `to`
 /// ([ADR-0127](../../../docs/adr/0127-moves-interpolate-effect-settings.md)): each
-/// number linearly (a whole number on both sides stays whole, rounded), each colour per
-/// channel, and every other value that differs switching from `from`'s to `to`'s at
+/// number linearly, rounded for a parameter in `whole` (the kind's `int` parameters, from
+/// its descriptor: a float stored as `0` and `1` still blends through `0.5`), each colour
+/// per channel, and every other value that differs switching from `from`'s to `to`'s at
 /// `k = 0.5`. The parameters are `to`'s. `k` is clamped to `[0, 1]`, so a spring never takes a setting past its
 /// ends and out of the range its kind allows.
-pub fn blend_settings(from: &Settings, to: &Settings, k: f32) -> Settings {
+pub fn blend_settings(from: &Settings, to: &Settings, k: f32, whole: &[String]) -> Settings {
     let k = if k.is_nan() { 0.0 } else { k.clamp(0.0, 1.0) };
     let mut out = to.clone();
     for (id, value) in out.0.iter_mut() {
@@ -355,7 +356,8 @@ pub fn blend_settings(from: &Settings, to: &Settings, k: f32) -> Settings {
         if start == value {
             continue;
         }
-        if let Some(blended) = blend_value(start, value, k) {
+        let whole = whole.iter().any(|w| w == id);
+        if let Some(blended) = blend_value(start, value, k, whole) {
             *value = blended;
         } else if k < 0.5 {
             *value = start.clone();
@@ -364,17 +366,17 @@ pub fn blend_settings(from: &Settings, to: &Settings, k: f32) -> Settings {
     out
 }
 
-/// `a` and `b`, two numbers or two colours, `k` of the way; `None` for anything else.
-fn blend_value(a: &Value, b: &Value, k: f32) -> Option<Value> {
+/// `a` and `b`, two numbers or two colours, `k` of the way, a number rounded when it is
+/// `whole`; `None` for anything else.
+fn blend_value(a: &Value, b: &Value, k: f32, whole: bool) -> Option<Value> {
     match (a, b) {
         (Value::Number(a), Value::Number(b)) => {
-            let k = f64::from(k);
-            if let (Some(a), Some(b)) = (a.as_i64(), b.as_i64()) {
-                let v = a as f64 + (b as f64 - a as f64) * k;
+            let (a, b) = (a.as_f64()?, b.as_f64()?);
+            let v = a + (b - a) * f64::from(k);
+            if whole {
                 return Some(Value::from(v.round() as i64));
             }
-            let (a, b) = (a.as_f64()?, b.as_f64()?);
-            serde_json::Number::from_f64(a + (b - a) * k).map(Value::Number)
+            serde_json::Number::from_f64(v).map(Value::Number)
         }
         (Value::String(a), Value::String(b)) => {
             let (a, alpha_a) = parse_color(a)?;
@@ -884,23 +886,28 @@ mod tests {
             ("same", json!(1)),
         ]);
         assert!(settings_blend(&from, &to));
-        let mid = blend_settings(&from, &to, 0.25);
+        let whole = ["steps".to_owned()];
+        let mid = blend_settings(&from, &to, 0.25, &whole);
         assert_eq!(mid.get("radius"), Some(&json!(5.0)));
         assert_eq!(
             mid.get("steps"),
             Some(&json!(3)),
-            "a whole number stays whole"
+            "an int parameter stays whole"
         );
+        // A float parameter stored as whole numbers still blends smoothly (#1302 B1).
+        let floats = |v: i64| settings(&[("strength", json!(v))]);
+        let half = blend_settings(&floats(0), &floats(1), 0.5, &[]);
+        assert_eq!(half.get("strength"), Some(&json!(0.5)));
         assert_eq!(mid.get("color"), Some(&json!("#402000")));
         assert_eq!(mid.get("tint"), Some(&json!("#40404040")));
         assert_eq!(mid.get("mode"), Some(&json!("box")), "before the midpoint");
         assert_eq!(
-            blend_settings(&from, &to, 0.5).get("mode"),
+            blend_settings(&from, &to, 0.5, &whole).get("mode"),
             Some(&json!("gauss"))
         );
         // A spring's overshoot never takes a setting past its end.
-        assert_eq!(blend_settings(&from, &to, 1.2), to);
-        assert_eq!(blend_settings(&from, &to, 0.0), from);
+        assert_eq!(blend_settings(&from, &to, 1.2, &whole), to);
+        assert_eq!(blend_settings(&from, &to, 0.0, &whole), from);
         let scene = |id: &str| json!({"type": "scene", "scene_id": id});
         let a = settings(&[("mask", scene("a"))]);
         let b = settings(&[("mask", scene("b"))]);

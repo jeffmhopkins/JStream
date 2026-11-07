@@ -1580,7 +1580,8 @@ only when their effects are the same kinds in order
 blend (`transition::effects_pair`, [ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
 equal, or plain values on both sides, not a scene, source or file reference that differs.
 A pair whose settings differ carries the leaving side's (`Visual::blend_from`); the shot
-keeps one `EffectBlend` per such chain, with the item's timing, and the render thread
+keeps one `EffectBlend` per such chain, with the item's timing and each filter's `int`
+parameters from its descriptor (`Chain::whole_params`), and the render thread
 hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
 numbers and colours linearly, every other value switching halfway, the eased progress
 clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`

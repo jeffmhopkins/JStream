@@ -118,7 +118,7 @@ and calls this crate.
   ([ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
   `settings_blend` says whether two settings maps can blend (no reference or `null`
   differs), and `blend_settings` gives them `k` of the way, numbers and colours
-  linearly, every other differing value switching at one half, `k` clamped to `[0, 1]`.
+  linearly (rounded for the kind's `int` parameters, which the caller names), every other differing value switching at one half, `k` clamped to `[0, 1]`.
 
 **Where it sits on the existing APIs.**
 

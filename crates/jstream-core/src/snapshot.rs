@@ -642,6 +642,8 @@ struct EffectBlend {
     from: Arc<[Settings]>,
     /// The settings it blends to: the chain's own, one per filter.
     to: Vec<Settings>,
+    /// Each filter's `int` parameters, which stay whole.
+    whole: Vec<Vec<String>>,
     /// The item's timing, whose eased progress the blend follows.
     timing: Timing,
 }
@@ -662,7 +664,10 @@ impl Transitioning {
                     .from
                     .iter()
                     .zip(&blend.to)
-                    .map(|(from, to)| jstream_render::transition::blend_settings(from, to, k))
+                    .zip(&blend.whole)
+                    .map(|((from, to), whole)| {
+                        jstream_render::transition::blend_settings(from, to, k, whole)
+                    })
                     .collect();
                 (&blend.owner, settings)
             })
@@ -695,6 +700,7 @@ fn effect_blends(
         }
         blends.push(EffectBlend {
             to: chain.filters.iter().map(|f| f.settings.clone()).collect(),
+            whole: chain.whole_params(),
             owner,
             from: Arc::clone(from),
             timing: *timing,

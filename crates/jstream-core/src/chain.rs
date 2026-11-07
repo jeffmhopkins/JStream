@@ -112,6 +112,16 @@ fn outset_of(kind: &str) -> u32 {
         .unwrap_or(0)
 }
 
+/// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
+fn whole_params(descriptor: &jstream_protocol::KindDescriptor) -> Vec<String> {
+    descriptor
+        .params
+        .iter()
+        .filter(|param| matches!(param.ty, jstream_protocol::ParamType::Int { .. }))
+        .map(|param| param.id.clone())
+        .collect()
+}
+
 /// One filter of a [`Chain`], as the collection holds it.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct ChainFilter {
@@ -318,6 +328,26 @@ impl Chain {
             .iter()
             .filter(|filter| filter.effect.is_some() || filter.program.is_some())
             .map(|filter| filter.kind.as_str())
+    }
+
+    /// Each filter's `int` parameters, in order, which a Move keeps whole as it blends
+    /// their settings (ADR-0127): from a pack effect's descriptor, or the built-in
+    /// kind's.
+    pub(crate) fn whole_params(&self) -> Vec<Vec<String>> {
+        static BUILTIN: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .iter()
+                .map(|kind| (kind.kind_id.clone(), whole_params(kind)))
+                .collect()
+        });
+        self.filters
+            .iter()
+            .map(|filter| match &filter.effect {
+                Some(effect) => whole_params(effect.kind_descriptor()),
+                None => builtin.get(&filter.kind).cloned().unwrap_or_default(),
+            })
+            .collect()
     }
 
     /// The enabled filters' kinds and settings, in order: what makes two items' effects

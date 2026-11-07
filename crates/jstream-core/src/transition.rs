@@ -356,7 +356,9 @@ fn blended_look(
             .map(|((kind, to), from)| {
                 (
                     kind.clone(),
-                    jstream_render::transition::blend_settings(from, to, k),
+                    // Only the shot knows the kinds' `int` parameters; this look is for
+                    // pairing, which compares values, not their types.
+                    jstream_render::transition::blend_settings(from, to, k, &[]),
                 )
             })
             .collect(),

@@ -40,7 +40,8 @@ picture between them can't be drawn.
 **2. How the settings move.** A paired item whose effects' settings differ draws its
 arriving side's effects with settings blended from the leaving side's, with the item's
 own progress and easing (its delay, its stagger and its curve, as its placement moves):
-- every number linearly, a whole number on both sides staying whole (rounded);
+- every number linearly, rounded to a whole number for a parameter the kind's
+  descriptor types `int` (a `float` parameter stored as `0` and `1` blends through `0.5`);
 - every colour (`#rrggbb` or `#rrggbbaa`) per channel, in the stored sRGB values;
 - every other value that differs (an enum, a string, a boolean) switches from the
   leaving side's to the arriving side's when the item's eased progress reaches one half.
