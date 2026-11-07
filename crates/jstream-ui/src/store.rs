@@ -28,6 +28,8 @@ pub struct Collection {
     pub rev: Rev,
     /// The canvas every scene is laid out on.
     pub canvas: Canvas,
+    /// The base frame rate, 30 or 60 (ADR-0119).
+    pub base_fps: u32,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
     /// Every scene with its items, in display order. A keyframe scene's `items` are its
@@ -63,6 +65,7 @@ impl Collection {
             QueryResult::StateGet {
                 rev,
                 canvas,
+                base_fps,
                 sources,
                 scenes,
                 outputs,
@@ -102,6 +105,7 @@ impl Collection {
                 Some(Collection {
                     rev,
                     canvas,
+                    base_fps,
                     sources,
                     scenes,
                     keyframe_children,

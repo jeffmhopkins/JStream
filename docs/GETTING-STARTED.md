@@ -56,6 +56,9 @@ depends_on = ["docs/UI-FEATURES.md"]
 A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
+The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
+resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
+you type) and its frame rate, 30 or 60 fps. Each output scales from that picture.
 
 1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
    then type its name.
