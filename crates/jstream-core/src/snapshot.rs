@@ -2346,7 +2346,9 @@ impl<'a> Planner<'a, '_> {
             }),
             false => None,
         };
-        chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        if let Some(chain) = chain.as_mut() {
+            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        }
         out.boxes.insert(
             owner.clone(),
             ItemBox {
