@@ -127,8 +127,13 @@ a stolen token, local denial of service.
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon's own listener binds `127.0.0.1`, with no flag to bind it elsewhere.
   **Network access** ([ADR-0104](../adr/0104-network-listener-over-tls.md)) is a second
-  listener the person turns on with `--lan` (the server's `tls` feature,
-  `ServerConfig::network`); it is off by default:
+  listener the person turns on with `--lan`, or in the desktop app with Settings ›
+  Devices › "Allow devices on my network" (the server's `tls` feature,
+  `ServerConfig::network`); it is off by default. The desktop app keeps that switch in
+  its data folder and saves it only through its own window's command, never through
+  the control API, so no agent, plugin or paired device can turn it on. Turning it off
+  applies at the app's next start and doesn't revoke the paired devices, which are
+  admitted again if it is turned back on; revoking them ends their access:
   - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
     suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.
   - **A self-signed certificate made on the host**: an ECDSA P-256 key, made on first use
