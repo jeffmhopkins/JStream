@@ -90,6 +90,10 @@ jstream-platform-windows.workspace = true
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 # The Linux helper's end-to-end test (`tests/linux_page.rs`) stamps pages on a fake clock.
 jstream-platform = { workspace = true, features = ["fake"] }
+# Its local-network checks (`tests/linux_page/local_network.rs`) serve an `https` page
+# from loopback, with a certificate made at test time, as the RTMPS tests do (R-DEP-006).
+rcgen.workspace = true
+rustls.workspace = true
 
 [[example]]
 name = "page_check"
