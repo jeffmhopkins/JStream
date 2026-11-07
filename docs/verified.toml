@@ -5331,7 +5331,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:c484b4073ddabb0a", by = "agent:claude", note = "Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
+stamp = { hash = "b3:8018efb2d7a42d24", by = "agent:claude", note = "Replaced 'always version = 1 with no renames' with the @renamed versioning, Save as pack… (save_as_problem, move_to_kind, old pack stays) and the CSSOM sizing of the coloured copy, matching the code and style.css | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:60723e6c2f3b1641", by = "agent:grok", note = "Re-read Design against the control dependency. The UI still drives the engine through the protocol. It does not set the base frame rate yet." }
@@ -5433,7 +5433,7 @@ stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1119: the 
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Design against mixer.rs (BusStrip delete reads delete.plan with DeleteTarget::Bus, confirms with the plan_summary detail, applies the plan expecting its rev) and confirm.rs (doc comment only); rewrote the Mixer bullet that said the engine refuses deleting a drawn bus, and the Native builds bullet still holds. Tests: new a_drawn_bus_is_deleted_through_its_plan (mixer.rs) against MockEngine; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
-stamp = { hash = "b3:c04c51c29b4bcda3", by = "agent:claude", note = "Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
+stamp = { hash = "b3:2ae7d3c7611f64e6", by = "agent:claude", note = "Replaced 'always version = 1 with no renames' with the @renamed versioning, Save as pack… (save_as_problem, move_to_kind, old pack stays) and the CSSOM sizing of the coloured copy, matching the code and style.css | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/device_preview.rs"]
 stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "The projectors paragraph now says any single object's Pop out opens its source alone with its own filters, the query takes source:<id>, and a picture subscribes with source_id (0.56), as projector.rs's Target::Source, Request, subscribe and Picture do; item_menu.rs's pop_out match is what calls it." }
@@ -5523,7 +5523,7 @@ stamp = { hash = "b3:6735b78fa8fc9542", by = "agent:claude", note = "The shell p
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking no longer mounts Pairing and Plugins under the Inspector; Pairing's design says a session without a server shows the Devices page's can't-pair note instead of hiding; the Plugins dialogs are portaled out of the Settings modal; style.css adds the two-column settings dialog with existing tokens" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:93ad750dc3cd389a", by = "agent:claude", note = "Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
+stamp = { hash = "b3:8a0dd73b63d79183", by = "agent:claude", note = "Replaced 'always version = 1 with no renames' with the @renamed versioning, Save as pack… (save_as_problem, move_to_kind, old pack stays) and the CSSOM sizing of the coloured copy, matching the code and style.css | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Added the colouring design: highlight tokenizes, a pre under a transparent textarea draws it in the same box and scrolls with it; matches custom_shader.rs and the .shader-stack/.hl-* rules in style.css" }
 
 ["CRATE-jstream-ui#purpose"."body"]
 stamp = { hash = "b3:b8e8bfd1889e73b7", by = "agent:claude", note = "Re-read: the custom shader editor bullet now names the WGSL colouring (highlight) among what is tested natively" }
@@ -5625,7 +5625,7 @@ stamp = { hash = "b3:868c62e116577b5f", by = "agent:claude", note = "#1119: the 
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "#461: re-read Purpose against mixer.rs (bus delete now reads delete.plan via plan_bus_delete/apply_plan and shows Confirm) and confirm.rs (doc comment names the mixer's bus strips); updated the Panels line so confirm.rs is shared with the mixer. Tests: new a_drawn_bus_is_deleted_through_its_plan; cargo test -p jstream-ui --all-features passes" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
-stamp = { hash = "b3:c04c51c29b4bcda3", by = "agent:claude", note = "Re-read: the custom shader editor bullet now names the WGSL colouring (highlight) among what is tested natively" }
+stamp = { hash = "b3:2ae7d3c7611f64e6", by = "agent:claude", note = "Re-read: custom_shader.rs gains @renamed, save_as_problem and Save as pack…, filters.rs move_to_kind; the purpose's module list holds | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: the custom shader editor bullet now names the WGSL colouring (highlight) among what is tested natively" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/device_preview.rs"]
 stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "Projectors bullet now names one source alone and pop_out_source (an object's Pop out) beside pop_out, as projector.rs and item_menu.rs have them; canvas/preview.rs and device_preview.rs only add source_id: None." }
@@ -5757,7 +5757,7 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.
 stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "Only crop.spec.js changed (a field read is now polled); the harness (mock daemon, fixtures, setup, browser) is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/custom-shader.spec.js"]
-stamp = { hash = "b3:499fec4651837a73", by = "agent:claude", note = "Re-read: the new custom-shader spec routes the socket itself like plugins.spec.js does; the harness (mock daemon, fixtures) is unchanged" }
+stamp = { hash = "b3:9a3f46e52984fc89", by = "agent:claude", note = "Re-read: the custom-shader spec still routes the socket itself; its fake now names a kind from the manifest; the harness is unchanged | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: the new custom-shader spec routes the socket itself like plugins.spec.js does; the harness (mock daemon, fixtures) is unchanged" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, so the harness holds." }
@@ -5850,7 +5850,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:dd8f3def87ac0d65", by = "agent:claude", note = "Added the Custom shader bullet, which matches custom-shader.spec.js step by step" }
+stamp = { hash = "b3:f9f0f822af46e7ca", by = "agent:claude", note = "The Custom shader bullet now covers the end-of-scroll check and the second test (rename to version 2, Save as pack refusals and the move), matching custom-shader.spec.js | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Added the Custom shader bullet, which matches custom-shader.spec.js step by step" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/browse.spec.js"]
 stamp = { hash = "b3:d5f8fbfcd30861e5", by = "agent:claude-settings", note = "Plugins entry says the spec opens the Settings dialog's Plugins page via File › Plugins…, and adds the new test: no plugins or pairing in the Inspector, page switching by click and arrows, the install dialog centred over a moved Settings dialog and closing alone on Escape; Browse's Install plugin text still holds" }
@@ -5874,7 +5874,7 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Conn
 stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "crop.spec.js's handle-drag test now polls the Right field instead of reading it once; it covers the same behaviour, so the Crop bullet still holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/custom-shader.spec.js"]
-stamp = { hash = "b3:499fec4651837a73", by = "agent:claude", note = "Added the Custom shader bullet, which matches custom-shader.spec.js step by step" }
+stamp = { hash = "b3:9a3f46e52984fc89", by = "agent:claude", note = "The Custom shader bullet now covers the end-of-scroll check and the second test (rename to version 2, Save as pack refusals and the move), matching custom-shader.spec.js | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Added the Custom shader bullet, which matches custom-shader.spec.js step by step" }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:4f09516304bbf2e7", by = "agent:obs-ui-thread", note = "docking.spec.js: the Left sidebar's tabs are now Scenes and Sources, after PanelId::Objects' new label; it uses the existing fixtures, and the Tests list, which names no Scene objects any more, holds." }
@@ -6333,7 +6333,7 @@ stamp = { hash = "b3:302d01fa61544c5e", by = "agent:claude", note = "Added the L
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:4e27a9f007f785fa", by = "agent:claude", note = "Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
+stamp = { hash = "b3:370b0435a71faabc", by = "agent:claude", note = "Re-read: the walkthrough doesn't use the custom shader editor, its renames or Save as pack | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read recording: the desktop app's Browse opens a save dialog on add and on Edit, and a browser still types the path. Record and Stop recording are unchanged." }
@@ -6342,7 +6342,7 @@ stamp = { hash = "b3:a7f8ea1ab2599a5d", by = "agent:cursor", note = "Re-read rec
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:4e27a9f007f785fa", by = "agent:claude", note = "Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
+stamp = { hash = "b3:370b0435a71faabc", by = "agent:claude", note = "Re-read: the walkthrough doesn't use the custom shader editor, its renames or Save as pack | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6360,7 +6360,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:70f0dcc2125c4805", by = "agent:claude-3d", note = "UI-FEATURES DL-06 now lists the 3D model type, so step 2's list of types gains a 3D model (a glTF or GLB file, or a built-in shape such as a cube); the rest of the steps hold. | merge: The merge brought in #1259 (File › Video settings… for the canvas resolution and frame rate: video_settings.rs, a header menu entry, a Purpose bullet, a Design sentence, a GETTING-STARTED paragraph and UI-FEATURES rows); none of it touches the 3D model source. The new canvas-size paragraph sits before step 1; step 2's source list with the 3D model still holds. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:4e27a9f007f785fa", by = "agent:claude", note = "Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
+stamp = { hash = "b3:370b0435a71faabc", by = "agent:claude", note = "Re-read: the walkthrough doesn't use the custom shader editor, its renames or Save as pack | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: the walkthrough doesn't touch the custom shader editor or the code colours" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -6960,10 +6960,10 @@ stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "edit
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking now says the Inspector shows the selected item only; workspace.rs mounts just Inspector for PanelId::Inspector; app.rs provides SettingsDialog and draws Settings in the shell" }
 
 ["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:978e0d463d7b9fe0", by = "agent:claude", note = "FL-12 now says the editor shows the text in colour (highlight under a transparent textarea), and syntax highlighting left the Not yet list" }
+stamp = { hash = "b3:285f9b4297b20cef", by = "agent:claude", note = "FL-12 now describes @renamed versioning and Save as pack… (ID rules, the move of the edited filter, the old pack staying); Not yet is down to a shader source | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: FL-12 now says the editor shows the text in colour (highlight under a transparent textarea), and syntax highlighting left the Not yet list" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
-stamp = { hash = "b3:c04c51c29b4bcda3", by = "agent:claude", note = "FL-12 now says the editor shows the text in colour (highlight under a transparent textarea), and syntax highlighting left the Not yet list" }
+stamp = { hash = "b3:2ae7d3c7611f64e6", by = "agent:claude", note = "FL-12 now describes @renamed versioning and Save as pack… (ID rules, the move of the edited filter, the old pack staying); Not yet is down to a shader source | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: FL-12 now says the editor shows the text in colour (highlight under a transparent textarea), and syntax highlighting left the Not yet list" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
 stamp = { hash = "b3:0492db5cae441b2c", by = "agent:claude", note = "FL-12 now describes @renamed versioning and Save as pack… (ID rules, the move of the edited filter, the old pack staying); Not yet is down to a shader source" }
@@ -7071,7 +7071,7 @@ stamp = { hash = "b3:5b4e4e10e77c4379", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:e562ed3306cd0292", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:978e0d463d7b9fe0", by = "agent:claude", note = "Re-read: FL-12 stays partial (a shader source and Save as pack remain), so no count changes" }
+stamp = { hash = "b3:285f9b4297b20cef", by = "agent:claude", note = "Re-read: FL-12 stays partial (a shader source in Add source remains), so the counts hold | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: Re-read: FL-12 stays partial (a shader source and Save as pack remain), so no count changes" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match | merge: main added HD-11 (Video settings), counted in its header totals; this branch adds no row | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
@@ -7122,7 +7122,7 @@ stamp = { hash = "b3:0e6aa9b851286a03", by = "agent:claude-3d", note = "WS-04 no
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: WS-05's note adds the mixer's vertical strips as a NumberField user (stacked, scrubbed up and down), matching number.rs's vertical prop; style.css adds the strip, column meter and flip-button rules in the WS-01 palette (--raised, --menu, --border, --line, --dim), so the theme rows' statuses stand." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
-stamp = { hash = "b3:93ad750dc3cd389a", by = "agent:claude", note = "WS-01 notes the new --code-* variables, added to :root for the shader editor's colours; no existing token changed" }
+stamp = { hash = "b3:8a0dd73b63d79183", by = "agent:claude", note = "style.css gains the .shader-save-as layout rules using existing tokens; no token changed | merge: The merge brought in #1331 (WGSL colouring and the editor's first browser spec), which this branch already held; its conflicts were this branch's own later edits to the same lines, kept; re-read, the section holds | kept from the merged side: WS-01 notes the new --code-* variables, added to :root for the shader editor's colours; no existing token changed" }
 
 ["UI-FEATURES#transform"."body"]
 stamp = { hash = "b3:94b5523166a74b43", by = "agent:claude-crop-ui", note = "Section intro and TF-04: Clear crop now also restores the uncropped box when the source size is known, through canvas::crop::clear." }
