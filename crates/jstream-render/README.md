@@ -473,7 +473,10 @@ and all of it for a 3D placement). On a cache where `draw_uploads_small` is on (
 default, so a deterministic render such as a snapshot draws every upload whole), the
 first frame of a key holds the upload at what the caller's `planned` need says (whole
 when it is 0), and each later frame reads what the draws needed over the frames since
-(once a frame, so every mix of one frame draws the same texels) and holds it at a
+(once a frame, so every mix of one frame draws the same texels), takes the larger of
+that and `planned` (the caller plans over every mix, so a mix drawn only every other
+tick, which records no draw on the ticks between, never makes the upload shrink and
+grow again, and a cut to a larger placement is drawn sharp at once), and holds it at a
 power-of-two fraction of the frame's size with a quarter of headroom over that, between
 a sixteenth and the whole: the next larger size once a draw needs more than it holds,
 a smaller one only once that size would be half or less of what it holds, and the same
@@ -1131,7 +1134,10 @@ mean of the texels under each, within two half steps, and a rewrite of it does t
 through `upload_drawn`, a 512² frame is whole on its first frame, a quarter each way
 once drawn at an eighth, the same texture while drawn a little larger and when a new
 version refills it, whole again once drawn large, a quarter again once drawn small, and
-whole once placed in 3D, and a new key starts at its planned need; without
+whole once placed in 3D, and a new key starts at its planned need; a still drawn small
+every tick and large every other tick stays whole when planned for both (and changes
+size without the plan), and a key held small given a whole upload of a frame the held
+size is made again, not refilled; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`, a render fails, an NV12 bind returns `Uncaptured`

@@ -4413,16 +4413,13 @@ pub(crate) fn compose_metered(
             // Held at the size its items draw it, unless something reads its texels
             // as they are: a video chain, or a model it stands in for (#1139).
             Pixels::Copied(_) | Pixels::Video(_) if shot.drawn_only(key, frame) => {
-                // What its placements need, for an upload the cache has not drawn yet:
-                // measured once a frame at most, and only then.
-                let planned = if cache.get(key).is_none() {
-                    let scales = planned.get_or_insert_with(|| shot.scales());
-                    scales.get(source).map_or(0.0, |scale| {
-                        scale * frame.extent[0] as f32 / frame.width.max(1) as f32
-                    })
-                } else {
-                    0.0
-                };
+                // What its placements need over every mix, due this tick or not, so a
+                // mix that only claims its layers doesn't let the upload shrink.
+                // Measured once per compose, and only when a frame needs it.
+                let scales = planned.get_or_insert_with(|| shot.scales());
+                let planned = scales.get(source).map_or(0.0, |scale| {
+                    scale * frame.extent[0] as f32 / frame.width.max(1) as f32
+                });
                 cache.upload_drawn(
                     compositor,
                     key,

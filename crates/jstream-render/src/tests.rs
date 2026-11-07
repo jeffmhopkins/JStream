@@ -1231,6 +1231,53 @@ fn the_cache_holds_an_upload_at_the_size_it_is_drawn() {
     );
 }
 
+/// One still shown small on every tick and large in a mix drawn only every other tick
+/// keeps its size when the caller plans for both: a tick the large mix doesn't draw must
+/// not shrink what it shows next. Without the plan the size follows the last tick's
+/// draws, so it changes. A key held small that then gets a whole upload of a frame the
+/// held size is made again, not refilled.
+#[test]
+fn the_cache_holds_a_still_for_a_mix_drawn_every_other_tick() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let rgba = halves();
+    let sizes = |compositor: &mut Compositor, planned: f32| {
+        let mut cache: ResourceCache<&str> = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let mut sizes = Vec::new();
+        for tick in 0..6 {
+            cache.begin_frame();
+            let image = cache
+                .upload_drawn(compositor, &"still", 1, (512, 512), &rgba, planned)
+                .expect("uploads")
+                .clone();
+            draw_square(compositor, &image, 64.0, false);
+            if tick % 2 == 1 {
+                draw_square(compositor, &image, 512.0, false);
+            }
+            sizes.push(image.width());
+            drop(cache.end_frame(compositor));
+        }
+        (cache, sizes)
+    };
+    let (_, planned) = sizes(compositor, 1.0);
+    assert_eq!(
+        planned, [512; 6],
+        "planned for the large mix: whole every tick"
+    );
+    let (mut cache, unplanned) = sizes(compositor, 0.0);
+    assert!(unplanned.iter().any(|&w| w != 512), "{unplanned:?}");
+    // Held small; a whole 128² frame under the key is a new upload, not a refill.
+    cache.begin_frame();
+    let small = vec![255u8; 128 * 128 * 4];
+    let image = cache
+        .upload(compositor, &"still", 2, 128, 128, &small)
+        .expect("a new upload");
+    assert_eq!((image.width(), image.height()), (128, 128));
+}
+
 /// Without [`ResourceCache::draw_uploads_small`], and for a frame too small to be
 /// worth it, [`ResourceCache::upload_drawn`] uploads the whole frame, as
 /// [`ResourceCache::upload`] does.

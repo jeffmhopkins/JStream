@@ -154,10 +154,12 @@ impl<K: Ord + Clone> ResourceCache<K> {
         rgba: &[u8],
     ) -> Result<&Image, RenderError> {
         let frame = self.frame;
+        // By the frame it holds and the texture's own size: one held small by
+        // `upload_drawn` is made again whole.
         let reuse = self.live.get(key).is_some_and(|entry| {
             entry.image.is_upload()
-                && entry.image.width() == width
-                && entry.image.height() == height
+                && entry.image.full() == (width, height)
+                && (entry.image.width(), entry.image.height()) == (width, height)
         });
         if reuse {
             let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
@@ -183,14 +185,18 @@ impl<K: Ord + Clone> ResourceCache<K> {
     /// its texels as they are), held at the size the compositor drew it at over the
     /// frames before, once [`Self::draw_uploads_small`] allows it (#1139, ADR-0117 §2).
     ///
-    /// A new entry is held at what `planned` says its items will need: the fraction of
-    /// the frame's resolution its placements draw, as the caller measured them (0 or
-    /// less when unknown, which uploads the whole frame). After that, each frame reads how much of
+    /// `planned` is what the caller's placements say its items need: the fraction of the
+    /// frame's resolution they draw, over every mix whether or not it draws this frame
+    /// (0 or less when unknown). A new entry is held at it (whole when unknown). After
+    /// that, each frame reads how much of
     /// the frame's resolution its draws needed last time (the most any item sampled; a
-    /// 3D placement needs it all), and holds the upload at a power-of-two fraction of
+    /// 3D placement needs it all), takes the larger of that and `planned` (so a mix
+    /// drawn only every other tick, or a cut to a larger placement, is never drawn from
+    /// too few texels), and holds the upload at a power-of-two fraction of
     /// the frame's size with a quarter of headroom over that, no smaller than a
     /// sixteenth: each texel is the mean of the frame's texels under it. An item drawn
-    /// larger than that gets a larger upload the next frame, and one drawn at less than
+    /// larger than that live (a gesture, a camera) gets a larger upload the next frame,
+    /// and one drawn at less than
     /// half of it a smaller one, so a small change in size uploads nothing. The image is
     /// placed at the frame's size whatever its texels, as [`Image::set_extent`] places an
     /// image drawn finer.
@@ -220,11 +226,13 @@ impl<K: Ord + Clone> ResourceCache<K> {
             None => 1.0,
             Some(held) => {
                 let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
-                // Read once a frame, so every mix of the frame draws the same texels.
+                // Read once a frame, so every mix of the frame draws the same texels,
+                // and never under what the placements plan: a mix that isn't due on
+                // a tick draws nothing then, and must not shrink what it shows.
                 let need = if entry.used == frame {
                     0.0
                 } else {
-                    entry.image.take_need()
+                    entry.image.take_need().max(planned.max(0.0))
                 };
                 let wanted = drawn_scale(need);
                 if need == 0.0 || (need <= held && wanted > held / 2.0) {
@@ -267,6 +275,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
         let at = self.frame;
         let reuse = self.live.get(key).is_some_and(|entry| {
             entry.image.is_upload()
+                && entry.image.full() == (size.width(), size.height())
                 && entry.image.width() == size.width()
                 && entry.image.height() == size.height()
         });
