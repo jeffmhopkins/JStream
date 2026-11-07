@@ -6204,7 +6204,7 @@ stamp = { hash = "b3:0b930991b44ef71c", by = "agent:wave-owner", note = "Merged 
 stamp = { hash = "b3:3f8bcd38814b7e54", by = "agent:wave-owner", note = "main into wave/m3-2 (#521, one merge of main through #527): lint_deps.rs gains main's CLAP allowlist and the plugin-clap reach rule (#477) beside the wave's ADR-0061 entries (jstream-aac, Linux loader); the section's text covers both; holds" }
 
 ["DOCS#governance"."body"]
-stamp = { hash = "b3:8351920c7315d119", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
+stamp = { hash = "b3:797e4656587876ea", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared, per doc; matches identity() in governance.rs and its two new tests" }
 
 ["DOCS#governance"."dep:docs/adr/0019-review-gate-v2.md"]
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
@@ -6213,7 +6213,7 @@ stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 stamp = { hash = "b3:74359364a23f0470", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Only a plain-text ADR-0018 mention in a comment/message/roadmap line moved to its successor ADR-0056 (#420); no behavior the section describes changed" }
 
 ["DOCS#governance"."file:xtask/src/governance.rs"]
-stamp = { hash = "b3:991579db231715d8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against governance.rs diff: only ADR-0018 -> ADR-0056 in module doc, Docs: line, pass message and its test; pre-approval logic (pin_only, Dependabot author) unchanged and matches ADR-0056 item 3; governed-file list unchanged." }
+stamp = { hash = "b3:a21610e70fb7cb33", by = "agent:issues-burndown", note = "Added #1297's identity checks to the list (removed plain anchors, removed tombstones, a new anchor reusing a tombstoned ID, a retired rule made active again) and said how anchors and tombstones are compared; matches identity() in governance.rs and its two new tests" }
 
 ["DOCS#ttl"."body"]
 stamp = { hash = "b3:b5e19598d2324056", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "the weekly sweep bullet now also says docs progress lists rows whose needs is missing (planned or review) or left over (done), matching progress.rs's stale(); the other sweep bullets are unchanged" }
