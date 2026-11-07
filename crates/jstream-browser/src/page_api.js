@@ -9,6 +9,7 @@
   var source = { shown: false, previewShown: false, shownAt: null, previewShownAt: null };
   var scenes = { program: null, preview: null };
   var values = new Map();
+  var levels = null;
 
   function emit(type, detail) {
     var set = listeners[type];
@@ -24,6 +25,19 @@
           throw error;
         });
       }
+    });
+  }
+
+  // A reading as the page sees it: frozen, so a listener can't change what the next one
+  // reads.
+  function reading(l) {
+    if (l === null) {
+      return null;
+    }
+    return Object.freeze({
+      peak: Object.freeze(l.peak.slice()),
+      rms: Object.freeze(l.rms.slice()),
+      bands: Object.freeze(l.bands.slice()),
     });
   }
 
@@ -85,6 +99,12 @@
       },
     });
   }
+  if (grant.levels) {
+    // The granted bus's latest reading: `null` while there is none.
+    api.levels = function () {
+      return levels;
+    };
+  }
   Object.defineProperty(window, "jstream", {
     value: Object.freeze(api),
     enumerable: true,
@@ -92,7 +112,7 @@
     writable: false,
   });
 
-  // One update: JSON text with any of `clock`, `source`, `scenes` and `values`.
+  // One update: JSON text with any of `clock`, `source`, `scenes`, `levels` and `values`.
   return function (text) {
     var update = JSON.parse(text);
     if (update.clock) {
@@ -113,6 +133,11 @@
     if (grant.scenes && update.scenes && JSON.stringify(update.scenes) !== JSON.stringify(scenes)) {
       scenes = update.scenes;
       emit("scenes", api.scenes);
+    }
+    // A reading comes each page frame while the bus has one, and each is reported.
+    if (grant.levels && update.levels !== undefined) {
+      levels = reading(update.levels);
+      emit("levels", levels);
     }
     if (grant.values && update.values) {
       Object.keys(update.values).forEach(function (name) {

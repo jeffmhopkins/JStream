@@ -259,7 +259,11 @@ impl ToHelper {
                 out.u8(u8::from(spec.local_network));
                 out.u8(match spec.page_api {
                     None => 0,
-                    Some(api) => 1 | (u8::from(api.scenes) << 1) | (u8::from(api.values) << 2),
+                    Some(api) => {
+                        1 | (u8::from(api.scenes) << 1)
+                            | (u8::from(api.values) << 2)
+                            | (u8::from(api.levels) << 3)
+                    }
                 });
             }
             Self::SetCss { page, css } => {
@@ -299,6 +303,7 @@ impl ToHelper {
                 }
                 out.opt_str(data.source.as_deref())?;
                 out.opt_str(data.scenes.as_deref())?;
+                out.opt_str(data.levels.as_deref())?;
                 out.len(data.values.len())?;
                 for (name, value) in &data.values {
                     out.str(name)?;
@@ -339,9 +344,10 @@ impl ToHelper {
                 };
                 let page_api = match body.u8()? {
                     0 => None,
-                    flags if flags & !0b111 == 0 && flags & 1 == 1 => Some(PageApi {
+                    flags if flags & !0b1111 == 0 && flags & 1 == 1 => Some(PageApi {
                         scenes: flags & 0b10 != 0,
                         values: flags & 0b100 != 0,
+                        levels: flags & 0b1000 != 0,
                     }),
                     _ => return Err(WireError::Malformed("a page API's flags are unknown")),
                 };
@@ -393,6 +399,7 @@ impl ToHelper {
                 };
                 let source = body.opt_string()?;
                 let scenes = body.opt_string()?;
+                let levels = body.opt_string()?;
                 let count = body.len()?;
                 // Each value takes at least five bytes, so a count the message can't hold
                 // is refused before anything is allocated for it.
@@ -409,6 +416,7 @@ impl ToHelper {
                         clock,
                         source,
                         scenes,
+                        levels,
                         values,
                     },
                 }
@@ -697,6 +705,7 @@ mod tests {
                     page_api: Some(PageApi {
                         scenes: true,
                         values: false,
+                        levels: true,
                     }),
                     ..spec(PageLocation::Web("https://example.com/".into()))
                 },
@@ -714,6 +723,7 @@ mod tests {
                     clock: Some((12.375, 0.05)),
                     source: Some(r#"{"shown":true}"#.into()),
                     scenes: Some(r#"{"program":null,"preview":null}"#.into()),
+                    levels: Some(r#"{"peak":[0.5,0.25],"rms":[0.1,0.1],"bands":[]}"#.into()),
                     values: vec![
                         ("status.text".into(), Some(r#""On air""#.into())),
                         ("counter.a".into(), None),
