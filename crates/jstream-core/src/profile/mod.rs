@@ -12,6 +12,7 @@
 //! Docs: crates/jstream-core/README.md#design, docs/adr/0103-per-item-performance-profile.md
 
 pub(crate) mod meter;
+pub(crate) mod streams;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -29,6 +30,13 @@ use crate::lock;
 
 use meter::{BUCKETS, PHASES, UnitTotals, bucket_top, nanos};
 pub(crate) use meter::{DrawMeter, DrawerSlot, DrawerTotals, Phase, UnitKey};
+pub(crate) use streams::{
+    InputTotals, MixerGuard, MixerMeter, MixerSource, StreamGuard, StreamMeter, StreamRegistry,
+    StreamTotals,
+};
+use streams::{
+    MixerReading, MixerSlot, StreamMeters, StreamReading, mixer_profile, stream_profiles,
+};
 
 /// Samples closer together than this replace each other, so a client that asks often
 /// doesn't fill the history.
@@ -143,6 +151,9 @@ struct Sample {
     plan_max: u64,
     threads: Option<Vec<ThreadTime>>,
     cpu: Option<Duration>,
+    streams: BTreeMap<u64, StreamReading>,
+    /// The mixer, whose longest mix is the one since the sample before.
+    mixer: MixerReading,
 }
 
 /// The engine's profiler (ADR-0103). Lives in the engine's shared state; every lock in it
@@ -155,6 +166,8 @@ pub(crate) struct Profiler {
     sources: Arc<SourceMeters>,
     threads: Mutex<Option<Arc<dyn ThreadCpu>>>,
     history: Mutex<VecDeque<Sample>>,
+    streams: Arc<Mutex<StreamMeters>>,
+    mixer: Arc<Mutex<MixerSlot>>,
     /// The program's frame period, in nanoseconds. The control thread sets it when a
     /// stage opens; the stats thread reads it.
     budget_ns: std::sync::atomic::AtomicU64,
@@ -175,6 +188,8 @@ impl Profiler {
             sources,
             threads: Mutex::new(None),
             history: Mutex::new(VecDeque::new()),
+            streams: Arc::default(),
+            mixer: Arc::default(),
             budget_ns: std::sync::atomic::AtomicU64::new(budget_nanos(budget)),
         }
     }
@@ -199,33 +214,51 @@ impl Profiler {
         self.preview.meter(self.budget())
     }
 
+    /// Meters an encoded stream in `profile.get` until the guard drops.
+    pub(crate) fn add_stream(&self, meter: StreamMeter) -> StreamGuard {
+        streams::add_stream(&self.streams, meter)
+    }
+
+    /// Where the preview hub registers its streams.
+    pub(crate) fn stream_registry(&self) -> StreamRegistry {
+        StreamRegistry(Arc::clone(&self.streams))
+    }
+
+    /// Meters the running stage's mixer until the guard drops.
+    pub(crate) fn add_mixer(&self, source: MixerSource) -> MixerGuard {
+        streams::add_mixer(&self.mixer, source)
+    }
+
     /// Reads each thread's CPU time from `threads` from now on.
     pub(crate) fn set_threads(&self, threads: Arc<dyn ThreadCpu>) {
         *lock(&self.threads) = Some(threads);
     }
 
-    /// Takes a sample now, with the process's CPU time `cpu`. The stats threads call it
-    /// once a second, outside the collection lock.
-    pub(crate) fn sample(&self, cpu: Option<Duration>) {
-        let sample = self.read(cpu);
+    /// Takes a sample now, with the process's CPU time `cpu` and the audio inputs'
+    /// totals `inputs`. The stats threads call it once a second, outside the collection
+    /// lock.
+    pub(crate) fn sample(&self, cpu: Option<Duration>, inputs: InputTotals) {
+        let sample = self.read(cpu, inputs);
         self.keep(sample);
     }
 
     /// The profile of the last `seconds` (or the default), its lists cut at `top`, with
-    /// the process's CPU time now `cpu`. Takes a sample. Called outside the collection
-    /// lock.
+    /// the process's CPU time now `cpu` and the audio inputs' totals `inputs`. Takes a
+    /// sample. Called outside the collection lock.
     pub(crate) fn profile(
         &self,
         seconds: Option<u32>,
         top: Option<u32>,
         cpu: Option<Duration>,
+        inputs: InputTotals,
     ) -> ProfileInfo {
         let seconds = seconds
             .unwrap_or(DEFAULT_PROFILE_SECONDS)
             .clamp(1, MAX_PROFILE_SECONDS);
         let top = top.unwrap_or(DEFAULT_PROFILE_TOP).min(MAX_PROFILE_TOP) as usize;
-        let mut now = self.read(cpu);
+        let mut now = self.read(cpu, inputs);
         let plan_max = now.plan_max;
+        let block_max = now.mixer.max_nanos;
         let base = {
             let history = lock(&self.history);
             let wanted = now
@@ -249,17 +282,26 @@ impl Profiler {
                 .max()
                 .unwrap_or(0);
             now.plan_max = now.plan_max.max(longest);
+            // And the longest mix, the same way.
+            let longest = history
+                .iter()
+                .filter(|sample| since.is_none_or(|since| sample.at > since))
+                .map(|sample| sample.mixer.max_nanos)
+                .max()
+                .unwrap_or(0);
+            now.mixer.max_nanos = now.mixer.max_nanos.max(longest);
             base
         };
         let info = window(&now, base.as_ref(), self.started, self.budget(), top);
         // Kept with only its own longest plan, so a later window doesn't count the
         // earlier ones twice over a base after them.
         now.plan_max = plan_max;
+        now.mixer.max_nanos = block_max;
         self.keep(now);
         info
     }
 
-    fn read(&self, cpu: Option<Duration>) -> Sample {
+    fn read(&self, cpu: Option<Duration>, inputs: InputTotals) -> Sample {
         let reader = lock(&self.threads).clone();
         let threads = reader.and_then(|reader| reader.threads());
         let plan = self.sources.read_plan();
@@ -272,6 +314,8 @@ impl Profiler {
             plan_max: plan.max,
             threads,
             cpu,
+            streams: lock(&self.streams).read(),
+            mixer: lock(&self.mixer).read(inputs),
         }
     }
 
@@ -294,6 +338,7 @@ impl Profiler {
             // The sample replaced keeps the longest plan it saw.
             let mut sample = sample;
             sample.plan_max = sample.plan_max.max(last.plan_max);
+            sample.mixer.max_nanos = sample.mixer.max_nanos.max(last.mixer.max_nanos);
             history.push_back(sample);
         } else {
             history.push_back(sample);
@@ -352,6 +397,12 @@ fn window(
             Some(percent(cpu.saturating_sub(before), span))
         }),
         threads: thread_profiles(now, base, span, top),
+        streams: stream_profiles(&now.streams, base.map(|base| &base.streams), span, top),
+        mixer: mixer_profile(
+            &now.mixer,
+            base.map(|base| &base.mixer),
+            now.mixer.max_nanos,
+        ),
     }
 }
 

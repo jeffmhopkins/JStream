@@ -533,7 +533,7 @@ source: crates/jstream-core/src/kinds.rs
         "max_len": 131072,
         "default": "",
         "label": "HTML",
-        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts and images from the web, but no local files, and reaches this computer and the local network only when allowed below.",
+        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts, images and scripts from the web over https, but no local files, and reaches this computer and the local network only when allowed below.",
         "live": false
       },
       {
@@ -593,7 +593,7 @@ source: crates/jstream-core/src/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Allow local network",
-        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. It covers the page's own origin only, and only a page loaded over https. A local file or a page on the local network may always.",
         "advanced": true,
         "live": false
       },
@@ -602,7 +602,8 @@ source: crates/jstream-core/src/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Page API",
-        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. A page from the web can send what it reads anywhere.",
+        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. Each kind of data below is its own checkbox.",
+        "warning": "A page from the web can send what it reads anywhere.",
         "group": "Page API",
         "live": false
       },
@@ -611,7 +612,22 @@ source: crates/jstream-core/src/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Scenes",
-        "description": "Also give the page the program and preview scenes' names. A preview scene's name can say what hasn't been shown yet.",
+        "description": "Also give the page the program and preview scenes' names.",
+        "warning": "Preview scene names can say what hasn't been shown yet.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_shared_values",
+        "type": "bool",
+        "default": false,
+        "label": "Shared values",
+        "description": "Also give the page the shared values named below, set with values.set.",
+        "warning": "The page can read these values, and a page from the web can send them anywhere.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
@@ -625,11 +641,38 @@ source: crates/jstream-core/src/kinds.rs
         "multiline": false,
         "max_len": 1024,
         "default": "",
-        "label": "Shared values",
-        "description": "The shared values the page may read, set with values.set: names or prefixes ending in .*, separated by commas (status.text, counter.*). Empty gives it none.",
+        "label": "Value names",
+        "description": "The shared values the page may read: names or prefixes ending in .*, separated by commas (status.text, counter.*).",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_shared_values",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_audio",
+        "type": "bool",
+        "default": false,
+        "label": "Audio levels",
+        "description": "Also give the page one bus's levels and spectrum bands, after its fader, with jstream.levels(). Never its samples.",
+        "warning": "A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_bus",
+        "type": "bus",
+        "default": null,
+        "label": "Bus",
+        "description": "The bus whose levels the page may read.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_audio",
           "equals": true
         },
         "live": false
@@ -1157,6 +1200,82 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "follow_pointer",
+    "category": "video_filter",
+    "name": "Follow pointer",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "zoom",
+        "type": "float",
+        "min": 1.0,
+        "max": 4.0,
+        "unit": "×",
+        "default": 1.0,
+        "label": "Zoom",
+        "description": "The resting zoom. At 1 the frame shows two thirds of the capture's height.",
+        "live": true
+      },
+      {
+        "id": "yaw_deg",
+        "type": "float",
+        "min": -60.0,
+        "max": 60.0,
+        "unit": "°",
+        "default": 20.0,
+        "label": "From the right",
+        "description": "The camera's angle to the right of the capture; negative is from the left.",
+        "live": true
+      },
+      {
+        "id": "pitch_deg",
+        "type": "float",
+        "min": -60.0,
+        "max": 60.0,
+        "unit": "°",
+        "default": -10.0,
+        "label": "From below",
+        "description": "The camera's angle below the capture; negative looks down from above.",
+        "live": true
+      },
+      {
+        "id": "lean_deg",
+        "type": "float",
+        "min": 0.0,
+        "max": 30.0,
+        "unit": "°",
+        "default": 9.0,
+        "label": "Lean",
+        "description": "How far the camera leans as the pointer moves. 0 is off.",
+        "live": true
+      },
+      {
+        "id": "smooth_ms",
+        "type": "int",
+        "min": 50,
+        "max": 5000,
+        "unit": "ms",
+        "default": 450,
+        "label": "Smoothing",
+        "description": "How long the camera takes to catch up with the pointer.",
+        "live": true
+      },
+      {
+        "id": "safe_margin_pct",
+        "type": "int",
+        "min": 0,
+        "max": 40,
+        "unit": "%",
+        "default": 10,
+        "label": "Safe margin",
+        "description": "How far in from each edge of the frame the pointer always stays.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "gain",
     "category": "audio_filter",
     "name": "Gain",
@@ -1426,6 +1545,119 @@ source: crates/jstream-core/src/kinds.rs
         "default": true,
         "label": "Restart when shown",
         "description": "Plays from the start each time the program shows it again.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "model",
+    "category": "source",
+    "name": "3D model",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "shape",
+        "type": "enum",
+        "options": [
+          {
+            "value": "file",
+            "label": "From a file"
+          },
+          {
+            "value": "plane",
+            "label": "Plane"
+          },
+          {
+            "value": "cube",
+            "label": "Cube"
+          },
+          {
+            "value": "sphere",
+            "label": "Sphere"
+          },
+          {
+            "value": "cylinder",
+            "label": "Cylinder"
+          },
+          {
+            "value": "cone",
+            "label": "Cone"
+          }
+        ],
+        "default": "file",
+        "label": "Shape",
+        "description": "A glTF file, or a built-in shape one unit across.",
+        "live": false
+      },
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "glb",
+          "gltf"
+        ],
+        "default": null,
+        "label": "Model file",
+        "description": "A glTF 2.0 file (.glb, or .gltf with its files beside it), for the shape `file`.",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "description": "A shape's base colour; multiplies a file's own.",
+        "live": true
+      },
+      {
+        "id": "metallic",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Metallic",
+        "description": "How metallic a shape is. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "roughness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Roughness",
+        "description": "How rough a shape is, 0 a mirror. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "lighting",
+        "type": "enum",
+        "options": [
+          {
+            "value": "studio",
+            "label": "Studio"
+          },
+          {
+            "value": "unlit",
+            "label": "Unlit"
+          }
+        ],
+        "default": "studio",
+        "label": "Lighting",
+        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+        "live": true
+      },
+      {
+        "id": "double_sided",
+        "type": "bool",
+        "default": false,
+        "label": "Double-sided",
+        "description": "Draw a shape's back faces too. A file's materials keep their own.",
         "live": true
       }
     ]

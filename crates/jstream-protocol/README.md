@@ -79,7 +79,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`), with
+  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `collection.save_as`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
@@ -147,7 +148,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -155,7 +156,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
-  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent)
+  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent;
+  since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -190,9 +192,12 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   which checks a camera's list as `check_motion` checks an item's and refuses an
   `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
-  `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
-  `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
-  what `scene.zoom_camera` steps by.
+  `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms` and, since 0.91, `safe_margin_pct`
+  up to `MAX_FOLLOW_MARGIN_PCT`, each with its default) with `CameraFollow::check`, and
+  `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25), what `scene.zoom_camera`
+  steps by. Since 0.91 a follow camera is a filter (ADR-0120): `FOLLOW_POINTER_KIND`
+  (`follow_pointer`), its `follow_pointer_descriptor`, and `CameraFollow::settings` and
+  `CameraFollow::from_settings`, which map a follow to that filter's settings and back.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -223,7 +228,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
-  and `timeline.cue_fired` (0.87), and `scene.keyframe_changed` (0.88).
+  and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
+  `collection.file_changed` (with `CollectionCause`, 0.94).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -303,9 +309,22 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.94 because a person can see and redo the CLAP plugin scan: the
+`PROTOCOL_VERSION` is 0.95 because a person can see and redo the CLAP plugin scan: the
 query `plugin.clap_scan` (`ClapScanInfo`) and the action `plugin.clap_rescan`
-([Plugins](#plugins), a placeholder number the release queue sets); 0.89 because a collection can set its base frame rate with
+([Plugins](#plugins), a placeholder number the release queue sets); 0.94 because of projects: the actions `collection.open`,
+`collection.new` and `collection.save_as`, the query `collection.info`, the event
+`collection.file_changed` and the `file` entity kind
+([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
+queue set); 0.93 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.92 because `profile.get` reports past the drawers: each
+encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
+mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
+capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
+`CameraFollow` gains `safe_margin_pct`
+([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
+release queue sets); 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -817,7 +836,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.93: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
@@ -1363,8 +1384,22 @@ Queries read and never change `rev`. Those that read the collection state carry 
   process's CPU; and its threads by name, as a percentage of one core (JStream's own
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
   cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
-  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
-  0.73.
+  `gpu_timing` are reserved for GPU timestamps. Since 0.92 it also reports past the
+  drawers. `streams` lists each running output's program feed and each H.264 preview
+  stream (a `ProfileStream`: `output` with its `output_id`, or `preview` with its
+  `channel` and the `scene_id` or `source_id` it shows) as a `StreamProfile`: its
+  encoded `fps`, the video frames handed to its encoder (`frames_in`), taken by it
+  (`encoded`), sent on (`frames_out`, to the muxer or publish target, or to the
+  client) and `dropped` on the way, the frames its encoder took more than a frame
+  period after they were handed over (`late`), the encoder's average time per frame
+  (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
+  video and audio for an output, video for a preview stream). Most frames lost come
+  first; a stream that ran in none of the window, or has ended, is left out. `mixer`
+  (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
+  `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
+  mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
+  inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1400,7 +1435,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
 - `plugin.clap_scan`: the CLAP plugin scan, its folders, what it found and what failed.
-  Runtime state, so no `rev`. Added in 0.94 (see *Plugins* below).
+  Runtime state, so no `rev`. Added in 0.95 (see *Plugins* below).
+- `collection.info`: the project file the engine saves to (`path`) and up to ten
+  `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.94
+  (see *Projects* below).
 - `codec.downloads`: the codec libraries the engine can download on a person's request,
   ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
   downloads* below).
@@ -1486,6 +1524,27 @@ the engine answers them and keeps them in its settings file, with pairing off to
 `Control` with no server in front answers `unsupported`. `ui_settings.set` fails with
 `action_failed` when the file can't be written, and the value is then kept until the
 server stops.
+
+**Projects** (0.94, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
+A project is one collection file on the engine's machine. `collection.open {path}` loads
+the file at `path` and saves there from then on; `collection.new {path}` creates an empty
+one there; `collection.save_as {path}` writes the current collection there and saves
+there from then on. New and save as never replace a file: anything at `path`, the open
+file included, is `already_exists`, entity `file`. An open or a new is `action_failed`
+while the open project can't be saved. A
+path is absolute and follows the `absolute` asset path rules (`invalid_argument` on
+`path` otherwise). A file that can't be read or loaded, such as one from a newer engine,
+is `action_failed` with its reason, and the open project stays open. An open or a new
+stops every running output, clears every client's undo history and idempotency keys,
+cancels open gestures, stops timelines, puts the first scene on program, and moves `rev`
+past the old collection's; every client gets `state.changed` (so an older client reads
+the state again), `studio.changed` and `collection.file_changed {path, cause}`. A save as
+to another folder rewrites asset references to keep naming the same files (a new `rev`
+that clears undo when it rewrites any). Stream keys belong to one project path on the
+engine's machine, and nothing in the file names where they are, so two projects sharing
+an output ID never share a key. All
+four answer `unsupported` when the host named no collection file, as the mock does. No
+plugin is granted them and no hotkey binds them.
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
@@ -1948,7 +2007,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
 not WASM plugins: the engine scans for `.clap` files and offers each effect as a
-`clap/<plugin id>` audio filter kind. Since 0.94 a person can see and redo that scan:
+`clap/<plugin id>` audio filter kind. Since 0.95 a person can see and redo that scan:
 - **`plugin.clap_scan`** answers a `ClapScanInfo`: `available` (whether this engine
   hosts CLAP plugins, with a `reason` when it doesn't and knows why), `scanning`,
   `scanned` (whether a scan has finished yet), `folders` (each folder searched, in
@@ -2139,6 +2198,8 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
   answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
+  0.94 adds `file` the same way: only an error answering `collection.new` or
+  `collection.save_as` names it.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
@@ -2215,7 +2276,8 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   undone by the same edit with the old list. Addressed to a keyframe scene, it writes
   that keyframe's override: `ItemOverride.motion`, which `item.clear_override` with
   field `motion` removes. An empty override list stops the item's motion in that
-  keyframe. A list that breaks the rules above is `invalid_argument` naming the field,
+  keyframe. A list that breaks the rules above is `invalid_argument` naming the field
+  (one over 8 suggests a group around the item, whose motion moves its children),
   and `check_motion` is the check every implementation shares. Plugins need the `edit`
   class for it. It isn't a live value yet (ADR-0099 decision 3 plans that, so a slider
   previews as it drags): each change is one undo step. `depth` is a property beyond

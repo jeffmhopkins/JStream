@@ -28,7 +28,9 @@ protocol's types (`Overrides`).
   sources against. The engine supplies them (`Graph::with_kinds`, and
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
-  (`cut`, `fade`, `move`), which every graph has.
+  (`cut`, `fade`, `move`), which every graph has. `Graph::with_rev` sets the `rev` of a
+  collection the engine opens in another's place
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
@@ -59,8 +61,9 @@ protocol's types (`Overrides`).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
-  scene's is an override of its parent's), its camera's `camera_motion` and
-  `camera_follow` (ADR-0113, a family's only), its `timelines` ordered by ID
+  scene's is an override of its parent's), its camera's `camera_motion` (ADR-0113, a
+  family's only; its follow camera, `Scene::camera_follow`, is read from its items'
+  `follow_pointer` effects, ADR-0120), its `timelines` ordered by ID
   (ADR-0115), and its items in stacking order, bottom
   first. A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
@@ -396,15 +399,21 @@ that does not want to change the graph it has.
   the variant's override, refused while the parent has no camera, and `State::effective_camera`
   reads the override or the parent's. Removing a parent's camera drops its variants'
   overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
-  `scene.set_camera_motion` and `scene.set_camera_follow` (`camera.rs`,
-  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) write the whole
-  motion list (checked by `check_camera_motion`, field `motion…`) and the follow camera
-  (checked by `CameraFollow::check`, field `follow.…`, its `item_id` an item of the scene
-  whose source is a built-in `display` or `window`), each undone by the old value and
-  refused on a keyframe scene (`invalid_argument`), since they belong to the family. A
-  scene keeps both while it has no camera, and a follow whose item later leaves the
-  scene stays, inert; a deleted scene's inverse restores them after its items
-  (`camera::restore`). `camera_anim_modifiers` turns a motion list into
+  `scene.set_camera_motion` (`camera.rs`,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) writes the whole
+  motion list (checked by `check_camera_motion`, field `motion…`), undone by the old
+  value. A follow camera is a `follow_pointer` filter on an item's own effects
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): `filter.add` refuses
+  it on any other owner, or on an item whose source isn't a built-in `display` or
+  `window` (`owner`), and `Item::follow` and `Scene::camera_follow` read it, the first
+  enabled one in stacking order. `scene.set_camera_follow` (checked by
+  `CameraFollow::check`, field `follow.…`, its `item_id` an item of the scene showing
+  a capture) is a shortcut that sets that item's filter, adding it as
+  `follow-pointer` when it has none, and removes the scene's other ones, undone by
+  those filter edits' inverses. Both are refused on a keyframe scene
+  (`invalid_argument`), since they belong to the family. A scene keeps its motion while
+  it has no camera; a follow goes with its item. A deleted scene's inverse restores its
+  motion after its items (`camera::restore`), and its follow with their effects. `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
 - **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   `timeline.set` stores a timeline in a scene (the scene `not_found`, then
@@ -490,7 +499,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 6), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 8), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -525,9 +534,10 @@ bump either. An override's `effects` (ADR-0088), written with each filter's
 `kind_version` and omitted while the keyframe follows the item, is `schema_version` 3,
 an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 `schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
-omitted while absent, are `schema_version` 5; a follow whose item has left the scene
-isn't written, so reloading never refuses it. A scene's `timelines` (ADR-0115), ordered
-by ID and omitted while empty, are `schema_version` 6. Loading creates the folders top level first, then
+omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), ordered
+by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
+`camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
+(ADR-0124) gives a `browser` source's page API a checkbox per kind of data. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -539,8 +549,13 @@ the engine's; this crate does no I/O.
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
   changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
   keyframe override's `effects` the same way, 3 to 4 an item's and an override's
-  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, and 5 to 6 a scene's
-  `timelines`),
+  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, 5 to 6 a scene's
+  `timelines`, and 6 to 7 moves a scene's `camera_follow` onto the item it follows as a
+  `follow_pointer` effect, last in its `effects`, dropping one whose item has left the
+  scene or whose effects are full, and 7 to 8 turns on a `browser` source's
+  `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
+  `page_api_bus` already grant something, so rebuilding it with its kind's defaults
+  takes nothing away),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -564,8 +579,7 @@ the engine's; this crate does no I/O.
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
-  scene's camera motion and follow camera (once every item exists, which a follow
-  names), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline. A
+  scene's camera motion (once every item exists), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline. A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a

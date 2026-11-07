@@ -189,6 +189,7 @@ fn param(p: &ParamDesc) -> Option<ParamDescriptor> {
         )
     };
     Some(ParamDescriptor {
+        warning: None,
         id: p.id.to_string(),
         ty,
         default,

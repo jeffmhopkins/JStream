@@ -30,17 +30,33 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, the open project with New project…, Open project…, Save
+  project as… and Open recent, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
+  `OpenProject`, the open project and the recent ones from `collection.info`, which the
+  header reads at start and again on `collection.file_changed` and `events.dropped`, so a
+  switch any client or agent makes shows at once; `None` while the engine has no
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
+  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
+  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  open project's, or the one the desktop app named at start. Its logic (names, suggested
+  paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
   the UI was built as, the engine's protocol, the licence and links, and each installed
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Video settings** (`video_settings.rs`): File › Video settings… sets the
+  collection's base resolution (the canvas, from presets or typed) and its base frame
+  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
+  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
@@ -101,7 +117,13 @@ Contents ([Design](#design) explains the choices):
   while the page has the focus and no dialog or menu is open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
-  `Collection::chords_for` lists a row's chords), tested natively.
+  `Collection::chords_for` lists a row's chords), tested natively. In the desktop app,
+  the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
+  the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
+  `false`), which the desktop app reads to register the bound chords with the OS
+  ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
+  registers reaches JStream as a hotkey even while the page has the focus, so the page
+  doesn't see that key press.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -116,7 +138,7 @@ Contents ([Design](#design) explains the choices):
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own).
+  the tool bars' own and a cube for the 3D model type).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -135,9 +157,9 @@ Contents ([Design](#design) explains the choices):
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
-  natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
-  with the followable items, the follow fields and adding a camera modifier tested
-  natively), the Filters
+  natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
+  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
+  modifier tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
@@ -259,7 +281,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
   with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
   filters, one step up and one down), which stays at the panel's foot while the rows
-  scroll. The scene list shows each
+  scroll. A `browser` source whose page is granted the page API has an "API" badge on
+  its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
+  The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -397,7 +421,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
-  platform's API), plus the kinds of placed sources it didn't report, which can be
+  platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
+  with a cube icon), plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -527,7 +552,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`place_asset`, tested natively). App assets have no button. A browser page renders
   none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
-  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  ones collapsed, and hidden while their `visible_if` doesn't hold or names a field that
+  is itself hidden. A field's `warning` (protocol 0.93) shows as a line under it, not only
+  in its tooltip. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
@@ -590,18 +617,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
-  offered while the scene places a display or window capture (`followable`), its fields
-  shown only while it is on and indented under the check, one row each for the
-  item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
-  hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
+  a note (`follow_note`) naming the capture whose `follow_pointer` filter moves the
+  camera, with Open its filter, or saying how to add one, with Add Follow pointer…, which
+  opens Add filter on the scene's first display or window capture (`followable`)
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)); and
   Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
-  on the position's x. Both are draft fields, which OK sends as
-  `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
-  `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
-  shows neither, since it draws its parent's.
-  Duplicate scene copies the scene's options and camera with it, and its camera motion
-  and follow camera, the follow on the copy of the item it follows. On the right, in the source Properties dialog's shell, are the
+  on the position's x. The list is a draft field, which OK sends as
+  `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
+  A keyframe scene shows neither, since it draws its parent's.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion;
+  the follow camera, a filter on the item it follows, goes with the copy of that item. On the right, in the source Properties dialog's shell, are the
   scene's filters: the Filters panel's rows on its video chain, which apply at once (a
   keyframe shows its parent's).
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
@@ -772,8 +798,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  system browser), then Check for updates and About JStream. Check for updates is
+  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
+  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
@@ -888,7 +916,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
   "Grant and turn on" and sends `plugin.enable` after it.
 - **Audio plugins** ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
-  protocol 0.94). The Settings dialog's Audio plugins page reads `plugin.clap_scan` each
+  protocol 0.95). The Settings dialog's Audio plugins page reads `plugin.clap_scan` each
   time it opens. It names the first folder searched as where to put a `.clap` file, lists
   every folder with whether it exists, the effects found and the files that failed with
   the host's reason (paths and names are shown as data), and a summary line. Rescan

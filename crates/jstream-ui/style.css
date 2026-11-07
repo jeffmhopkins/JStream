@@ -201,6 +201,7 @@ a.menuitem:focus-visible { outline: none; }
 .connection { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 8px 6px; font-size: 12px; }
 .connection dt { color: var(--dim); }
 .connection dd { margin: 0; white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.project-name { margin: 0 8px 6px; font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
 .header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }
@@ -407,6 +408,7 @@ a.menuitem:focus-visible { outline: none; }
 .muted { color: var(--muted); }
 .panel + .panel { margin-top: 1.25rem; }
 .panel .problem { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.field-warning { grid-column: 1 / -1; margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--text-soft); }
 .panel button, .panel-inspector button { padding: 0.15rem 0.45rem; }
 select, textarea {
   font: inherit;
@@ -522,6 +524,7 @@ textarea { width: 100%; min-height: 4rem; resize: vertical; }
 .tree-row .ref-badge { display: inline-flex; flex: 0 0 18px; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; }
 .tree-row .row-main .ref-badge .icon { color: inherit; }
 .ref-badge.mask { color: #b07cff; background: #b07cff33; }
+.tree-row .page-api-badge { flex: 0 0 auto; padding: 0 4px; border-radius: 4px; font-size: 10px; font-weight: 600; line-height: 16px; color: var(--link); background: #4c8dff26; }
 .ref-badge.fx { color: #e8a33d; background: #e8a33d33; }
 .ref-badge.off { color: var(--faint); background: #5a606b33; }
 /* Folders (S13, S18): a caret that folds them, and a dim name. */
@@ -1186,10 +1189,23 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .update-body, .settings-body { padding: 16px 18px; font-size: 13px; }
 .update-body p, .settings-check-note { margin: 0; }
 .update-detail, .settings-check-note { margin-top: 8px; color: var(--muted); font-size: 12px; }
+.modal.project-dialog { width: 480px; }
+.project-body { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; font-size: 13px; }
+.project-path { display: flex; flex-direction: column; gap: 6px; }
+.project-path-row { display: flex; gap: 8px; }
+.project-path-row input { flex: 1; min-width: 0; }
+.project-note, .project-problem { margin: 0; font-size: 12px; color: var(--muted); }
+.project-warning { color: var(--text); }
+.project-problem { color: var(--danger); }
 .update-body a { color: var(--link); }
 .settings-check { display: flex; gap: 10px; align-items: flex-start; }
 .settings-check input { width: auto; margin: 3px 0 0; accent-color: var(--accent); }
 .settings-check-label { display: block; }
+.settings-field { display: flex; flex-direction: column; gap: 6px; }
+.video-settings .settings-field + .settings-check-note, .video-settings .settings-size + .settings-check-note { margin-bottom: 14px; }
+.settings-size { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.settings-size input { width: 96px; }
+.settings-error { margin: 8px 0 0; color: var(--danger, #e5484d); font-size: 12px; }
 .update-notice {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 6px 12px; background: var(--menu); border-bottom: 1px solid var(--border);

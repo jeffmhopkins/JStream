@@ -835,14 +835,19 @@ pub enum Edit {
         motion: Vec<CameraMotionModifier>,
     },
     /// Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the
-    /// pointer over a display or window capture in the scene. It belongs to the scene
+    /// pointer over a display or window capture in the scene. Since 0.91 a follow camera
+    /// is a `follow_pointer` filter on the followed item's effects (ADR-0120), and this
+    /// edit is kept as a shortcut for those filter edits: with `follow`, it sets that
+    /// item's `follow_pointer` filter to its numbers and turns it on, adding one last in
+    /// the item's effects when it has none, and removes every other `follow_pointer`
+    /// filter of the scene's items; without, it removes them all. It belongs to the scene
     /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
-    /// scene or doesn't show a display or window capture, and for a number
-    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
-    /// leaves the follow in place and inert until it is set again or an undo brings the
-    /// item back. The follow camera reads the pointer only where the program is drawn
-    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
-    /// Inverse: `scene.set_camera_follow` with the previous value.
+    /// scene or doesn't show a display or window capture, for a number
+    /// `CameraFollow::check` refuses, and when the item's effects are full. The follow
+    /// camera reads the pointer only where the program is drawn live: `video.snapshot`
+    /// and a frame sheet show it at rest, on the capture's centre. Inverse: the inverse
+    /// of those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and
+    /// `filter.set_enabled`).
     #[serde(rename = "scene.set_camera_follow")]
     SceneSetCameraFollow {
         /// The scene to change.
@@ -1805,7 +1810,7 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
-    /// Scans the CLAP search folders again (0.94, ADR-0035), so a plugin installed since
+    /// Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since
     /// the engine started is offered without a restart. It answers once the scan ends,
     /// which takes a moment per plugin file; `plugin.clap_scan` then reports it. Each
     /// effect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan
@@ -1889,6 +1894,50 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// Opens the project (collection file) at `path` on the engine's machine and saves
+    /// there from then on (0.94, ADR-0121). The file is loaded and checked first; a file
+    /// the engine can't read or load (a newer `schema_version`, a broken file) fails with
+    /// `action_failed` and its reason, and the open project stays open with nothing
+    /// stopped, as it does when the open project can't be saved first. Then every
+    /// output that isn't stopped stops, and the collection is
+    /// replaced: `rev` becomes the file's or one past the current one, whichever is
+    /// greater, every client's undo history and idempotency keys are cleared, open
+    /// gestures are cancelled, timelines stop, and the first scene goes on program and
+    /// preview. Every client gets `state.changed`, `studio.changed` and
+    /// `collection.file_changed`. Fails with `invalid_argument` on `path` for a path
+    /// that breaks the `absolute` asset path rules, and `unsupported` when the host
+    /// named no collection file. Not an edit: undo can't take it back.
+    #[serde(rename = "collection.open")]
+    CollectionOpen {
+        /// The absolute path of the collection file.
+        path: String,
+    },
+    /// Creates a new, empty project at `path` (the four sample labels, the default
+    /// canvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// `action_failed` when it can't be written, and otherwise as `collection.open`.
+    #[serde(rename = "collection.new")]
+    CollectionNew {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
+    /// Writes the current project to a new file at `path` and saves there from then on
+    /// (0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder
+    /// differs, each `collection` asset reference is rewritten to keep naming the same
+    /// file: relative to the new folder when the file is under it, otherwise
+    /// `absolute`; an `absolute` reference to a file under the new folder becomes
+    /// relative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's
+    /// undo history. Nothing stops. Each output's stream key is copied to the new file.
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// the open file included, `invalid_argument` on `path` for a path that breaks the
+    /// `absolute` asset path rules, `action_failed` when the file can't be written (the
+    /// open file stays the one saved to), and `unsupported` when the host named no
+    /// collection file.
+    #[serde(rename = "collection.save_as")]
+    CollectionSaveAs {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1943,6 +1992,9 @@ impl Action {
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
             Action::ValuesSet { .. } => "values.set",
+            Action::CollectionOpen { .. } => "collection.open",
+            Action::CollectionNew { .. } => "collection.new",
+            Action::CollectionSaveAs { .. } => "collection.save_as",
         }
     }
 
@@ -2031,7 +2083,10 @@ impl Action {
             | Action::CodecDelete { .. }
             | Action::PackWrite { .. }
             | Action::PackDelete { .. }
-            | Action::ValuesSet { .. } => vec![],
+            | Action::ValuesSet { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => vec![],
         }
     }
 
@@ -2093,6 +2148,13 @@ impl Action {
                 "type",
                 "a codec action can't be bound: a person downloads or deletes a codec \
                  through the UI, after reading its licence (ADR-0061)",
+            )),
+            Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => Some((
+                "type",
+                "a collection action can't be bound: it replaces or moves the project a key \
+                 press would run in (ADR-0121)",
             )),
             Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
                 "type",

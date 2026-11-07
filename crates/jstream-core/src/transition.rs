@@ -143,8 +143,12 @@ pub(crate) struct Visual {
     pub(crate) size: Option<[u32; 2]>,
     pub(crate) settings: ItemTransition,
     /// Its effects' kinds and settings in order (ADR-0065), empty without: two items
-    /// pair only when theirs are the same (§6).
+    /// pair only when theirs are the same kinds in the same order, with settings a Move
+    /// can blend ([`effects_pair`]).
     pub(crate) effects: Vec<(String, Settings)>,
+    /// Once a Move pairs it with an item whose effects' settings differ, the settings it
+    /// blends them from, one per effect in order (ADR-0127); `None` for everything else.
+    pub(crate) blend_from: Option<Arc<[Settings]>>,
     /// For a group that moves as one item within a family, its children's tracks
     /// inside its layer (ADR-0049 §3); `None` for everything else.
     pub(crate) inside: Option<Arc<Inside>>,
@@ -278,6 +282,11 @@ impl Planned {
                 track.sample(elapsed_ms, canvas).map(|at| Visual {
                     at,
                     seen: seen(visual, track),
+                    // Taken from the screen mid-blend, it looks as it does then, which
+                    // a Move from here blends on from (ADR-0127).
+                    effects: blended_look(visual, track, elapsed_ms)
+                        .unwrap_or_else(|| visual.effects.clone()),
+                    blend_from: None,
                     inside: visual.inside.as_ref().map(|inside| {
                         Arc::new(Inside {
                             planned: inside.planned.held(elapsed_ms, canvas),
@@ -315,6 +324,57 @@ impl Planned {
             end_ms: 0.0,
         }
     }
+}
+
+/// Whether two items' effects let a Move pair them (ADR-0081, as ADR-0127 amends it):
+/// the same kinds in the same order, with settings that are the same or that a Move can
+/// blend ([`jstream_render::transition::settings_blend`]).
+pub(crate) fn effects_pair(from: &[(String, Settings)], to: &[(String, Settings)]) -> bool {
+    from.len() == to.len()
+        && from.iter().zip(to).all(|((kind_a, a), (kind_b, b))| {
+            kind_a == kind_b && jstream_render::transition::settings_blend(a, b)
+        })
+}
+
+/// The look of `visual` as `track` draws it `elapsed_ms` in, while it blends its effects'
+/// settings (ADR-0127); `None` when it doesn't blend them.
+fn blended_look(
+    visual: &Visual,
+    track: &Track,
+    elapsed_ms: f32,
+) -> Option<Vec<(String, Settings)>> {
+    let from = visual.blend_from.as_ref()?;
+    let Track::Pair { timing, .. } = track else {
+        return None;
+    };
+    let k = timing.progress(elapsed_ms);
+    Some(
+        visual
+            .effects
+            .iter()
+            .zip(from.iter())
+            .map(|((kind, to), from)| {
+                (
+                    kind.clone(),
+                    // Only the shot knows the kinds' `int` parameters; this look is for
+                    // pairing, which compares values, not their types.
+                    jstream_render::transition::blend_settings(from, to, k, &[]),
+                )
+            })
+            .collect(),
+    )
+}
+
+/// The settings each effect of `visual` draws with `elapsed_ms` into `track`, while it
+/// blends them (ADR-0127): `None` when it doesn't.
+#[cfg(test)]
+pub(crate) fn blended_settings(
+    visual: &Visual,
+    track: &Track,
+    elapsed_ms: f32,
+) -> Option<Vec<Settings>> {
+    blended_look(visual, track, elapsed_ms)
+        .map(|look| look.into_iter().map(|(_, settings)| settings).collect())
 }
 
 fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
@@ -367,14 +427,28 @@ pub(crate) fn plan(
                     } else {
                         f.source_id == item.source_id
                     };
-                    !used[j] && same && f.settings.glide == Glide::Auto && f.effects == item.effects
+                    !used[j]
+                        && same
+                        && f.settings.glide == Glide::Auto
+                        && effects_pair(&f.effects, &item.effects)
                 })
             })
             .flatten();
         let mut arriving_motion = None;
+        let mut blend_from = None;
         let track = match partner {
             Some(j) => {
                 used[j] = true;
+                // Effects whose settings differ blend from the leaving side's (ADR-0127).
+                if from[j].effects != item.effects {
+                    blend_from = Some(
+                        from[j]
+                            .effects
+                            .iter()
+                            .map(|(_, settings)| settings.clone())
+                            .collect(),
+                    );
+                }
                 // Both sides' modifiers, blended as it moves (ADR-0099).
                 arriving_motion = Some(TrackMotion {
                     from: from[j].motion.to.clone(),
@@ -397,6 +471,7 @@ pub(crate) fn plan(
         if let Some(motion) = arriving_motion {
             item.motion = motion;
         }
+        item.blend_from = blend_from;
         arriving.push((item, track));
         arriving_partners.push(partner);
     }
@@ -615,6 +690,7 @@ mod tests {
             size: None,
             settings: ItemTransition::default(),
             effects: Vec::new(),
+            blend_from: None,
             inside: None,
             seen: super::Seen::AsPlanned,
             motion: super::TrackMotion::same(ItemId::new(item_id), std::sync::Arc::from([])),
@@ -650,29 +726,58 @@ mod tests {
     }
 
     /// Two placements of a source pair only when their effects are the same filters in
-    /// order with the same settings (ADR-0065 §6); otherwise each takes its unmatched
-    /// effect.
+    /// order (ADR-0065 §6, ADR-0081); settings that differ blend from the leaving side's
+    /// (ADR-0127). A different list, or a reference that differs, takes each one's
+    /// unmatched effect.
     #[test]
-    fn items_pair_only_when_their_effects_match() {
-        let framed = |x: f32, strength: f64| Visual {
+    fn items_pair_when_their_effects_are_the_same_kinds_and_blend_their_settings() {
+        let framed = |x: f32, strength: serde_json::Value| Visual {
             effects: vec![(
                 "vignette".into(),
-                [("strength", serde_json::json!(strength))]
-                    .into_iter()
-                    .collect(),
+                [("strength", strength)].into_iter().collect(),
             )],
             ..visual("cam", x)
         };
-        let same = plan(&[framed(0.0, 0.5)], &[framed(10.0, 0.5)], &run(true), false);
+        use serde_json::json;
+        let same = plan(
+            &[framed(0.0, json!(0.5))],
+            &[framed(10.0, json!(0.5))],
+            &run(true),
+            false,
+        );
         assert_eq!(kinds(&same), [("cam".into(), "pair")]);
-        let other = plan(&[framed(0.0, 0.5)], &[framed(10.0, 0.8)], &run(true), false);
+        assert_eq!(same.tracks[0].0.blend_from, None, "nothing to blend");
+        let other = plan(
+            &[framed(0.0, json!(0.5))],
+            &[framed(10.0, json!(0.8))],
+            &run(true),
+            false,
+        );
+        assert_eq!(kinds(&other), [("cam".into(), "pair")]);
+        let (paired, track) = &other.tracks[0];
+        let from = paired.blend_from.as_deref().expect("it blends");
+        assert_eq!(from[0].get("strength"), Some(&json!(0.5)));
+        // Linear over 500 ms after the first item's 0 ms stagger: halfway at 250.
+        let mid = super::blended_settings(paired, track, 250.0).expect("blends");
+        let strength = mid[0].get("strength").and_then(|v| v.as_f64());
+        assert!(
+            strength.is_some_and(|v| (v - 0.65).abs() < 1e-6),
+            "{strength:?}"
+        );
+        let scene = |id: &str| json!({"type": "scene", "scene_id": id});
+        let masked = plan(
+            &[framed(0.0, scene("a"))],
+            &[framed(10.0, scene("b"))],
+            &run(true),
+            false,
+        );
         assert_eq!(
-            kinds(&other),
+            kinds(&masked),
             [("cam".into(), "disappear"), ("cam".into(), "appear")]
         );
         let bare = plan(
             &[visual("cam", 0.0)],
-            &[framed(10.0, 0.5)],
+            &[framed(10.0, json!(0.5))],
             &run(true),
             false,
         );

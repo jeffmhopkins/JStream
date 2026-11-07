@@ -132,10 +132,12 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-aac` | JStream's AAC-LC encoder, Linux's AAC path ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), within [ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)'s limits): MPEG-2 AAC LC tools only, encode only; `f32` samples in, raw access units and the `AudioSpecificConfig` out. `jstream-platform-linux` puts it behind `AudioEncoder` | no |
 | 0 | `jstream-anim` | Keyframe-scene and motion model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md), [ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)): a variant's overrides and their inverses, effective values over the live parent, the switch plan between keyframes, motion modifiers and timelines; generic over geometry, no dependencies | no |
+| 0 | `jstream-midi` | MIDI 1.0 model for controller input ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): messages parsed from bytes, and the tempo, beat and bar a MIDI clock gives on the media clock; no I/O, no allocation, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -733,9 +735,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
   which a camera can't hear), and
-  `scene.set_camera_follow` a camera that glides after the pointer over a display or
-  window capture, each set on the family's scene; the action `scene.zoom_camera` steps
-  a follow camera's live zoom, with no `rev` change
+  a `follow_pointer` filter on a display or window capture item a camera that glides
+  after the pointer over it, keeping it inside a safe margin, and supplying the framing
+  camera to a 2D scene ([ADR-0120](adr/0120-follow-pointer-is-a-filter.md), protocol
+  0.91; `scene.set_camera_follow` is a shortcut for its filter edits), each belonging
+  to the family's scene; the action `scene.zoom_camera` steps a follow camera's live
+  zoom, with no `rev` change
   ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -789,6 +794,14 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
+  the actions `collection.open`, `collection.new` and `collection.save_as` switch the
+  collection file the engine saves to, the query `collection.info` reports it and the
+  recent ones, and the event `collection.file_changed` tells every client. An open or a
+  new stops every output, clears every client's undo and moves `rev` past the old
+  collection's, with `state.changed` so an older client reads the state again. A path is
+  absolute and follows the `absolute` asset path rules. They answer `unsupported` when
+  the host named no collection file; no plugin is granted them and no hotkey binds them.
 - **UI settings** (protocol 0.52, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)):
   the action `ui_settings.set` keeps an opaque JSON value under a key and the query
   `ui_settings.get` reads it back, so the web UI's dock follows the person from the
@@ -1024,7 +1037,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1068,7 +1081,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
-  action undo can't take back or a history call, today `device`, `history`, `output`,
+  action undo can't take back or a history call, today `collection` (an open stops
+  every output and clears undo, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)),
+  `device`, `history`, `output`,
   `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
   may set a shared value a page may send off the machine,
   [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
@@ -1429,8 +1444,23 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
-  migration that refuses the new field in an older file. `jstream-core`
-  loads the file the host names and replaces it atomically after every change.
+  migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
+  (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
+  settings already grant names or a bus, since loading rebuilds sources with their
+  kind's defaults. `jstream-core`
+  loads the file the host names and replaces it atomically after every change. A
+  project is one such file: `collection.open`, `collection.new` and
+  `collection.save_as` switch the file it saves to
+  ([ADR-0121](adr/0121-projects-open-new-and-save-as.md)), and a save as rewrites
+  asset references so they keep naming the same files. New and save as only ever make
+  a new file. Nothing in the file says where its outputs' stream keys are stored: the
+  engine scopes them by the file's path on this machine, so two projects that share an
+  output ID never share a key, and a shared file reaches no one's keys.
+- **Recent projects:** `recent-collections.json` (version 1) in the data directory, up
+  to ten project files, most recent first, which `jstream-core` updates on every open,
+  new and save as. The desktop app opens the first at startup if it still loads, and
+  `collection.json` otherwise.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor

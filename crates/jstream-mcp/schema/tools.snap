@@ -951,7 +951,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Scans the CLAP search folders again (0.94, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "description": "Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
                 "properties": {
                   "type": {
                     "const": "plugin.clap_rescan",
@@ -1061,6 +1061,60 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.open",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.new",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.save_as",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
                 ],
                 "type": "object"
               },
@@ -1270,6 +1324,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Finite32",
                 "default": -10.0,
                 "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "safe_margin_pct": {
+                "default": 10,
+                "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
               },
               "smooth_ms": {
                 "default": 450,
@@ -3250,7 +3311,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -6093,6 +6154,97 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `collection` operation: set `op.type` to one of `collection.open` (action), `collection.new` (action), `collection.save_as` (action), `collection.info` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `collection` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.open",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.new",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.save_as",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reads which project (collection file) the engine saves to, and the projects\nopened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails\nwith `unsupported` when the host named no collection file.",
+                "properties": {
+                  "type": {
+                    "const": "collection.info",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "collection"
+    },
+    {
+      "annotations": {
         "openWorldHint": false,
         "readOnlyHint": true
       },
@@ -8200,7 +8352,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Scans the CLAP search folders again (0.94, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "description": "Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
                 "properties": {
                   "type": {
                     "const": "plugin.clap_rescan",
@@ -8310,6 +8462,60 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.open",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.new",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.save_as",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
                 ],
                 "type": "object"
               },
@@ -8519,6 +8725,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Finite32",
                 "default": -10.0,
                 "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "safe_margin_pct": {
+                "default": 10,
+                "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
               },
               "smooth_ms": {
                 "default": 450,
@@ -10499,7 +10712,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -15666,7 +15879,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Scans the CLAP search folders again (0.94, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "description": "Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
                 "properties": {
                   "type": {
                     "const": "plugin.clap_rescan",
@@ -15776,6 +15989,60 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.open",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.new",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.save_as",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
                 ],
                 "type": "object"
               },
@@ -15985,6 +16252,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Finite32",
                 "default": -10.0,
                 "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "safe_margin_pct": {
+                "default": 10,
+                "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
               },
               "smooth_ms": {
                 "default": 450,
@@ -17965,7 +18239,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -21358,6 +21632,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": -10.0,
                 "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
               },
+              "safe_margin_pct": {
+                "default": 10,
+                "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
               "smooth_ms": {
                 "default": 450,
                 "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
@@ -22262,7 +22543,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
                 "properties": {
                   "follow": {
                     "anyOf": [
@@ -23969,7 +24250,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Scans the CLAP search folders again (0.94, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "description": "Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
                 "properties": {
                   "type": {
                     "const": "plugin.clap_rescan",
@@ -24079,6 +24360,60 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "name"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.open",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.new",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+                "properties": {
+                  "path": {
+                    "description": "The absolute path of the new collection file.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "collection.save_as",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "path"
                 ],
                 "type": "object"
               },
@@ -24288,6 +24623,13 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Finite32",
                 "default": -10.0,
                 "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
+              },
+              "safe_margin_pct": {
+                "default": 10,
+                "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
               },
               "smooth_ms": {
                 "default": 450,
@@ -26268,7 +26610,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+                "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
                 "properties": {
                   "follow": {
                     "anyOf": [

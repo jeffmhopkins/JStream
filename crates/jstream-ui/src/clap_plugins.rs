@@ -1,4 +1,4 @@
-//! The Settings dialog's Audio plugins page (ADR-0035, protocol 0.94): where the engine
+//! The Settings dialog's Audio plugins page (ADR-0035, protocol 0.95): where the engine
 //! looks for CLAP audio effects, the ones its last scan found, the files it couldn't
 //! scan and why, and Rescan, which scans again without a restart.
 //!

@@ -19,13 +19,17 @@ use crate::panels::outputs::{
     OutputRow, Vcam, go_live_targets, is_running, live_outputs, load, start_blocker,
     start_or_stop_all,
 };
+use crate::project::{OpenProject, ProjectAsk, ProjectDialog, open_now, project_name};
 use crate::projector::{self, Request, Target};
 use crate::settings::{SettingsDialog, SettingsPage};
 use crate::store::Studio;
 use crate::updates::UpdateDialog;
+use crate::video_settings::VideoSettingsDialog;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
-use jstream_control::protocol::{DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind};
+use jstream_control::protocol::{
+    DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind, OutputState,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use leptos::wasm_bindgen::JsCast;
@@ -309,7 +313,11 @@ pub fn Header(
     let open = RwSignal::new(None::<Menu>);
     let about_open = RwSignal::new(false);
     let settings = use_context::<SettingsDialog>();
+    let video_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
+    // The project dialog, with the path its field starts with.
+    let project_ask = RwSignal::new(None::<(ProjectAsk, String)>);
+    let project = use_context::<OpenProject>().unwrap_or_default().0;
     let protocol = Signal::derive(move || info.with(|i| i.protocol.clone()));
     let loads = StoredValue::new(0_u64);
     let disconnect = StoredValue::new_local(disconnect);
@@ -342,6 +350,18 @@ pub fn Header(
         });
     };
 
+    // The open project and the recent ones (ADR-0121): read at start and after every
+    // switch, whichever client or agent made it.
+    let reload_project = move || {
+        let Some(session) = session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            let found = crate::project::info(&*session.control).await;
+            project.try_set(found);
+        });
+    };
+
     // A stream key changed, which no event reports: re-read whether Go Live can start.
     Effect::new(move |previous: Option<u64>| {
         let now = studio.keys_changed.get();
@@ -355,10 +375,16 @@ pub fn Header(
         let mut events = current.control.events();
         drop(current);
         reload();
+        reload_project();
         spawn_local(async move {
             while let Some(event) = events.next().await {
                 match event {
-                    Event::StateChanged { .. } | Event::EventsDropped { .. } => reload(),
+                    Event::StateChanged { .. } => reload(),
+                    Event::EventsDropped { .. } => {
+                        reload();
+                        reload_project();
+                    }
+                    Event::CollectionFileChanged { .. } => reload_project(),
                     Event::OutputStateChanged { output_id, state } => {
                         let known = rows.try_update(|rows| {
                             rows.iter_mut()
@@ -417,6 +443,26 @@ pub fn Header(
         });
     };
 
+    let running = move || {
+        rows.with(|rows| {
+            rows.iter()
+                .filter(|row| !matches!(row.state, OutputState::Stopped | OutputState::Failed))
+                .count()
+        })
+    };
+    let ask_project = move |ask: ProjectAsk| {
+        open.set(None);
+        let start = project.with_untracked(|p| ask.suggested(p.as_ref().map(|p| p.path.as_str())));
+        project_ask.set(Some((ask, start)));
+    };
+    let open_recent = move |path: String| {
+        open.set(None);
+        if running() > 0 {
+            project_ask.set(Some((ProjectAsk::Open, path)));
+        } else {
+            open_now(session.get(), studio, path);
+        }
+    };
     let targets = move || rows.with(|rows| go_live_targets(rows.iter()));
     let live = move || rows.with(|rows| live_outputs(rows.iter()));
     let record = move || rows.with(|rows| RecordButton::of(rows));
@@ -553,6 +599,49 @@ pub fn Header(
                             <dt>"Revision"</dt>
                             <dd>{move || info.with(|i| i.rev.clone())}</dd>
                         </dl>
+                        <Show when=move || project.with(Option::is_some)>
+                            <div class="menu-sep"></div>
+                            <p class="menu-head">"PROJECT"</p>
+                            <p
+                                class="project-name"
+                                title=move || project.with(|p| p.as_ref().map(|p| p.path.clone()).unwrap_or_default())
+                            >
+                                {move || project.with(|p| p.as_ref().map(|p| project_name(&p.path)).unwrap_or_default())}
+                            </p>
+                            <button class="menuitem" role="menuitem" on:click=move |_| ask_project(ProjectAsk::New)>
+                                "New project…"
+                            </button>
+                            <button class="menuitem" role="menuitem" on:click=move |_| ask_project(ProjectAsk::Open)>
+                                "Open project…"
+                            </button>
+                            <button class="menuitem" role="menuitem" on:click=move |_| ask_project(ProjectAsk::SaveAs)>
+                                "Save project as…"
+                            </button>
+                            {move || {
+                                let recent: Vec<String> = project.with(|p| {
+                                    p.as_ref()
+                                        .map(|p| p.recent.iter().filter(|r| **r != p.path).take(5).cloned().collect())
+                                        .unwrap_or_default()
+                                });
+                                (!recent.is_empty()).then(|| view! {
+                                    <p class="menu-head">"OPEN RECENT"</p>
+                                    {recent.into_iter().map(|path| {
+                                        let title = path.clone();
+                                        let name = project_name(&path);
+                                        view! {
+                                            <button
+                                                class="menuitem"
+                                                role="menuitem"
+                                                title=title
+                                                on:click=move |_| open_recent(path.clone())
+                                            >
+                                                {name}
+                                            </button>
+                                        }
+                                    }).collect_view()}
+                                })
+                            }}
+                        </Show>
                         <div class="menu-sep"></div>
                         {settings.map(|settings| view! {
                             <button
@@ -565,6 +654,18 @@ pub fn Header(
                             >
                                 "Settings…"
                             </button>
+                        })}
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
+                                video_open.set(true);
+                            }
+                        >
+                            "Video settings…"
+                        </button>
+                        {settings.map(|settings| view! {
                             <button
                                 class="menuitem"
                                 role="menuitem"
@@ -741,9 +842,20 @@ pub fn Header(
             <Show when=move || about_open.get()>
                 <About protocol=protocol close=move || about_open.set(false) />
             </Show>
+            <Show when=move || video_open.get()>
+                <VideoSettingsDialog close=move || video_open.set(false) />
+            </Show>
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />
             </Show>
+            {move || project_ask.get().map(|(ask, start)| view! {
+                <ProjectDialog
+                    ask=ask
+                    start=start
+                    running=running()
+                    close=move || project_ask.set(None)
+                />
+            })}
             <span class="spacer"></span>
             <span
                 class="readout"

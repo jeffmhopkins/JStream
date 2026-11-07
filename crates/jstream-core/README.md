@@ -96,8 +96,10 @@ state machine. Contents:
   change (see *Collection file* in [Design](#design)).
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
-  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
-  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  the source kinds of `jstream-sources`' built-in registry, the audio filter kinds,
+  `jstream-render`'s video filter kinds, and `follow_pointer`, the follow camera, which
+  drives its scene's camera and draws nothing
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)). Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
   `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
   filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
   adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
@@ -140,7 +142,7 @@ state machine. Contents:
     locks of its own, never taken with the collection lock held) for
     `plugin.clap_scan`, which reports the folders the hosts search
     (`PluginHosts::folders`, with whether each exists), the effects found and the files
-    that failed, and `plugin.clap_rescan` (protocol 0.94), which scans again with the
+    that failed, and `plugin.clap_rescan` (protocol 0.95), which scans again with the
     same hosts and answers once it ends. One scan runs at a time; a rescan during the
     start-up scan waits for it, and the query says `scanning` meanwhile. Without hosts
     the query says CLAP is unavailable, with the reason a host gave
@@ -207,7 +209,7 @@ state machine. Contents:
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
   the engine's `AudioScopes`. A `browser` source granted the page API is told what it
-  shows its page: its visibility, the scenes and the shared values (see *Page API* in
+  shows its page: its visibility, the scenes, the shared values and a bus's levels (see *Page API* in
   [Design](#design)).
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
@@ -320,12 +322,17 @@ state machine. Contents:
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot as its pass camera's
   `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
-  box at its committed geometry, its crop, fit and flips, and the capture it shows). As a
+  box at its committed geometry, its crop, fit and flips, and the capture it shows). The
+  follow camera is the family's first enabled `follow_pointer` effect
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), which the chains skip,
+  since it draws nothing; a scene with one and no camera draws through the framing
+  camera (`PassCamera`'s `supplied`), so a 2D scene follows too. As a
   pass draws, the follow camera glides after the pointer the capture reports
   (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
-  springs of the follow-cursor mock, keeping the box filling the frame, and focuses where
-  it looks when the camera has a blur; camera motion is then added, clamped to the
-  camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
+  springs of the follow-cursor mock, keeping the box filling the frame, then slides its
+  look point just far enough to keep the pointer inside its safe margin (#1216), and
+  focuses where it looks when the camera has a blur; camera motion is then added,
+  clamped to the camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
   family), step once per frame time, and are dropped after 10 s undrawn. A transition
   moves each end's camera the same way, so a Move into or out of a follow scene follows
   it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
@@ -451,7 +458,21 @@ state machine. Contents:
   reads all of them, the threads from the host's `ThreadCpu`
   (`Engine::set_thread_cpu`) and the process CPU into a sample on each `stats.tick`
   and each `profile.get`, keeps a minute of samples, and answers a window as the
-  difference between the newest and the one from that long ago.
+  difference between the newest and the one from that long ago. Past the drawers
+  (protocol 0.92, `profile/streams.rs`): each running output, and each H.264 preview
+  session, registers a `StreamMeter` while it runs, whose reader loads its video
+  session's counters (`jstream-encode`'s `received`, `encoded`, `late`, `encode_nanos`)
+  through a `StatsHandle` that keeps no session alive, then what it sent and lost after
+  it (the output's `SentCounters` and drops, the preview stream's queued and refused
+  pictures); a session reopened, or an output's next run, is a new meter that counts
+  from zero. The mixer thread sleeps until its next block is due
+  (`Mixer::next_due`, in its sample rate, rescaled to the clock's time base; at most
+  4 ms at a time, so a stop or a clock that jumps is seen
+  soon), not in 1 ms polls (ADR-0117 §9). It counts each block and how long its mix took (the poll
+  that makes it and everything done with it after) into a `MixerMeter` of relaxed
+  atomics, and the program stage registers it with its master bus's skips; the audio
+  inputs' underruns and drops are the drop ledger's `AudioInputDrops`, summed with the
+  ones removed.
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
@@ -767,7 +788,8 @@ settings, and the CLAP kinds' parameter defaults), `png`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes), `blake3` (the digests a quarantine keeps of each blamed
-shader, ADR-0097; already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
+shader, ADR-0097, and a project's stream-key scope, a hash of its path, ADR-0121;
+already in the tree through `jstream-server`), `tracing` (see *Logging*) and, on Windows only,
 `jstream-platform-windows` (`create_private_file` and `check_private_file` for the audit
 log and the collection file, `src/private_file.rs`; the GPU capture hardware test,
 `src/tests/windows_gpu.rs`, compiled only with this crate's `hw-tests` feature, uses it
@@ -780,7 +802,7 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
 scenes, only the values its grant covers and a removal, an update held to the next
-page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant), `jstream-crash` (the crash redaction's `Secrets` fed by the
+page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant; and a page given a bus reading `null`, then its levels and bands while an output runs, then `null` again), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
 test plugins of `src/tests/automation.rs`) and `jstream-mcp`
@@ -804,7 +826,7 @@ happened. Placeholder output actions do too: they only step the state machine.
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
 (see *Frame sheets*), and a scene sheet follows its audio modifiers under that lock
-before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.94) run
+before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.95) run
 outside it: a rescan runs plugin host processes for seconds and takes the collection
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 
@@ -939,7 +961,8 @@ collection lock:
   step keeps the `rev` its batch first produced (`step_rev`). The undo stack keeps the
   newest 100 steps by default (`with_history_limit`; 0 keeps none). A session's
   history is dropped when it closes, since a reconnecting client gets a new
-  `client_id`.
+  `client_id`, and every client's when a project is opened or created, or a save as
+  rewrites asset references ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - **Order of checks.** A used idempotency key returns its first result (keys are
   shared with batches and store the whole result); then `expected_rev`
   (`rev_conflict`); then an empty stack (`history_empty`). None of these drops a step.
@@ -1178,7 +1201,11 @@ and the client and request that started it. Nothing of it is saved or undone.
   until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
-  round sends its loops and ends after its cues fire. A round collects every
+  round sends each loop or end in time order with its cues, once the cues due at or
+  before that pass boundary (`boundary`) have run, and drops it when one of them
+  stopped that run or started the timeline again (`send_timeline_step`): a stopped
+  timeline sends no `looped`, and a run restarted before its end sends no `ended`
+  after the new run's `started`. A round collects every
   timeline's due fires before it runs them, and skips a fire when an earlier cue in
   that round stopped its timeline or started it again (`started_ns`); a timeline that
   only reached its own end still runs the cues that were due before the end. When all
@@ -1351,7 +1378,9 @@ time and draws the sampled items over opaque black, bottom first, the nested sce
 they show composited first. Without a scene to draw, the primary display's capture is
 scaled to fill the canvas, which is fitted the same way, or the output is black.
 A 3D scene's camera may move on its own
-([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): its pass, and a
+([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), and a 2D scene
+with a `follow_pointer` effect draws through the framing camera so it can
+([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): its pass, and a
 transition's ends, carry the family's `CameraMoves`, which `compose` applies to the
 camera as it draws (a follow camera's springs in that compositor's `Chains`, stepped
 once per frame time, then the camera's motion), with the zoom steps from the live
@@ -1443,11 +1472,16 @@ engine hands each running source whose page has the page API (`Source::page_api`
 `PageView` of the collection as drawn: whether the program scene shows the source,
 and whether the preview scene does (`activity::shown_sources`: the visible items, and
 through every placed nested scene source to any depth, whatever its audio, a keyframe's
-overrides applied as for audio), the two scenes' IDs and names, and the shared values.
+overrides applied as for audio), the two scenes' IDs and names, the shared values, and
+each bus's post-fader levels (`AudioRouting::page_levels`, read without restarting the
+held peak that `meters.tick` takes; empty while no mixer runs, and read only while a
+page is granted). Attaching and detaching the mixer feed the pages too, so a page given
+a bus reads `null` and then its levels.
 The source sends its page only what changed, so this costs nothing when no page is
 granted and little when nothing changed, and at most one update per page frame (ADR-0102
 decision 3): what changes within a frame is merged and held, and `page_view` returns
-when it may go. The earliest of those is the sources' page wake, which the sources
+when it may go, which is every page frame while a page's bus has a reading. The
+earliest of those is the sources' page wake, which the sources
 thread wakes for as it does for the plan's own (`LiveSources::wake_at`), so a held
 update goes out a frame later whether or not anything else changes. Each look at a
 source (`look_timed`) hands it the plan's time too (`Source::page_clock`), from which a
@@ -1556,7 +1590,21 @@ the plan is made again. An item whose `effects_space` is `canvas`
 ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
 layer instead, with no outset, scaled down the same way: the item is drawn into it
 where it is placed, turned, flipped and tilted as it is (a live resize redraws it
-there), and the layer covers the canvas flat. Its transition visual never glides. A layer that can't be made or drawn (too large for the
+there), and the layer covers the canvas flat. Its transition visual never glides.
+An item that shows a 3D model ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6;
+its source's frame carries the model, from `Source::model`, beside the transparent
+stand-in) always has a canvas-sized layer, effects or not. The chain phase draws the
+model into it with `Compositor::draw_model`: posed by the item's geometry with its live
+values and motion applied, seen through its scene's camera with the camera's live value,
+motion and follow applied as the scene's pass resolves them, and lit as the source says.
+`Chains` uploads each source's model once per version and lets go of one no frame drew.
+Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
+input, as for canvas space, so they run over the canvas. The item is placed as
+`Placement::Layer`, flat at the canvas's top-left, sorting in a 3D scene by the model's
+pose. Like a canvas-space layer it never glides in a transition. A model that can't be
+uploaded blanks its item, logged once. Goldens in `chain.rs` draw an unlit plane in its
+box, moved by its motion, with a `vignette` over its layer, and turned 60° through a
+scene camera, where it covers the cells a flat item in the same pose covers. A layer that can't be made or drawn (too large for the
 adapter) blanks only its item that frame, logged once until a frame draws it, as a
 failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or
@@ -1565,8 +1613,16 @@ it. A legacy transform has the box its quad covers, so
 over a capture, whose size isn't known when planning, its effects are bypassed. A
 source's own chain still runs once, wherever it is placed. In a transition an item
 with effects is its effects' layer over its grown box, uncropped, and two items pair
-only when their effects are the same kinds with the same settings in order
-([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)). Goldens in `chain.rs`
+only when their effects are the same kinds in order
+([ADR-0081](../../docs/adr/0081-effects-pair-by-their-look.md)) with settings a Move can
+blend (`transition::effects_pair`, [ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+equal, or plain values on both sides, not a scene, source or file reference that differs.
+A pair whose settings differ carries the leaving side's (`Visual::blend_from`); the shot
+keeps one `EffectBlend` per such chain, with the item's timing and each filter's `int`
+parameters from its descriptor (`Chain::whole_params`), and the render thread
+hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
+numbers and colours linearly, every other value switching halfway, the eased progress
+clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
@@ -2193,6 +2249,13 @@ snapshot, so the preview shows the transition onto the new program scene, then t
 scene, with the same `rev` (the switch changes none). Not yet: video mixes other than
 program, sources on their own, and the post-master stage, which come with the video mixes and the master chain.
 
+Each H.264 session a stream opens, the hub's own or the program stage's, is metered in
+`profile.get`'s `streams` (protocol 0.92) while it is open: the subscription hands the
+stream the profiler's `StreamRegistry`, and the stream counts each picture its binary
+queue took or refused (`SentCounts`), so its `frames_out` and `dropped` are what reached
+the client's queue and what its keyframe gate dropped, beside the encoder's own drops.
+JPEG and PNG streams are not metered.
+
 <a id="events"></a>
 ## Events
 <!-- @section
@@ -2236,6 +2299,10 @@ Registering two sources for the same drop adds it twice.
 
 A source reports running totals. The tick is the sum, so a client subtracts the previous
 tick.
+
+A mixer input's source also reports its own counters (`DropSource::audio_input`), so
+`profile.get`'s `mixer` sums the inputs' underruns and drops, removed inputs' latched
+with the rest (protocol 0.92).
 
 What each stage contributes:
 
@@ -2449,7 +2516,9 @@ whose meters are built before the thread starts, since the loudness meter alloca
 and never allocate after) and publishes through atomics (`MasterMeters`). An
 `audio.reset_loudness` sets a flag the mixer thread reads before its next block, which
 restarts the integrated loudness. With no program stage running, no `meters.tick` is
-emitted and `audio.reset_loudness` does nothing.
+emitted and `audio.reset_loudness` does nothing. A page granted a bus reads the buses'
+meters too (`page_levels`), without restarting the held peaks, so `meters.tick` still
+sees every peak.
 
 <a id="outputs"></a>
 ## Outputs
@@ -3084,11 +3153,17 @@ plugin loads, before an event is emitted and before a subscription closes; under
 registry lock, an entry's grant lock is a leaf, which a plugin's session also takes
 alone. The plugin file's lock comes before the registry lock: a save holds it while it
 reads the plugins and writes `plugins.json`, and nothing takes it under the registry
-lock. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
+lock. The collection file's mutex comes before every other engine lock: a save holds it
+while it takes the collection lock to serialize, and `collection.open`, `collection.new`
+and `collection.save_as` hold it for the whole call, the stops of the outputs an open
+stops included, which take only the locks `output.stop` takes; the recent list's mutex
+is taken alone or after it, and the stream-key scope's mutex is a leaf, set under the
+collection lock when the file changes and read alone. A plugin's thread holds no engine lock while the plugin runs, so the plugin's
 calls take the collection lock as any session's do. The live sources' `SourceMeters`
 (a source's paints, looks and builds, and the plans) are two leaf mutexes the planner
 takes under the collection lock and `jstream-sources` and the profiler take alone; the
-`Profiler`'s history and thread-reader locks are never taken with the collection lock
+`Profiler`'s history, thread-reader, stream and mixer locks are never taken with the
+collection lock (the mixer thread takes none: its meter is atomics)
 (*Profile* in [Purpose](#purpose)). A stream's poll takes only its queue's lock. No lock
 is held across an `await`, and a snapshot's reply slot is not held across a wake.
 `output.start`
@@ -3245,6 +3320,38 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 
 `jstream-daemon`'s `--collection` option turns this on
 ([jstream-daemon › Design](../../apps/jstream-daemon/README.md#design)).
+
+**Projects** ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md),
+`projects.rs`). With a collection file named, `collection.open`, `collection.new` and
+`collection.save_as` switch the file the engine saves to, and `collection.info` reports
+it; without one they answer `unsupported`. Each holds the collection file's mutex for the
+whole call. An open reads and loads the file into a graph with the engine's kinds and a
+new loads an empty one with the sample labels. Then the open file is saved, and a save
+that fails refuses the call. Then the new collection is written to its path before
+anything stops (a new one with `CollectionFile::create_new`, which never replaces a file),
+so a file that can't be read, loaded or written leaves everything as it was. Then pending
+stale stream keys are removed under the old scope, every running output stops through `output.stop` (with its events and audit
+entry), and, under the collection lock, `replace_collection` swaps the graph: `rev` one
+past the old one unless the file's is later, open gestures cancelled, timelines stopped,
+every client's undo history and idempotency keys cleared, the first scene on program,
+sources rebuilt with the new folder behind `collection` assets, then what follows any
+batch (`state.changed`) and `studio.changed`. A switch that fails after that removes the
+file a new made. A save as refuses a path where anything is, copies each output's stream
+key to the new path's scope, rewrites asset references for the new folder
+(`move_collection_assets`), and makes the file with `create_new` under the collection
+lock, so no batch lands between the copy and the switch; a rewrite is a new `rev` and
+clears undo, and a save as that fails removes the copied keys. Each ends with `collection.file_changed`
+and puts the file first in the recent list (`with_recent_collections`, at most ten, kept
+in a JSON file the host names; `recent_collections` reads it for a host's startup).
+
+**Stream-key scopes.** An output's key is stored under `<scope>/<output_id>`
+(`Engine::stream_key_name`, which hosts' publish openers read too), where the scope is
+`projects::key_scope`, a hash of the collection file's path with its folder resolved
+through links, kept on the engine's own lock and set whenever the file changes. Nothing
+in the file names it. Without a collection file, keys stay under the bare output ID. The
+collection loaded at startup keeps the keys stored before projects: once the engine has
+both it and a key store, each bare key is copied to its scoped name, unless one is there,
+and then removed; a store failure leaves that key where it was and is logged.
 
 <a id="not-yet"></a>
 ## Not yet

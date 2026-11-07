@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 
 fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,
@@ -29,7 +30,8 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
 /// sort, and an asset; `tone`, an audio kind with no parameters; `scope`, a video kind
 /// that draws a bus (as `waveform` and `spectrum` do); and the filter kinds `tint`
-/// (video, with a scene reference) and `gain` (audio).
+/// (video, with a scene reference), `follow_pointer` (the follow camera, ADR-0120) and
+/// `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -129,6 +131,7 @@ fn kinds() -> Vec<KindDescriptor> {
                 json!(0.0),
             )],
         },
+        jstream_protocol::follow_pointer_descriptor(),
     ]
 }
 

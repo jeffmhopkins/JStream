@@ -35,8 +35,8 @@ use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
 use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
 use crate::{
-    Drawer, DrawerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
 use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
@@ -1369,6 +1369,15 @@ pub(crate) fn actions() -> Vec<Action> {
             value: None,
         },
         Action::PrivacySet { on: true },
+        Action::CollectionOpen {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+        },
+        Action::CollectionNew {
+            path: "/home/me/shows/talk.json".into(),
+        },
+        Action::CollectionSaveAs {
+            path: "D:/Projects/show copy.json".into(),
+        },
         Action::PreviewSubscribe {
             channel: 2,
             max_width: None,
@@ -1665,6 +1674,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::PluginList,
         Query::PluginClapScan,
         Query::CodecDownloads,
+        Query::CollectionInfo,
         Query::YoutubeStats,
         Query::SourceSizes,
         Query::VideoFrames {
@@ -1792,6 +1802,47 @@ fn profile_info() -> ProfileInfo {
                 cpu_pct: ms(6.5),
             },
         ],
+        streams: vec![
+            StreamProfile {
+                stream: ProfileStream::Output {
+                    output_id: OutputId::new("out_yt"),
+                },
+                fps: ms(30.0),
+                frames_in: 150,
+                encoded: 149,
+                frames_out: 148,
+                dropped: 2,
+                late: 3,
+                encode_ms: ms(4.5),
+                kbps: 6_210,
+                target_kbps: 6_160,
+            },
+            StreamProfile {
+                stream: ProfileStream::Preview {
+                    channel: 1,
+                    scene_id: Some(SceneId::new("scn_2")),
+                    source_id: None,
+                },
+                fps: ms(15.0),
+                frames_in: 75,
+                encoded: 75,
+                frames_out: 75,
+                dropped: 0,
+                late: 0,
+                encode_ms: ms(2.0),
+                kbps: 1_700,
+                target_kbps: 1_728,
+            },
+        ],
+        mixer: Some(MixerProfile {
+            blocks: 234,
+            late_blocks: 1,
+            block_max_ms: ms(22.5),
+            block_ms: ms(21.333),
+            skipped_frames: 0,
+            underrun_frames: 480,
+            dropped_frames: 0,
+        }),
     }
 }
 
@@ -1852,6 +1903,7 @@ fn color_settings() -> Settings {
 /// A descriptor using every parameter type and hint.
 fn color_kind() -> KindDescriptor {
     let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,
@@ -2637,6 +2689,13 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 "this platform has no CLAP plugin host yet".into(),
             )),
         },
+        QueryResult::CollectionInfo {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+            recent: vec![
+                "C:/Users/me/Videos/Show/show.json".into(),
+                "C:/Users/me/AppData/Roaming/JStream/collection.json".into(),
+            ],
+        },
         QueryResult::CodecDownloads {
             downloads: vec![crate::CodecDownloadInfo {
                 download_id: "openh264".into(),
@@ -2786,6 +2845,21 @@ pub(crate) fn events() -> Vec<Event> {
             id: "tl_other".into(),
         }),
     });
+    for (path, cause) in [
+        (
+            "C:/Users/me/Videos/Show/show.json",
+            crate::CollectionCause::Open,
+        ),
+        ("/home/me/shows/talk.json", crate::CollectionCause::New),
+        ("D:/Projects/show copy.json", crate::CollectionCause::SaveAs),
+    ] {
+        events.push(Event::CollectionFileChanged {
+            path: path.into(),
+            cause,
+            client_id: ClientId::new("c1"),
+            request_id: Some(RequestId::new("r7")),
+        });
+    }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),
@@ -3071,6 +3145,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Hotkey,
         EntityKind::Plugin,
         EntityKind::Pack,
+        EntityKind::File,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

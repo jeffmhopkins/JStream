@@ -431,10 +431,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
   one revision, which one undo puts back. With a window capture in the scene, the
-  camera, Depth of field and Follow pointer on, and a camera-motion row added, the
-  settings column's `scrollWidth` stays within its `clientWidth` at the dialog's width
-  and when a 720-wide viewport clamps the dialog; the Nearest on top check sits in
-  front of its text, and the From the right stepper keeps room for its number.
+  camera and Depth of field on, Follow pointer offering Add Follow pointer… (a filter on
+  the capture, ADR-0120), and a camera-motion row added, the settings column's
+  `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
+  720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
+  text, and the Roll field keeps room for its number.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
@@ -445,6 +446,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   program captioned with Main, no preview outside studio mode, and Intro and Main below
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
+- **Video settings** (`video-settings.spec.js`): File › Video settings… opens on
+  1920×1080 at 30 fps; a preset fills both sides, a typed side of 0 turns the preset to
+  Custom and is refused in the dialog; 1280×720 at 60 fps applies as one revision and
+  reopens with those values; Apply with nothing changed sends nothing; and one Undo
+  takes back both.
 
 <a id="running"></a>
 ## Running them

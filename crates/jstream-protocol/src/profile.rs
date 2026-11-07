@@ -56,6 +56,111 @@ pub struct ProfileInfo {
     pub process_cpu_pct: Option<Finite32>,
     /// The process's threads, those of one name added together, busiest first.
     pub threads: Vec<ThreadProfile>,
+    /// What happened to the frames past the drawers (since 0.92): each output's and
+    /// each H.264 preview stream's, from its encoder to where it sends them, most
+    /// frames lost first. A stream that ran in none of the window is left out.
+    pub streams: Vec<StreamProfile>,
+    /// The audio mixer and its inputs in the window (since 0.92). Omitted when the
+    /// mixer didn't run in it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mixer: Option<MixerProfile>,
+}
+
+/// One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached
+/// its encoder, what left it, and what was lost or late on the way.
+///
+/// An output's frames are its program feed's, from the video encoder to the muxer or
+/// publish target; a preview stream's go from its encoder to the client's socket. An
+/// encoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and
+/// `encode_ms` repeat; what each sends and loses after it is its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct StreamProfile {
+    /// Which stream.
+    pub stream: ProfileStream,
+    /// The frame rate it is encoded at.
+    #[serde(default)]
+    pub fps: Finite32,
+    /// The video frames handed to its encoder, dropped ones included.
+    #[serde(default)]
+    pub frames_in: u64,
+    /// The video frames its encoder took.
+    #[serde(default)]
+    pub encoded: u64,
+    /// The video frames it sent: to the muxer or publish target for an output, to the
+    /// client for a preview stream.
+    #[serde(default)]
+    pub frames_out: u64,
+    /// The video frames lost between its encoder's input and where it sends them: a
+    /// full encoder queue, a busy encoder, a full packet queue, or a dropped link.
+    #[serde(default)]
+    pub dropped: u64,
+    /// The video frames its encoder took more than a frame period after they were
+    /// handed over: a stream falls behind before it drops.
+    #[serde(default)]
+    pub late: u64,
+    /// The average time its encoder spent on a frame, in milliseconds. A hardware
+    /// encoder that works asynchronously spends only the time to submit it.
+    #[serde(default)]
+    pub encode_ms: Finite32,
+    /// The bit rate it sent at over the window, in kilobits a second: video and audio
+    /// for an output, video for a preview stream.
+    #[serde(default)]
+    pub kbps: u32,
+    /// The bit rate its encoders are set to, in kilobits a second, the same way.
+    #[serde(default)]
+    pub target_kbps: u32,
+}
+
+/// An encoded stream, by what it feeds ([`StreamProfile::stream`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ProfileStream {
+    /// An output's program feed.
+    Output {
+        /// The output.
+        output_id: OutputId,
+    },
+    /// An H.264 preview stream.
+    Preview {
+        /// The stream's channel on its connection.
+        channel: u32,
+        /// The scene it shows; omitted with `source_id` for the program.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The source it shows alone.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_id: Option<SourceId>,
+    },
+    /// A stream this version of the protocol doesn't know. Never sent; produced only
+    /// when parsing a result from a newer server.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+/// The audio mixer and its inputs in the window ([`ProfileInfo::mixer`]). Every count is
+/// in engine sample frames (48 000 a second) or mixer blocks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct MixerProfile {
+    /// The blocks the mixer mixed.
+    pub blocks: u64,
+    /// The blocks whose mix took longer than the audio they hold: the mixer can't keep
+    /// up with the clock while this grows.
+    pub late_blocks: u64,
+    /// The longest mix of a block, in milliseconds.
+    pub block_max_ms: Finite32,
+    /// The length of a block, in milliseconds: what a mix must stay under.
+    pub block_ms: Finite32,
+    /// Frames the mixer skipped because it fell more than half its ring behind the clock.
+    pub skipped_frames: u64,
+    /// Frames the inputs had no audio for when the mixer read them, played as silence:
+    /// a device or source that delivers late or not at all.
+    pub underrun_frames: u64,
+    /// Frames the inputs dropped: arrived after the mixer had passed them, or
+    /// overwritten before it read them.
+    pub dropped_frames: u64,
 }
 
 /// A thread that draws shots ([`ProfileInfo::drawers`]).

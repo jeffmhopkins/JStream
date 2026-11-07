@@ -2817,6 +2817,8 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "libc",
+ "rcgen",
+ "rustls",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
@@ -2936,6 +2938,7 @@ name = "jstream-desktop"
 version = "0.1.0-alpha.4.2"
 dependencies = [
  "anyhow",
+ "futures-util",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
@@ -2948,6 +2951,7 @@ dependencies = [
  "jstream-sources",
  "rustls",
  "rustls-native-certs",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tokio",
@@ -2996,6 +3000,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-jtunnel"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "jstream-midi",
+]
+
+[[package]]
 name = "jstream-mcp"
 version = "0.0.0"
 dependencies = [
@@ -3013,6 +3025,13 @@ name = "jstream-media"
 version = "0.0.0"
 dependencies = [
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jstream-midi"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
 ]
 
 [[package]]
@@ -3093,6 +3112,7 @@ version = "0.0.0"
 dependencies = [
  "jstream-platform",
  "jstream-plugin-proto",
+ "jstream-protocol",
  "jstream-vcam-proto",
  "tracing",
  "wgpu",

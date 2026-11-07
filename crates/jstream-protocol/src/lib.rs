@@ -52,8 +52,8 @@ pub use audio::{
     gain_db_problem,
 };
 pub use camera_motion::{
-    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
-    check_camera_motion,
+    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_POINTER_KIND, FOLLOW_ZOOM_RANGE,
+    FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
 };
 pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
@@ -70,7 +70,8 @@ pub use envelope::{
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{
-    ChainCost, DropCounts, EngineLoad, Event, OutputHealth, OutputState, OutputStatsInfo,
+    ChainCost, CollectionCause, DropCounts, EngineLoad, Event, OutputHealth, OutputState,
+    OutputStatsInfo,
 };
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
@@ -128,8 +129,8 @@ pub use preview::{
 };
 pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
-    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
 pub use query::{
     CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,

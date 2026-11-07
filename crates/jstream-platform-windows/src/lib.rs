@@ -9,7 +9,7 @@
 //! both ends) with the plugin host's MMCSS registration (`ProAudioThread`),
 //! `check_media_foundation`, which reports a Windows N edition without Media Foundation,
 //! and user-only files for a host's secrets (`create_private_file`,
-//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`), and the MMCSS tasks of the real-time threads (`WindowsThreadPriority`); packet video decoders follow. Layer 2, and one of the few crates allowed
+//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`), and the MMCSS tasks of the real-time threads (`WindowsThreadPriority`), and the desktop app's global hotkeys (`GlobalHotkeys`, ADR-0112); packet video decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -30,6 +30,8 @@ mod decode;
 mod dialog;
 #[cfg(windows)]
 mod gpu;
+// Its key tables are tested on every platform; the listener is Windows.
+mod hotkeys;
 // Its decision logic is tested on every platform.
 #[cfg(any(windows, test))]
 mod n_edition;
@@ -68,6 +70,9 @@ pub use decode::MfMediaDecoders;
 pub use dialog::{Pick, PickKind, pick_path};
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
+#[cfg(windows)]
+pub use hotkeys::GlobalHotkeys;
+pub use hotkeys::{HotkeyChord, KeyCode, key_code, parse_chord};
 #[cfg(windows)]
 pub use n_edition::check_media_foundation;
 #[cfg(windows)]

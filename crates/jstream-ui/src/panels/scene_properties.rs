@@ -1,10 +1,10 @@
 //! The scene Properties dialog (spec-workspace.md 6.2.5): a scene's name, its
 //! Transition in and out, the hotkey that switches to it, whether a multiview shows it,
 //! its background colour, whether its audio reaches the Mixer when it is nested, and its
-//! 3D camera (ADR-0094), with the camera's Follow pointer and Camera motion (ADR-0113,
-//! [`super::camera_moves`]). Everything is a draft until OK, which sends what changed as
-//! one batch (`scene.rename`, `scene.set_transitions`, `scene.set_meta`,
-//! `scene.set_options`, `scene.set_camera`, `scene.set_camera_follow`,
+//! 3D camera (ADR-0094), with the camera's Follow pointer note and Camera motion
+//! (ADR-0113, ADR-0120, [`super::camera_moves`]). Everything is a draft until OK, which
+//! sends what changed as one batch (`scene.rename`, `scene.set_transitions`,
+//! `scene.set_meta`, `scene.set_options`, `scene.set_camera`,
 //! `scene.set_camera_motion`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
@@ -24,8 +24,8 @@ use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, CameraFollow, CameraMotionModifier, Chord, Edit, FilterOwner, Finite32, SceneCamera,
-    SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
+    Action, CameraMotionModifier, Chord, Edit, FilterOwner, Finite32, SceneCamera, SceneId,
+    TransitionPresetId, check_camera_motion, parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -72,9 +72,6 @@ pub struct SceneDraft {
     /// Its camera, which makes it a 3D scene (ADR-0094); on a keyframe scene its
     /// override of its parent's.
     pub camera: Option<SceneCamera>,
-    /// Its camera's follow camera (ADR-0113), or none; a keyframe scene draws its
-    /// parent's.
-    pub camera_follow: Option<CameraFollow>,
     /// Its camera's motion modifiers (ADR-0113); a keyframe scene draws its parent's.
     pub camera_motion: Vec<CameraMotionModifier>,
 }
@@ -92,7 +89,6 @@ impl SceneDraft {
             include_audio: scene.options.include_audio,
             background: scene.options.background.clone(),
             camera: scene.camera,
-            camera_follow: scene.camera_follow.clone(),
             camera_motion: scene.camera_motion.clone(),
         })
     }
@@ -179,20 +175,6 @@ pub fn scene_edits(
         edits.push(Edit::SceneSetCamera {
             scene_id: scene_id.clone(),
             camera: draft.camera,
-        });
-    }
-    if draft.camera_follow != before.camera_follow {
-        if let Some(follow) = &draft.camera_follow
-            && let Err(problem) = follow.check()
-        {
-            return Err(format!(
-                "Follow pointer: {} {}.",
-                problem.field, problem.reason
-            ));
-        }
-        edits.push(Edit::SceneSetCameraFollow {
-            scene_id: scene_id.clone(),
-            follow: draft.camera_follow.clone(),
         });
     }
     if draft.camera_motion != before.camera_motion {
@@ -1169,11 +1151,10 @@ mod tests {
         );
     }
 
-    /// ADR-0113: Follow pointer and Camera motion send `scene.set_camera_follow` and
-    /// `scene.set_camera_motion` when they change, and a value out of range is refused
-    /// before sending.
+    /// ADR-0113: Camera motion sends `scene.set_camera_motion` when it changes. Follow
+    /// pointer is a filter since ADR-0120, so the dialog sends no follow.
     #[test]
-    fn follow_and_camera_motion_send_their_edits() {
+    fn camera_motion_sends_its_edit() {
         let scene: SceneInfo = serde_json::from_value(serde_json::json!({
             "scene_id": "a",
             "name": "A",
@@ -1186,35 +1167,18 @@ mod tests {
         };
         let a = SceneId::new("a");
         let before = SceneDraft::of(&c, &a).expect("the scene");
-        let follow = CameraFollow::of(jstream_control::protocol::ItemId::new("screen"));
         let motion = crate::panels::camera_moves::with_added(&[]).expect("room");
         let after = SceneDraft {
-            camera_follow: Some(follow.clone()),
             camera_motion: motion.clone(),
             ..before.clone()
         };
         assert_eq!(
             scene_edits(&c, &a, &before, &after),
-            Ok(vec![
-                Edit::SceneSetCameraFollow {
-                    scene_id: a.clone(),
-                    follow: Some(follow.clone()),
-                },
-                Edit::SceneSetCameraMotion {
-                    scene_id: a.clone(),
-                    motion,
-                },
-            ])
+            Ok(vec![Edit::SceneSetCameraMotion {
+                scene_id: a.clone(),
+                motion,
+            }])
         );
-        let too_far = SceneDraft {
-            camera_follow: Some(CameraFollow {
-                zoom: Finite32::new(9.0).expect("finite"),
-                ..follow
-            }),
-            ..before.clone()
-        };
-        let refused = scene_edits(&c, &a, &before, &too_far).expect_err("refused");
-        assert!(refused.contains("follow.zoom"), "{refused}");
     }
 
     /// ADR-0108 decision 7: Depth of field starts focused on the camera's target with a

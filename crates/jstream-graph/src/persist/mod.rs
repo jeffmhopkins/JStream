@@ -33,7 +33,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 6;
+pub const SCHEMA_VERSION: u32 = 8;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -57,8 +57,9 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
-const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] =
-    [v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6];
+const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8,
+];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
 /// `items[].effects`, ADR-0065). A version 1 file has no scene filters, and its items'
@@ -148,6 +149,104 @@ fn v5_to_v6(value: &mut Value) -> Result<(), String> {
     for scene in scenes.into_iter().flatten() {
         if scene.get("timelines").is_some() {
             return Err("a version 5 scene has no `timelines`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 7 moves a scene's follow camera onto its item (ADR-0120): a scene's
+/// `camera_follow` becomes a `follow_pointer` effect, last in the followed item's
+/// `effects`, with the follow's numbers as its settings. A follow whose item has left the
+/// scene was inert and is dropped, as is one whose item's effects are already full.
+fn v6_to_v7(value: &mut Value) -> Result<(), String> {
+    let Some(scenes) = value.get_mut("scenes").and_then(Value::as_array_mut) else {
+        return Ok(());
+    };
+    for scene in scenes {
+        let Some(follow) = scene
+            .as_object_mut()
+            .and_then(|s| s.remove("camera_follow"))
+        else {
+            continue;
+        };
+        let follow: CameraFollow = serde_json::from_value(follow)
+            .map_err(|_| "a scene's `camera_follow` is not a follow camera".to_owned())?;
+        let items = scene.get_mut("items").and_then(Value::as_array_mut);
+        let Some(item) = items
+            .into_iter()
+            .flatten()
+            .find(|item| item.get("id").and_then(Value::as_str) == Some(follow.item_id.as_str()))
+        else {
+            continue;
+        };
+        let Some(item) = item.as_object_mut() else {
+            continue;
+        };
+        let effects = item
+            .entry("effects")
+            .or_insert_with(|| Value::Array(Vec::new()));
+        let Some(effects) = effects.as_array_mut() else {
+            return Err("an item's `effects` is not a list".into());
+        };
+        if effects.len() >= crate::model::MAX_CHAIN_FILTERS {
+            continue;
+        }
+        let taken = |id: &str| {
+            effects
+                .iter()
+                .any(|f| f.get("id").and_then(Value::as_str) == Some(id))
+        };
+        let id = (1..)
+            .map(|n| {
+                if n == 1 {
+                    "follow-pointer".to_owned()
+                } else {
+                    format!("follow-pointer-{n}")
+                }
+            })
+            .find(|id| !taken(id))
+            .unwrap_or_default();
+        let filter = FileFilter {
+            id: FilterId::new(id),
+            kind: jstream_protocol::FOLLOW_POINTER_KIND.into(),
+            kind_version: Some(jstream_protocol::follow_pointer_descriptor().version),
+            enabled: true,
+            settings: follow.settings(),
+        };
+        effects.push(serde_json::to_value(filter).map_err(|e| e.to_string())?);
+    }
+    Ok(())
+}
+
+/// Version 8 gives each kind of data a `browser` page may read its own checkbox
+/// (ADR-0124): `page_api_shared_values` for the names in `page_api_values`, and
+/// `page_api_audio` for the bus in `page_api_bus`. Loading rebuilds each source with its
+/// kind's defaults, which would turn both off, so a version 7 source whose names or bus
+/// are set gets its checkbox on: nothing a user granted is taken away, and nothing new
+/// is granted.
+fn v7_to_v8(value: &mut Value) -> Result<(), String> {
+    let sources = value.get_mut("sources").and_then(Value::as_array_mut);
+    for source in sources.into_iter().flatten() {
+        let browser =
+            source.get("kind") == Some(&serde_json::json!({"type": "builtin", "kind": "browser"}));
+        let Some(settings) = source
+            .get_mut("settings")
+            .and_then(Value::as_object_mut)
+            .filter(|_| browser)
+        else {
+            continue;
+        };
+        let names = settings
+            .get("page_api_values")
+            .and_then(Value::as_str)
+            .is_some_and(|names| !names.trim().is_empty());
+        let bus = settings
+            .get("page_api_bus")
+            .is_some_and(|bus| !bus.is_null());
+        for (checkbox, granted) in [("page_api_shared_values", names), ("page_api_audio", bus)] {
+            if granted && !settings.contains_key(checkbox) {
+                settings.insert(checkbox.to_owned(), Value::Bool(true));
+            }
         }
     }
     Ok(())
@@ -344,10 +443,6 @@ struct FileScene {
     /// for a keyframe scene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera_motion: Vec<CameraMotionModifier>,
-    /// Its follow camera (ADR-0113, schema_version 5); omitted for none, and for one
-    /// whose item has left the scene, which is inert.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    camera_follow: Option<CameraFollow>,
     /// Its timelines (ADR-0115, schema_version 6), ordered by ID; omitted when it has
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -654,10 +749,6 @@ impl Graph {
                     background: scene.options.background.clone(),
                     camera: scene.camera,
                     camera_motion: scene.camera_motion.clone(),
-                    camera_follow: scene
-                        .camera_follow
-                        .clone()
-                        .filter(|f| scene.items.iter().any(|item| item.id == f.item_id)),
                     timelines: scene.timelines.values().cloned().collect(),
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
@@ -1356,24 +1447,14 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             ));
         }
     }
-    // Once every item exists, which a follow camera names.
+    // Once every item exists.
     for scene in &file.scenes {
-        let object = format!("scene `{}`", scene.id);
         if !scene.camera_motion.is_empty() {
             edits.push((
-                object.clone(),
+                format!("scene `{}`", scene.id),
                 Edit::SceneSetCameraMotion {
                     scene_id: scene.id.clone(),
                     motion: scene.camera_motion.clone(),
-                },
-            ));
-        }
-        if scene.camera_follow.is_some() {
-            edits.push((
-                object,
-                Edit::SceneSetCameraFollow {
-                    scene_id: scene.id.clone(),
-                    follow: scene.camera_follow.clone(),
                 },
             ));
         }

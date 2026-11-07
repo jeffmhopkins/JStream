@@ -1,4 +1,4 @@
-//! The CLAP audio plugin scan on the wire (0.94, ADR-0035): where the engine looks for
+//! The CLAP audio plugin scan on the wire (0.95, ADR-0035): where the engine looks for
 //! `.clap` files, the effects it found, and the files it couldn't scan, for
 //! `plugin.clap_scan` and `plugin.clap_rescan`.
 

@@ -6,6 +6,7 @@
 //! `mcp` and `output set-key` also read the input they are given (stdin in the binary).
 
 use crate::args::{self, Command, Connection, Invocation, USAGE};
+use crate::bench;
 use crate::block::{block_on, next_event};
 use crate::exit::{self, CliError};
 use crate::mcp;
@@ -225,6 +226,13 @@ pub fn execute(
             write_response(out, &block_on(control.call(call))?, json)
         }
         Command::Events { count } => stream_events(control.events(), *count, json, out),
+        Command::Bench(options) => {
+            if bench::run(&*control, options, out)? {
+                Ok(())
+            } else {
+                Err(CliError::GatesFailed)
+            }
+        }
         Command::Help
         | Command::Version
         | Command::Mcp
@@ -565,6 +573,12 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                     write!(out, ", primary")?;
                 }
                 writeln!(out)?;
+            }
+        }
+        QueryResult::CollectionInfo { path, recent } => {
+            writeln!(out, "{path}")?;
+            for project in recent.iter().filter(|p| *p != path) {
+                writeln!(out, "  recent: {project}")?;
             }
         }
         QueryResult::FontList { fonts } => {
@@ -942,6 +956,12 @@ fn report(error: &CliError, json: bool, err: &mut dyn Write) {
             // Says which side failed, as `io` covers both.
             CliError::Read(_) => {
                 json!({"error": {"code": "io", "message": error.to_string()}})
+            }
+            CliError::GatesFailed => {
+                json!({"error": {"code": "gates_failed", "message": error.to_string()}})
+            }
+            CliError::Bench(message) => {
+                json!({"error": {"code": "bench_failed", "message": message}})
             }
         };
         writeln!(err, "{body}")

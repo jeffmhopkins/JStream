@@ -1,6 +1,6 @@
 //! Camera motion and follow cameras (ADR-0113): the shot redraws every frame while a
 //! camera moves on its own, and `scene.zoom_camera` reaches the render thread on the
-//! parameter channel.
+//! parameter channel; a Follow pointer filter supplies a 2D scene its camera (ADR-0120).
 
 use super::{batch, block_on, code, connected, create, edits};
 use crate::Engine;
@@ -124,4 +124,48 @@ fn camera_motion_redraws_every_frame() {
     };
     batch(&control, set(vec![off])).expect("motion off");
     assert!(!hub.load().shot().changes_with_time(), "a disabled sway");
+}
+
+/// ADR-0120: a Follow pointer filter on a capture in a 2D scene supplies the scene's
+/// camera and moves it every frame; turned off, the scene is still and 2D again.
+#[test]
+fn a_follow_filter_moves_a_2d_scenes_camera_until_it_is_off() {
+    use jstream_protocol::{FOLLOW_POINTER_KIND, FilterChain, FilterId, FilterOwner};
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let mut flat = scenes();
+    flat.pop();
+    batch(&control, edits(flat)).expect("scenes");
+    assert!(!hub.load().shot().changes_with_time(), "a 2D scene");
+    let owner = FilterOwner::Item {
+        item_id: ItemId::new("screen"),
+    };
+    batch(
+        &control,
+        Batch::single(Edit::FilterAdd {
+            owner: owner.clone(),
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("follow"),
+            kind: FOLLOW_POINTER_KIND.into(),
+            settings: Default::default(),
+            enabled: None,
+            index: None,
+        }),
+    )
+    .expect("the filter");
+    assert!(hub.load().shot().changes_with_time(), "a follow camera");
+    block_on(control.call(zoom("a", 1))).expect("the filter's scene zooms");
+    batch(
+        &control,
+        Batch::single(Edit::FilterSetEnabled {
+            owner,
+            filter_id: FilterId::new("follow"),
+            enabled: false,
+        }),
+    )
+    .expect("off");
+    assert!(!hub.load().shot().changes_with_time(), "off: still again");
+    let failed = block_on(control.call(zoom("a", 1))).expect_err("no follow camera");
+    assert_eq!(code(&failed), Some("action_failed"));
 }
