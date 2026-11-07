@@ -20,6 +20,7 @@ cargo-fuzz = true
 # test tool, never linked into JStream.
 libfuzzer-sys = "0.4"
 jstream-graph = { path = "../crates/jstream-graph" }
+jstream-jtunnel = { path = "../crates/jstream-jtunnel" }
 jstream-media = { path = "../crates/jstream-media" }
 jstream-mux = { path = "../crates/jstream-mux" }
 jstream-protocol = { path = "../crates/jstream-protocol" }
@@ -119,6 +120,13 @@ bench = false
 [[bin]]
 name = "font_load"
 path = "fuzz_targets/font_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jtunnel"
+path = "fuzz_targets/jtunnel.rs"
 test = false
 doc = false
 bench = false

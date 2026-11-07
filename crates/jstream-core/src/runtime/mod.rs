@@ -29,9 +29,9 @@ pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture}
 #[cfg(test)]
 pub(crate) use pipeline::{DrawHook, gpu_draw_with};
 pub(crate) use pipeline::{
-    EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, MixKey, OpenDraw, OutputEncode,
-    Pending, PipelineEvent, Program, Release, Running, StartError, cpu_draw, frame_budget, launch,
-    launch_program, launch_vcam, output_size, parts_from,
+    EncodeKey, Encoders, Gate, MediaHost, MixKey, OpenDraw, OutputEncode, Pending, PipelineEvent,
+    Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,
+    launch_program, launch_vcam, on_frame_grid, output_size, parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;

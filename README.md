@@ -177,7 +177,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
 | 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236 |
-| 1 | jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality | ⏳ planned: each Windows run opens with it, and a fail blocks the release | #1220, #1140 |  |
+| 1 | jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality | ⏳ planned: each Windows run opens with it, and a fail blocks the release | #1220, #1140 | #1260, #1315 |
 | 1 | A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording | ⏳ planned: #1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar | #1205, #1217 |  |
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |
 | 2 | Pop-out projectors: the program, the preview or a scene in its own window or full screen on another monitor, at full quality and frame rate | ⏳ planned: #1199 merged; the Windows check is #1208 | #1208 | #1199 |
@@ -188,7 +188,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned: #1251 lays out the 3D camera section (#1214); #1225, #1216 and #1188 remain | #1225, #1216, #1214, #1188 | #1251 |
 |  | Looping media files play without a gap at the wrap | ⏳ planned | #445 |  |
 |  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240, #1245, #1255, #1257 |
-|  | Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter | ⏳ planned | #1226, #1227, #1232 |  |
+|  | Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter | ⏳ planned: #1281 brings Glow past the box, Bloom and the Vignette (#1226); #1289 is the first part of the Custom shader (#1232), and #1331 colours its editor (#1295); #1227 remains | #1226, #1227, #1232, #1295 | #1281, #1289, #1331 |
 |  | Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read | ⏳ planned | #1228, #1060 |  |
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | ⏳ planned | #1195, #1196 |  |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
