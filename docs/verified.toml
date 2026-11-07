@@ -18,7 +18,7 @@ stamp = { hash = "b3:28fa830d7989af60", by = "agent:browser-linux", note = "Adde
 stamp = { hash = "b3:bc43dee67b83cb62", by = "agent:claude", note = "Added a paragraph on the page API (ADR-0102): one-way data over the pipe then helper process messages to the renderer, which defines window.jstream only in the main frame of the source's own documents, nothing flowing back; added ADR-0102 to depends_on. The rest of the section holds for this change." }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:37dc05ff1c40c4a8", by = "agent:claude", note = "Added the jstream-midi (L0) and jstream-jtunnel (L1, on jstream-midi only) rows, matching their [package.metadata.jstream] layer, summary and unsafe_allowed, citing ADR-0122; layering holds (lint-deps ok)" }
+stamp = { hash = "b3:76949955a840a677", by = "agent:claude", note = "Added the jstream-visca (L0, no deps) row, matching its [package.metadata.jstream]; lint-deps ok" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -136,6 +136,9 @@ stamp = { hash = "b3:504280e9852eb46f" }
 
 ["ARCH#crate-map"."file:crates/jstream-vcam-windows/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:24cef673281620f5" }
+
+["ARCH#crate-map"."file:crates/jstream-visca/Cargo.toml#jstream-meta"]
+stamp = { hash = "b3:4220d068cf462464", by = "agent:claude", note = "Added the jstream-visca (L0, no deps) row, matching its [package.metadata.jstream]; lint-deps ok" }
 
 ["ARCH#crate-map"."file:crates/jstream-youtube/Cargo.toml#jstream-meta"]
 stamp = { hash = "b3:717f84850b5a595c", by = "agent:youtube-sign-in", note = "Re-read jstream-youtube and jstream-sources rows: summaries now cite ADR-0058; nothing else changed" }
@@ -2949,7 +2952,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe", by = "agent:a5c0c5084d9af49ea", note = "
 stamp = { hash = "b3:547465583e80c85e", by = "agent:claude", note = "This PR (#694): the platform SubmitLock bullet now names Linux's portal capture copies as another submitter and both render submits that hold the lock (the composite's and Nv12Converter::submit's into an encode target), dropping the wave's '(the Linux backend's capture copies and NV12 submits don't take it yet, #694)'; FrameSync::stage's text is #672's, unchanged. ARCH's GPU-path sentence now says render holds the context's SubmitLock through the composite's and the NV12 conversion's submits, and that Linux's PipeWire capture copies take it beside the browser source's copies, which agrees. | merge: Merged wave/m3-4 at 9d192c50 (201b994f) into this PR (#694), built by hand: m3-4's tree with #694's own Linux change re-applied. The branch last merged wave/m3-3 at 23641826 (#687) and carried a cherry-pick of #672's SubmitLock (b7705da3); #672 reached the wave through wave/m1-4's landing (#810), synced in by #820, so the wave's version stands (Nv12Converter::submit holding the compositor's lock) and this PR's Nv12Converter::for_compositor, its own-lock converter and the pipeline.rs change are dropped as superseded. Since 23641826 the wave gained the rest of wave/m3-3 (landed as #786: #767's main sync with wave/m1-3's landing #754, #593, #629 and others), synced in by #789, then #612, #603, #617, #610, #685, #689, #634, #799, #488, #820 (main through #810: #672, #781, #712, #718), #573 and #807. Into platform GPU frames the merge brought #754's transitions wording (through #789) and #672's SubmitLock bullet with its #694 clause (through #820). Into ARCH GPU pipeline it brought, through #789, wave/m1-3's landing (#754: flips in the placement, the CPU-path alpha, the chain runtime's apply_filter_into, device loss (#349), ADR-0052 transitions and the privacy blur) and #629's 0.34 3D acceptance (via #786); through #820, #781's image extent (ADR-0073) and #672's SubmitLock sentence. #573 and #807 touch none of these inputs. The wave entry this replaces recorded, kept here: [body and ARCH gpu-pipeline, wave/m1-4's main merge (via #810 and #820)] Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. wave/m1-4: #672's SubmitLock paragraph. Main: #606/#652's Linux paragraphs; ARCH gpu-pipeline's dep change (X1's 3D draw, mips and chains from #622/#624/#643/#687 beside #781's extents). The Linux backend's capture copies and NV12 submits don't take the lock yet, so the SubmitLock paragraph now says so and names #694, which is queued into wave/m3-4. Holds with that clause." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:37dc05ff1c40c4a8", by = "agent:claude", note = "Only new crate-map rows for jstream-midi and jstream-jtunnel changed; nothing GPU-related, the section holds" }
+stamp = { hash = "b3:76949955a840a677", by = "agent:claude", note = "Only a new crate-map row for jstream-visca changed; nothing GPU-related, the section holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:98a8ff3d37fd5a7d", by = "agent:claude", note = "ARCH gpu-pipeline now also mentions the readback ring; VideoSurface::Cpu still serves readback and fallbacks as this section says." }
@@ -5990,6 +5993,24 @@ stamp = { hash = "b3:63e42e67393d20f4" }
 ["CRATE-jstream-vcam-windows#purpose"."file:crates/jstream-vcam-windows/src/win/stream.rs"]
 stamp = { hash = "b3:8c355a30a5fdf52f" }
 
+["CRATE-jstream-visca#purpose"."body"]
+stamp = { hash = "b3:0ae4521f1ce460e9", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
+["CRATE-jstream-visca#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-visca"]
+stamp = { hash = "b3:34decd8e364a7cf2", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
+["CRATE-jstream-visca#purpose"."file:crates/jstream-visca/src/command.rs"]
+stamp = { hash = "b3:890488b1f5b17496", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
+["CRATE-jstream-visca#purpose"."file:crates/jstream-visca/src/ip.rs"]
+stamp = { hash = "b3:e6d3abc33b2bcd18", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
+["CRATE-jstream-visca#purpose"."file:crates/jstream-visca/src/lib.rs"]
+stamp = { hash = "b3:dc3f52045f5bd703", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
+["CRATE-jstream-visca#purpose"."file:crates/jstream-visca/src/reply.rs"]
+stamp = { hash = "b3:bbf63aa660661d9d", by = "agent:claude", note = "New crate: re-read against src (Address and reply byte, every Command's bytes and ranges, PositionWidth 5/4 and 4/4 signed nibbles, Inquiry set, Request::parse Syntax vs Unsupported, Reply and ErrorKind codes, InquiryValue both ways, ip header/control/Sequence/next_message); the Sony list is linked as unverified" }
+
 ["CRATE-jstream-youtube#purpose"."body"]
 stamp = { hash = "b3:d5b2af4d67e777ac", by = "agent:claude", note = "SecretHook is Fn(SecretKind, &str): the client tags its refresh token, each access token it holds and each stream key, and SecretKind::slot names the one slot a client's access tokens supersede in (#844). For review B1, SignInAccessToken (no slot) is the kind core uses for a sign-in's access token before the store decides. Edited the live bullet for both; what the hook is handed and when is unchanged, and the tests assert the kinds and the slots. || Kept here, the wave/m1-5 entry this PR's change replaced, word for word: Earlier notes, kept: [on body, file:crates/jstream-youtube/src/lib.rs] main into wave/m3-2 (#521), after merging wave/m3-2 through #594: re-read the whole section. The chat bullet (from main's Y4 part 1: liveChatMessages.list with id,snippet,authorDetails, 2000 a page, Scope::Readonly; ChatMessage fields and events; control characters replaced, 1000/100 caps; ChatPoller following the page token, at least 1 s, the 60 s-30 min and 5 s-5 min ladders, stopping on offlineAt or liveChatEnded/NotFound/Disabled, no thread or sleep; quota cost and the per-collection opt-in, ADR-0058 §5) still matches chat.rs and chat/tests.rs. The stats bullet (the wave's #594: videos.list with id,liveStreamingDetails,statistics under Readonly, None for counts YouTube omits, STATS_INTERVAL 60 s, ChatRate over CHAT_RATE_WINDOW, None until two polls, at most 128 counts) matches stats.rs; the merge keeps both bullets. lib.rs keeps pub mod chat and pub mod stats with both re-exports, and its crate doc names stats, chat and ChatPoller. Not yet now lists sending as the channel, the engine's chat polling with its switch and youtube.chat.feature, streamList, the engine's stats polling with its youtube.stats event and query, and quota accounting. stats.rs's rustdoc on record now names MAX_CHAT_POLLS (128) as code instead of linking the private constant, which broke cargo doc; holds [on file:crates/jstream-youtube/src/live.rs] Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs only makes call, first, non_empty and u64_or_string crate-visible, as main's chat does; lib.rs doc names stats [on file:crates/jstream-youtube/src/live/tests.rs] Y3 with ADR-0058: list_broadcasts_of_type as live.rs implements and tests it; the empty BUILT_IN_CLIENT_ID/SECRET constants in oauth.rs, re-exported from lib.rs (§1); the engine paragraph says the calls are protocol commands for the UI and MCP leaves them out (§3); Not yet now lists only chat, audience stats and quota accounting, since the commands, engine wiring and the built-in client constants land here; holds || This PR's notes: [on body, file:crates/jstream-youtube/src/lib.rs, file:crates/jstream-youtube/src/live.rs, file:crates/jstream-youtube/src/live/tests.rs] #353: the live bullet now describes LiveClient::with_secret_hook: the hook gets the refresh token and any access token at once, then each refreshed access token, rotated refresh token and the stream keys from list_streams, stream and insert_stream, as live.rs does (saw, saw_keys); SecretHook is exported from lib.rs; live/tests.rs adds the_secret_hook_sees_every_token_and_stream_key_the_client_gets and the_secret_hook_sees_a_grants_tokens_and_a_new_streams_key" }
 
@@ -6204,13 +6225,13 @@ stamp = { hash = "b3:5076a5210cb42948", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6676087d5516add9", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cargo.toml gains the image_decode and font_load bins and its header comment now names the nightly fuzz workflow; seed.sh seeds image_decode from jstream-sources tests/data JPEG, WebP and text golden PNGs plus a 1x1 GIF it writes, and font_load from the bundled Roboto subset. The prose lists exactly those seeds; run, replay and tmin commands unchanged and were run with cargo-fuzz 0.13.2." }
 
 ["FUZZ#running"."file:fuzz/Cargo.toml"]
-stamp = { hash = "b3:313a612b8591d66f", by = "agent:claude", note = "fuzz/Cargo.toml gained jstream-jtunnel and the jtunnel bin; seed.sh is unchanged and jtunnel starts from nothing, as the section's 'other targets' line says" }
+stamp = { hash = "b3:18cba48a6254d3da", by = "agent:claude", note = "fuzz/Cargo.toml gained jstream-visca and the visca bin; seed.sh unchanged, and visca starts from nothing as the section says" }
 
 ["FUZZ#running"."file:fuzz/seed.sh"]
 stamp = { hash = "b3:8e9bac0f26049d3f", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Cargo.toml gains the image_decode and font_load bins and its header comment now names the nightly fuzz workflow; seed.sh seeds image_decode from jstream-sources tests/data JPEG, WebP and text golden PNGs plus a 1x1 GIF it writes, and font_load from the bundled Roboto subset. The prose lists exactly those seeds; run, replay and tmin commands unchanged and were run with cargo-fuzz 0.13.2." }
 
 ["FUZZ#targets"."body"]
-stamp = { hash = "b3:3bada641672a22df", by = "agent:claude", note = "Added the jtunnel target row (JTunnel packet with events, PCM and SysEx walked, plus mDNS answers; a parsed audio packet writes back from its raw events and parses the same), matching fuzz_targets/jtunnel.rs" }
+stamp = { hash = "b3:4cdce5c5fb8fac85", by = "agent:claude", note = "Added the visca target row (a VISCA message or VISCA-over-IP datagram read as request and reply; what parses encodes back to the same bytes), matching fuzz_targets/visca.rs" }
 
 ["FUZZ#targets"."file:fuzz/fuzz_targets/aac.rs"]
 stamp = { hash = "b3:cc2f13ad15f910af" }
@@ -6247,6 +6268,9 @@ stamp = { hash = "b3:c96607ecbfc52f86" }
 
 ["FUZZ#targets"."file:fuzz/fuzz_targets/protocol_decode.rs"]
 stamp = { hash = "b3:cbc148f78a6a98ff" }
+
+["FUZZ#targets"."file:fuzz/fuzz_targets/visca.rs"]
+stamp = { hash = "b3:22c3015c6af03877", by = "agent:claude", note = "Added the visca target row (a VISCA message or VISCA-over-IP datagram read as request and reply; what parses encodes back to the same bytes), matching fuzz_targets/visca.rs" }
 
 ["GETTING-STARTED#agents"."body"]
 stamp = { hash = "b3:80e97f061fb2d527", by = "agent:claude", note = "Shortcut with --mcp, 127.0.0.1:4455, data-folder token, Claude Desktop config and the claude mcp add line (Command Prompt, with the PowerShell $env:APPDATA form) through jstream-cli mcp, per-client undo; matches desktop and CLI usage" }
@@ -6528,7 +6552,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:ef078d22b4977c46", by = "agent:help-about", note = "Re-read: jstream-ui now takes version.workspace (its About dialog shows it), added to the list of crates that take the release version" }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:1484d3c2c19867b0", by = "agent:claude", note = "Cargo.toml only gained the jstream-midi and jstream-jtunnel workspace dependencies; [workspace.package] version and the rules here are unchanged" }
+stamp = { hash = "b3:f984eb403ecf7b05", by = "agent:claude", note = "Cargo.toml only gained the jstream-visca workspace dependency; the version and the rules here are unchanged" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:a1044690d58295b7", by = "agent:release-thread", note = "Main and wave rulesets have strict_required_status_checks_policy false, so merge main (a wave PR merges its wave) only on a conflict, on becoming the protocol holder or holding it and conflicting (matches Protocol steps 2 and 3), or for needed code; one push per round; batch ledger verifies; a merge of a passed PR keeps its pass via ADR-0109 when its diff is unchanged (merge plus ledger-only restamp commits, as onlyBaseMerges checks), otherwise a normal round; drafts until ready (R-GIT-003) | kept from the merged side: New section: main has no up-to-date requirement (ruleset required_status_checks strict=false), so merge main only on a conflict, as protocol holder, or for needed code; one push per round; batch ledger verifies; merge-only pushes say so and get REVIEW gather item 6's lighter review; drafts until ready (R-GIT-003 skips CI on drafts)" }
