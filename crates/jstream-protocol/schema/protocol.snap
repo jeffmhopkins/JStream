@@ -1934,6 +1934,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": -10.0,
           "description": "The resting angle below the item's normal, in degrees, within ±60: positive looks\nup at it from below, negative down from above. Default −10."
         },
+        "safe_margin_pct": {
+          "default": 10,
+          "description": "The safe margin, in percent of the frame's width and height on each side, from 0\nto 40 (since 0.91, #1216). Default 10: the pointer stays in the middle 80% of the\nframe on every frame, whatever the smoothing, wherever the item's box lets the\nframe reach it. At 0 it stays inside the frame.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
         "smooth_ms": {
           "default": 450,
           "description": "The time constant of each of its two springs, in milliseconds, from 50 to 5000.\nDefault 450.",
@@ -4493,7 +4500,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, and for a number\n`CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,\nleaves the follow in place and inert until it is set again or an undo brings the\nitem back. The follow camera reads the pointer only where the program is drawn\nlive: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.\nInverse: `scene.set_camera_follow` with the previous value.",
+          "description": "Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the\npointer over a display or window capture in the scene. Since 0.91 a follow camera\nis a `follow_pointer` filter on the followed item's effects (ADR-0120), and this\nedit is kept as a shortcut for those filter edits: with `follow`, it sets that\nitem's `follow_pointer` filter to its numbers and turns it on, adding one last in\nthe item's effects when it has none, and removes every other `follow_pointer`\nfilter of the scene's items; without, it removes them all. It belongs to the scene\nfamily: `invalid_argument` on a keyframe scene, for an item that isn't in the\nscene or doesn't show a display or window capture, for a number\n`CameraFollow::check` refuses, and when the item's effects are full. The follow\ncamera reads the pointer only where the program is drawn live: `video.snapshot`\nand a frame sheet show it at rest, on the capture's centre. Inverse: the inverse\nof those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and\n`filter.set_enabled`).",
           "properties": {
             "follow": {
               "anyOf": [
@@ -11349,7 +11356,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It\nbelongs to the family, so a keyframe scene reports none and draws its parent's.\nOmitted for none."
+          "description": "Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It\nbelongs to the family, so a keyframe scene reports none and draws its parent's.\nSince 0.91 it is read from its items' effects (ADR-0120): the first enabled\n`follow_pointer` filter in stacking order, as a follow of that item. Omitted for\nnone."
         },
         "camera_motion": {
           "description": "Its camera motion (ADR-0113, since 0.85): the modifiers that change its camera as it is drawn.\nIt belongs to the family, so a keyframe scene reports none and draws its parent's.\nOmitted when empty.",
@@ -13001,5 +13008,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.89"
+  "title": "JStream protocol 0.91"
 }

@@ -733,9 +733,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
   which a camera can't hear), and
-  `scene.set_camera_follow` a camera that glides after the pointer over a display or
-  window capture, each set on the family's scene; the action `scene.zoom_camera` steps
-  a follow camera's live zoom, with no `rev` change
+  a `follow_pointer` filter on a display or window capture item a camera that glides
+  after the pointer over it, keeping it inside a safe margin, and supplying the framing
+  camera to a 2D scene ([ADR-0120](adr/0120-follow-pointer-is-a-filter.md), protocol
+  0.91; `scene.set_camera_follow` is a shortcut for its filter edits), each belonging
+  to the family's scene; the action `scene.zoom_camera` steps a follow camera's live
+  zoom, with no `rev` change
   ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -1429,7 +1432,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
   (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
   instead, each with a
-  migration that refuses the new field in an older file. `jstream-core`
+  migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. `jstream-core`
   loads the file the host names and replaces it atomically after every change.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.

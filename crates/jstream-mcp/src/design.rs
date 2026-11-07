@@ -139,12 +139,16 @@ focus with two keyframe scenes that differ only in `focus_px` and a `move` trans
 A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
 kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
 `fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
-hand-held camera. To follow the pointer over a screen capture, `scene.set_camera_follow` \
-names an item of the scene showing a `display` or `window` source: the camera glides \
-after the pointer at an angle (`yaw_deg`, `pitch_deg`), keeps the capture filling the \
-frame and, with `blur_px` above 0, focuses where it looks. `zoom` (1-4) is its resting \
-zoom; `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
-Both belong to the scene's family: set them on the parent, not a keyframe scene. \
+hand-held camera. To follow the pointer over a screen capture, add a `follow_pointer` \
+filter to the effects of an item showing a `display` or `window` source (`filter.add` \
+on the `item` owner); `scene.set_camera_follow` is a shortcut that does the \
+same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \
+`pitch_deg`), keeps the capture filling the frame, keeps the pointer inside \
+`safe_margin_pct` (default 10% a side) and, with `blur_px` above 0, focuses where it \
+looks; a 2D scene gets a camera for it. `zoom` (1-4) is its resting zoom; \
+`scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+Turning the filter off returns the camera to where it was. Camera motion and the \
+follow belong to the scene's family: set them on the parent, not a keyframe scene. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
