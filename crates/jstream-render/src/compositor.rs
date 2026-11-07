@@ -552,6 +552,7 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        let padding = filter.pad();
         let (pass, scratch) = filter.parts();
         scratch.begin();
         let mut ctx = filter::Ctx {
@@ -570,7 +571,16 @@ impl Compositor {
             scratch,
         };
         ctx.holds.clear();
-        let encoded = pass.encode(&mut ctx, input, output);
+        let encoded = if padding == 0 {
+            pass.encode(&mut ctx, input, output)
+        } else {
+            let grow = |side: u32| side.saturating_add(padding.saturating_mul(2));
+            ctx.scratch(grow(input.width()), grow(input.height()))
+                .and_then(|padded| {
+                    filter::pad(&mut ctx, input, padding, &padded)?;
+                    pass.encode(&mut ctx, &padded, output)
+                })
+        };
         ctx.hold(input);
         ctx.scratch.end();
         if let Err(err) = encoded {

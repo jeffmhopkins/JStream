@@ -340,9 +340,11 @@ type Moving = (MediaTime, Track);
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
 
-/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned plus
-/// the effects' outset on every side, in canvas pixels, scaled down to fit
-/// [`MAX_LAYER_SIDE`] when larger. A live resize draws into the same layer, scaled, until
+/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
+/// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
+/// every side when larger. The effects grow it by the outset where the first of them
+/// that draws past its input runs (`Chain::pad_at`), and the result is placed over the
+/// box grown by the outset. A live resize draws into the same layer, scaled, until
 /// the plan is made again.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Boxed {
@@ -350,7 +352,7 @@ pub(crate) struct Boxed {
     size: [f32; 2],
     /// The room the effects need beyond each edge, in canvas pixels.
     outset: f32,
-    /// The layer's size in pixels.
+    /// The size in pixels of the layer the item is drawn into: the box's.
     layer: [u32; 2],
     /// Layer pixels per canvas pixel: 1, or less for a layer scaled down to fit.
     scale: f32,
@@ -381,7 +383,9 @@ impl Boxed {
         Some(Self {
             size,
             outset,
-            layer: [side(padded[0]), side(padded[1])],
+            // The box alone: the effects grow it by the outset where the first of them
+            // that draws past its input runs (`Chain::pad_at`).
+            layer: [side(size[0]), side(size[1])],
             scale,
             input,
             canvas: false,
@@ -2389,7 +2393,7 @@ impl<'a> Planner<'a, '_> {
         if let Some(planned) = out.boxes.get(&owner) {
             return Some(planned.boxed);
         }
-        let chain = Chain::of_filters(
+        let mut chain = Chain::of_filters(
             &owner,
             item.effects(),
             GpuKey::ItemBox(scene.clone(), item.id().clone()),
@@ -2441,6 +2445,9 @@ impl<'a> Planner<'a, '_> {
             }),
             false => None,
         };
+        if let Some(chain) = chain.as_mut() {
+            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        }
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -5465,8 +5472,9 @@ pub(crate) mod tests {
         Frame::new(16, 9, &bytes, u64::from(rgba[1])).expect("invariant: 16x9 RGBA8")
     }
 
-    /// An item's effects layer is its box plus the outset on every side (ADR-0065 §5):
-    /// the box is drawn centred in it, flat, and the layer is placed over the box grown
+    /// An item's effects layer is its box, which the effects pad by the outset on every
+    /// side (ADR-0065 §5): the box is drawn into it, flat, and the result is placed over
+    /// the box grown
     /// in proportion, turned as the box is. A box too large for one texture is scaled
     /// down uniformly, and a legacy transform has the box its quad covers.
     #[test]
@@ -5481,10 +5489,11 @@ pub(crate) mod tests {
         placed.flip_h = true;
         placed.fit_mode = FitMode::Fill;
         let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
-        assert_eq!(boxed.layer, [108, 58]);
+        // The box alone: the effects pad it by the outset as they run.
+        assert_eq!(boxed.layer, [100, 50]);
 
         let inside = boxed.inside(&placed).expect("inside");
-        assert_eq!((inside.center.x.get(), inside.center.y.get()), (54.0, 29.0));
+        assert_eq!((inside.center.x.get(), inside.center.y.get()), (50.0, 25.0));
         assert_eq!(
             (inside.size.width.get(), inside.size.height.get()),
             (100.0, 50.0)
@@ -7090,6 +7099,7 @@ pub(crate) mod tests {
             Chain {
                 input: GpuKey::Frame(SourceId::new("red")),
                 filters: Vec::new(),
+                pad: None,
             },
         );
         assert_eq!(scales(&planned)[1], (SourceId::new("red"), 1.0));

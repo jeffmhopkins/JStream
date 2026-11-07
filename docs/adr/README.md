@@ -136,6 +136,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0122](0122-controller-input-midi-and-one-binding-system.md) | Controller input: MIDI and JTunnel, one binding system for every trigger | accepted | agent |  |
 | [ADR-0123](0123-lan-inputs-jtunnel-and-visca.md) | LAN inputs without TLS: JTunnel senders and VISCA, opt-in and accepted one peer at a time | accepted | maintainer |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0125](0125-item-effects-layer-grows-where-it-is-needed.md) | An item's effects layer grows at the first effect that draws past the box | accepted | agent |  |
 | [ADR-0127](0127-moves-interpolate-effect-settings.md) | A Move blends the settings of effects that differ only in their settings | accepted | agent |  |
 | [ADR-0131](0131-ask-before-a-new-agent-connects.md) | The desktop app asks the person before a new agent's first connection | accepted | agent |  |
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
