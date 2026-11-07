@@ -1445,8 +1445,11 @@ for the kind and its pack and for every entry whose digests the kind draws, run 
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
 it is recovering. A kind whose pass runs too long on the GPU (the guard in
-[Runtime](#runtime)) is blamed and quarantined the same way, alone, and the engine sends
-`gpu.effect_slow` with the kind, its time, the limit and the kinds quarantined.
+[Runtime](#runtime)) is blamed and quarantined the same way, alone (`blame_slow`), and
+the engine sends `gpu.effect_slow` with the kind, its time, the limit and the kinds
+quarantined. A report of a kind already quarantined, drawn again before the quarantine
+reached the render thread, is dropped: it is no second blame, so it can't take the
+pack.
 
 **Page API** (`LiveSources::feed_pages`, ADR-0102 decisions 4 to 7). After every plan
 (where the engine also syncs source sizes), after `studio.set_preview`, after a

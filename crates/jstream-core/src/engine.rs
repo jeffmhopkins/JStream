@@ -5335,20 +5335,21 @@ impl Shared {
             ?limit,
             "an effect-pack kind ran too long on the GPU"
         );
-        // Under the packs' lock, as for a device loss.
+        // Under the packs' lock, as for a device loss. A late report of a kind already
+        // quarantined is dropped: it is no second blame (`blame_slow`).
         let mut packs = lock(&self.effect_packs);
-        let blamed = BTreeSet::from([kind_id.clone()]);
-        let quarantined = match packs.as_mut().map(|packs| packs.blame(&blamed)) {
-            Some(crate::effect_packs::Blame {
+        let quarantined = match packs.as_mut().map(|packs| packs.blame_slow(&kind_id)) {
+            Some(Some(crate::effect_packs::Blame {
                 quarantined,
                 update,
                 ..
-            }) => {
+            })) => {
                 if let Some(update) = update {
                     self.install_effects(update);
                 }
                 quarantined
             }
+            Some(None) => return,
             None => Vec::new(),
         };
         drop(packs);
