@@ -433,6 +433,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   program captioned with Main, no preview outside studio mode, and Intro and Main below
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
+- **Video settings** (`video-settings.spec.js`): File › Video settings… opens on
+  1920×1080 at 30 fps; a preset fills both sides, a typed side of 0 turns the preset to
+  Custom and is refused in the dialog; 1280×720 at 60 fps applies as one revision and
+  reopens with those values; Apply with nothing changed sends nothing; and one Undo
+  takes back both.
 
 <a id="running"></a>
 ## Running them

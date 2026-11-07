@@ -196,7 +196,7 @@ state machine. Contents:
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
   the engine's `AudioScopes`. A `browser` source granted the page API is told what it
-  shows its page: its visibility, the scenes and the shared values (see *Page API* in
+  shows its page: its visibility, the scenes, the shared values and a bus's levels (see *Page API* in
   [Design](#design)).
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
@@ -771,7 +771,7 @@ tests), `jstream-platform`'s `fake` feature (the pipeline test and
 `src/tests/audio.rs`, and the page API's updates in `src/tests/page_api.rs`: a granted
 page's visibility on program and preview, directly and through a nested scene, the two
 scenes, only the values its grant covers and a removal, an update held to the next
-page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant), `jstream-crash` (the crash redaction's `Secrets` fed by the
+page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant; and a page given a bus reading `null`, then its levels and bands while an output runs, then `null` again), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
 test plugins of `src/tests/automation.rs`) and `jstream-mcp`
@@ -1167,7 +1167,11 @@ and the client and request that started it. Nothing of it is saved or undone.
   until its gestures are. A tick runs every playing timeline's due cues in time order
   across timelines, in up to `MAX_ROUNDS` (16) rounds: a cue that plays a timeline starts
   it at the cue's time, so that timeline's first cues are due in the next round. A
-  round sends its loops and ends after its cues fire. A round collects every
+  round sends each loop or end in time order with its cues, once the cues due at or
+  before that pass boundary (`boundary`) have run, and drops it when one of them
+  stopped that run or started the timeline again (`send_timeline_step`): a stopped
+  timeline sends no `looped`, and a run restarted before its end sends no `ended`
+  after the new run's `started`. A round collects every
   timeline's due fires before it runs them, and skips a fire when an earlier cue in
   that round stopped its timeline or started it again (`started_ns`); a timeline that
   only reached its own end still runs the cues that were due before the end. When all
@@ -1433,11 +1437,16 @@ engine hands each running source whose page has the page API (`Source::page_api`
 `PageView` of the collection as drawn: whether the program scene shows the source,
 and whether the preview scene does (`activity::shown_sources`: the visible items, and
 through every placed nested scene source to any depth, whatever its audio, a keyframe's
-overrides applied as for audio), the two scenes' IDs and names, and the shared values.
+overrides applied as for audio), the two scenes' IDs and names, the shared values, and
+each bus's post-fader levels (`AudioRouting::page_levels`, read without restarting the
+held peak that `meters.tick` takes; empty while no mixer runs, and read only while a
+page is granted). Attaching and detaching the mixer feed the pages too, so a page given
+a bus reads `null` and then its levels.
 The source sends its page only what changed, so this costs nothing when no page is
 granted and little when nothing changed, and at most one update per page frame (ADR-0102
 decision 3): what changes within a frame is merged and held, and `page_view` returns
-when it may go. The earliest of those is the sources' page wake, which the sources
+when it may go, which is every page frame while a page's bus has a reading. The
+earliest of those is the sources' page wake, which the sources
 thread wakes for as it does for the plan's own (`LiveSources::wake_at`), so a held
 update goes out a frame later whether or not anything else changes. Each look at a
 source (`look_timed`) hands it the plan's time too (`Source::page_clock`), from which a
@@ -1546,7 +1555,21 @@ the plan is made again. An item whose `effects_space` is `canvas`
 ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)) has a canvas-sized
 layer instead, with no outset, scaled down the same way: the item is drawn into it
 where it is placed, turned, flipped and tilted as it is (a live resize redraws it
-there), and the layer covers the canvas flat. Its transition visual never glides. A layer that can't be made or drawn (too large for the
+there), and the layer covers the canvas flat. Its transition visual never glides.
+An item that shows a 3D model ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 6;
+its source's frame carries the model, from `Source::model`, beside the transparent
+stand-in) always has a canvas-sized layer, effects or not. The chain phase draws the
+model into it with `Compositor::draw_model`: posed by the item's geometry with its live
+values and motion applied, seen through its scene's camera with the camera's live value,
+motion and follow applied as the scene's pass resolves them, and lit as the source says.
+`Chains` uploads each source's model once per version and lets go of one no frame drew.
+Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
+input, as for canvas space, so they run over the canvas. The item is placed as
+`Placement::Layer`, flat at the canvas's top-left, sorting in a 3D scene by the model's
+pose. Like a canvas-space layer it never glides in a transition. A model that can't be
+uploaded blanks its item, logged once. Goldens in `chain.rs` draw an unlit plane in its
+box, moved by its motion, with a `vignette` over its layer, and turned 60° through a
+scene camera, where it covers the cells a flat item in the same pose covers. A layer that can't be made or drawn (too large for the
 adapter) blanks only its item that frame, logged once until a frame draws it, as a
 failed chain blanks only its owner. What the item shows is read as the chain phase draws it: a
 source's frame or chain output, a capture, or a nested scene through its own chain or
@@ -2463,7 +2486,9 @@ whose meters are built before the thread starts, since the loudness meter alloca
 and never allocate after) and publishes through atomics (`MasterMeters`). An
 `audio.reset_loudness` sets a flag the mixer thread reads before its next block, which
 restarts the integrated loudness. With no program stage running, no `meters.tick` is
-emitted and `audio.reset_loudness` does nothing.
+emitted and `audio.reset_loudness` does nothing. A page granted a bus reads the buses'
+meters too (`page_levels`), without restarting the held peaks, so `meters.tick` still
+sees every peak.
 
 <a id="outputs"></a>
 ## Outputs

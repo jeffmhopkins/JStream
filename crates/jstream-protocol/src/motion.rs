@@ -390,7 +390,8 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
     if motion.len() > MAX_MOTION_MODIFIERS {
         return Err(problem(
             "motion".into(),
-            "an item holds at most 8 motion modifiers",
+            "an item holds at most 8 motion modifiers; put the rest on a group around it, \
+             whose motion moves its children too",
         ));
     }
     for (n, m) in motion.iter().enumerate() {
@@ -594,6 +595,12 @@ mod tests {
         assert_eq!(field_of(&[]), None);
         let nine: Vec<_> = (0..9).map(|n| wiggle(&format!("m{n}"), 1.0)).collect();
         assert_eq!(field_of(&nine).as_deref(), Some("motion"));
+        let full = check_motion(&nine).expect_err("nine is one too many");
+        assert!(
+            full.reason.contains("on a group around it"),
+            "the refusal says where the rest can go (#1189): {}",
+            full.reason
+        );
         assert_eq!(
             field_of(&[wiggle("a", 1.0), wiggle("a", 1.0)]).as_deref(),
             Some("motion.1.modifier_id")

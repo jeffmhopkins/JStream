@@ -41,6 +41,11 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Video settings** (`video_settings.rs`): File › Video settings… sets the
+  collection's base resolution (the canvas, from presets or typed) and its base frame
+  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
+  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
@@ -116,7 +121,7 @@ Contents ([Design](#design) explains the choices):
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own).
+  the tool bars' own and a cube for the 3D model type).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -387,7 +392,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
-  platform's API), plus the kinds of placed sources it didn't report, which can be
+  platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
+  with a cube icon), plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -763,7 +769,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
   system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  File › Settings… are [`updates.rs`](src/updates.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), both described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
