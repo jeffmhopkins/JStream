@@ -88,10 +88,14 @@ fn a_bad_camera_is_refused_with_its_field() {
 fn a_keyframe_follows_or_overrides_its_parent_camera() {
     let mut graph = fixture();
     apply_ok(&mut graph, vec![variant("k", "a")]);
-    // A keyframe of a 2D scene can't be 3D.
-    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![set("k", Some(framing()))]));
-    assert!(field.ends_with("camera"), "{field}");
-    assert!(reason.contains("parent"), "{reason}");
+    // A keyframe of a 2D scene may have a camera of its own (ADR-0128), which removing
+    // the 2D parent's (none) camera leaves alone.
+    apply_ok(&mut graph, vec![set("k", Some(moved(200.0)))]);
+    assert_eq!(effective(&graph, "k"), Some(moved(200.0)));
+    assert_eq!(effective(&graph, "a"), None);
+    apply_ok(&mut graph, vec![set("a", None)]);
+    assert_eq!(own(&graph, "k"), Some(moved(200.0)));
+    apply_ok(&mut graph, vec![set("k", None)]);
     apply_ok(&mut graph, vec![set("a", Some(framing()))]);
     assert_eq!(own(&graph, "k"), None);
     assert_eq!(effective(&graph, "k"), Some(framing()));

@@ -134,4 +134,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0118](0118-placed-keyframes-on-the-graph.md) | Placed keyframes live on the engine's graph, not on a copy rebuilt each batch | accepted | agent |  |
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0128](0128-moves-between-2d-and-3d-glide.md) | A Move between a 2D side and a 3D one glides through the framing camera | accepted | agent |  |
 <!-- @generated end adr-index -->

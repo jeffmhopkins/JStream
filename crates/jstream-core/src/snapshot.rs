@@ -1404,7 +1404,7 @@ fn plan_inner(
     if let Some((running, now)) =
         running.filter(|(running, _)| Some(&running.to) == program.as_ref())
     {
-        let planned = planner.transition(running, &mut shot);
+        let (planned, pairs) = planner.transition(running, &mut shot);
         let end = end_time(running.start, planned.end_ms);
         if end.is_some_and(|end| now < end) {
             finished = false;
@@ -1437,7 +1437,7 @@ fn plan_inner(
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
-                cameras: planner.track_cameras(running),
+                cameras: planner.track_cameras(running, pairs),
                 moves,
                 end_ms: planned.end_ms,
             });
@@ -1597,8 +1597,8 @@ pub(crate) fn on_screen(
         assets,
         wake: None,
     };
-    let planned = planner.transition(running, &mut shot);
-    let cameras = planner.track_cameras(running);
+    let (planned, pairs) = planner.transition(running, &mut shot);
+    let cameras = planner.track_cameras(running, pairs);
     let elapsed_ms = running.elapsed_ms(now);
     planned.on_screen_seen(elapsed_ms, canvas_size(state.canvas()), |visual, track| {
         Seen::Held {
@@ -1870,10 +1870,21 @@ impl<'a> Planner<'a, '_> {
     }
 
     /// The cameras `running`'s tracks are seen through (ADR-0094 decision 7).
-    fn track_cameras(&self, running: &Running) -> TrackCameras {
+    /// The cameras `running`'s tracks are seen through. `pairs` is whether it moves
+    /// ([`Self::transition`]'s answer): a Move between a 2D side and a 3D one sees the 2D
+    /// side through the framing camera, which draws it as 2D does (ADR-0128).
+    fn track_cameras(&self, running: &Running, pairs: bool) -> TrackCameras {
         let committed = |id: &SceneId| self.camera(id).and_then(|camera| camera.committed());
+        let ends = self.move_ends(running);
+        let ends = match ends {
+            (None, Some(_)) | (Some(_), None) if pairs => {
+                let framing = SceneCamera::framing(self.state.canvas());
+                (ends.0.or(Some(framing)), ends.1.or(Some(framing)))
+            }
+            ends => ends,
+        };
         TrackCameras {
-            ends: (running.from_camera, committed(&running.to)),
+            ends,
             overlay: running
                 .run
                 .stinger
@@ -1885,7 +1896,7 @@ impl<'a> Planner<'a, '_> {
                 duration_ms: running.run.duration_ms as f32,
                 easing: running.run.easing,
             },
-            pairs: running.run.pairs,
+            pairs,
             overlay_run: match &running.from {
                 From::OnScreen(visuals) => visuals
                     .iter()
@@ -1926,7 +1937,35 @@ impl<'a> Planner<'a, '_> {
     /// Within a family, a group that moves as one item carries its children's tracks
     /// inside its layer, from their values on one side to those on the other
     /// (ADR-0049 §3), and is drawn from a scene of the shot that holds them.
-    fn transition(&mut self, running: &Running, out: &mut Shot) -> Planned {
+    /// The committed cameras `running` moves between: what was on screen's, and the
+    /// shown scene's, `None` for a 2D side.
+    fn move_ends(&self, running: &Running) -> (Option<SceneCamera>, Option<SceneCamera>) {
+        let committed = self
+            .camera(&running.to)
+            .and_then(|camera| camera.committed());
+        (running.from_camera, committed)
+    }
+
+    /// Whether every one of `visuals`, the 2D side of a Move into or out of 3D, draws the
+    /// same through the framing camera as in 2D (ADR-0128): flat (no tilt, turn or
+    /// depth), or with its own perspective at the framing camera's focal length.
+    fn framed_alike(&self, visuals: &[Visual]) -> bool {
+        let canvas = self.state.canvas();
+        let focal = SceneCamera::framing(canvas)
+            .view(canvas)
+            .map(|view| view.focal_px());
+        visuals.iter().all(|visual| {
+            let g = &visual.at.geometry;
+            let flat =
+                g.tilt_deg.get() == 0.0 && g.turn_deg.get() == 0.0 && g.depth_px.get() == 0.0;
+            flat || match (g.perspective_px, &focal) {
+                (Some(p), Ok(focal)) => (p.get() - focal).abs() < 0.5,
+                _ => false,
+            }
+        })
+    }
+
+    fn transition(&mut self, running: &Running, out: &mut Shot) -> (Planned, bool) {
         let flatten = running.run.pairs;
         let from: Vec<Visual> = match &running.from {
             From::Scene(scene) => self.endpoint(scene, flatten, out),
@@ -1938,9 +1977,29 @@ impl<'a> Planner<'a, '_> {
                 .collect(),
         };
         let to = self.endpoint(&running.to, flatten, out);
-        let (mut planned, partners) = transition::plan(&from, &to, &running.run, running.by_item);
-        if running.by_item && flatten {
-            self.move_inside(&mut planned, &from, &partners, &running.run, out);
+        // A Move between 2D and 3D sees the 2D side through the framing camera
+        // (ADR-0128); where that side can't be drawn the same through it, it fades.
+        let mut pairs = running.run.pairs;
+        let faded;
+        let mut run = &running.run;
+        if pairs {
+            let two_d = match self.move_ends(running) {
+                (None, Some(_)) => Some(&from),
+                (Some(_), None) => Some(&to),
+                _ => None,
+            };
+            if two_d.is_some_and(|side| !self.framed_alike(side)) {
+                pairs = false;
+                faded = transition::Run {
+                    pairs: false,
+                    ..running.run.clone()
+                };
+                run = &faded;
+            }
+        }
+        let (mut planned, partners) = transition::plan(&from, &to, run, running.by_item);
+        if running.by_item && pairs {
+            self.move_inside(&mut planned, &from, &partners, run, out);
         }
         // Each group with children inside it gets a scene of the shot that draws them.
         let tracks = std::mem::take(&mut planned.tracks);
@@ -1985,7 +2044,7 @@ impl<'a> Planner<'a, '_> {
             }
             planned.end_ms = planned.end_ms.max(running.run.duration_ms as f32);
         }
-        planned
+        (planned, pairs)
     }
 
     /// Gives each pair of `planned` that moves a group as one image, between two views
@@ -2767,8 +2826,10 @@ struct PassCamera {
 
 impl PassCamera {
     /// The camera it draws through with live cameras applied: `live` gives the live
-    /// value set on a scene, `Some(None)` for a live removal. A keyframe scene is 2D
-    /// when its parent is, and otherwise draws its override, else its parent's camera.
+    /// value set on a scene, `Some(None)` for a live removal. A keyframe scene draws its
+    /// override, else its parent's camera; a keyframe of a 2D parent may have its own
+    /// (ADR-0128). A live removal of a parent's committed camera makes every keyframe 2D,
+    /// overrides too, as committing it would drop them (ADR-0094 §6).
     fn resolve(
         &self,
         scene: &SceneId,
@@ -2778,15 +2839,18 @@ impl PassCamera {
         let Some((parent, committed)) = &self.parent else {
             return own;
         };
-        let parent = live(parent).unwrap_or(*committed)?;
-        Some(own.unwrap_or(parent))
+        let parent = live(parent).unwrap_or(*committed);
+        if parent.is_none() && committed.is_some() {
+            return None;
+        }
+        own.or(parent)
     }
 
     /// The camera it draws through with no live values.
     fn committed(&self) -> Option<SceneCamera> {
         match &self.parent {
             None => self.own,
-            Some((_, parent)) => parent.map(|parent| self.own.unwrap_or(parent)),
+            Some((_, parent)) => self.own.or(*parent),
         }
     }
 }

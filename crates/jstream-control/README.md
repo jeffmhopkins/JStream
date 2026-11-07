@@ -201,9 +201,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   a scene's or source's delete restores its folder and metadata;
 - scene cameras (`scene.set_camera`, in `mock/organise.rs`,
   [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
-  graph's fields, an override on a keyframe scene refused while its parent has no
-  camera, and removing a parent's camera dropping its keyframes' overrides, which the
-  inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
+  graph's fields, an override on a keyframe scene whether or not its parent has a
+  camera (ADR-0128), and removing a parent's camera dropping its keyframes' overrides
+  (only when it had one), which the inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
   follow camera ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md):
   `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
   `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a

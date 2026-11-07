@@ -4438,7 +4438,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, a coordinate past the\ndrawable bound, or a camera on a keyframe scene whose parent has none. Removing a\nparent's camera also removes its keyframe scenes' overrides. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
+          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, or a coordinate past\nthe drawable bound. A keyframe of a 2D scene may have a camera of its own\n(ADR-0128). Removing a parent's camera also removes its keyframe scenes'\noverrides; a removal on a parent that has none removes nothing. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
           "properties": {
             "camera": {
               "anyOf": [
@@ -11338,7 +11338,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera; the keyframe shows the parent's camera where\nit has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
+          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera, which a keyframe of a 2D scene may have too\n(ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
         "camera_follow": {
           "anyOf": [

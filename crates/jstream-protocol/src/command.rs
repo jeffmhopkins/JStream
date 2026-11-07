@@ -809,9 +809,10 @@ pub enum Edit {
     /// 3D scene: its items are placed in one 3D space by their geometry and seen through
     /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
     /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
-    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
-    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
-    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// outside 1 to 170, a position within 0.001 px of the target, or a coordinate past
+    /// the drawable bound. A keyframe of a 2D scene may have a camera of its own
+    /// (ADR-0128). Removing a parent's camera also removes its keyframe scenes'
+    /// overrides; a removal on a parent that has none removes nothing. Inverse:
     /// `scene.set_camera` with the previous camera, then each removed override.
     #[serde(rename = "scene.set_camera")]
     SceneSetCamera {
