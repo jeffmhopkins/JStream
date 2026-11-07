@@ -67,3 +67,18 @@ max_over_budget_pct = 100
 
 [scene.nested_deep]
 max_over_budget_pct = 100
+
+# Scenes that draw near the frame budget on a 4-CPU GitHub runner (about 35-45 ms a
+# frame at 30 fps): most of their frames land just over budget, so only the frame rate
+# and mean frame time judge them.
+[scene.vf_color_correction]
+max_over_budget_pct = 100
+
+[scene.vf_apply_lut]
+max_over_budget_pct = 100
+
+[scene.vf_scene_mask]
+max_over_budget_pct = 100
+
+[scene.scene_chain]
+max_over_budget_pct = 100

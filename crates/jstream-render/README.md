@@ -631,8 +631,8 @@ defaults pass its descriptor, and that they build its pass.
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
-scene's over its composite, of an item's effects over its box, drawn into a layer
-grown by their summed `max_outset_px`
+scene's over its composite, of an item's effects over its box, in a layer
+grown by their summed `max_outset_px` at the first effect that declares one
 ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
@@ -775,14 +775,18 @@ premultiplied linear light on the way out.
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
-  (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
-  the centre is measured in the frame's own UV, so the shape is an ellipse that follows
-  the frame's aspect: 0 at the centre, 1 at the corners. Inside `radius` the picture is
-  untouched. Over the next `softness` it fades towards `color`, to `strength` times the
-  colour's alpha (a smoothstep; 0 is a hard edge). Coverage is kept, so a transparent
-  pixel stays transparent. It frames whatever its chain runs on: the source's whole
-  frame here, and an item's cropped box or a scene's composite once those owners are
-  built (ADR-0065, #529).
+  (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
+  default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
+  (`normal`, the default, mixes towards the colour, a tint; `multiply` darkens by it)
+  and `center_x`, `center_y` (0..1 of the frame, default 0.5). The distance from the
+  centre is 0 there and 1 at the half-diagonal: in the frame's own UV for `frame`, in
+  pixels for `round`. Inside `radius` the picture is untouched; over the next
+  `softness` it fades in (a smoothstep; 0 is a hard edge) to `strength` times the
+  colour's alpha, in linear light. The settings #1226 added default to what the kind
+  drew before, so a saved vignette keeps its look and the kind stays at version 1
+  (ADR-0025 › Versioning a kind). Coverage is kept, so a transparent pixel stays
+  transparent. It frames whatever its chain runs on: a source's whole frame, an item's
+  cropped box or a scene's composite (ADR-0065, #529).
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
@@ -801,7 +805,7 @@ or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied 
 (an SDR assumption: values above 1 are clipped).
 The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
-The multi-pass filters (V2), in `src/filter/multipass/`:
+The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 
 - `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
   `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
@@ -826,7 +830,18 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   An inside stroke treats the area past the frame as outside the shape.
 - `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
   1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
-  no offset.
+  no offset: light around an alpha shape, under it, so it needs a transparent edge (a
+  logo, text, a keyed camera, or an item's outset, **Bounds** below).
+- `bloom`: `threshold` (0..1, default 0.7), `intensity` (0 to 4, default 1), `radius`
+  (0 to 100 px, default 24) and `tint` (default white). The light that bright parts of
+  any picture give off, an opaque camera included: a bright pass keeps what is above
+  the threshold on the sRGB-encoded luma of the straight colour (a smoothstep over a
+  0.1 knee each side), the shared gaussian blurs it with transparent edges, and the
+  composite adds it, tinted and times intensity, over the input in premultiplied
+  linear light. The added light's coverage is its brightest channel, so past a shape it
+  shows as light. The bright pass is drawn into the output layer, which the blur reads
+  and the composite overwrites, so bloom takes only the blur's scratch layers.
+  Intensity 0 copies the input.
 - `video_delay`: `delay_ms` (0 to 5000, default 0, which passes the input through) and
   `max_memory_mb` (64 to 16384, default 1024). The pass keeps a ring of frame copies
   stamped with the clock and shows the newest one at or before now minus the delay, or
@@ -837,17 +852,26 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
-**Bounds.** Drop shadow, outline (outside) and glow draw within their input's frame,
-as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for a
-source or scene chain: the output is the input's size, the input is drawn 1:1, and
+**Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
+frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
+a source or scene chain: the output is the input's size, the input is drawn 1:1, and
 the part of the effect past the frame's edge is cut. So they don't change the
 source's reported size, and around an opaque frame a shadow, an outside stroke or a
 glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-ADR-0065 pads by the chain's `max_outset_px`; these kinds don't declare one yet, so
-their layer is the box and the part past it is cut there too.
+grows by the chain's summed `max_outset_px` where the first kind that declares one
+runs ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+`VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
+before the pass's own, and `apply_filter_into` first draws the input centred into a
+scratch layer that size, transparent around it, then runs the pass over that. Each of
+these kinds declares the
+most it can draw past its input at any settings: drop shadow 300 (the largest offset
+plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
+and bloom 100 (the largest radius). So on an item the glow and shadow of an opaque
+picture show around its box (#1226). That room costs layer memory and fill: a
+1920×1080 box with a drop shadow is a 2520×1680 layer.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with

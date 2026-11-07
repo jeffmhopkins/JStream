@@ -15,6 +15,12 @@ unsafe_allowed = false
 [lints]
 workspace = true
 
+[features]
+# The network listener (ADR-0104): a second, TLS-only listener for devices on the network,
+# with a self-signed certificate made on the host. The daemon and the desktop app turn it
+# on; without it the server listens on loopback only, as before.
+tls = ["dep:rcgen", "dep:ring", "dep:rustls", "dep:tokio-rustls"]
+
 [dependencies]
 axum.workspace = true
 # The token compare hashes both sides to a fixed length (#44); already in the tree for
@@ -33,6 +39,14 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
+# The network listener's certificate (ADR-0104 §4): an ECDSA P-256 key and a self-signed
+# certificate, made once on the host. `tls` only.
+rcgen = { workspace = true, optional = true }
+# The certificate's SHA-256 fingerprint, as a browser's certificate viewer shows it, and
+# rustls' crypto provider (R-DEP-006). `tls` only.
+ring = { workspace = true, optional = true }
+rustls = { workspace = true, optional = true }
+tokio-rustls = { workspace = true, optional = true }
 # A span per connection; accepted and refused upgrades are logged (R-RS-005).
 tracing.workspace = true
 
