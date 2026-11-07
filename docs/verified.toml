@@ -5055,7 +5055,7 @@ stamp = { hash = "b3:234830343d1d1b94" }
 stamp = { hash = "b3:39494430b9cb586b", by = "agent:claude", note = "Whole PR (#1025): the Kinds backdrop entry now says a backdrop is capped at 7680 a side and 7680 x 4320 pixels, either way round, below other kinds because it is drawn on the CPU and scales up softly, checked by create before drawing and naming the side to shrink; the tests/backdrop.rs list names the size-cap test. Limits and the color entry are unchanged and hold." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/browser.rs"]
-stamp = { hash = "b3:946eac6d2a9c7ca6", by = "agent:alpha5-security", note = "Re-read the browser source's local_network paragraph: added that the opt-in covers the page's own origin and only an https page (Chromium refuses plain http pages' local requests), matching the new descriptor text; html description now says web loads go over https." }
+stamp = { hash = "b3:f687e3685e54a12f", by = "agent:alpha5-security", note = "Re-read the browser source's local_network paragraph: the opt-in covers the page's own origin only and only an https page (Chromium refuses plain http pages' local requests), matching the descriptor text (now 'own origin'); html description says web loads go over https. The merged #1261 3D-model text doesn't touch it." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/capture.rs"]
 stamp = { hash = "b3:04f0d33ce67de3c1", by = "agent:claude-window-picker", note = "display and window's target is now ParamType::CaptureTarget of that kind (protocol 0.50; capture.rs, kinds.snap), and the display/window bullet says the type marks it as a capture.targets ID a UI lists to pick from; webcam's device stays a string." }
@@ -6579,7 +6579,7 @@ stamp = { hash = "b3:a71c0833188b98b6", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#browser"."body"]
-stamp = { hash = "b3:ba1a7cff16823377", by = "agent:alpha5-security", note = "Re-read against #347/#1035: HTML pages get an https origin of their own per source (no shared storage) so their opt-in is origin-exact and the HTML opaque-frame gap is closed; new #347 controls paragraph on Chromium's network-layer checks (rebinding, unseen requests, non-secure pages) and the helper's per-origin grant, tested by tests/linux_page/local_network.rs; Gaps keep the file-page opaque-origin reach, the Windows confirmation and the control-token note." }
+stamp = { hash = "b3:60312d165643c76a", by = "agent:alpha5-security", note = "Re-read against #347/#1035: HTML pages get an https origin of their own per source (no shared storage) so their opt-in is origin-exact; #347 controls paragraph lists what the Linux e2e tests show (rebinding refused, opted-in https page reaches 127.0.0.1 while its third-party frame is refused a rebinding name by Chromium alone, HTML page origin), says service workers and ws:// are covered but untested, and that an opted-in page's own context shares no cookies; page-API paragraph now names the HTML page's own origin instead of data:. Gaps keep the file-page opaque reach, the Windows confirmation and the control-token note." }
 
 ["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }

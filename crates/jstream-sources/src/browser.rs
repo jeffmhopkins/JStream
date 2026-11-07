@@ -129,7 +129,7 @@ impl BrowserKind {
                         "Let a page from the internet make requests to this computer and \
                          the local network (localhost, 192.168.x.x and the like), for \
                          widgets that talk to an app running here. Off, those requests are \
-                         refused. It covers the page's own site only, and only a page loaded \
+                         refused. It covers the page's own origin only, and only a page loaded \
                          over https. A local file or a page on the local network may always."
                             .into(),
                     ),

@@ -287,9 +287,15 @@ rebinding, and requests the resource handler never sees. In the pinned CEF's win
 pages they refuse without asking the permission handler, so for a source that opted in
 the helper allows them for the source's own origin, as the top-level origin, in a
 request context of the page's own. A third-party frame inside it and every other source
-stay refused. The Linux helper's end-to-end tests check each of these on the real
-helper, with Chromium's test switches mapping public names to `127.0.0.1`
-(`crates/jstream-browser/tests/linux_page/local_network.rs`).
+stay refused. The Linux helper's end-to-end tests check, on the real helper with
+Chromium's test switches mapping public names to `127.0.0.1`
+(`crates/jstream-browser/tests/linux_page/local_network.rs`): a public page refused a
+public name that resolves locally; an opted-in `https` page reaching `127.0.0.1` while a
+third-party frame inside it is refused the same kind of name, both by Chromium alone;
+and an HTML page on an origin of its own. Service workers and `ws://` handshakes are
+covered by the same network-layer check but not tested. An opted-in page has a request
+context of its own, so it shares no cookies or storage with other sources from its
+origin; profiles are in memory, so nothing is lost.
 
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
@@ -319,8 +325,8 @@ its page in to a read-only `window.jstream` with the engine animation clock and 
 page's own visibility, and, per further setting, the program and preview scenes, named
 shared values, and one bus's levels and bands (never its samples). The renderer
 defines the API only in the main frame, and only while it shows the source's own
-document: the source's web origin exactly, its file's folder or below, or the `data:`
-document of a page given as HTML. Data flows one way: the engine filters it to the
+document: the source's web origin exactly, its file's folder or below, or the origin of
+its own a page given as HTML loads from. Data flows one way: the engine filters it to the
 grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
 updates in the renderer only from the browser process, and its client drops every
 process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A

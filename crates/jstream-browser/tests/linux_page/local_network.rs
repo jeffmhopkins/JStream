@@ -265,13 +265,17 @@ fn a_public_page_can_t_reach_this_computer_through_a_name_that_resolves_to_it() 
 fn an_opted_in_https_page_reaches_this_computer_and_its_third_party_frames_don_t() {
     let (target, target_port) = listen();
     let target = serve(target, "pong".into(), None);
-    // The frame tells its own server how its request went.
+    // The frame asks for a public name that resolves to this computer, which the
+    // request policy lets through, so only Chromium's scoping of the grant to the
+    // page's own origin refuses it. It tells its own server how that went.
+    let (rebind, rebind_port) = listen();
+    let rebind = serve(rebind, "pong".into(), Some(tls_for("rebind.test")));
     let (frame, frame_port) = listen();
     let frame = serve(
         frame,
         format!(
             r#"<!doctype html><script>
-fetch("http://127.0.0.1:{target_port}/from-frame").then(
+fetch("https://rebind.test:{rebind_port}/from-frame").then(
   () => fetch("/frame-reached"), () => fetch("/frame-refused"));
 </script>"#
         ),
@@ -304,7 +308,8 @@ fetch("http://127.0.0.1:{target_port}/from-frame").then(
     }
     assert!(was_asked(&frame, "/frame-refused"));
     assert!(!was_asked(&frame, "/frame-reached"));
-    assert!(!was_asked(&target, "/from-frame"));
+    assert!(!was_asked(&rebind, "/from-frame"));
+    assert!(was_asked(&target, "/ping"), "the opted-in page reached it");
 }
 
 /// #1035: a page given as HTML loads from an origin of its own, a host under the
