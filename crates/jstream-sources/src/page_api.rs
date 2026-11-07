@@ -5,13 +5,15 @@
 //! grant covers.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use jstream_browser::{PageApi, PageData};
 use jstream_media::MediaTime;
-use jstream_protocol::{Settings, check_value_name};
+use jstream_protocol::{BusId, Reference, Settings, check_value_name};
 use serde_json::{Value, json};
 
 use crate::SourceError;
+use crate::scope::{AudioMeter, AudioScope, METER_BANDS};
 
 /// The longest `page_api_values` setting, in bytes.
 pub(crate) const MAX_VALUES_GRANT_BYTES: usize = 1024;
@@ -42,6 +44,19 @@ pub struct PageView<'a> {
     pub preview_scene: Option<(&'a str, &'a str)>,
     /// Every shared value, by name.
     pub values: &'a BTreeMap<String, Value>,
+    /// Each bus's levels after its fader, the master's included; empty while no mixer
+    /// runs.
+    pub buses: &'a BTreeMap<BusId, BusLevels>,
+}
+
+/// A bus's levels as the mixer meters them after its fader (ADR-0102 decision 8), linear
+/// full scale (1.0 is 0 dBFS), left then right.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BusLevels {
+    /// The largest absolute sample since the meters were last read (`meters.tick`).
+    pub peak: [f32; 2],
+    /// The RMS level over the most recent mixed block.
+    pub rms: [f32; 2],
 }
 
 /// What a source's settings grant its page.
@@ -51,6 +66,8 @@ pub(crate) struct Grant {
     /// The shared values it may read: whole names, and prefixes (`status.` for
     /// `status.*`) that cover every name below them.
     pub(crate) values: Vec<Covered>,
+    /// The bus whose levels it may read (`page_api_bus`).
+    pub(crate) bus: Option<BusId>,
 }
 
 /// One entry of `page_api_values`.
@@ -85,7 +102,23 @@ impl Grant {
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
         )?;
-        Ok(Some(Self { scenes, values }))
+        let bus = match settings.get("page_api_bus").unwrap_or(&Value::Null) {
+            Value::Null => None,
+            value => match Reference::from_value(value) {
+                Some(Reference::Bus { bus_id }) => Some(bus_id),
+                _ => {
+                    return Err(SourceError::Setting {
+                        param: "page_api_bus".into(),
+                        reason: "must be a bus reference or null".into(),
+                    });
+                }
+            },
+        };
+        Ok(Some(Self {
+            scenes,
+            values,
+            bus,
+        }))
     }
 
     /// What the page's `window.jstream` has.
@@ -93,6 +126,7 @@ impl Grant {
         PageApi {
             scenes: self.scenes,
             values: !self.values.is_empty(),
+            levels: self.bus.is_some(),
         }
     }
 
@@ -165,10 +199,26 @@ pub(crate) struct Feed {
     pending: PageData,
     /// The clock time the last update was sent.
     sent: Option<f64>,
+    /// The granted bus's scope, and the meter that finds its bands.
+    meter: Option<(Arc<AudioScope>, AudioMeter)>,
+    /// The levels as last sent.
+    levels: Option<String>,
+    /// Whether the granted bus had a reading at the last look: while it does, a page
+    /// frame is always due, for the next.
+    metering: bool,
+    /// The millisecond the meter last measured at: its clock only counts up.
+    measured: u64,
 }
 
 impl Feed {
-    pub(crate) fn new(grant: Grant, fps: u32) -> Self {
+    /// A feed for `grant`'s page painting `fps` frames a second, whose granted bus (if
+    /// any) has its bands found in `scope`.
+    pub(crate) fn new(grant: Grant, fps: u32, scope: Option<Arc<AudioScope>>) -> Self {
+        let meter = grant
+            .bus
+            .as_ref()
+            .and(scope)
+            .map(|scope| (scope, AudioMeter::new()));
         Self {
             grant,
             fps: fps.max(1),
@@ -183,6 +233,10 @@ impl Feed {
             age: None,
             pending: PageData::default(),
             sent: None,
+            meter,
+            levels: None,
+            metering: false,
+            measured: 0,
         }
     }
 
@@ -198,6 +252,9 @@ impl Feed {
         }
         if data.scenes.is_some() {
             pending.scenes = data.scenes;
+        }
+        if data.levels.is_some() {
+            pending.levels = data.levels;
         }
         for (name, value) in data.values {
             match pending.values.iter_mut().find(|(n, _)| *n == name) {
@@ -232,9 +289,10 @@ impl Feed {
     }
 
     /// When what is still to be sent may go, on the media clock, or `None` with nothing
-    /// pending.
+    /// pending. While the granted bus has a reading, the next page frame is always due,
+    /// for the reading then.
     pub(crate) fn due(&self) -> Option<MediaTime> {
-        if self.pending.is_empty() {
+        if self.pending.is_empty() && !self.metering {
             return None;
         }
         let at = self.sent.map_or(0.0, |sent| sent + self.frame());
@@ -290,6 +348,29 @@ impl Feed {
             .to_string();
             data.scenes = changed(&mut self.scenes, scenes);
         }
+        if let Some(bus) = &self.grant.bus {
+            let reading = view.buses.get(bus);
+            self.metering = reading.is_some();
+            let levels = reading.map_or_else(
+                || "null".to_owned(),
+                |levels| {
+                    let secs = view.now.as_secs_f64();
+                    let ms = if secs.is_finite() && secs > 0.0 {
+                        (secs * 1000.0) as u64
+                    } else {
+                        0
+                    }
+                    .max(self.measured);
+                    self.measured = ms;
+                    let bands = self
+                        .meter
+                        .as_mut()
+                        .map(|(scope, meter)| meter.measure(scope, ms).bands);
+                    levels_json(levels, bands.as_ref().map(<[f32; METER_BANDS]>::as_slice))
+                },
+            );
+            data.levels = changed(&mut self.levels, levels);
+        }
         if !self.grant.values.is_empty() {
             let grant = &self.grant;
             let values = &mut self.values;
@@ -343,6 +424,21 @@ impl Feed {
     }
 }
 
+/// A bus reading as the page's `levels` JSON: `peak` and `rms` left then right, and
+/// `bands` from the lowest, each to three decimals. Without a scope every band is 0.
+fn levels_json(levels: &BusLevels, bands: Option<&[f32]>) -> String {
+    let round = |v: f32| (f64::from(v) * 1000.0).round() / 1000.0;
+    let pair = |pair: [f32; 2]| [round(pair[0]), round(pair[1])];
+    let silent = [0.0; METER_BANDS];
+    let bands: Vec<f64> = bands.unwrap_or(&silent).iter().map(|&b| round(b)).collect();
+    json!({
+        "peak": pair(levels.peak),
+        "rms": pair(levels.rms),
+        "bands": bands,
+    })
+    .to_string()
+}
+
 /// `now` if it differs from what `last` holds, which then holds it.
 fn changed(last: &mut Option<String>, now: String) -> Option<String> {
     if last.as_ref() == Some(&now) {
@@ -356,6 +452,8 @@ fn changed(last: &mut Option<String>, now: String) -> Option<String> {
 mod tests {
     use super::*;
     use jstream_media::Timebase;
+
+    static NO_BUSES: BTreeMap<BusId, BusLevels> = BTreeMap::new();
 
     fn at(ms: i64) -> MediaTime {
         MediaTime::new(ms, Timebase::MILLIS)
@@ -399,7 +497,8 @@ mod tests {
             grant.api(),
             PageApi {
                 scenes: false,
-                values: true
+                values: true,
+                levels: false,
             }
         );
         assert!(grant.covers("status.text"));
@@ -432,8 +531,9 @@ mod tests {
         let grant = Grant {
             scenes: true,
             values: vec![Covered::Below("status".into())],
+            bus: None,
         };
-        let mut feed = Feed::new(grant, 50);
+        let mut feed = Feed::new(grant, 50, None);
         let mut values = BTreeMap::new();
         values.insert("status.text".to_owned(), json!("On air"));
         values.insert("secret".to_owned(), json!(1));
@@ -445,6 +545,7 @@ mod tests {
                 program_scene: Some(("scn_1", "Main")),
                 preview_scene: None,
                 values,
+                buses: &NO_BUSES,
             }
         }
         let first = feed.view(&view(&values, false, 1000));
@@ -480,9 +581,10 @@ mod tests {
         let grant = Grant {
             scenes: false,
             values: vec![Covered::Below("counter".into())],
+            bus: None,
         };
         // 50 a second: one page frame is 20 ms.
-        let mut feed = Feed::new(grant, 50);
+        let mut feed = Feed::new(grant, 50, None);
         let value = |n: i64| PageData {
             values: vec![("counter.a".to_owned(), Some(n.to_string()))],
             ..PageData::default()
@@ -526,13 +628,101 @@ mod tests {
     }
 
     #[test]
+    fn a_page_given_a_bus_reads_its_levels_each_frame() {
+        let vod = BusId::new("vod");
+        let grant = Grant::of(&settings(&[
+            ("page_api", json!(true)),
+            (
+                "page_api_bus",
+                Reference::Bus {
+                    bus_id: vod.clone(),
+                }
+                .to_value(),
+            ),
+        ]))
+        .unwrap()
+        .unwrap();
+        assert_eq!(grant.bus, Some(vod.clone()));
+        assert!(grant.api().levels);
+        assert!(
+            Grant::of(&settings(&[
+                ("page_api", json!(true)),
+                ("page_api_bus", json!("vod"))
+            ]))
+            .is_err()
+        );
+        let scope = Arc::new(AudioScope::new());
+        let mut feed = Feed::new(grant, 50, Some(Arc::clone(&scope)));
+        let values = BTreeMap::new();
+        let mut buses = BTreeMap::new();
+        fn view<'a>(
+            values: &'a BTreeMap<String, Value>,
+            buses: &'a BTreeMap<BusId, BusLevels>,
+            ms: i64,
+        ) -> PageView<'a> {
+            PageView {
+                now: at(ms),
+                program: true,
+                preview: false,
+                program_scene: None,
+                preview_scene: None,
+                values,
+                buses,
+            }
+        }
+        // No mixer: null, and no frame is due for it.
+        let none = feed.view(&view(&values, &buses, 1000));
+        assert_eq!(none.levels.as_deref(), Some("null"));
+        feed.post(none);
+        assert!(feed.flush(at(1000)).is_some());
+        assert_eq!(feed.due(), None);
+        // A 1 kHz tone on the bus: levels and bands, and the next frame is always due.
+        let tone: Vec<f32> = (0..4800)
+            .flat_map(|n| {
+                let v = 0.5 * (std::f32::consts::TAU * 1000.0 * n as f32 / 48_000.0).sin();
+                [v, v]
+            })
+            .collect();
+        scope.push(48_000, &tone);
+        buses.insert(
+            vod.clone(),
+            BusLevels {
+                peak: [0.5, 0.25],
+                rms: [0.3536, 0.1768],
+            },
+        );
+        let reading = feed.view(&view(&values, &buses, 1020));
+        let levels: Value = serde_json::from_str(reading.levels.as_deref().unwrap()).unwrap();
+        assert_eq!(levels["peak"], json!([0.5, 0.25]));
+        assert_eq!(levels["rms"], json!([0.354, 0.177]));
+        let bands = levels["bands"].as_array().unwrap();
+        assert_eq!(bands.len(), METER_BANDS);
+        assert!(bands.iter().any(|b| b.as_f64().unwrap() > 0.5), "{bands:?}");
+        feed.post(reading);
+        assert!(feed.flush(at(1020)).is_some());
+        assert_eq!(
+            feed.due(),
+            Some(MediaTime::new(1_040_000, Timebase::MICROS))
+        );
+        // The bus goes: null once.
+        buses.clear();
+        assert_eq!(
+            feed.view(&view(&values, &buses, 1040)).levels.as_deref(),
+            Some("null")
+        );
+        assert_eq!(feed.view(&view(&values, &buses, 1060)).levels, None);
+    }
+
+    #[test]
     fn a_page_without_scenes_or_values_gets_neither() {
         let mut feed = Feed::new(
             Grant {
                 scenes: false,
                 values: Vec::new(),
+                bus: None,
             },
             30,
+            None,
         );
         let mut values = BTreeMap::new();
         values.insert("status.text".to_owned(), json!("x"));
@@ -543,6 +733,7 @@ mod tests {
             program_scene: Some(("scn_1", "Main")),
             preview_scene: None,
             values: &values,
+            buses: &NO_BUSES,
         });
         assert_eq!(data.scenes, None);
         assert!(data.values.is_empty());
@@ -555,8 +746,10 @@ mod tests {
             Grant {
                 scenes: false,
                 values: Vec::new(),
+                bus: None,
             },
             25,
+            None,
         );
         assert_eq!(feed.clock(at(1000), None), Some((1.0, 0.04)));
         assert_eq!(feed.clock(at(1200), None), None);

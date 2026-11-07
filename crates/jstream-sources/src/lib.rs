@@ -61,7 +61,7 @@ pub use image::{StillImage, decode_still};
 pub use jstream_browser::BrowserBackend;
 pub use media::MediaAudio;
 pub use model::ModelKind;
-pub use page_api::PageView;
+pub use page_api::{BusLevels, PageView};
 pub use registry::Registry;
 pub use scope::{
     AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, RawMeasure, drawn_source,

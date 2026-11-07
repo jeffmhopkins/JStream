@@ -504,6 +504,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
     let mut page = open(Some(PageApi {
         scenes: true,
         values: true,
+        levels: false,
     }));
     wait_for(&*page, [0, 0, 255]);
     page.send_data(PageData {
@@ -512,6 +513,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
             r#"{"shown":true,"previewShown":false,"shownAt":2.5,"previewShownAt":null}"#.into(),
         ),
         scenes: Some(r#"{"program":{"id":"scn_main","name":"Main"},"preview":null}"#.into()),
+        levels: None,
         values: vec![("status.ok".into(), Some("true".into()))],
     });
     wait_for(&*page, [0, 255, 0]);
@@ -529,6 +531,67 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
     page.send_data(value("true"));
     wait_for(&*page, [0, 255, 0]);
     drop(page);
+
+    // A page granted a bus reads each reading, and `null` once there is none.
+    let mut levels = open_levels(&backend, width, height, &dir);
+    wait_for(&*levels, [0, 0, 255]);
+    let reading = |text: &str| PageData {
+        levels: Some(text.into()),
+        ..PageData::default()
+    };
+    let bands = vec!["0.5"; 64].join(",");
+    levels.send_data(reading(&format!(
+        r#"{{"peak":[0.5,0.25],"rms":[0.1,0.1],"bands":[{bands}]}}"#
+    )));
+    wait_for(&*levels, [255, 255, 0]);
+    levels.send_data(reading("null"));
+    wait_for(&*levels, [0, 255, 255]);
+    drop(levels);
     drop(backend);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A page that is blue with `jstream.levels`, yellow once a `levels` event brought the
+/// reading `levels()` returns, and cyan once that is `null`.
+const LEVELS_PAGE: &str = r##"<!doctype html>
+<html><body><div id="d" style="position:fixed;inset:0;background:#ff0000"></div>
+<script>
+if (window.jstream && typeof window.jstream.levels === "function") {
+  document.getElementById("d").style.background = "#0000ff";
+  window.jstream.addEventListener("levels", function (reading) {
+    var color = "#ff00ff";
+    var now = window.jstream.levels();
+    if (reading === null && now === null) {
+      color = "#00ffff";
+    } else if (reading === now && reading.peak[0] === 0.5 && reading.rms[1] === 0.1
+        && reading.bands.length === 64 && Object.isFrozen(reading.bands)) {
+      color = "#ffff00";
+    }
+    document.getElementById("d").style.background = color;
+  });
+}
+</script></body></html>"##;
+
+fn open_levels(
+    backend: &CefBackend,
+    width: u32,
+    height: u32,
+    dir: &std::path::Path,
+) -> Box<dyn jstream_browser::BrowserPage> {
+    backend
+        .open(&PageSpec {
+            location: PageLocation::Html(LEVELS_PAGE.into()),
+            size: FrameSize::new(width, height).expect("a size"),
+            fps: 30,
+            css: DEFAULT_CSS.into(),
+            local_network: false,
+            page_api: Some(jstream_browser::PageApi {
+                levels: true,
+                ..jstream_browser::PageApi::default()
+            }),
+        })
+        .unwrap_or_else(|error| {
+            let log = std::fs::read_to_string(dir.join("cef.log")).unwrap_or_default();
+            panic!("the levels page didn't open: {error}\nCEF's log:\n{log}");
+        })
 }

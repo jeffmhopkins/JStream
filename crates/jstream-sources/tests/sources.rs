@@ -94,6 +94,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "display",
             "image",
             "media",
+            "model",
             "shape",
             "spectrum",
             "text",
