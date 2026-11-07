@@ -87,8 +87,9 @@ jobs:
 
             // A push makes the after-review runs for the PR's earlier heads moot: cancel them so
             // their Windows and macOS jobs free their runners. The new head's run is dispatched
-            // once its own review passes.
-            if (context.payload.action === 'synchronize') {
+            // once its own review passes. A fork PR's runs were never dispatched, and its branch
+            // name could match one of this repo's own branches, so it cancels nothing.
+            if (context.payload.action === 'synchronize' && pr.head.repo?.full_name === `${owner}/${repo}`) {
               try {
                 for (const status of ['queued', 'in_progress']) {
                   const { data } = await github.rest.actions.listWorkflowRuns({
