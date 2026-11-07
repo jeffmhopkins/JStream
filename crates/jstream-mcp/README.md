@@ -93,7 +93,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -123,7 +123,9 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
+today `collection` (an open or a new stops every output and clears every client's undo,
+[ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
+`output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays

@@ -31,12 +31,15 @@ pub mod menu;
 pub mod pairing;
 pub mod panels;
 pub mod plugins;
+pub mod project;
 pub mod projector;
 pub mod screenshot;
 pub mod session;
+pub mod settings;
 pub mod store;
 pub mod ui_settings;
 pub mod updates;
+pub mod video_settings;
 pub mod workspace;
 
 pub use app::{App, SessionContext};

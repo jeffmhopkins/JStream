@@ -41,8 +41,8 @@ use crate::panels::tree::{
 };
 use crate::store::{Collection, Studio, apply, plan_delete, plan_summary};
 use jstream_control::protocol::{
-    DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId, SceneRole,
-    SourceId, SourceKind,
+    BusInfo, DeleteTarget, Edit, FilterId, FilterInfo, ItemId, LabelId, Reference, SceneId,
+    SceneRole, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -497,6 +497,16 @@ pub fn Sources() -> impl IntoView {
                 })
             })
         };
+        // A badge while the source's page is granted anything (ADR-0124).
+        let page_badge = {
+            let id = source_id.clone();
+            move || {
+                studio.collection.with(|c| {
+                    let c = c.as_ref()?;
+                    page_api_grant(c.source(&id)?, &c.buses)
+                })
+            }
+        };
         let key = item_id.to_string();
         // A nested scene's item is selected in its own scene, which the panel then shows,
         // but a group's child in a keyframe's tree in the keyframe, which overrides it.
@@ -797,6 +807,9 @@ pub fn Sources() -> impl IntoView {
                     <RenameField value=name.clone() done=rename.clone() />
                 </Show>
                 <LabelChips labels=labels />
+                {move || page_badge().map(|tip| view! {
+                    <span class="page-api-badge" title=tip.clone() aria-label=tip>"API"</span>
+                })}
                 <button
                     type="button"
                     class="hov tree-tool eye"
@@ -1028,6 +1041,50 @@ pub fn Sources() -> impl IntoView {
             <ToolBar label="Source tools" tools=tools />
         </section>
     }
+}
+
+/// What a `browser` source's page is granted, as its Sources badge's tooltip ("Page API:
+/// clock, visibility, scenes, audio levels (Mic)"), or `None` while `page_api` is off
+/// (ADR-0124). It reads the settings as the engine does: each kind only while its own
+/// checkbox is on.
+pub fn page_api_grant(source: &SourceInfo, buses: &[BusInfo]) -> Option<String> {
+    let builtin = matches!(&source.kind, SourceKind::Builtin { kind } if kind == "browser");
+    let on = |param: &str| {
+        source
+            .settings
+            .get(param)
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    };
+    if !builtin || !on("page_api") {
+        return None;
+    }
+    let mut kinds = vec!["clock".to_owned(), "visibility".to_owned()];
+    if on("page_api_scenes") {
+        kinds.push("scenes".into());
+    }
+    let names = source
+        .settings
+        .get("page_api_values")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_default()
+        .trim();
+    if on("page_api_shared_values") && !names.is_empty() {
+        kinds.push(format!("shared values ({names})"));
+    }
+    if on("page_api_audio")
+        && let Some(Reference::Bus { bus_id }) = source
+            .settings
+            .get("page_api_bus")
+            .and_then(Reference::from_value)
+    {
+        let name = buses
+            .iter()
+            .find(|bus| bus.bus_id == bus_id)
+            .map_or_else(|| bus_id.to_string(), |bus| bus.name.clone());
+        kinds.push(format!("audio levels ({name})"));
+    }
+    Some(format!("Page API: {}", kinds.join(", ")))
 }
 
 #[cfg(test)]
@@ -1359,5 +1416,64 @@ mod tests {
         );
         // Without scene references nothing opens.
         assert!(!all(&collection(), "main")[1].open);
+    }
+
+    #[test]
+    fn the_badge_names_what_a_page_is_granted() {
+        use super::page_api_grant;
+        use jstream_control::protocol::{BusId, BusInfo, Reference};
+        use serde_json::json;
+        let page = |pairs: &[(&str, serde_json::Value)]| SourceInfo {
+            source_id: "page".into(),
+            name: "Page".into(),
+            kind: SourceKind::Builtin {
+                kind: "browser".into(),
+            },
+            settings: pairs
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                .collect(),
+            duplicated_from: None,
+            audio: None,
+            filters: Default::default(),
+            meta: Default::default(),
+        };
+        let mic: BusInfo = serde_json::from_value(
+            json!({"bus_id": "mic", "name": "Mic", "gain_db": 0.0, "muted": false}),
+        )
+        .expect("a bus");
+        let bus = Reference::Bus {
+            bus_id: BusId::new("mic"),
+        }
+        .to_value();
+        assert_eq!(page_api_grant(&page(&[]), &[]), None);
+        assert_eq!(
+            page_api_grant(&page(&[("page_api", json!(true))]), &[]).as_deref(),
+            Some("Page API: clock, visibility")
+        );
+        // Names and a bus without their checkboxes grant nothing.
+        let unchecked = page(&[
+            ("page_api", json!(true)),
+            ("page_api_values", json!("status.*")),
+            ("page_api_bus", bus.clone()),
+        ]);
+        assert_eq!(
+            page_api_grant(&unchecked, std::slice::from_ref(&mic)).as_deref(),
+            Some("Page API: clock, visibility")
+        );
+        let all = page(&[
+            ("page_api", json!(true)),
+            ("page_api_scenes", json!(true)),
+            ("page_api_shared_values", json!(true)),
+            ("page_api_values", json!("status.*")),
+            ("page_api_audio", json!(true)),
+            ("page_api_bus", bus),
+        ]);
+        assert_eq!(
+            page_api_grant(&all, &[mic]).as_deref(),
+            Some(
+                "Page API: clock, visibility, scenes, shared values (status.*), audio levels (Mic)"
+            )
+        );
     }
 }

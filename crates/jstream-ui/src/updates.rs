@@ -1,5 +1,5 @@
 //! Help › Check for updates, and the Settings checkbox that runs it at launch
-//! (docs/UI-FEATURES.md#header).
+//! (docs/UI-FEATURES.md#header), on the Settings dialog's General page (`settings.rs`).
 //!
 //! The desktop app serves GitHub's public releases list at [`CHECK_PATH`] (its
 //! `updates.rs`). This page reads that list and compares it with the version it was
@@ -442,14 +442,10 @@ pub fn UpdateDialog(
     }
 }
 
-/// Settings: the launch check and, in the desktop app, whether hotkeys are heard while
-/// another application has the focus. The dialog grows as the other application
-/// settings arrive.
+/// The Settings dialog's General page (`settings.rs`): "Check for updates at launch" and,
+/// in the desktop app, whether hotkeys are heard while another application has the focus.
 #[component]
-pub fn SettingsDialog(
-    /// Closes the dialog.
-    close: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+pub fn LaunchCheckSetting() -> impl IntoView {
     let on = RwSignal::new(kept_launch_check());
     // Global hotkeys, in the desktop app only: the server keeps the switch, which the
     // desktop app reads (ADR-0112 §6).
@@ -482,53 +478,40 @@ pub fn SettingsDialog(
         });
     };
     view! {
-        <Modal label="Settings" class="settings-dialog" cancel=close>
-            <div class="modal-header">
-                <div class="modal-titles">
-                    <h2 class="modal-title">"Settings"</h2>
-                </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
-            </div>
-            <div class="settings-body">
-                <label class="settings-check">
-                    <input
-                        type="checkbox"
-                        aria-label="Check for updates at launch"
-                        prop:checked=move || on.get()
-                        on:change=move |event| {
-                            let checked = event_target_checked(&event);
-                            on.set(checked);
-                            keep_launch_check(checked);
-                        }
-                    />
-                    <span>
-                        <span class="settings-check-label">"Check for updates at launch"</span>
-                        <span class="settings-check-note">
-                            "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
-                        </span>
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Check for updates at launch"
+                prop:checked=move || on.get()
+                on:change=move |event| {
+                    let checked = event_target_checked(&event);
+                    on.set(checked);
+                    keep_launch_check(checked);
+                }
+            />
+            <span>
+                <span class="settings-check-label">"Check for updates at launch"</span>
+                <span class="settings-check-note">
+                    "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
+                </span>
+            </span>
+        </label>
+        <Show when=move || global.get().is_some()>
+            <label class="settings-check">
+                <input
+                    type="checkbox"
+                    aria-label="Hear hotkeys while another app has the focus"
+                    prop:checked=move || global.get().unwrap_or(true)
+                    on:change=move |event| keep_global(event_target_checked(&event))
+                />
+                <span>
+                    <span class="settings-check-label">"Hear hotkeys while another app has the focus"</span>
+                    <span class="settings-check-note">
+                        "When on, the desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus. On until you turn it off."
                     </span>
-                </label>
-                <Show when=move || global.get().is_some()>
-                    <label class="settings-check">
-                        <input
-                            type="checkbox"
-                            aria-label="Hear hotkeys while another app has the focus"
-                            prop:checked=move || global.get().unwrap_or(true)
-                            on:change=move |event| keep_global(event_target_checked(&event))
-                        />
-                        <span>
-                            <span class="settings-check-label">"Hear hotkeys while another app has the focus"</span>
-                            <span class="settings-check-note">
-                                "When on, the desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus. On until you turn it off."
-                            </span>
-                        </span>
-                    </label>
-                </Show>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="primary" data-primary on:click=move |_| close()>"Close"</button>
-            </div>
-        </Modal>
+                </span>
+            </label>
+        </Show>
     }
 }
 

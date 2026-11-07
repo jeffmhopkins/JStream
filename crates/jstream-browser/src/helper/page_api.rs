@@ -30,6 +30,7 @@ const MESSAGE: &str = "jstream.page_data";
 const KEY_API: &str = "jstream.page_api";
 const KEY_SCENES: &str = "jstream.page_api.scenes";
 const KEY_VALUES: &str = "jstream.page_api.values";
+const KEY_LEVELS: &str = "jstream.page_api.levels";
 const KEY_HOME_KIND: &str = "jstream.page_api.home_kind";
 const KEY_HOME: &str = "jstream.page_api.home";
 
@@ -40,14 +41,15 @@ pub(crate) fn extra_info(api: PageApi, home: &ApiHome) -> Option<DictionaryValue
     info.set_bool(Some(&KEY_API.into()), 1);
     info.set_bool(Some(&KEY_SCENES.into()), c_int::from(api.scenes));
     info.set_bool(Some(&KEY_VALUES.into()), c_int::from(api.values));
+    info.set_bool(Some(&KEY_LEVELS.into()), c_int::from(api.levels));
     info.set_string(Some(&KEY_HOME_KIND.into()), Some(&kind.into()));
     info.set_string(Some(&KEY_HOME.into()), Some(&value.into()));
     Some(info)
 }
 
 /// `data` as the process message its page's main frame is sent: the clock (a flag and
-/// two numbers), the visibility and scenes (empty for none: JSON text is never empty),
-/// then each value's name and JSON text (empty for one removed).
+/// two numbers), the visibility, scenes and levels (empty for none: JSON text is never
+/// empty), then each value's name and JSON text (empty for one removed).
 pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     let message = process_message_create(Some(&MESSAGE.into()))?;
     let list = message.argument_list()?;
@@ -57,10 +59,11 @@ pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     list.set_double(2, lead);
     list.set_string(3, Some(&data.source.as_deref().unwrap_or_default().into()));
     list.set_string(4, Some(&data.scenes.as_deref().unwrap_or_default().into()));
+    list.set_string(5, Some(&data.levels.as_deref().unwrap_or_default().into()));
     for (n, (name, value)) in data.values.iter().enumerate() {
-        list.set_string(5 + 2 * n, Some(&name.as_str().into()));
+        list.set_string(6 + 2 * n, Some(&name.as_str().into()));
         list.set_string(
-            6 + 2 * n,
+            7 + 2 * n,
             Some(&value.as_deref().unwrap_or_default().into()),
         );
     }
@@ -81,9 +84,10 @@ fn read_message(message: &ProcessMessage) -> Option<PageData> {
         clock: (list.bool(0) == 1).then(|| (list.double(1), list.double(2))),
         source: text(3),
         scenes: text(4),
+        levels: text(5),
         values: Vec::new(),
     };
-    let mut index = 5;
+    let mut index = 6;
     while index + 1 < list.size() {
         if let Some(name) = text(index) {
             data.values.push((name, text(index + 1)));
@@ -102,7 +106,7 @@ struct Granted {
     /// frame shows a document the rule covers.
     feed: Option<(V8Context, V8Value)>,
     /// How many browser objects with this ID the renderer holds: a cross-origin
-    /// navigation (a `data:` page's reload among them) creates the new one before it
+    /// navigation creates the new one before it
     /// destroys the old, so the entry goes only with the last.
     browsers: usize,
 }
@@ -158,6 +162,7 @@ wrap_render_process_handler! {
             let api = PageApi {
                 scenes: info.bool(Some(&KEY_SCENES.into())) == 1,
                 values: info.bool(Some(&KEY_VALUES.into())) == 1,
+                levels: info.bool(Some(&KEY_LEVELS.into())) == 1,
             };
             let id = browser.identifier();
             self.granted.with(|granted| {

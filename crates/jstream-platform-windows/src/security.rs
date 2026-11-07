@@ -14,7 +14,12 @@
 //!   user, SYSTEM, Administrators, `OWNER RIGHTS` (the owner, checked above) or one of the
 //!   caller's extra trustees, unless it grants nothing beyond [`HARMLESS`]. Deny entries
 //!   are ignored, which can only refuse more, never less. An entry of a type that isn't
-//!   a known deny type counts as an allow.
+//!   a known deny type counts as an allow;
+//! - an allow entry for an **app package or capability SID** (`S-1-15-2-…`, `S-1-15-3-…`,
+//!   alias `AC`) is no other account: Windows lets an app container's token in only as
+//!   far as both its user's SIDs and its package SIDs are allowed, so such an entry can
+//!   only narrow what a user entry grants, never let a user in. A packaged app's
+//!   redirected `%APPDATA%` (MSIX `LocalCache`) carries them on every file (#1189).
 //!
 //! Administrators are trusted as root is on Unix: they can take ownership of anything.
 
@@ -87,7 +92,7 @@ pub(crate) fn check(sddl: &str, user_sid: &str, extra: &[&str]) -> Result<(), Re
     trusted.extend_from_slice(extra);
     for ace in dacl {
         let applies = ace.allows && !ace.inherit_only && ace.mask & !HARMLESS != 0;
-        if applies && !names_any(&ace.sid, user_sid, &trusted) {
+        if applies && !names_any(&ace.sid, user_sid, &trusted) && !is_app_container(&ace.sid) {
             return Err(Refusal::ForeignGrant {
                 sid: ace.sid,
                 mask: ace.mask,
@@ -168,6 +173,18 @@ fn names_any(sid: &str, user_sid: &str, sids: &[&str]) -> bool {
     let sid = resolve(sid, user_sid);
     sids.iter()
         .any(|s| !sid.is_empty() && sid.eq_ignore_ascii_case(s))
+}
+
+/// Whether the SDDL trustee `sid` is an app package SID (`S-1-15-2-…`, `ALL APPLICATION
+/// PACKAGES` among them, alias `AC`) or a capability SID (`S-1-15-3-…`). Neither is an
+/// account: an access check grants an app container only what its user's SIDs are also
+/// granted.
+fn is_app_container(sid: &str) -> bool {
+    let sid = sid.to_ascii_uppercase();
+    sid == "AC"
+        || ["S-1-15-2-", "S-1-15-3-"]
+            .iter()
+            .any(|prefix| sid.len() > prefix.len() && sid.starts_with(prefix))
 }
 
 /// The SID string an SDDL alias stands for; anything else as it is. Only the aliases the
@@ -483,6 +500,34 @@ mod tests {
         assert_eq!(
             grant(&format!("O:{ALICE}G:SYD:NO_ACCESS_CONTROL")),
             Err(Refusal::NoDacl)
+        );
+    }
+
+    #[test]
+    fn app_package_and_capability_entries_let_no_account_in() {
+        // A file in an MSIX package's redirected `%APPDATA%` (#1189).
+        let cap = "S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479";
+        let pkg = "S-1-15-2-466767348-3739614953-2700836392-1801644223-4227750657";
+        let local_cache = format!(
+            "O:{ALICE}D:(A;ID;FA;;;{cap})(A;ID;FA;;;{pkg})(A;ID;FA;;;AC)(A;ID;FA;;;{ALICE})"
+        );
+        assert_eq!(grant(&local_cache), Ok(()));
+        // They don't cover another user granted beside them.
+        assert!(matches!(
+            grant(&format!("O:{ALICE}D:(A;;FA;;;{cap})(A;;FR;;;{BOB})")),
+            Err(Refusal::ForeignGrant { sid, .. }) if sid == BOB
+        ));
+        // Nor any other S-1-15 authority, or a bare prefix.
+        for other in ["S-1-15-1-5", "S-1-15-2-", "S-1-15-3"] {
+            assert!(
+                grant(&format!("O:{ALICE}D:(A;;FA;;;{other})")).is_err(),
+                "{other}"
+            );
+        }
+        // An owner is still an owner: a package can't own the file.
+        assert_eq!(
+            grant(&format!("O:{cap}D:(A;;FA;;;{ALICE})")),
+            Err(Refusal::ForeignOwner(cap.into()))
         );
     }
 

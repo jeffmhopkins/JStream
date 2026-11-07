@@ -28,7 +28,9 @@ protocol's types (`Overrides`).
   sources against. The engine supplies them (`Graph::with_kinds`, and
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
-  (`cut`, `fade`, `move`), which every graph has.
+  (`cut`, `fade`, `move`), which every graph has. `Graph::with_rev` sets the `rev` of a
+  collection the engine opens in another's place
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
@@ -510,7 +512,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 8), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 9), `rev`, the `canvas`, scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -548,8 +550,9 @@ an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 `schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
 omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), ordered
 by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
-`camera_follow`: a follow camera is its item's `follow_pointer` effect. A collection's
-`bindings` (ADR-0122) are `schema_version` 8. Loading creates the folders top level first, then
+`camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
+(ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
+`bindings` (ADR-0122) are `schema_version` 9. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -564,8 +567,11 @@ the engine's; this crate does no I/O.
   `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, 5 to 6 a scene's
   `timelines`, and 6 to 7 moves a scene's `camera_follow` onto the item it follows as a
   `follow_pointer` effect, last in its `effects`, dropping one whose item has left the
-  scene or whose effects are full, and 7 to 8 adds `bindings`, refusing a version 7
-  file that holds them),
+  scene or whose effects are full, and 7 to 8 turns on a `browser` source's
+  `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
+  `page_api_bus` already grant something, so rebuilding it with its kind's defaults
+  takes nothing away, and 8 to 9 adds `bindings`, refusing a version 8 file that
+  holds them),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -702,9 +708,9 @@ master send's round trip, a webcam's among them (its audio on, no send back); a 
 transitions' round trip (with the initial `cut` deleted, or kept but changed), the
 old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
 preset of another kind version refused; hotkeys' round trip; the parity collection
-with two controller bindings saving exactly as `persist/fixtures/v8.json` and that
-fixture loading exactly, and a version 7 file holding `bindings` refused by its
-migration; and a file whose binding
+with two controller bindings saving exactly as `persist/fixtures/v9.json` and that
+fixture loading exactly, and a version 8 file holding `bindings` refused by its
+migration; a file whose hotkey binding
 names a missing scene refused; a clone's
 link surviving a round trip after its original is deleted; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling

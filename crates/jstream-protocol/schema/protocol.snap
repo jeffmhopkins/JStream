@@ -952,6 +952,60 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Opens the project (collection file) at `path` on the engine's machine and saves\nthere from then on (0.94, ADR-0121). The file is loaded and checked first; a file\nthe engine can't read or load (a newer `schema_version`, a broken file) fails with\n`action_failed` and its reason, and the open project stays open with nothing\nstopped, as it does when the open project can't be saved first. Then every\noutput that isn't stopped stops, and the collection is\nreplaced: `rev` becomes the file's or one past the current one, whichever is\ngreater, every client's undo history and idempotency keys are cleared, open\ngestures are cancelled, timelines stop, and the first scene goes on program and\npreview. Every client gets `state.changed`, `studio.changed` and\n`collection.file_changed`. Fails with `invalid_argument` on `path` for a path\nthat breaks the `absolute` asset path rules, and `unsupported` when the host\nnamed no collection file. Not an edit: undo can't take it back.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the collection file.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.open",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Creates a new, empty project at `path` (the four sample labels, the default\ncanvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\n`action_failed` when it can't be written, and otherwise as `collection.open`.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the new collection file.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.new",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes the current project to a new file at `path` and saves there from then on\n(0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder\ndiffers, each `collection` asset reference is rewritten to keep naming the same\nfile: relative to the new folder when the file is under it, otherwise\n`absolute`; an `absolute` reference to a file under the new folder becomes\nrelative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's\nundo history. Nothing stops. Each output's stream key is copied to the new file.\nIt never replaces a file: fails with `already_exists` when anything is at `path`,\nthe open file included, `invalid_argument` on `path` for a path that breaks the\n`absolute` asset path rules, `action_failed` when the file can't be written (the\nopen file stays the one saved to), and `unsupported` when the host named no\ncollection file.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the new collection file.",
+              "type": "string"
+            },
+            "type": {
+              "const": "collection.save_as",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
           "description": "**Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy\nscreen: the engine refuses this with `unsupported` and covers nothing.",
           "properties": {
             "on": {
@@ -2555,6 +2609,26 @@ source: crates/jstream-protocol/src/fixtures.rs
         "hardware_encoder"
       ],
       "type": "object"
+    },
+    "CollectionCause": {
+      "description": "Which call made the engine save the collection to another file\n([`Event::CollectionFileChanged`], 0.94).",
+      "oneOf": [
+        {
+          "const": "open",
+          "description": "`collection.open`: another collection was loaded.",
+          "type": "string"
+        },
+        {
+          "const": "new",
+          "description": "`collection.new`: an empty collection was created.",
+          "type": "string"
+        },
+        {
+          "const": "save_as",
+          "description": "`collection.save_as`: the same collection, saved to another file.",
+          "type": "string"
+        }
+      ]
     },
     "Crop": {
       "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
@@ -5518,6 +5592,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "timeline",
           "description": "A timeline a scene holds (ADR-0115). Only an error answering a `timeline.*`\ncommand, or a `hotkey.set` or `timeline.set` naming one, names it, so a client\nthat sends none never reads it.",
           "type": "string"
+        },
+        {
+          "const": "file",
+          "description": "A file on the engine's machine, named by its path (0.94, ADR-0121). Only an\nerror answering `collection.new` or `collection.save_as` names it, so a client\nthat sends neither never reads it.",
+          "type": "string"
         }
       ]
     },
@@ -6301,6 +6380,45 @@ source: crates/jstream-protocol/src/fixtures.rs
             "cue",
             "pass",
             "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The engine saves the collection to another file (0.94, ADR-0121): a\n`collection.open`, `collection.new` or `collection.save_as` succeeded. After an\nopen or a new, `state.changed` and `studio.changed` come first, and the client\nreads the new collection with `state.get`.",
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/CollectionCause",
+              "description": "Which call changed it."
+            },
+            "client_id": {
+              "$ref": "#/$defs/ClientId",
+              "description": "The client whose request caused it."
+            },
+            "path": {
+              "description": "The absolute path of the collection file the engine saves to now.",
+              "type": "string"
+            },
+            "request_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/RequestId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That client's request ID, so it can match the event to its own response."
+            },
+            "type": {
+              "const": "collection.file_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path",
+            "cause",
+            "client_id"
           ],
           "type": "object"
         }
@@ -7442,6 +7560,57 @@ source: crates/jstream-protocol/src/fixtures.rs
         "width",
         "height"
       ],
+      "type": "object"
+    },
+    "MixerProfile": {
+      "description": "The audio mixer and its inputs in the window ([`ProfileInfo::mixer`]). Every count is\nin engine sample frames (48 000 a second) or mixer blocks.",
+      "properties": {
+        "block_max_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The longest mix of a block, in milliseconds."
+        },
+        "block_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The length of a block, in milliseconds: what a mix must stay under."
+        },
+        "blocks": {
+          "default": 0,
+          "description": "The blocks the mixer mixed.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dropped_frames": {
+          "default": 0,
+          "description": "Frames the inputs dropped: arrived after the mixer had passed them, or\noverwritten before it read them.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "late_blocks": {
+          "default": 0,
+          "description": "The blocks whose mix took longer than the audio they hold: the mixer can't keep\nup with the clock while this grows.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped_frames": {
+          "default": 0,
+          "description": "Frames the mixer skipped because it fell more than half its ring behind the clock.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "underrun_frames": {
+          "default": 0,
+          "description": "Frames the inputs had no audio for when the mixer read them, played as silence:\na device or source that delivers late or not at all.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "MonitorTap": {
@@ -8586,6 +8755,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             }
           ],
           "description": "UI hint: shown only while another parameter has a given value."
+        },
+        "warning": {
+          "description": "One line a client shows beside the control, not only in a tooltip: what setting\nit gives away (0.93, ADR-0124). A client that predates it ignores it.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -8945,6 +9121,71 @@ source: crates/jstream-protocol/src/fixtures.rs
         "kind"
       ],
       "type": "object"
+    },
+    "ProfileStream": {
+      "description": "An encoded stream, by what it feeds ([`StreamProfile::stream`]).",
+      "oneOf": [
+        {
+          "description": "An output's program feed.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "An H.264 preview stream.",
+          "properties": {
+            "channel": {
+              "description": "The stream's channel on its connection.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "scene_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SceneId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The scene it shows; omitted with `source_id` for the program."
+            },
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The source it shows alone."
+            },
+            "type": {
+              "const": "preview",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "channel"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProfileUnit": {
       "description": "A unit of drawing work, by its owner.",
@@ -10054,6 +10295,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads which project (collection file) the engine saves to, and the projects\nopened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails\nwith `unsupported` when the host named no collection file.",
+          "properties": {
+            "type": {
+              "const": "collection.info",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per\ndrawing thread, per unit of drawing work and its owner (a source's upload or\nchain, a scene's chain or pass, an item's effects, an output's chain), per\nsource, the planner, and the CPU of each thread of the process. The engine\nmeasures all the time, so it needs no start. Runtime state: the result carries\nno `rev`.",
           "properties": {
             "seconds": {
@@ -11052,6 +11306,31 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `collection.info` (0.94). Not collection state, so it carries no\n`rev`.",
+          "properties": {
+            "path": {
+              "description": "The absolute path of the collection file the engine saves to.",
+              "type": "string"
+            },
+            "recent": {
+              "description": "Up to ten collection files opened, created or saved as, most recent first,\n`path` among them. A file may have moved or gone since.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "collection.info",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "path"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `plugin.list` (0.58). Installed plugins are not collection state, so\nit carries no `rev`.",
           "properties": {
             "plugins": {
@@ -11114,6 +11393,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "Whether units carry `gpu_ms`, measured with GPU timestamp queries. `false` until\nthe engine measures GPU time, and on an adapter that can't.",
               "type": "boolean"
             },
+            "mixer": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/MixerProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The audio mixer and its inputs in the window (since 0.92). Omitted when the\nmixer didn't run in it."
+            },
             "plan": {
               "$ref": "#/$defs/PlanProfile",
               "default": {
@@ -11144,6 +11434,14 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The sources that cost the `jstream-sources` thread or the planner time,\ncostliest first.",
               "items": {
                 "$ref": "#/$defs/SourceProfile"
+              },
+              "type": "array"
+            },
+            "streams": {
+              "default": [],
+              "description": "What happened to the frames past the drawers (since 0.92): each output's and\neach H.264 preview stream's, from its encoder to where it sends them, most\nframes lost first. A stream that ran in none of the window is left out.",
+              "items": {
+                "$ref": "#/$defs/StreamProfile"
               },
               "type": "array"
             },
@@ -12126,6 +12424,78 @@ source: crates/jstream-protocol/src/fixtures.rs
         "title",
         "status",
         "health"
+      ],
+      "type": "object"
+    },
+    "StreamProfile": {
+      "description": "One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached\nits encoder, what left it, and what was lost or late on the way.\n\nAn output's frames are its program feed's, from the video encoder to the muxer or\npublish target; a preview stream's go from its encoder to the client's socket. An\nencoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and\n`encode_ms` repeat; what each sends and loses after it is its own.",
+      "properties": {
+        "dropped": {
+          "default": 0,
+          "description": "The video frames lost between its encoder's input and where it sends them: a\nfull encoder queue, a busy encoder, a full packet queue, or a dropped link.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encode_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The average time its encoder spent on a frame, in milliseconds. A hardware\nencoder that works asynchronously spends only the time to submit it."
+        },
+        "encoded": {
+          "default": 0,
+          "description": "The video frames its encoder took.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "The frame rate it is encoded at."
+        },
+        "frames_in": {
+          "default": 0,
+          "description": "The video frames handed to its encoder, dropped ones included.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "frames_out": {
+          "default": 0,
+          "description": "The video frames it sent: to the muxer or publish target for an output, to the\nclient for a preview stream.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kbps": {
+          "default": 0,
+          "description": "The bit rate it sent at over the window, in kilobits a second: video and audio\nfor an output, video for a preview stream.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "late": {
+          "default": 0,
+          "description": "The video frames its encoder took more than a frame period after they were\nhanded over: a stream falls behind before it drops.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stream": {
+          "$ref": "#/$defs/ProfileStream",
+          "description": "Which stream."
+        },
+        "target_kbps": {
+          "default": 0,
+          "description": "The bit rate its encoders are set to, in kilobits a second, the same way.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "stream"
       ],
       "type": "object"
     },

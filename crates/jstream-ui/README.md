@@ -30,21 +30,37 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, the open project with New project…, Open project…, Save
+  project as… and Open recent, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
+  `OpenProject`, the open project and the recent ones from `collection.info`, which the
+  header reads at start and again on `collection.file_changed` and `events.dropped`, so a
+  switch any client or agent makes shows at once; `None` while the engine has no
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
+  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
+  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  open project's, or the one the desktop app named at start. Its logic (names, suggested
+  paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
   the UI was built as, the engine's protocol, the licence and links, and each installed
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
+- **Video settings** (`video_settings.rs`): File › Video settings… sets the
+  collection's base resolution (the canvas, from presets or typed) and its base frame
+  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
+  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
-  its release page. File › Settings… holds "Check for updates at launch", off until the
+  its release page. The Settings dialog's General page holds "Check for updates at launch", off until the
   user turns it on; the desktop app's main window then checks once as the workspace
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
@@ -102,7 +118,7 @@ Contents ([Design](#design) explains the choices):
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. In the desktop app,
-  File › Settings… also holds "Hear hotkeys while another app has the focus", kept as
+  the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
   the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
   `false`), which the desktop app reads to register the bound chords with the OS
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
@@ -122,7 +138,7 @@ Contents ([Design](#design) explains the choices):
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own).
+  the tool bars' own and a cube for the 3D model type).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -174,12 +190,16 @@ Contents ([Design](#design) explains the choices):
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
-  Inspector, shown only when the server pairs devices (start pairing and show the code, list and
+- **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Devices)
+  listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
+  Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
-- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
-  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
+  Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
+  page's top level), the calls behind
   them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
   and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
   texts, tested natively, the section's re-reads and grants against a fake engine that
@@ -255,7 +275,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
   with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
   filters, one step up and one down), which stays at the panel's foot while the rows
-  scroll. The scene list shows each
+  scroll. A `browser` source whose page is granted the page API has an "API" badge on
+  its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
+  The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -393,7 +415,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
-  platform's API), plus the kinds of placed sources it didn't report, which can be
+  platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
+  with a cube icon), plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -523,7 +546,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`place_asset`, tested natively). App assets have no button. A browser page renders
   none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
-  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  ones collapsed, and hidden while their `visible_if` doesn't hold or names a field that
+  is itself hidden. A field's `warning` (protocol 0.93) shows as a line under it, not only
+  in its tooltip. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
@@ -692,7 +717,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Sources (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
+  Sources (`Sources`), the Inspector (`Inspector`), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
@@ -767,8 +792,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), described under
+  system browser), then Check for updates and About JStream. Check for updates is
+  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
+  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
@@ -842,8 +869,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
-  calls `device.list` when it opens and shows only if that is served: a session with no
-  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `device.list` when it opens and shows its controls only if that is served: a
+  session with no server in front answers `unsupported`, and the Devices page then says
+  no device can pair with this session. "Pair a device"
   calls `pairing.start` and shows the code, large, with a countdown from its
   `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel

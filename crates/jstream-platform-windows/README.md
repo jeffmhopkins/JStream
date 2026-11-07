@@ -478,7 +478,11 @@ The code is ported from spikes S1 to S3. This first cut has:
   call, so it never carries its folder's inherited entries. `check_private_file` reads
   an open file's owner and DACL and applies the `security` rule with no extra trustees:
   the owner must be the user, SYSTEM or Administrators, and no one else may hold more
-  than `READ_CONTROL`, `SYNCHRONIZE` or `FILE_READ_ATTRIBUTES`.
+  than `READ_CONTROL`, `SYNCHRONIZE` or `FILE_READ_ATTRIBUTES`. App package and
+  capability SIDs (`S-1-15-2-…`, `S-1-15-3-…`) are not someone else: Windows grants an app
+  container only what its user's SIDs are granted too, so their entries never let
+  another user in. A packaged app's redirected `%APPDATA%` (MSIX `LocalCache`) puts them on
+  every file, so JStream started from one, such as the Claude desktop app, still starts (#1189).
 
 - **`check_media_foundation`**, the Media Foundation check
   ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md#consequences)): Windows N and

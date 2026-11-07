@@ -11,6 +11,7 @@
 #![forbid(unsafe_code)]
 
 mod args;
+mod bench;
 mod block;
 mod exit;
 mod mcp;

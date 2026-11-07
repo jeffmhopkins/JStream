@@ -477,12 +477,19 @@ It fails on:
    breaks its rules, a UI feature row with an unknown status). See
    [Generated content](#generated).
 6. **Fact mismatches** for file-sourced facts.
-7. **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
-   `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
-   delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
-8. **Identity violations:** a rule or section anchor that existed on `main` is missing
-   and has no tombstone. See [Lifecycle](#lifecycle).
-9. **Rule metadata:** see [Rules](#rules).
+7. **Rule metadata:** see [Rules](#rules).
+
+`docs check` reads only the tree it runs on, never `main`, so two rules that compare a
+PR with its base are enforced by the `governance` check instead (see
+[Governance](#governance)). It fails on each of these unless the PR carries
+`governance-approved` and a justification:
+
+- **Accepted-ADR edits:** content changes to an accepted ADR. Only `status` and
+  `superseded_by` may change, plus the generated `adr-status` banner and `@doc`
+  delimiter changes made under a repo-wide format ADR ([R-DOC-009](RULES.md#R-DOC-009)).
+- **Identity changes:** a doc, section or rule that existed on the base is deleted or
+  retired, whether or not it leaves a tombstone ([R-DOC-010](RULES.md#R-DOC-010)). See
+  [Lifecycle](#lifecycle).
 
 It also **reports**, without failing (as `warning:` lines), crates that no section covers,
 and `applies_to` globs naming a crate directory (`crates/<name>/…`, `apps/<name>/…`) that
@@ -743,7 +750,10 @@ section saying what is loosened or tightened, and why:
 - edits to `covers`, `applies_to`, `enforced_by` or `status` in any metadata block;
 - any edit to an accepted ADR, including a metadata-container change under R-DOC-009's
   exception, but not a change confined to its generated `adr-status` banner;
-- retiring a rule; deleting or retiring a doc or section;
+- retiring a rule; deleting or retiring a doc or section; removing any other `<a id>`
+  anchor or a `retired_sections` tombstone; and reusing an ID, either a new anchor
+  that a base tombstone names or a retired rule made active again
+  ([R-DOC-010](RULES.md#R-DOC-010));
 - edits to `deny.toml`, `clippy.toml`, `rustfmt.toml`, `rust-toolchain.toml`,
   `[workspace.lints]` or the root manifest's `[lints]`, `.github/**`, `xtask/src/docs/**`,
   `xtask/src/main.rs`, `xtask/src/governance.rs`, `xtask/src/lint_deps.rs` (which holds
@@ -771,7 +781,9 @@ description and author from the event payload. Then:
   case) opens the section, which runs to the next `##` heading. It must still contain
   text once HTML comments are removed, as in `review-gate`'s `section()`.
 - **Metadata** blocks are compared per doc, section anchor and rule ID. A section or rule
-  that is gone counts as deleted or retired.
+  that is gone counts as deleted or retired. Every other `<a id>` anchor, and every
+  `retired_sections` key, is compared by ID within the same doc: one missing from the
+  doc at `HEAD` counts as removed, and one that only moved within the doc doesn't.
 - **Suppressions** are found by a text scan of changed `.rs` files (`//` lines skipped),
   looking into `cfg_attr` attribute lists (nested too), and compared with the base as a
   multiset, so an unchanged attribute that moves doesn't count.

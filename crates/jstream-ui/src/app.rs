@@ -274,6 +274,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(crate::clipboard::FilterClip(RwSignal::new(None)));
     provide_context(crate::clipboard::TransformClip(RwSignal::new(None)));
     provide_context(AddSourceDialog::new());
+    provide_context(crate::project::OpenProject::new());
     provide_context(PropertiesDialog::new());
     provide_context(SceneDialog::new());
     provide_context(FilterDialogs::new());
@@ -284,6 +285,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(crate::canvas::taps::PreviewTaps::new());
     // Each dialog's place for this page. Not the engine's UI settings (ADR-0084).
     provide_context(crate::dialog::DialogPlaces::new());
+    provide_context(crate::settings::SettingsDialog::new());
     view! {
         <div class="shell">
             <Header info=info disconnect=disconnect />
@@ -303,6 +305,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             // The Add filter dialog opens over the Filters window, so it comes after.
             <FilterSettings />
             <AddFilter />
+            <crate::settings::Settings />
             <ContextMenu />
         </div>
     }

@@ -38,13 +38,18 @@ const V5: &str = include_str!("fixtures/v5.json");
 const V6: &str = include_str!("fixtures/v6.json");
 
 /// A collection file at schema version 7: version 6 with its follow camera saved as a
-/// `follow_pointer` effect on the screen item (ADR-0120). It must keep loading as
-/// version 1 must.
+/// `follow_pointer` effect on the screen item (ADR-0120). It must keep loading as version
+/// 1 must.
 const V7: &str = include_str!("fixtures/v7.json");
 
-/// A collection file at schema version 8, the current one: version 7 with two controller
-/// bindings (ADR-0122). The same rule applies once version 9 exists.
+/// A collection file at schema version 8: version 7, whose `browser` sources (it has
+/// none) would carry a checkbox per kind of page data (ADR-0124). It must keep loading
+/// as version 1 must.
 const V8: &str = include_str!("fixtures/v8.json");
+
+/// A collection file at schema version 9, the current one: version 8 with two controller
+/// bindings (ADR-0122). The same rule applies once version 10 exists.
+const V9: &str = include_str!("fixtures/v9.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -62,6 +67,7 @@ fn kinds() -> Vec<KindDescriptor> {
         max_outset_px: None,
         params: vec![
             ParamDescriptor {
+                warning: None,
                 id: "color".into(),
                 ty: ParamType::Color { alpha: true },
                 default: json!("#000000ff"),
@@ -73,6 +79,7 @@ fn kinds() -> Vec<KindDescriptor> {
                 live: true,
             },
             ParamDescriptor {
+                warning: None,
                 id: "follow".into(),
                 ty: ParamType::Source { media: None },
                 default: Value::Null,
@@ -94,6 +101,7 @@ fn kinds() -> Vec<KindDescriptor> {
         audio: false,
         max_outset_px: None,
         params: vec![ParamDescriptor {
+            warning: None,
             id: "audio".into(),
             ty: ParamType::Bus,
             default: Value::Null,
@@ -114,6 +122,7 @@ fn kinds() -> Vec<KindDescriptor> {
         audio: false,
         max_outset_px: Some(4),
         params: vec![ParamDescriptor {
+            warning: None,
             id: "tint".into(),
             ty: ParamType::Source { media: None },
             default: Value::Null,
@@ -372,8 +381,8 @@ fn v6_graph() -> Graph {
     graph
 }
 
-/// The v6 collection plus two controller bindings (ADR-0122): what version 8 saves.
-fn v8_graph() -> Graph {
+/// The v6 collection plus two controller bindings (ADR-0122): what version 9 saves.
+fn v9_graph() -> Graph {
     use jstream_protocol::{Action, Trigger};
     let mut graph = v6_graph();
     let applied = graph.apply(
@@ -478,29 +487,144 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v8_graph().to_collection_json(), V8);
+    assert_eq!(v9_graph().to_collection_json(), V9);
 }
 
 #[test]
-fn the_v8_fixture_loads_exactly() {
-    let expected = v8_graph();
-    let loaded = load(V8);
+fn the_v9_fixture_loads_exactly() {
+    let expected = v9_graph();
+    let loaded = load(V9);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
-/// Version 7 upgrades unchanged: it has no controller bindings, and one there is
+/// Version 8 upgrades unchanged: it has no controller bindings, and one there is
 /// refused.
 #[test]
-fn the_v7_fixture_loads_with_no_bindings() {
-    let mut file: Value = serde_json::from_str(V7).unwrap_or_default();
+fn the_v8_fixture_loads_with_no_bindings() {
+    let mut file: Value = serde_json::from_str(V8).unwrap_or_default();
     file["bindings"] = json!([]);
     assert_eq!(
         load(&file.to_string()).map(|_| ()),
         Err(LoadError::Migration {
-            from: 7,
-            reason: "a version 7 file has no `bindings`".into(),
+            from: 8,
+            reason: "a version 8 file has no `bindings`".into(),
         })
+    );
+}
+
+#[test]
+fn the_v8_fixture_loads_exactly() {
+    let expected = v6_graph();
+    let loaded = load(V8);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(7)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 8 turns on a `browser` source's page API checkbox for names or a bus it
+/// already grants (ADR-0124), and leaves every other source and setting as it was.
+#[test]
+fn the_v7_migration_keeps_a_page_api_grant() {
+    let browser = json!({"type": "builtin", "kind": "browser"});
+    let bus = json!({"type": "bus", "bus_id": "mic"});
+    let mut file = json!({
+        "schema_version": 7,
+        "sources": [
+            {"id": "both", "kind": browser, "settings": {
+                "page_api": true, "page_api_values": "status.*", "page_api_bus": bus}},
+            {"id": "none", "kind": browser, "settings": {
+                "page_api": true, "page_api_values": "  ", "page_api_bus": null}},
+            {"id": "other", "kind": {"type": "builtin", "kind": "color"}, "settings": {
+                "page_api_values": "status.*"}},
+        ],
+    });
+    assert_eq!(super::migrate(&mut file), Ok(()));
+    assert_eq!(file["schema_version"], json!(super::SCHEMA_VERSION));
+    let settings = |n: usize| file["sources"][n]["settings"].clone();
+    assert_eq!(settings(0)["page_api_shared_values"], json!(true));
+    assert_eq!(settings(0)["page_api_audio"], json!(true));
+    assert_eq!(settings(0)["page_api_values"], json!("status.*"));
+    assert!(settings(1).get("page_api_shared_values").is_none());
+    assert!(settings(1).get("page_api_audio").is_none());
+    assert!(settings(2).get("page_api_shared_values").is_none());
+}
+
+/// A `browser` kind with the page API's settings (ADR-0124), as `jstream-sources`
+/// declares them, for loading a granted version-7 page through the graph.
+fn browser_kind() -> KindDescriptor {
+    let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        warning: None,
+        id: id.into(),
+        ty,
+        default,
+        label: id.into(),
+        description: None,
+        group: None,
+        advanced: false,
+        visible_if: None,
+        live: true,
+    };
+    KindDescriptor {
+        kind_id: "browser".into(),
+        category: KindCategory::Source,
+        name: "Browser".into(),
+        version: 1,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![
+            param("page_api", ParamType::Bool, json!(false)),
+            param("page_api_shared_values", ParamType::Bool, json!(false)),
+            param(
+                "page_api_values",
+                ParamType::String {
+                    multiline: false,
+                    max_len: 1024,
+                },
+                json!(""),
+            ),
+            param("page_api_audio", ParamType::Bool, json!(false)),
+            param("page_api_bus", ParamType::Bus, Value::Null),
+        ],
+    }
+}
+
+/// A granted version-7 `browser` source loads through the graph with both checkboxes
+/// on, its names and bus kept, where the kind's defaults alone would turn them off.
+#[test]
+fn a_v7_page_api_grant_loads_with_its_checkboxes_on() {
+    let mut file: Value = serde_json::from_str(V7).expect("the v7 fixture");
+    file["sources"]
+        .as_array_mut()
+        .expect("sources")
+        .push(json!({
+            "id": "page",
+            "name": "Page",
+            "kind": {"type": "builtin", "kind": "browser"},
+            "kind_version": 1,
+            "settings": {
+                "page_api": true,
+                "page_api_values": "status.*",
+                "page_api_bus": {"type": "bus", "bus_id": "vod"},
+            },
+        }));
+    let mut kinds = kinds();
+    kinds.push(browser_kind());
+    let loaded = Graph::new()
+        .with_kinds(kinds)
+        .with_collection_json(&file.to_string())
+        .expect("loads");
+    let page = loaded
+        .state()
+        .source(&SourceId::new("page"))
+        .expect("the page");
+    let setting = |id: &str| page.settings().get(id).cloned();
+    assert_eq!(setting("page_api_shared_values"), Some(json!(true)));
+    assert_eq!(setting("page_api_audio"), Some(json!(true)));
+    assert_eq!(setting("page_api_values"), Some(json!("status.*")));
+    assert_eq!(
+        setting("page_api_bus"),
+        Some(json!({"type": "bus", "bus_id": "vod"}))
     );
 }
 

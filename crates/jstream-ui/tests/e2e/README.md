@@ -135,14 +135,18 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
   it out of About. With hardware, nothing is offered until the encoder form asks for software
   H.264 (and not for HEVC), and a saved software profile brings the section's offer.
-- **Plugins** (`plugins.spec.js`, under the Inspector): the mock engine runs no plugins,
+- **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
+  Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
   `plugin.install`, `plugin.grant` and `plugin.enable` from a list it keeps. An install
   sends the folder and the ID suggested from its name with no grant, and, since the
   manifest asks for more than `read`, opens the grant dialog, which offers `read` ticked
   and fixed and only the classes and host asked for, and sends just what was ticked; the
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
-  granted a class and a folder and turned on in one step.
+  granted a class and a folder and turned on in one step. The Inspector holds neither
+  plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
+  between General, Plugins and Devices, and the install dialog opens centred over a
+  moved Settings dialog and closes alone on Escape.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
@@ -434,6 +438,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   program captioned with Main, no preview outside studio mode, and Intro and Main below
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
+- **Video settings** (`video-settings.spec.js`): File › Video settings… opens on
+  1920×1080 at 30 fps; a preset fills both sides, a typed side of 0 turns the preset to
+  Custom and is refused in the dialog; 1280×720 at 60 fps applies as one revision and
+  reopens with those values; Apply with nothing changed sends nothing; and one Undo
+  takes back both.
 
 <a id="running"></a>
 ## Running them

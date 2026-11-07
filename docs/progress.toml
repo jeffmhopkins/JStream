@@ -128,6 +128,8 @@ title = "Save and load projects: File › New, Open, Save As and Open recent"
 priority = 4
 status = "planned"
 issues = [1218]
+prs = [1269]
+note = "#1269 is the protocol and engine part (ADR-0121); the File menu follows"
 
 [[target]]
 release = "alpha.5"
@@ -791,7 +793,7 @@ milestone = "M1b"
 title = "Scene filter chains and item effects"
 status = "done"
 release = "alpha.4"
-prs = [802, 813, 815, 823, 824, 897, 921, 944, 968]
+prs = [802, 815, 823, 824, 897, 921, 944, 968]
 note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968)"
 
 [[item]]
@@ -1261,7 +1263,7 @@ id = "3D3"
 milestone = "M3"
 title = "3D models with materials and live textures"
 status = "planned"
-prs = [1112, 1113, 1118]
+prs = [1112, 1113, 1118, 1261]
 note = "ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
 needs = ["build"]
 
@@ -1496,6 +1498,23 @@ release = "alpha.4"
 gate = true
 prs = [1146,  1178]
 note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
+
+[[item]]
+id = "PA4"
+milestone = "M3"
+title = "Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124)"
+status = "done"
+release = "alpha.5"
+prs = [1287]
+
+[[item]]
+id = "PA3"
+milestone = "M3"
+title = "Page API part 3: a bus's levels and bands for pages (jstream.levels)"
+status = "hardware"
+release = "alpha.5"
+prs = [1263]
+note = "Merged; the Windows run's page API step (#1147) checks a granted bus with real audio"
 
 [[item]]
 id = "PF1"

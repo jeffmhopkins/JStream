@@ -816,6 +816,28 @@ impl AudioRouting {
         Some((sources, buses))
     }
 
+    /// Each bus's levels after its fader, the master's included, for the pages granted a
+    /// bus (ADR-0102 decision 8); empty while no mixer runs. It leaves each meter's held
+    /// peak for the next [`meters`](Self::meters), so the peak read is the one held
+    /// since the last `meters.tick`.
+    pub(crate) fn page_levels(&self) -> BTreeMap<BusId, jstream_sources::BusLevels> {
+        let Some(attached) = &self.attached else {
+            return BTreeMap::new();
+        };
+        let page = |reading: MeterReading| jstream_sources::BusLevels {
+            peak: reading.peak,
+            rms: reading.rms,
+        };
+        std::iter::once((BusId::master(), page(attached.master.peek_meter())))
+            .chain(
+                attached
+                    .buses
+                    .iter()
+                    .map(|(id, bus)| (id.clone(), page(bus.peek_meter()))),
+            )
+            .collect()
+    }
+
     /// Restarts the master's integrated loudness (`audio.reset_loudness`). Does nothing
     /// while no mixer runs.
     pub(crate) fn reset_loudness(&self) {
