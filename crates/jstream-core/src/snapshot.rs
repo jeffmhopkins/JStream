@@ -7064,6 +7064,7 @@ pub(crate) mod tests {
             Chain {
                 input: key.clone(),
                 filters: Vec::new(),
+                pad: None,
             },
         );
         assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
