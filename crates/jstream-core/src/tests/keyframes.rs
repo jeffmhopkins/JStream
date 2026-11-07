@@ -1032,7 +1032,7 @@ fn a_move_blends_effect_settings_that_differ() {
 
 /// While a Move blends an effect's settings (ADR-0127), the item's layer holds what it
 /// draws at either look: a glow whose radius shrinks from 80 to 4 is padded for 80 for
-/// the whole Move, though its own settings need 16 (ADR-0125 › Amendment).
+/// the whole Move, though its own settings need 16 (ADR-0136).
 #[test]
 fn a_move_pads_the_layer_for_the_look_it_leaves() {
     use jstream_protocol::{FilterChain, FilterId, FilterInfo, FilterOwner};

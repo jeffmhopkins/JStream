@@ -117,7 +117,7 @@ fn max_outset_of(kind: &str) -> u32 {
 const OUTSET_STEP: u32 = 16;
 
 /// How far a filter of `kind` draws beyond each edge of its input at `settings`
-/// (ADR-0125 › Amendment), rounded up to [`OUTSET_STEP`] and never more than the kind's
+/// (ADR-0136), rounded up to [`OUTSET_STEP`] and never more than the kind's
 /// `max_outset_px`: a kind render doesn't measure takes that whole.
 fn outset_of(kind: &str, settings: &Settings) -> u32 {
     let most = max_outset_of(kind);
@@ -338,7 +338,7 @@ impl Chain {
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
-    /// sum of what each draws past its input at its settings (ADR-0125 › Amendment).
+    /// sum of what each draws past its input at its settings (ADR-0136).
     /// Only an item's effects layer is padded by it; a source's or a scene's chain draws
     /// at its input's size (ADR-0065 §5).
     pub(crate) fn outset(&self) -> u32 {
@@ -2944,7 +2944,7 @@ mod tests {
     }
 
     /// An item's layer grows by what its effects draw at their settings, not the most
-    /// their kinds could (ADR-0125 › Amendment): a drop shadow and an outline at their
+    /// their kinds could (ADR-0136): a drop shadow and an outline at their
     /// defaults (8 px offset and blur, a 4 px stroke) pad it by 16 px each, not 300 and
     /// 65.
     #[test]
@@ -2987,7 +2987,7 @@ mod tests {
         );
         let shot = shot(&graph);
         let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
-        // The glow's radius, 50, rounded up to the 16 px step (ADR-0125 › Amendment).
+        // The glow's radius, 50, rounded up to the 16 px step (ADR-0136).
         assert_eq!(chain.and_then(|c| c.pad), Some((1, 64)));
         assert_golden(
             &shot,

@@ -731,7 +731,7 @@ fn effect_blends(
 
 /// Grows the layer of `owner`'s item, and its chain's pad, to hold what its effects
 /// draw at the settings `from` a Move blends from as well as at their own: an effect's
-/// outset follows its settings (ADR-0125 › Amendment), and the blend passes through
+/// outset follows its settings (ADR-0136), and the blend passes through
 /// both looks.
 fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
     let (Some(chain), Some(planned)) = (shot.chains.get_mut(owner), shot.boxes.get_mut(owner))

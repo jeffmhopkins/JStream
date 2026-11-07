@@ -51,12 +51,12 @@ pub fn descriptors() -> Vec<KindDescriptor> {
 }
 
 /// How far a built-in filter of `kind_id` draws past each edge of its input at
-/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0125] › Amendment):
+/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
 /// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
 /// outside its width. `None` for a kind that declares no outset, or one this crate
 /// doesn't draw; a caller then takes the declared `max_outset_px`.
 ///
-/// [ADR-0125]: ../../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md
+/// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
 pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
     multipass::outset(kind_id, settings)
 }

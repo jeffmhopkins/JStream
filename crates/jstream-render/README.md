@@ -639,7 +639,7 @@ stage's and an output's over the mix an output draws
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
 drop shadow, outline, glow or bloom draws past its input at its settings, never more
-than its `max_outset_px` (ADR-0125 › Amendment); core sizes an item's layer by it.
+than its `max_outset_px` (ADR-0136); core sizes an item's layer by it.
 
 **The harness.**
 

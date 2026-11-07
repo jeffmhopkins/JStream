@@ -167,7 +167,7 @@ mod outset_tests {
     }
 
     /// Each kind's outset follows its settings, and never passes the `max_outset_px`
-    /// it declares (ADR-0125 › Amendment), at its defaults, at its largest settings and
+    /// it declares (ADR-0136), at its defaults, at its largest settings and
     /// at values out of range.
     #[test]
     fn an_outset_follows_the_settings_within_the_declared_most() {

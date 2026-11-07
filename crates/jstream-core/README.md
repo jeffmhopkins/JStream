@@ -1605,8 +1605,8 @@ or a bloom its radius, an outline outside its width), each rounded up to 16 px
 takes it whole (render › Filters). The chain grows the layer by it where the first
 effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
-([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md) and its
-amendment). While a Move blends an item's effects (ADR-0127), each effect's outset is
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
+[ADR-0136](../../docs/adr/0136-an-effects-outset-follows-its-settings.md)). While a Move blends an item's effects (ADR-0127), each effect's outset is
 the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both. A box
 longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
 drawn cropped and fitted, centred, flat and unrotated,
