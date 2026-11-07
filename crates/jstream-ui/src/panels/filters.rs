@@ -351,9 +351,10 @@ pub fn catalogue(kinds: &[KindSummary], video: bool, audio: bool) -> Vec<FilterT
 pub const NEW_SHADER: &str = "+custom-shader";
 
 /// The catalogue with the Custom shader entry for an owner with a video chain: last in
-/// the Effect packs group, before Other and the audio kinds.
+/// the Effect packs group, before Other and the audio kinds. An engine that lists no
+/// kinds gets none, so the dialog still says it lists no filters.
 pub fn with_custom(mut types: Vec<FilterType>, video: bool) -> Vec<FilterType> {
-    if !video {
+    if !video || types.is_empty() {
         return types;
     }
     let at = types
@@ -3195,6 +3196,7 @@ mod tests {
             ]
         );
         assert_eq!(all[2].kind, NEW_SHADER);
+        assert!(with_custom(Vec::new(), true).is_empty());
         let only_video = with_custom(catalogue(&kinds[1..2], true, false), true);
         assert_eq!(only_video.last().map(|t| t.kind.as_str()), Some(NEW_SHADER));
         let audio = with_custom(catalogue(&kinds, false, true), false);
