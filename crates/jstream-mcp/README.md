@@ -214,7 +214,9 @@ keeps the pointer inside a safe margin and gives a 2D scene a camera, with
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
-kinds where no browser is available), continuous motion as `item.set_motion` on items
+kinds where no browser is available), a page that plays along with a MIDI input on
+`jstream.midi()` (`page_api_midi`) or follows the engine's `tempo.*` values
+([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)), continuous motion as `item.set_motion` on items
 rather than in pages (one engine clock, so items, masks and nested scenes move in step;
 a one-shot jolt as an `impulse` on the `triggered` clock that `item.trigger_motion`
 fires, rather than stepping the item call by call;

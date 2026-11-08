@@ -34,7 +34,7 @@ pub const CHANNELS: usize = 16;
 pub const KEYS: usize = 128;
 /// Note events the log keeps: at 1000 notes a second, a second of them, more than any
 /// piano roll shows of a real performance.
-const LOG: usize = 1 << 10;
+pub(crate) const LOG: usize = 1 << 10;
 /// How often a MIDI source draws a new frame.
 const FPS: u64 = 30;
 /// How often a source with nothing moving checks whether its input moves again.
@@ -109,6 +109,14 @@ pub struct MidiState {
     changes: AtomicU64,
     /// The tempo the input's clock gives, which its [`MidiFeed`] publishes.
     tempo: tempo::TempoCell,
+}
+
+impl std::fmt::Debug for MidiState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MidiState")
+            .field("changes", &self.changes())
+            .finish_non_exhaustive()
+    }
 }
 
 impl Default for MidiState {

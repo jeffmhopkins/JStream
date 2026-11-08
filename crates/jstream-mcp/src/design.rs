@@ -13,7 +13,8 @@
 //! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
-//! `jstream.levels()` (ADR-0124), and how to write a custom shader the Filters window's
+//! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
+//! `tempo.*` values (ADR-0147), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -261,7 +262,16 @@ never a microphone bus it doesn't), and in the page listen for `levels` events, 
 each 0 to 1. A spectrogram draws each reading as one column of a canvas, shifting the \
 canvas left by a column first; on a `null` reading (no output runs, or the bus is gone) \
 it draws nothing. The page gets at most one reading per frame of its `fps`, and only \
-while an output runs. Keep continuous motion \
+while an output runs. \
+For a page that plays along with a performer (notes lighting up, a beat counter, a \
+controller-driven graphic), set the `browser` source's `page_api` and `page_api_midi`, \
+and `page_api_midi_input` to the MIDI input's name (empty for every input), and read \
+`jstream.midi()` or listen for `midi` events: `{input, tempo, notes, controllers, bend, \
+pressure, recent}`, where `tempo` is `null` or `{bpm, playing, clock, beat, at}`, `notes` \
+and `controllers` are `[channel, key or controller, value]` with channels 1 to 16, and \
+`recent` holds the last two seconds' note-ons as `[at, channel, key, velocity]`; times \
+are seconds on `jstream.clock`. The engine also keeps `tempo.bpm`, `tempo.playing`, \
+`tempo.beat` and `tempo.bar` as shared values, which `values.list` reads. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. \

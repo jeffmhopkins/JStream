@@ -106,6 +106,9 @@ struct Shared {
     snapshots: SnapshotWorker,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// Whether the `jstream-tempo` thread has started: once per engine, however often
+    /// JTunnel starts again (ADR-0147 §1).
+    tempo: AtomicBool,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -208,6 +211,7 @@ impl Default for Engine {
                     state: Mutex::new(state),
                     snapshots: SnapshotWorker::default(),
                     sheets: AtomicUsize::new(0),
+                    tempo: AtomicBool::new(false),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -1275,9 +1279,16 @@ impl Engine {
             let state = lock(&self.shared.state);
             (state.audio.wanted(), state.live.midi())
         };
-        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi)?);
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi.clone())?);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        if let Some(midi) = midi
+            && !self.shared.tempo.swap(true, Ordering::Relaxed)
+            && !spawn_tempo(Arc::downgrade(&self.shared), midi)
+        {
+            // The next start tries again.
+            self.shared.tempo.store(false, Ordering::Relaxed);
+        }
         Ok(local)
     }
 
@@ -5895,6 +5906,38 @@ impl State {
         self.feed_pages();
     }
 
+    /// Sets the `tempo.*` shared values the MIDI clock gave (ADR-0147), credited to the
+    /// client `engine`, and tells the pages and clients that read them.
+    fn publish_tempo(
+        &mut self,
+        changes: &[(&str, Option<serde_json::Value>)],
+        wake: &mut Vec<Waker>,
+    ) {
+        let mut any = false;
+        for (name, value) in changes {
+            match self.values.set(name, value.clone()) {
+                Ok(true) => {
+                    any = true;
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name: (*name).to_owned(),
+                            value: value.clone(),
+                            client_id: ClientId::new("engine"),
+                            request_id: None,
+                        },
+                        wake,
+                    );
+                }
+                Ok(false) => {}
+                // Only a full store refuses one; the next change tries again.
+                Err(error) => tracing::debug!(name, %error, "a tempo value wasn't set"),
+            }
+        }
+        if any {
+            self.feed_pages();
+        }
+    }
+
     /// Tells each page granted the page API what it may read now (ADR-0102): its
     /// visibility in the collection as drawn, the program and preview scenes, and the
     /// shared values. A page is sent only what changed, so this runs after every plan and
@@ -6270,6 +6313,39 @@ impl Drop for State {
 /// How often the live ticker checks whether the render thread has caught up with a
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
+/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
+/// started.
+fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-tempo".into())
+        .spawn(move || {
+            let mut published = crate::tempo::Published::default();
+            loop {
+                thread::sleep(crate::tempo::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let Some((reading, now_ms)) = crate::tempo::read(&midi) else {
+                    continue;
+                };
+                let next = published.next(reading.as_ref(), now_ms);
+                if next == published {
+                    continue;
+                }
+                let mut wake = Vec::new();
+                lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
+                drop(engine);
+                wake_all(wake);
+                published = next;
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
 
 /// Starts `jstream-live`, which runs [`State::live_tick`] when it is next due, until
 /// nothing is left to send or release or the engine is gone. Returns whether it

@@ -324,7 +324,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.107 because the event `kinds.changed` (`KindsCause`) tells
+`PROTOCOL_VERSION` is 0.112 because the engine keeps a MIDI clock's tempo as the
+shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
+itself with `values.changed` from the client `engine`, and a `browser` source's page may
+be granted one MIDI input's state, `page_api_midi` (ADR-0147, a number the release queue
+set; 0.108 to 0.111 are other PRs'); 0.107 because the event `kinds.changed` (`KindsCause`) tells
 every client when a CLAP scan or the effect packs change the kinds
 ([Events](#events), #1328, a number the release queue set); 0.106 because a person can see and redo the CLAP plugin scan: the
 query `plugin.clap_scan` (`ClapScanInfo`) and the action `plugin.clap_rescan`
@@ -2321,6 +2325,13 @@ ADR-0032's live values either, which are a gesture's uncommitted edits.
   bad name or an oversized value is refused (`bind_problem`), so a saved binding never
   fails every press. Its value is then saved with the binding. A plugin may call
   `values.list` (class `read`), never `values.set`, which no class names yet.
+- Since 0.112 the engine sets four values itself, from the MIDI clock its every-input
+  MIDI state follows ([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md),
+  ADR-0122 §4): `tempo.bpm` (beats per minute to a tenth, removed while no clock runs),
+  `tempo.playing` (`true` while the transport plays and its clock runs), and `tempo.beat`
+  and `tempo.bar` (whole quarter notes and four-beat bars since the song's start). Its
+  `values.changed` names the client `engine` and has no `request_id`. A client may still
+  set these names, as any; the engine's next change overwrites them.
 
 <a id="errors"></a>
 ## Errors
