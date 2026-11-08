@@ -297,12 +297,14 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(editor()).toContainText('Pick an encoder or a video mix');
 });
 
-test('Start all starts every output that can start, and a running row shows its stats', async ({ page, daemon }) => {
+test('Start all starts every output that can start, Stop all stops what runs, and a running row shows its stats', async ({ page, daemon }) => {
   const send = await statsTicks(page);
   await openOutputs(page, daemon);
-  const all = page.locator('.outputs-head').getByRole('button', { name: /all$/ });
-  await expect(all).toHaveText('▶ Start all');
+  const head = page.locator('.outputs-head');
+  const all = head.getByRole('button', { name: '▶ Start all' });
+  const stopAll = head.getByRole('button', { name: '■ Stop all' });
   await expect(all).toBeDisabled();
+  await expect(stopAll).toHaveCount(0);
   await addOutput(page, 'record', '/tmp/a.mp4');
   await addOutput(page, 'record', '/tmp/b.mp4');
   // A stream without its key can't start, so Start all leaves it.
@@ -312,7 +314,9 @@ test('Start all starts every output that can start, and a running row shows its 
   await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Live');
   await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Live');
   await expect(outputRow(page, 'output-3').locator('.badge')).toHaveText('Stopped');
-  await expect(all).toHaveText('■ Stop all');
+  // Nothing left that can start; Stop all sits beside it while anything runs.
+  await expect(all).toBeDisabled();
+  await expect(stopAll).toBeVisible();
 
   send({
     seq: 1,
@@ -322,15 +326,16 @@ test('Start all starts every output that can start, and a running row shows its 
   await expect(outputRow(page, 'output-1').locator('.output-row-stats')).toHaveText('2.45 Mbps · 3 dropped · 00:12:34');
   await expect(outputRow(page, 'output-2').locator('.output-row-stats')).toHaveCount(0);
 
-  await all.click();
+  await stopAll.click();
   await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Stopped');
   await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Stopped');
   // A stopped row has no stats line, even before the next tick.
   await expect(outputRow(page, 'output-1').locator('.output-row-stats')).toHaveCount(0);
-  await expect(all).toHaveText('▶ Start all');
+  await expect(stopAll).toHaveCount(0);
+  await expect(all).toBeEnabled();
 });
 
-test('Duplicate adds a copy without the stream key and opens its settings', async ({ page, daemon }) => {
+test('Duplicate adds a copy without the stream key, a recording\'s under a free path, and opens its settings', async ({ page, daemon }) => {
   await openOutputs(page, daemon);
   await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
   let dialog = await openOutputSettings(page, 'output-1');
@@ -348,6 +353,14 @@ test('Duplicate adds a copy without the stream key and opens its settings', asyn
   await expect(dialog.getByRole('textbox', { name: 'Stream key' })).toHaveAttribute('placeholder', 'Paste the stream key');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(outputRow(page, 'output-2').locator('.output-row-note')).toHaveText('Set a stream key first.');
+
+  // A recording's copy writes beside it under a free name, so both can run.
+  await addOutput(page, 'record', '/tmp/a.mp4');
+  await outputRow(page, 'output-3').getByRole('button', { name: 'More for output-3' }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  await expect(dialog.locator('.modal-title')).toHaveText('output-4 settings');
+  await expect(dialog.getByLabel('File path')).toHaveValue('/tmp/a (2).mp4');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
 });
 
 test('an open dialog follows another client\'s change to a field it left alone', async ({ page, context, daemon }) => {
