@@ -81,6 +81,12 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
 add `renames = { <old> = \"<new>\" }`. The engine doesn't move saved values through \
 renames yet, so set the new ID on existing filters with `filter.set_settings`. \
+A generated picture works the same way as a shader source a person can edit from its \
+Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
+`[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
+Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
+the pass's inputs, `// @audio` sets `audio = true` and adds `audio`, and a \
+`// @param <id> scene \"Label\"` line is a `scene` setting, also an input. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \
