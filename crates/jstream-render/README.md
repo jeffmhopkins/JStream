@@ -295,18 +295,23 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    item, or a visible 2D item drawn small, draws gets its mip chain rebuilt if its image
    changed: an `Rgba16Float` texture
    with every level down to 1×1, premultiplied linear. A chain is of the item's crop,
-   not the whole source: level 0 copies the cropped texels one for one (a `Region`, the
+   not the whole source: level 0 holds the cropped texels (a `Region`, the
    crop's whole texels carried as integers from the item's crop, never recovered from
-   its texture coordinates; `vs_region` maps the pass onto it), converting an import as
-   the composite shader would. So no coarser level averages a texel past the crop into
+   its texture coordinates, in the pass's uniform with the level's size), converting
+   each import texel as the composite shader would before it is averaged. So no coarser level averages a texel past the crop into
    the item, and clamping to the chain's edge keeps the anisotropic footprint inside the
    crop too (#641). The crop counts in the image's extent, so for an image drawn with
    more pixels than its extent (ADR-0073) it is scaled to texels and widened outwards to
    whole ones (`Region::in_texels`). The item's UVs and UV bounds are mapped into the
    chain's. An image
    keeps a chain per crop it is drawn with, the four most recently used. Each further
-   level is one pass that samples the level above at its own texel centres, so the
-   linear filter averages 2×2 texels. Each `Image` counts its changes (its clones share
+   level is one pass over the level above. Every pass, level 0's too, writes each texel
+   as the exact box average of the input texels it covers, read with `textureLoad` and
+   weighted by how much of each is covered (`mip.wgsl`): one texel when level 0 is at
+   the region's size, 2×2 between even levels, and up to 3 per axis where a level's
+   size is odd (1080 → 540 → 270 → 135 → 67). One linear tap at the texel centre only
+   half covered the edge texels of such a level, so a 1080² source drawn at 1 / 20
+   measured a mean error of 17 against 2.7 for a 512² one; it is now 2.7 too. Each `Image` counts its changes (its clones share
    the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
    `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
@@ -321,10 +326,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    samples one the same way when a canvas pixel spans more than `MINIFIED`, 1.15,
    texels along either axis of its quad (`Shape::minification`, counted in the image's
    texels, so a density counts), which one bilinear tap would skip texels at (#1217).
-   When it spans 2 or more along both axes the sampler never reads level 0, so that
-   item's chain starts a level down (`Mips::skip`): the first pass renders the region
-   at half size, its one linear tap averaging 2×2 texels, and the chain holds a quarter
-   of the texels. An image keeps that chain apart from a full one of the same crop. A
+   When it spans `2^k` or more along both axes the sampler never reads the levels finer
+   than `k`, so that item's chain starts `k` levels down (`Mips::skip`, at most
+   `MAX_SKIP`, 3): level 0 is the region at `1 / 2^k` of its size, each of its texels
+   the box average of about `2^k` source texels per axis (a few more where the region's
+   size isn't a multiple of `2^k`), and the chain holds `1 / 4^k` of the
+   texels. A 1080p camera drawn at an eighth of its size keeps a 240×135 chain. An image keeps that chain apart from a full one of the same crop. A
    source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
@@ -1101,8 +1108,11 @@ a mean of at most 10 and a p99 of at most 50 over its interior (measured 3.6 to 
 and 11 to 45; with one level they were 19 to 62 and 98 to 134), and one at 1 / 1.2 of
 its size at most 4 and 40 (measured 3.1 and 26; with one level 5.5 and 46). A third
 test checks which chain an item gets: none at or near its size, a full one when one
-axis is squeezed, and a half-size one, built once while the upload is unchanged, at a
-quarter of its size.
+axis is squeezed, one starting two levels down, built once while the upload is
+unchanged, at a quarter of its size, and one starting `MAX_SKIP` down far smaller. A
+fourth draws sources whose levels have odd sizes (600² and 1080²) at 1 / 14 and 1 / 20:
+at most 5 and 20, measured 2.7 to 3.5 and 10 to 13 (13 to 17 and 50 to 72 when each
+level was one linear tap).
 
 Three more run the same comparison through a scene camera
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), the reference mapping each sample
@@ -1279,11 +1289,13 @@ a hardware GPU.
 - **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
   rotated 2D items should get edge coverage too, which changes their goldens.
 - **Small sources.** A 2D item drawn small samples a chain built from its whole crop
-  every frame its source changes, so a 1080p camera in a small box costs a quarter-size
-  chain and its rebuild. An upload only items draw is held at the size they draw it
+  every frame its source changes, so a 1080p camera in a small box costs a chain of up
+  to an eighth of its size each way and its rebuild, which reads every source texel once. An upload only items draw is held at the size they draw it
   (`ResourceCache::upload_drawn`, #1139), so its chain is small too; an import (a
-  capture, a page) is not. Open: a level 0 built at the drawn size for an import, which
-  a first pass of more than one tap would allow.
+  capture, a page) is not, beyond `MAX_SKIP` levels. One crop can now hold a chain at
+  each of the four starting levels, as many as an image keeps (`MAX_CHAINS`), so several
+  crops of one image drawn small at once, or a zoom through 2×, 4× and 8×, can push each
+  other's chains out and build them again.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and
