@@ -13,6 +13,26 @@
 //! covers, it evaluates the shim there, keeps the update function it returns, and feeds
 //! it everything the cache holds; each later update goes to it as it arrives. CEF calls
 //! all of these on the renderer's main thread, so the state is that thread's own.
+//!
+//! # Behaviour
+//!
+//! **The page API** (`helper/page_api.rs`, ADR-0102). A granted page gets a request
+//! context of its own, so no other page's renderer process holds it, and its grant and
+//! `ApiHome` go to the renderer in the browser's `extra_info`. The browser process keeps
+//! each page's updates merged (`PageCache`); once the browser exists it sends the whole
+//! cache, then each update, as a `jstream.page_data` process message to the main frame,
+//! and the whole cache again whenever the main frame starts loading a document, which
+//! may be in a renderer process that has none of it.
+//! In the renderer, the render-process handler keeps each granted browser's grant, home
+//! and cache; when a JavaScript context is made in a main frame whose URL the home
+//! covers, it evaluates the shim before any page script runs, feeds it the cache, and
+//! feeds it each later update, until that context is released (only that one: an old
+//! document's context can go after the new one's is made). A cross-origin navigation makes the renderer's new browser object before it destroys the old one with
+//! the same ID, so the entry is counted and goes only with the last. The shim reports
+//! only what changed, so the state sent again fires no events. A subframe, a popup, or a main frame on any other
+//! document gets no `window.jstream`. It takes messages only from the browser process,
+//! and the client drops every process message a renderer sends, so nothing reaches the
+//! engine from a page.
 
 use std::collections::HashMap;
 use std::os::raw::c_int;
