@@ -172,7 +172,10 @@ Contents ([Design](#design) explains the choices):
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
-  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  field the panels share (`number.rs`), the custom curve editor the Inspector and the
+  preset form share (`curve.rs`, a point's range and the drawing's path tested natively),
+  the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
+  natively), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
@@ -499,8 +502,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`).
   Behaviour holds Scene switches (the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
-  while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's) and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
+  while they differ from the defaults, and for a custom curve its drawing and four
+  points, kept to x 0 to 1 and y −2 to 3; not shown in a keyframe, whose items switch as
+  the parent's), in a keyframe scene Timing into this keyframe in its place (the
+  keyframe's own delay, easing and duration of the item in moves into it, each blank
+  while it follows the item's or the preset's, with a reset per field and Clear timing,
+  sent as `item.set_timing` or `item.clear_override`, ADR-0129), and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
   scene, as a scene's Hotkey row is,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
@@ -1014,7 +1021,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The editor sends each change at once, as a `transition.update` naming only what
   changed (after a kind change, the patch is against the new kind's defaults, as the
   engine applies it): Name, the kind as a Cut / Fade / Move / Stinger segmented control, and for
-  every kind but a cut the duration, the kind's parameters and the easing. Under them a
+  every kind but a cut the duration, the kind's parameters and the easing (a custom
+  curve with its drawing and four points, `curve.rs`). Under them a
   note counts the scenes that override with it ("Overrides: N in, M out."), and Make
   default and Delete show for every preset but the default. The engine's preset wins:
   each change it reports resets the fields to it. The kind's parameters come from
