@@ -48,7 +48,7 @@ tested on every platform.
 | `ScreenCaptureKitCapture` | `Capture` | `capture/` | display and window capture through ScreenCaptureKit, behind the Screen Recording permission |
 | `MacosKeychain` | `StreamKeyStore`, `OAuthTokenStore` | `keychain.rs` | generic-password items in the login keychain (ADR-0063 §9, [R-SEC-001](../../docs/RULES.md#R-SEC-001)); nothing syncs to iCloud |
 | `CoreAudioIo` | `AudioIo` | `audio/` | Core Audio devices, input (behind the Microphone permission), output, and desktop and application audio through process taps (macOS 14.2) |
-| `AvFoundationVideoDevices` | `VideoDevices` | `video_device/` | cameras through AVFoundation, behind the Camera permission (ADR-0063 §10) |
+| `AvFoundationVideoDevices` | `VideoDevices` | `video_device/` | cameras through AVFoundation, behind the Camera permission (ADR-0063 §10); no camera controls yet (the trait's default, #1196) |
 | `NoGpuInterop` | `GpuInterop` | `unbuilt.rs` | a stand-in until the Metal interop exists, so the engine takes the CPU frame paths |
 
 Each permission is asked for once (macOS prompts the first time); after that a missing

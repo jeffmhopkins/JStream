@@ -36,7 +36,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `WasapiAudio` | `AudioIo` | `audio/` | endpoints, inputs, outputs, loopback and process loopback; event-driven, shared mode, one MMCSS "Pro Audio" thread per stream |
 | `WgcCapture` | `Capture` | `capture/` | Windows.Graphics.Capture of displays and windows, on the CPU path or the GPU path (`on_gpu`) |
 | `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback |
-| `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, and MJPEG decoding |
+| `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding |
 | `MfMediaDecoders` | `MediaDecoders` | `decode/` | local media files through the Source Reader |
 | `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)) |
 | `WindowsVcam` | `VcamSink` | `vcam/` | the virtual camera's engine side, publishing to [`jstream-vcam-windows`](../jstream-vcam-windows/README.md) |
