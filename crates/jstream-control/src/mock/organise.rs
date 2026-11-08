@@ -65,6 +65,7 @@ impl Collection {
             Edit::SceneSetCameraFollow { scene_id, follow } => {
                 self.set_camera_follow(scene_id, follow.as_ref(), at)
             }
+            Edit::SceneSetPtzShots { scene_id, shots } => self.set_ptz_shots(scene_id, shots, at),
             Edit::LabelCreate {
                 label_id,
                 name,
@@ -418,6 +419,24 @@ impl Collection {
             ));
         }
         Ok(si)
+    }
+
+    /// `scene.set_ptz_shots` (ADR-0138), as the engine applies it: any scene, a keyframe
+    /// scene included.
+    fn set_ptz_shots(
+        &mut self,
+        scene_id: &SceneId,
+        shots: &[jstream_protocol::PtzShot],
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        let si = self.existing_scene(scene_id)?;
+        jstream_protocol::check_ptz_shots(shots)
+            .map_err(|(field, reason)| invalid(at, &field, reason))?;
+        let old = std::mem::replace(&mut self.scenes[si].ptz_shots, shots.to_vec());
+        Ok(vec![Edit::SceneSetPtzShots {
+            scene_id: scene_id.clone(),
+            shots: old,
+        }])
     }
 
     /// `scene.set_camera_motion` (ADR-0113), as the engine applies it.

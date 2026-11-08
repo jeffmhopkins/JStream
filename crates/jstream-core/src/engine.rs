@@ -1083,6 +1083,20 @@ impl Engine {
             .map(|pending| pending.kind.clone())
     }
 
+    /// Drives the PTZ cameras `setup` lists (ADR-0138, ADR-0123 §4): a socket and a
+    /// thread for each, which the `ptz.*` actions, `ptz.list` and the scenes' shots use.
+    /// Replaces the cameras of an earlier call, whose threads stop; an empty setup stops
+    /// them all. Without a call the engine drives no camera and opens no socket.
+    ///
+    /// # Errors
+    /// When a camera's socket can't be opened or its thread can't start; the cameras
+    /// running before are kept then.
+    pub fn start_ptz(&self, setup: &crate::ptz::PtzSetup) -> std::io::Result<()> {
+        let ptz = crate::ptz::Ptz::start(setup)?;
+        lock(&self.shared.state).ptz = ptz;
+        Ok(())
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -3824,6 +3838,8 @@ struct State {
     audio: AudioSources,
     /// Each `webcam`'s camera controls, set on its device as they change (#1196).
     camera_controls: crate::camera_controls::CameraControls,
+    /// The PTZ cameras this machine drives (ADR-0138): none until the host starts them.
+    ptz: crate::ptz::Ptz,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -4877,6 +4893,10 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
+        if let Some(done) = self.ptz.act(&action) {
+            done?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5057,6 +5077,9 @@ impl State {
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
+                },
+                Query::PtzList => QueryResult::PtzList {
+                    cameras: self.ptz.list(),
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
@@ -5372,6 +5395,13 @@ impl State {
         transition: Option<TransitionStarted>,
         wake: &mut Vec<Waker>,
     ) {
+        // The heads follow what the studio shows (ADR-0138 §7).
+        self.ptz.follow(
+            self.graph.state(),
+            self.studio.program(),
+            self.studio.preview(),
+            transition.as_ref().map_or(0, |t| t.duration_ms),
+        );
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),

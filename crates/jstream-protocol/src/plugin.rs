@@ -85,6 +85,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    // LAN addresses of the machine's PTZ heads (ADR-0138) are the person's.
+    ("ptz.list", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
@@ -116,6 +118,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_options", Class(E)),
     ("scene.set_camera", Class(E)),
     ("scene.set_camera_motion", Class(E)),
+    ("scene.set_ptz_shots", Class(E)),
     ("scene.set_camera_follow", Class(E)),
     ("scene.set_transitions", Class(E)),
     ("scene.create_variant", Class(E)),
@@ -206,6 +209,13 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
+    // They move a physical head on the LAN (ADR-0138), which no plugin scope covers.
+    ("ptz.drive", N),
+    ("ptz.aim", N),
+    ("ptz.home", N),
+    ("ptz.recall", N),
+    ("ptz.store", N),
+    ("ptz.focus", N),
     ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),

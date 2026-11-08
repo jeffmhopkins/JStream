@@ -331,6 +331,7 @@ impl Scene {
             items: self.items.iter().map(Item::to_info).collect(),
             camera: self.camera,
             camera_motion: self.camera_motion.clone(),
+            ptz_shots: self.ptz_shots.clone(),
             camera_follow: self.camera_follow(),
             timelines: self.timelines.values().cloned().collect(),
         }

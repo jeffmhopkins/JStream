@@ -2888,6 +2888,7 @@ dependencies = [
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
+ "jstream-visca",
  "jstream-youtube",
  "png",
  "serde",

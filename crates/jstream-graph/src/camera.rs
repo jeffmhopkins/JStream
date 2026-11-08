@@ -9,8 +9,8 @@ use crate::apply::{Kinds, invalid, not_found};
 use crate::model::{Scene, State};
 use jstream_protocol::{
     CameraFollow, CameraMotionModifier, Edit, EntityKind, FOLLOW_POINTER_KIND, FilterChain,
-    FilterId, FilterOwner, GeometryError, ItemId, ProtocolError, SceneCamera, SceneId, SourceKind,
-    check_camera_motion,
+    FilterId, FilterOwner, GeometryError, ItemId, ProtocolError, PtzShot, SceneCamera, SceneId,
+    SourceKind, check_camera_motion, check_ptz_shots,
 };
 
 /// The built-in source kinds a follow camera can follow: captures that report where
@@ -41,6 +41,9 @@ pub(crate) fn apply(
         }
         Edit::SceneSetCameraFollow { scene_id, follow } => {
             Some(set_follow(state, kinds, scene_id, follow.as_ref(), at))
+        }
+        Edit::SceneSetPtzShots { scene_id, shots } => {
+            Some(set_ptz_shots(state, scene_id, shots, at))
         }
         _ => None,
     }
@@ -125,6 +128,25 @@ fn family_scene(
         ));
     }
     Ok(si)
+}
+
+/// `scene.set_ptz_shots` (ADR-0138 §6): replaces the scene's own shots, a keyframe
+/// scene's included.
+fn set_ptz_shots(
+    state: &mut State,
+    scene_id: &SceneId,
+    shots: &[PtzShot],
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let si = state
+        .scene_index(scene_id)
+        .ok_or_else(|| not_found(EntityKind::Scene, scene_id.as_str()))?;
+    check_ptz_shots(shots).map_err(|(field, reason)| invalid(at, &field, reason))?;
+    let old = std::mem::replace(&mut state.scenes[si].ptz_shots, shots.to_vec());
+    Ok(vec![Edit::SceneSetPtzShots {
+        scene_id: scene_id.clone(),
+        shots: old,
+    }])
 }
 
 fn set_motion(
@@ -265,14 +287,21 @@ fn unused_id(state: &State, item_id: &ItemId) -> FilterId {
         .unwrap_or_else(|| FilterId::new("follow-pointer"))
 }
 
-/// The edits that put back a deleted scene's camera motion, after its camera. Its
-/// follow camera comes back with its items' effects (ADR-0120).
+/// The edits that put back a deleted scene's camera motion, after its camera, and its
+/// PTZ shots (ADR-0138). Its follow camera comes back with its items' effects
+/// (ADR-0120).
 pub(crate) fn restore(scene: &Scene) -> Vec<Edit> {
     let mut edits = Vec::new();
     if !scene.camera_motion.is_empty() {
         edits.push(Edit::SceneSetCameraMotion {
             scene_id: scene.id.clone(),
             motion: scene.camera_motion.clone(),
+        });
+    }
+    if !scene.ptz_shots.is_empty() {
+        edits.push(Edit::SceneSetPtzShots {
+            scene_id: scene.id.clone(),
+            shots: scene.ptz_shots.clone(),
         });
     }
     edits
@@ -287,5 +316,20 @@ impl State {
             let pi = self.scene_index(parent)?;
             self.scenes[pi].camera
         })
+    }
+
+    /// The PTZ shots `scene` sends when it goes on program or preview (ADR-0138 §6): a
+    /// keyframe scene's own, then its parent's for every camera it has none for. Each
+    /// camera once, in that order.
+    pub fn effective_ptz_shots(&self, scene: &Scene) -> Vec<PtzShot> {
+        let mut shots = scene.ptz_shots.clone();
+        if let Some(pi) = scene.variant_of.as_ref().and_then(|p| self.scene_index(p)) {
+            for shot in &self.scenes[pi].ptz_shots {
+                if !shots.iter().any(|s| s.camera == shot.camera) {
+                    shots.push(shot.clone());
+                }
+            }
+        }
+        shots
     }
 }

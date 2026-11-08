@@ -70,7 +70,9 @@ protocol's types (`Overrides`).
   family's only; its follow camera, `Scene::camera_follow`, is read from its items'
   `follow_pointer` effects, ADR-0120), its `timelines` ordered by ID
   (ADR-0115), and its items in stacking order, bottom
-  first. A keyframe
+  first, and its PTZ `ptz_shots` (ADR-0138: a preset or a pose per named camera, where a
+  keyframe scene's shot for a camera replaces its parent's and
+  `State::effective_ptz_shots` reads the result). A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
@@ -529,7 +531,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 12), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 13), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -572,7 +574,8 @@ by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writ
 (ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
 `bindings` (ADR-0122) are `schema_version` 9. An override's `timing` (ADR-0129), omitted
 while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey binding's and a
-timeline's `labels`. Loading creates the folders top level first, then
+timeline's `labels`. A scene's `ptz_shots` (ADR-0138), omitted while empty, are
+`schema_version` 13. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -597,7 +600,7 @@ the engine's; this crate does no I/O.
   `blending` in a version 11 file, turns its items' `normal_srgb` and `additive_srgb`
   into `normal` and `additive`, and sets `linear` when any item used another mode, the
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
-  `srgb`),
+  `srgb`, and 12 to 13 refuses a scene's `ptz_shots` in a version 12 file),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -622,7 +625,8 @@ the engine's; this crate does no I/O.
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
-  scene's camera motion (once every item exists), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
+  scene's camera motion (once every item exists), then each scene's PTZ shots
+  (`scene.set_ptz_shots`), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
 (`` binding `MIDI note 36 on channel 10` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object

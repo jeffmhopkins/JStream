@@ -226,6 +226,12 @@ pub enum Query {
     /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
+    /// Lists the PTZ cameras on this machine's list (ADR-0138 §4), in the order the host
+    /// gave them: each one's address, whether it answered lately, its last pose and its
+    /// last error. Runtime state, so no `rev`. Empty when the machine controls no PTZ
+    /// cameras, which is the default (ADR-0123 §1).
+    #[serde(rename = "ptz.list")]
+    PtzList,
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -403,6 +409,7 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
+            Query::PtzList => "ptz.list",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -729,6 +736,12 @@ pub enum QueryResult {
         /// The displays, then the windows, in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
     },
+    /// The result of `ptz.list`.
+    #[serde(rename = "ptz.list")]
+    PtzList {
+        /// The cameras, in the order the host listed them.
+        cameras: Vec<crate::ptz::PtzCameraInfo>,
+    },
     /// The result of `font.list`.
     #[serde(rename = "font.list")]
     FontList {
@@ -842,6 +855,7 @@ impl QueryResult {
             QueryResult::LabelMembers { .. } => "label.members",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
+            QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",
@@ -1127,6 +1141,11 @@ pub struct SceneInfo {
     /// Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0138 §6): the physical camera framings it sends when it goes
+    /// on program or preview. On a keyframe scene, only its own, which replace its
+    /// parent's for the same cameras. Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ptz_shots: Vec<crate::ptz::PtzShot>,
     /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
     /// belongs to the family, so a keyframe scene reports none and draws its parent's.
     /// Since 0.91 it is read from its items' effects (ADR-0120): the first enabled

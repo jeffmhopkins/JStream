@@ -41,6 +41,7 @@ mod frames;
 mod gesture;
 mod history;
 mod kinds;
+mod lan;
 mod live;
 mod load;
 mod motion;
@@ -53,6 +54,7 @@ mod preview;
 mod private_file;
 mod profile;
 mod projects;
+mod ptz;
 mod reactive;
 mod runtime;
 mod session;
@@ -83,11 +85,13 @@ pub use drops::{
     capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
 };
 pub use engine::Engine;
+pub use lan::is_lan;
 pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
 pub use plugins::supervisor::{
     HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
 };
 pub use projects::recent_collections;
+pub use ptz::{PtzCamera, PtzSetup};
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
     connect_rtmp,

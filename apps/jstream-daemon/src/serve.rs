@@ -131,6 +131,13 @@ pub fn engine(
     if let Some(dir) = &options.effects_dir {
         engine.watch_effect_packs(dir);
     }
+    if !options.ptz.is_empty() {
+        let setup = jstream_core::PtzSetup::new(options.ptz.clone()).map_err(anyhow::Error::msg)?;
+        engine
+            .start_ptz(&setup)
+            .map_err(|err| anyhow::anyhow!("starting PTZ control: {err}"))?;
+        tracing::info!(cameras = setup.cameras().len(), "PTZ control on (ADR-0138)");
+    }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.

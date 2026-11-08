@@ -63,6 +63,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 # Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0058).
 jstream-youtube.workspace = true
+# VISCA's bytes for the PTZ cameras the engine drives (ADR-0138), pure and fuzzed.
+jstream-visca.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
 

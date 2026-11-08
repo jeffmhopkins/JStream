@@ -292,7 +292,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -336,6 +336,22 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   differently, the one listed later wins when both name the device the same way (an
   empty `device` and the first device's ID are told apart: then the last changed wins). `capture.targets` lists each device's
   `controls` from `VideoDevices::controls`.
+- **PTZ cameras** (`ptz/`, [ADR-0138](../../docs/adr/0138-ptz-cameras-shots-and-actions.md)):
+  the physical heads this machine drives over VISCA, off until the host calls
+  `Engine::start_ptz` with its camera list (ADR-0123 §1). Each camera, checked against
+  the LAN ranges of `lan.rs` and with its address, port and VISCA address unique, gets
+  a `jstream-ptz` thread and its own socket: Sony-style VISCA over IP on UDP (with a
+  sequence reset at start), raw VISCA over UDP, or raw VISCA over TCP, reconnecting
+  after a second. The thread sends what the control side queues, waits up to 300 ms
+  for each command's ACK, completion or error, and while idle asks the head's pan-tilt,
+  zoom and focus positions every 500 ms; a drive replaces an unsent drive just before
+  it. It reads only replies from the camera's address and port and VISCA address, and
+  drops and counts the rest. `ptz.list` reports each head's last pose, last error,
+  counters, and whether it answered in the last three seconds. The control side (`Ptz`)
+  sits under the engine lock and only sends on channels: the `ptz.*` actions, and the
+  shots of the scenes the studio shows, fired from `emit_studio` when the program or
+  preview scene changes (the program's paced to the switch's duration by
+  `matched_speed`; the preview's only for cameras the program's shots don't name).
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -421,13 +437,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 <a id="contents-tests"></a>
 ## Contents: tests
 <!-- @section
-covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
+covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
 -->
 
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `tests/mcp.rs`,
+  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -664,6 +680,16 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   starts again at its duration when its `restart` counter changes
   (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
+- **PTZ** (`src/ptz/tests.rs`, `src/tests/ptz.rs`): a VISCA head emulator on loopback
+  (`FakeHead`, VISCA over IP, raw UDP or raw TCP) that takes each command as a head
+  does and answers inquiries with its pose; each transport aiming the head and its
+  pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0138 names; a
+  queued drive replacing the one before it; the checks and refusals; a reply from
+  another address dropped and counted, and a silent head reported; the daemon's camera
+  syntax; the speed curve; and through the engine, the actions and the list, program
+  switches firing shots (a keyframe scene's over its parent's, a camera not listed
+  skipped, a longer transition pacing a pose), and a preview moving only the cameras
+  the program doesn't frame.
 
 <a id="design"></a>
 ## Design
@@ -731,7 +757,8 @@ counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters)
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
 descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
-supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
+supervisor's block and control messages), `jstream-visca` (the VISCA commands, inquiries
+and replies the PTZ heads exchange, ADR-0138), `jstream-plugin-wasm` (the wasmtime host the
 WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
 by default, ADR-0075), `serde` (the derives of the installed plugins' file,
 ADR-0076), `jstream-youtube` (Google sign-in and the
@@ -3154,7 +3181,11 @@ side takes under the collection lock; the program stage's `jstream-audio-sources
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
 drop ledger's, never the collection lock (see *Audio sources*). The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
-collection lock; that thread takes no engine lock while it sets them on the device.
+collection lock; that thread takes no engine lock while it sets them on the device. The PTZ heads work
+the same way (ADR-0138): actions and shots go to each `jstream-ptz` thread over a channel,
+sent under the collection lock, and a head's status is a leaf mutex its thread takes
+alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
+while it sends or waits for a reply.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit

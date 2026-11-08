@@ -3,7 +3,7 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#bindings, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#bindings, crates/jstream-protocol/README.md#ptz, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
 
 #![forbid(unsafe_code)]
 
@@ -36,6 +36,7 @@ pub mod parity;
 mod plugin;
 mod preview;
 mod profile;
+mod ptz;
 mod query;
 mod schema;
 mod settings;
@@ -135,6 +136,12 @@ pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
     MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
+};
+pub use ptz::{
+    MAX_PTZ_CAMERA_NAME, MAX_PTZ_PAN, MAX_PTZ_PAN_SPEED, MAX_PTZ_PRESET, MAX_PTZ_SHOTS,
+    MAX_PTZ_TILT, MAX_PTZ_TILT_SPEED, MAX_PTZ_ZOOM_SPEED, PtzCameraInfo, PtzFocus, PtzPose,
+    PtzShot, PtzTransport, camera_name_problem as ptz_camera_name_problem, check_ptz_shots,
+    ptz_action_check,
 };
 pub use query::{
     CameraControlInfo, CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget,
