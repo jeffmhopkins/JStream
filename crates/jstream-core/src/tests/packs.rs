@@ -7,7 +7,9 @@ use crate::Engine;
 use crate::effect_packs::test_pack::{BLUE, KIND, MANIFEST, MUL, Temp};
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, ActionResult, Call, CallResult, PackContent, PackFile, Query, QueryResult,
+    Action, ActionResult, Batch, Call, CallResult, Edit, FilterChain, FilterId, FilterOwner,
+    HistoryCall, HistoryOp, PackContent, PackFile, Query, QueryResult, Settings, SourceId,
+    SourceKind,
 };
 
 fn write(control: &dyn Control, shader: &str) -> Result<CallResult, jstream_control::ControlError> {
@@ -101,4 +103,167 @@ fn an_agent_writes_reads_and_deletes_a_pack() {
         ]
     );
     assert_eq!(entries[2].error.as_deref(), Some("invalid_argument"));
+}
+
+/// The `tint` pack at version 2: its `tint` setting renamed `colour`.
+const RENAMED: &str = r##"
+[pack]
+id = "tint"
+name = "Tint"
+
+[[effect]]
+id = "mul"
+name = "Multiply"
+version = 2
+shader = "mul.wgsl"
+renames = { tint = "colour" }
+
+[[effect.param]]
+id = "colour"
+label = "Colour"
+type = "color"
+default = "#00ff00"
+"##;
+
+/// [`MUL`] reading the renamed setting.
+const MUL_RENAMED: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    let c = src(in.uv);\n    return vec4<f32>(c.rgb * p.colour.rgb, c.a);\n}\n";
+
+fn write_renamed(control: &dyn Control) {
+    let files = [("effect.toml", RENAMED), ("mul.wgsl", MUL_RENAMED)]
+        .into_iter()
+        .map(|(path, text)| PackFile {
+            path: path.into(),
+            content: PackContent::Text(text.into()),
+        })
+        .collect();
+    let call = Call::Action {
+        action: Action::PackWrite {
+            pack: "tint".into(),
+            files,
+        },
+    };
+    block_on(control.call(call)).expect("the renamed pack is written");
+}
+
+/// A colour source `bg` with a `tint` filter of [`KIND`] set to red.
+fn tinted(control: &dyn Control) {
+    super::batch(
+        control,
+        Batch {
+            edits: vec![
+                Edit::SourceCreate {
+                    source_id: SourceId::new("bg"),
+                    name: "bg".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("bg"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("tint"),
+                    kind: KIND.into(),
+                    settings: [("tint", serde_json::json!("#ff0000"))]
+                        .into_iter()
+                        .collect(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a pack filter");
+}
+
+/// The `tint` filter on `bg` as the collection file at `path` holds it.
+fn saved_filter(path: &std::path::Path) -> serde_json::Value {
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("read")).expect("json");
+    saved["sources"]
+        .as_array()
+        .expect("sources")
+        .iter()
+        .find(|s| s["id"] == "bg")
+        .expect("bg")["filters"]["video"][0]
+        .clone()
+}
+
+/// A pack reload that renames a setting moves each live filter's value to the new ID
+/// (#1353, ADR-0025 › Versioning a kind), saves it, and an undo from before it no longer
+/// writes the old ID.
+#[test]
+fn a_reload_moves_live_filters_through_the_renames() {
+    let temp = Temp::new("renames-live");
+    let path = temp.0.join("scenes.json");
+    let engine = Engine::new()
+        .with_collection_file(&path)
+        .expect("collection file");
+    engine.watch_effect_packs(temp.0.join("effects"));
+    let control = connected(&engine);
+    write(&control, MUL).expect("written");
+    tinted(&control);
+    assert_eq!(saved_filter(&path)["kind_version"], 1);
+    let before = engine.rev();
+
+    write_renamed(&control);
+    assert_eq!(engine.rev(), before.next().expect("rev"), "one revision");
+    let filter = saved_filter(&path);
+    assert_eq!(filter["kind_version"], 2);
+    assert_eq!(
+        filter["settings"],
+        serde_json::json!({ "colour": "#ff0000" })
+    );
+
+    // The batch that added the filter can't come back over the upgrade.
+    let undo = block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo))));
+    assert_eq!(
+        undo.err().as_ref().and_then(super::code),
+        Some("undo_conflict")
+    );
+    assert_eq!(
+        saved_filter(&path)["settings"],
+        serde_json::json!({ "colour": "#ff0000" })
+    );
+}
+
+/// A filter loaded from the collection file before its pack keeps its settings as the
+/// file has them, and they follow the renames from the recorded version once the pack
+/// loads (#1353).
+#[test]
+fn a_loaded_filter_follows_the_renames_once_its_pack_loads() {
+    let temp = Temp::new("renames-load");
+    let path = temp.0.join("scenes.json");
+    {
+        let engine = Engine::new()
+            .with_collection_file(&path)
+            .expect("collection file");
+        engine.watch_effect_packs(temp.0.join("effects"));
+        let control = connected(&engine);
+        write(&control, MUL).expect("written");
+        tinted(&control);
+    }
+    // The pack moves on while the collection is closed.
+    let pack = temp.0.join("effects").join("tint");
+    std::fs::write(pack.join("effect.toml"), RENAMED).expect("manifest");
+    std::fs::write(pack.join("mul.wgsl"), MUL_RENAMED).expect("shader");
+
+    let engine = Engine::new()
+        .with_collection_file(&path)
+        .expect("the collection loads with its pack missing");
+    let loaded = engine.rev();
+    engine.watch_effect_packs(temp.0.join("effects"));
+    assert_eq!(engine.rev(), loaded.next().expect("rev"), "one revision");
+    let filter = saved_filter(&path);
+    assert_eq!(filter["kind_version"], 2);
+    assert_eq!(
+        filter["settings"],
+        serde_json::json!({ "colour": "#ff0000" })
+    );
 }

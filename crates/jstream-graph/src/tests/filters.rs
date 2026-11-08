@@ -1186,3 +1186,84 @@ fn a_sidechain_key_is_an_edge_of_its_source() {
         vec![blocker(EntityKind::Source, "music", "filters.d.key")]
     );
 }
+
+/// A filter loaded while its kind was missing follows the kind's renames once the kind
+/// is described, from the version the file recorded, and is fitted to it; one saved by a
+/// newer version stays as it is (#1353, ADR-0025 › Versioning a kind).
+#[test]
+fn upgrade_moves_loaded_filters_through_renames() {
+    let mut g = graph();
+    apply_ok(
+        &mut g,
+        vec![
+            builtin("cam"),
+            with(tint("cam", "a"), &[("amount", json!(0.5))], None),
+            tint("cam", "b"),
+        ],
+    );
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let video = &mut file["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "cam"))
+        .expect("cam is saved")["filters"]["video"];
+    video[0]["settings"] = json!({ "amount": 0.75, "gone": 1 });
+    video[1]["kind_version"] = json!(3);
+    let without: Vec<KindDescriptor> = kinds()
+        .into_iter()
+        .filter(|k| k.kind_id != "tint")
+        .collect();
+    let loaded = Graph::new()
+        .with_kinds(without)
+        .with_collection_json(&file.to_string())
+        .expect("loads with the kind missing");
+
+    // Version 2 calls `amount` `strength`.
+    let mut tint_v2 = kinds()
+        .into_iter()
+        .find(|k| k.kind_id == "tint")
+        .expect("tint");
+    tint_v2.version = 2;
+    tint_v2.params[0].id = "strength".into();
+    let mut loaded = loaded.with_kinds([tint_v2]);
+    let migrate = |kind: &str, stored: &Settings, from: u32| -> Option<Settings> {
+        assert_eq!(kind, "tint");
+        (from <= 2).then(|| {
+            stored
+                .iter()
+                .map(|(id, v)| (if id == "amount" { "strength" } else { id }, v.clone()))
+                .collect()
+        })
+    };
+    let before = loaded.rev();
+    let changed = [("tint".to_owned(), None)].into_iter().collect();
+    let upgraded = loaded
+        .upgrade_filters(&changed, &migrate)
+        .expect("a change");
+    assert_eq!(upgraded.rev, before.next().expect("rev"));
+    assert_eq!(loaded.rev(), upgraded.rev);
+    let fitted = settings(&[("strength", json!(0.75)), ("mask", Value::Null)]);
+    assert_eq!(
+        upgraded.set,
+        [Edit::FilterSetSettings {
+            owner: owner("cam"),
+            filter_id: FilterId::new("a"),
+            patch: fitted.clone(),
+        }],
+        "only `a` changed: `b` came from a newer version"
+    );
+    let chain = loaded
+        .state()
+        .source(&SourceId::new("cam"))
+        .expect("cam")
+        .filters();
+    let filters = chain.chain(FilterChain::Video);
+    assert_eq!(filters[0].settings(), &fitted);
+    assert_eq!(filters[1].settings().get("amount"), Some(&json!(1.0)));
+    // Saved at the kind's version now, and nothing more to do.
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(
+        saved["sources"][0]["filters"]["video"][0]["kind_version"],
+        json!(2)
+    );
+    assert_eq!(loaded.upgrade_filters(&changed, &migrate), None);
+}

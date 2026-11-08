@@ -485,8 +485,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
-  Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), the `YouTube` kind, a virtual
+  Not yet: settings migrations between kind versions for sources and presets (a source
+  saved at another version is refused on load; a filter of an effect pack's kind follows
+  the effect's renames when its new version loads, #1353), the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
