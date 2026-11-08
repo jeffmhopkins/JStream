@@ -11,10 +11,11 @@ ignore = [
     # jstream-ui moves to a Leptos release that has (ADR-0045).
     { id = "RUSTSEC-2024-0436", reason = "paste is unmaintained; a build-time proc-macro under Leptos 0.8 (jstream-ui). Expires: M2 exit" },
     # `proc-macro-error` is unmaintained; gtk-rs 0.18's `gtk3-macros` uses it. It is in the
-    # graph only through Tauri's Linux webview (WebKitGTK); jstream-desktop depends on Tauri
-    # on Windows only, so it is never built. Expires at the M2 exit, or when the desktop app
-    # targets Linux, whichever comes first.
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; Linux-only under Tauri's gtk3-macros, never built (jstream-desktop uses Tauri on Windows only). Expires: M2 exit or a Linux desktop build" },
+    # graph only through Tauri's Linux webview (WebKitGTK), built only with jstream-desktop's
+    # `webkitgtk` feature (ADR-0140), and at build time only (a proc-macro): no code of it
+    # reaches the app. Tauri 2 pins gtk-rs 0.18, so it goes when Tauri moves to GTK 4 or
+    # gtk-rs drops it. The advisory is unmaintained-only, with no vulnerability.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; a build-time proc-macro under Tauri's gtk3-macros, Linux only with jstream-desktop's webkitgtk feature (ADR-0140). Expires: Tauri on GTK 4 or gtk-rs without it" },
 ]
 
 [licenses]
@@ -76,7 +77,8 @@ skip = [
     { crate = "rustc-hash@1.1.0", reason = "naga 30 (wgpu, pinned exactly by ADR-0004) uses 1; Leptos uses 2" },
     { crate = "thiserror@1.0.69", reason = "gloo-net 0.6 (server_fn under Leptos 0.8) uses thiserror 1" },
     { crate = "thiserror-impl@1.0.69", reason = "thiserror 1, for gloo-net 0.6 under Leptos 0.8" },
-    # Tauri 2 (jstream-desktop, ADR-0045), which it depends on for Windows only. cargo-deny
+    # Tauri 2 (jstream-desktop, ADR-0045), which it depends on for Windows, and on Linux with
+    # its `webkitgtk` feature (ADR-0140). cargo-deny
     # checks every platform's graph, so most of these come from Tauri's dependencies for
     # other platforms or from its build-time code generation; the notes say which.
     # Among these pairs, only base64 0.22 and 0.23 both reach the Windows app binary.

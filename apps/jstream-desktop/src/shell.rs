@@ -80,16 +80,17 @@ fn allowed(url: &Url, blank: bool) -> bool {
 }
 
 /// Opens `url`, one [`links::opens_in_browser`] accepts, in the system browser:
-/// Explorer hands an `https` URL to the default browser. The URL is one argument,
-/// never parsed by a shell.
+/// Explorer hands an `https` URL to the default browser on Windows, and `xdg-open` (the
+/// desktop's handler, found on `PATH`) on Linux. The URL is one argument, never parsed
+/// by a shell.
 fn open_in_browser(url: &Url) {
-    let explorer = std::env::var_os("SystemRoot")
+    #[cfg(windows)]
+    let opener = std::env::var_os("SystemRoot")
         .map(|root| std::path::Path::new(&root).join("explorer.exe"))
         .unwrap_or_else(|| "explorer.exe".into());
-    if let Err(error) = std::process::Command::new(explorer)
-        .arg(url.as_str())
-        .spawn()
-    {
+    #[cfg(not(windows))]
+    let opener = std::path::PathBuf::from("xdg-open");
+    if let Err(error) = std::process::Command::new(opener).arg(url.as_str()).spawn() {
         tracing::warn!(%error, "could not open a link in the browser");
     }
 }
@@ -206,7 +207,11 @@ pub fn run(
             Ok(())
         })
         .build(tauri::generate_context!())
-        .context("could not create the window (is WebView2 installed?)")?;
+        .context(if cfg!(windows) {
+            "could not create the window (is WebView2 installed?)"
+        } else {
+            "could not create the window (is there a display, and WebKitGTK 4.1?)"
+        })?;
     let mut host = host;
     app.run(move |_app, event| {
         if let RunEvent::Exit = event
