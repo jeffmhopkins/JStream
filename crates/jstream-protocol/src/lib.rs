@@ -140,8 +140,9 @@ pub use preview::{
 };
 pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
-    MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
-    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
+    MAX_PROFILE_TOP, MixerProfile, NetworkInputProfile, NetworkProfile, PhaseProfile, PlanProfile,
+    ProfileInfo, ProfileStream, ProfileUnit, SourceProfile, StreamProfile, ThreadProfile,
+    UnitProfile, ViewProfile,
 };
 pub use ptz::{
     MAX_PTZ_CAMERA_NAME, MAX_PTZ_PAN, MAX_PTZ_PAN_SPEED, MAX_PTZ_PRESET, MAX_PTZ_SHOTS,

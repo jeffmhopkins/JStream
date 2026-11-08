@@ -69,6 +69,61 @@ pub struct ProfileInfo {
     /// reported in the window, the session's that has ended included while the window
     /// reaches back to its last report.
     pub views: Vec<ViewProfile>,
+    /// The JTunnel receiver's senders and what it dropped (since 0.113, #1223). Omitted
+    /// while the receiver is off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<NetworkProfile>,
+}
+
+/// The JTunnel receiver ([`ProfileInfo::network`], ADR-0122, ADR-0123). Unlike the rest
+/// of the profile, its counts run from when the receiver started, not over the window.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct NetworkProfile {
+    /// Each sender the receiver accepts, in the order the host gave them.
+    pub inputs: Vec<NetworkInputProfile>,
+    /// Datagrams from outside the LAN ranges.
+    pub outside_lan: u64,
+    /// Datagrams from a LAN address it doesn't subscribe to.
+    pub unaccepted: u64,
+    /// Datagrams that aren't a JTunnel packet it accepts, or longer than one may be.
+    pub malformed: u64,
+    /// Audio packets in a codec it can't decode yet (Opus).
+    pub unsupported: u64,
+    /// MIDI messages it handed to the MIDI inputs.
+    pub midi: u64,
+}
+
+/// One accepted JTunnel sender ([`NetworkProfile::inputs`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct NetworkInputProfile {
+    /// Its tunnel name, as a `network_audio` source's `sender` names it.
+    pub sender: String,
+    /// Its stream's sample rate; 0 before anything has arrived from it.
+    pub sample_rate: u32,
+    /// Whether a source records it now.
+    pub recording: bool,
+    /// How far ahead of now its held audio reaches, in milliseconds: the buffer's
+    /// fill, which JTunnel shows as its latency.
+    pub latency_ms: Finite32,
+    /// How long past its jitter-free arrival each frame is held, in milliseconds: the
+    /// recording source's `latency_ms`.
+    pub lead_ms: Finite32,
+    /// The drift between its clock and this machine's, in parts per million, once
+    /// enough of its stream has arrived; omitted before. Positive: its clock runs slow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drift_ppm: Option<Finite32>,
+    /// Frames played with their audio.
+    pub played: u64,
+    /// Frames concealed with silence because they didn't come in time.
+    pub concealed: u64,
+    /// Frames that came after their turn, and were dropped.
+    pub late: u64,
+    /// Redundant copies and repeated datagrams.
+    pub repeats: u64,
+    /// Times its stream restarted.
+    pub restarts: u64,
 }
 
 /// One client view's preview pictures in the window ([`ProfileInfo::views`]), as its
