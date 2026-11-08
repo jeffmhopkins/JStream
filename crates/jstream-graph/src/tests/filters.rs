@@ -1186,3 +1186,231 @@ fn a_sidechain_key_is_an_edge_of_its_source() {
         vec![blocker(EntityKind::Source, "music", "filters.d.key")]
     );
 }
+
+/// A filter loaded while its kind was missing follows the kind's renames once the kind
+/// is described, from the version the file recorded, and takes a default for what it
+/// lacks, keeping a key the kind doesn't declare; one saved by a newer version stays as
+/// it is (#1353, ADR-0025 › Versioning a kind).
+#[test]
+fn upgrade_moves_loaded_filters_through_renames() {
+    let mut g = graph();
+    apply_ok(
+        &mut g,
+        vec![
+            builtin("cam"),
+            with(tint("cam", "a"), &[("amount", json!(0.5))], None),
+            tint("cam", "b"),
+        ],
+    );
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let video = &mut file["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "cam"))
+        .expect("cam is saved")["filters"]["video"];
+    video[0]["settings"] = json!({ "amount": 0.75, "gone": 1 });
+    video[1]["kind_version"] = json!(3);
+    let without: Vec<KindDescriptor> = kinds()
+        .into_iter()
+        .filter(|k| k.kind_id != "tint")
+        .collect();
+    let loaded = Graph::new()
+        .with_kinds(without)
+        .with_collection_json(&file.to_string())
+        .expect("loads with the kind missing");
+
+    // Version 2 calls `amount` `strength`.
+    let mut tint_v2 = kinds()
+        .into_iter()
+        .find(|k| k.kind_id == "tint")
+        .expect("tint");
+    tint_v2.version = 2;
+    tint_v2.params[0].id = "strength".into();
+    let mut loaded = loaded.with_kinds([tint_v2]);
+    let migrate = |kind: &str, stored: &Settings, from: u32| -> Option<Settings> {
+        assert_eq!(kind, "tint");
+        (from <= 2).then(|| {
+            stored
+                .iter()
+                .map(|(id, v)| (if id == "amount" { "strength" } else { id }, v.clone()))
+                .collect()
+        })
+    };
+    let before = loaded.rev();
+    let changed = [("tint".to_owned(), None)].into_iter().collect();
+    let upgraded = loaded
+        .upgrade_filters(&changed, &migrate)
+        .expect("a change");
+    assert_eq!(upgraded.rev, before.next().expect("rev"));
+    assert_eq!(loaded.rev(), upgraded.rev);
+    let fitted = settings(&[
+        ("strength", json!(0.75)),
+        ("gone", json!(1)),
+        ("mask", Value::Null),
+    ]);
+    assert_eq!(
+        upgraded.set,
+        [Edit::FilterSetSettings {
+            owner: owner("cam"),
+            filter_id: FilterId::new("a"),
+            patch: settings(&[
+                ("strength", json!(0.75)),
+                ("mask", Value::Null),
+                ("amount", Value::Null),
+            ]),
+        }],
+        "only `a` changed: `b` came from a newer version"
+    );
+    let chain = loaded
+        .state()
+        .source(&SourceId::new("cam"))
+        .expect("cam")
+        .filters();
+    let filters = chain.chain(FilterChain::Video);
+    assert_eq!(filters[0].settings(), &fitted);
+    assert_eq!(filters[1].settings().get("amount"), Some(&json!(1.0)));
+    // Saved at the kind's version now, and nothing more to do.
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(
+        saved["sources"][0]["filters"]["video"][0]["kind_version"],
+        json!(2)
+    );
+    assert_eq!(loaded.upgrade_filters(&changed, &migrate), None);
+}
+
+/// Version 2 of `tint`, which calls `amount` `strength`, and its migration.
+fn tint_v2() -> KindDescriptor {
+    let mut tint = kinds()
+        .into_iter()
+        .find(|k| k.kind_id == "tint")
+        .expect("tint");
+    tint.version = 2;
+    tint.params[0].id = "strength".into();
+    tint
+}
+
+fn tint_v1() -> KindDescriptor {
+    kinds()
+        .into_iter()
+        .find(|k| k.kind_id == "tint")
+        .expect("tint")
+}
+
+fn migrate_tint(_: &str, stored: &Settings, from: u32) -> Option<Settings> {
+    (from <= 2).then(|| {
+        stored
+            .iter()
+            .map(|(id, v)| (if id == "amount" { "strength" } else { id }, v.clone()))
+            .collect()
+    })
+}
+
+fn cam_filter(g: &Graph, index: usize) -> &crate::Filter {
+    &g.state()
+        .source(&SourceId::new("cam"))
+        .expect("cam")
+        .filters()
+        .chain(FilterChain::Video)[index]
+}
+
+fn saved_version(g: &Graph) -> Value {
+    let saved: Value = serde_json::from_str(&g.to_collection_json()).expect("json");
+    saved["sources"][0]["filters"]["video"][0]["kind_version"].clone()
+}
+
+/// A pack rewritten at the same version, without a parameter and then with it again,
+/// leaves a filter's settings as they were: only a newer version moves them (#1353).
+#[test]
+fn a_same_version_reload_keeps_every_setting() {
+    let mut g = graph();
+    apply_ok(
+        &mut g,
+        vec![
+            builtin("cam"),
+            with(tint("cam", "a"), &[("amount", json!(0.5))], None),
+        ],
+    );
+    let mut without_amount = tint_v1();
+    without_amount.params.retain(|p| p.id != "amount");
+    let mut g = g.with_kinds([without_amount]);
+    let changed = [("tint".to_owned(), Some(1))].into_iter().collect();
+    assert_eq!(g.upgrade_filters(&changed, &migrate_tint), None);
+    assert_eq!(
+        cam_filter(&g, 0).settings().get("amount"),
+        Some(&json!(0.5))
+    );
+    let mut g = g.with_kinds([tint_v1()]);
+    assert_eq!(g.upgrade_filters(&changed, &migrate_tint), None);
+    assert_eq!(
+        cam_filter(&g, 0).settings().get("amount"),
+        Some(&json!(0.5))
+    );
+}
+
+/// Settings a newer version stored keep that version through a downgrade, a save and a
+/// reload, so the newer pack coming back finds them as it left them (#1353).
+#[test]
+fn a_downgrade_keeps_the_newer_version_across_a_save() {
+    let mut g = graph().with_kinds([tint_v2()]);
+    apply_ok(
+        &mut g,
+        vec![
+            builtin("cam"),
+            with(tint("cam", "a"), &[("strength", json!(0.75))], None),
+        ],
+    );
+    // Version 1 knows no newer settings.
+    let migrate_v1 = |_: &str, stored: &Settings, from: u32| (from <= 1).then(|| stored.clone());
+    let mut g = g.with_kinds([tint_v1()]);
+    let changed = [("tint".to_owned(), Some(2))].into_iter().collect();
+    assert_eq!(g.upgrade_filters(&changed, &migrate_v1), None);
+    assert_eq!(saved_version(&g), json!(2), "saved by the newer version");
+
+    let without: Vec<KindDescriptor> = kinds()
+        .into_iter()
+        .filter(|k| k.kind_id != "tint")
+        .collect();
+    let mut g = Graph::new()
+        .with_kinds(without)
+        .with_collection_json(&g.to_collection_json())
+        .expect("loads with the kind missing")
+        .with_kinds([tint_v1()]);
+    let loaded = [("tint".to_owned(), None)].into_iter().collect();
+    assert_eq!(g.upgrade_filters(&loaded, &migrate_v1), None);
+    assert_eq!(saved_version(&g), json!(2));
+
+    let mut g = g.with_kinds([tint_v2()]);
+    let upgraded = [("tint".to_owned(), Some(1))].into_iter().collect();
+    assert_eq!(g.upgrade_filters(&upgraded, &migrate_tint), None);
+    assert_eq!(
+        cam_filter(&g, 0).settings().get("strength"),
+        Some(&json!(0.75))
+    );
+    assert_eq!(cam_filter(&g, 0).unknown_kind_version, None);
+    assert_eq!(saved_version(&g), json!(2));
+}
+
+/// A kind removed and then added back at a newer version moves its filters from the
+/// version they were stored by (#1353).
+#[test]
+fn a_removed_kind_coming_back_newer_moves_its_filters() {
+    let mut g = graph();
+    apply_ok(
+        &mut g,
+        vec![
+            builtin("cam"),
+            with(tint("cam", "a"), &[("amount", json!(0.5))], None),
+        ],
+    );
+    let g = g.without_kinds(["tint"]);
+    assert_eq!(cam_filter(&g, 0).unknown_kind_version, Some(1));
+    assert_eq!(saved_version(&g), json!(1));
+    let mut g = g.with_kinds([tint_v2()]);
+    let added = [("tint".to_owned(), None)].into_iter().collect();
+    assert!(g.upgrade_filters(&added, &migrate_tint).is_some());
+    assert_eq!(
+        cam_filter(&g, 0).settings().get("strength"),
+        Some(&json!(0.5))
+    );
+    assert_eq!(cam_filter(&g, 0).settings().get("amount"), None);
+    assert_eq!(saved_version(&g), json!(2));
+}
