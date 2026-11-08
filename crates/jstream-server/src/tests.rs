@@ -939,9 +939,13 @@ fn a_server_shutdown_disconnects_calls_and_ends_events() {
     assert_eq!(next_event(&harness, &mut late), None);
 }
 
-/// A session whose `hello` signals `entered`, then waits for a permit from `gate`, so a
-/// test can hold a connection's task inside the handshake while the client queues more
-/// messages behind it.
+/// A session whose `hello` signals `entered`, then blocks until `gate` has a permit, so a
+/// test can hold a connection's task while the client queues more messages behind it.
+///
+/// It blocks the thread rather than awaiting: since #1334 a `hello` waits beside the
+/// connection loop, which goes on reading while it waits, so an awaiting `hello` no longer
+/// holds the task. `block_in_place` hands the worker's other tasks to another thread, so
+/// the rest of the server runs meanwhile.
 struct Gated {
     inner: jstream_control::MockControl,
     entered: Arc<Notify>,
@@ -950,14 +954,14 @@ struct Gated {
 
 impl Control for Gated {
     fn hello(&self, hello: Hello) -> BoxFuture<'_, Result<Welcome, ControlError>> {
-        Box::pin(async move {
-            self.entered.notify_one();
-            match self.gate.acquire().await {
+        self.entered.notify_one();
+        tokio::task::block_in_place(|| {
+            match tokio::runtime::Handle::current().block_on(self.gate.acquire()) {
                 Ok(permit) => permit.forget(),
                 Err(error) => panic!("gate: {error}"),
             }
-            self.inner.hello(hello).await
-        })
+        });
+        self.inner.hello(hello)
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
@@ -979,7 +983,7 @@ impl Control for Gated {
 /// request and the server begins shutting down, so when the task goes on, the shutdown
 /// and the request are ready together. `tokio::select!` picks among ready branches at random,
 /// and without the check the task took and answered the request in about one round in
-/// twenty; 200 rounds (well under a second) miss that with a probability near 1e-4.
+/// six; 200 rounds miss that with a probability below 1e-12.
 #[test]
 fn a_request_read_after_the_shutdown_is_not_answered() {
     let runtime = match tokio::runtime::Builder::new_multi_thread()
@@ -1030,10 +1034,14 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
                 let serving = tokio::spawn(server.serve_with_shutdown(async move {
                     let _ = stopped.await;
                 }));
-                let mut socket = match tokio_tungstenite::connect_async(request).await {
-                    Ok((socket, _)) => socket,
-                    Err(error) => panic!("connect: {error}"),
-                };
+                // Without Nagle's algorithm, so the request goes out at once rather than
+                // waiting for the server to acknowledge the `hello`: a delayed ACK could
+                // hold it past the shutdown, and the round would test nothing.
+                let mut socket =
+                    match tokio_tungstenite::connect_async_with_config(request, None, true).await {
+                        Ok((socket, _)) => socket,
+                        Err(error) => panic!("connect: {error}"),
+                    };
                 for text in [hello, query] {
                     if let Err(error) = socket.send(Message::Text(text.into())).await {
                         panic!("send: {error}");
@@ -1043,6 +1051,7 @@ fn a_request_read_after_the_shutdown_is_not_answered() {
                         entered.notified().await;
                     }
                 }
+                tokio::time::sleep(Duration::from_millis(5)).await;
                 let _ = stop.send(());
                 // The server stops listening only after it has told its connections it is
                 // shutting down. (Awaiting `serving` here would wait for this connection,
