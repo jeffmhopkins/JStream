@@ -304,6 +304,12 @@ pub fn Canvas() -> impl IntoView {
     // channel and one preview stream on it, and draw its frames. Frames of a dialog's
     // own picture go to its tap.
     let stream = StoredValue::new_local(None::<preview::Stream>);
+    // The rate the live view asks for: the collection's base rate (ADR-0119).
+    let live_fps = Memo::new(move |_| {
+        studio
+            .collection
+            .with(|c| preview::live_fps(c.as_ref().map_or(preview::FPS, |c| c.base_fps)))
+    });
     let taps = use_context::<taps::PreviewTaps>();
     {
         let alive = Arc::clone(&alive);
@@ -320,8 +326,11 @@ pub fn Canvas() -> impl IntoView {
                 (stage.client_width() as f32, stage.client_height() as f32)
             });
             let ratio = window().device_pixel_ratio() as f32;
-            let mut first =
-                preview::Stream::first((width, height, ratio), screen::Screen::supports_h264());
+            let mut first = preview::Stream::first(
+                (width, height, ratio),
+                screen::Screen::supports_h264(),
+                live_fps.get_untracked(),
+            );
             // What the canvas shows by now.
             first.scene = wanted.get_untracked();
             stream.set_value(Some(first));
@@ -350,22 +359,9 @@ pub fn Canvas() -> impl IntoView {
             ));
         });
     }
-    // Another scene shown: close the stream and open one of it (CV-03), once what the
-    // canvas wants has held for `preview::SETTLE`. A scene switch changes the selection
-    // before the program, so `wanted` goes program, the scene, program again: settling
-    // keeps the program stream through it, and its transition plays without a stall
-    // (#1205).
-    let resubscribe = move |want: Option<SceneId>| {
+    // Closes the current stream and opens `next` in its place.
+    let switch = move |current: preview::Stream, next: preview::Stream| {
         let Some(tally) = view_tally.try_get_value() else {
-            return;
-        };
-        let Some(current) = stream.try_get_value().flatten() else {
-            return;
-        };
-        let Some(now) = wanted.try_get_untracked() else {
-            return;
-        };
-        let Some(next) = preview::settled_switch(&current, &want, &now) else {
             return;
         };
         stream.set_value(Some(next.clone()));
@@ -396,6 +392,34 @@ pub fn Canvas() -> impl IntoView {
             }
         });
     };
+    // Another scene shown: close the stream and open one of it (CV-03), once what the
+    // canvas wants has held for `preview::SETTLE`. A scene switch changes the selection
+    // before the program, so `wanted` goes program, the scene, program again: settling
+    // keeps the program stream through it, and its transition plays without a stall
+    // (#1205).
+    let resubscribe = move |want: Option<SceneId>| {
+        let Some(current) = stream.try_get_value().flatten() else {
+            return;
+        };
+        let Some(now) = wanted.try_get_untracked() else {
+            return;
+        };
+        let Some(next) = preview::settled_switch(&current, &want, &now) else {
+            return;
+        };
+        switch(current, next);
+    };
+    // A new base rate (or the first collection, read after the stream opened): the same
+    // picture at the new rate.
+    Effect::new(move |_| {
+        let fps = live_fps.get();
+        let Some(current) = stream.try_get_value().flatten() else {
+            return;
+        };
+        if let Some(next) = current.at_fps(fps) {
+            switch(current, next);
+        }
+    });
     Effect::new(move |_| {
         let want = wanted.get();
         if stream

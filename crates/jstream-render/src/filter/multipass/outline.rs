@@ -1,6 +1,7 @@
 //! `outline`: a stroke of `width` px around the input's alpha shape, outside it or
 //! inside it. Either way it draws within the input's frame, so an outside stroke past
-//! the frame's edge is cut (ADR-0065 §5).
+//! the frame's edge is cut (ADR-0065 §5); on an item, its `max_outset_px` gives the
+//! effects layer room for the widest outside stroke past the box.
 //!
 //! Method: a jump flood. A seed pass marks the shape's pixels (alpha at least 0.5;
 //! inside: the pixels below it), then steps of `S, S/2, ..., 1` and one more step of 1
@@ -42,20 +43,24 @@ const STROKE: Shader = Shader {
 };
 
 pub(super) fn descriptor() -> KindDescriptor {
-    filter(
-        KIND,
-        "Outline",
-        vec![
-            float("width", "Width", 0.0, f64::from(MAX_WIDTH), 4.0, "px"),
-            color("color", "Color", true, "#ffffff"),
-            choice(
-                "position",
-                "Position",
-                &[("outside", "Outside"), ("inside", "Inside")],
-                "outside",
-            ),
-        ],
-    )
+    KindDescriptor {
+        // The widest stroke and its one antialiased pixel.
+        max_outset_px: Some(MAX_WIDTH as u32 + 1),
+        ..filter(
+            KIND,
+            "Outline",
+            vec![
+                float("width", "Width", 0.0, f64::from(MAX_WIDTH), 4.0, "px"),
+                color("color", "Color", true, "#ffffff"),
+                choice(
+                    "position",
+                    "Position",
+                    &[("outside", "Outside"), ("inside", "Inside")],
+                    "outside",
+                ),
+            ],
+        )
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -85,6 +90,17 @@ fn read(settings: &Settings) -> Stroke {
         },
         color: read.color_linear("color", [1.0; 4]),
         inside: read.choice("position", "outside") == "inside",
+    }
+}
+
+/// The width and the pixel the antialiased edge takes, for a stroke outside the shape;
+/// none for one inside it.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    let stroke = read(settings);
+    if stroke.inside {
+        0.0
+    } else {
+        stroke.width + 1.0
     }
 }
 

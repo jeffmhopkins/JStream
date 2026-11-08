@@ -184,6 +184,8 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        // A still drawn small holds only the texels it is drawn with (#1139).
+        cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out, meter| {
             cache.begin_frame();
@@ -610,6 +612,8 @@ struct Work {
     /// The newest capture frame version the last picture drew
     /// ([`HubCaptures::frames`]).
     frames: u64,
+    /// What the frame slots the last picture drew held ([`Shot::slot_stamp`]).
+    slots: u64,
     /// The session the program stage feeds, while it draws this stream.
     staged: Option<Staged>,
 }
@@ -639,6 +643,7 @@ impl Work {
             shown: None,
             draw_errors: 0,
             frames: 0,
+            slots: 0,
             staged: None,
         }
     }
@@ -762,11 +767,14 @@ impl Staged {
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
     ) -> Result<Self, String> {
+        // The stage draws every `divisor`th base tick, so the encoder is told the rate
+        // it gets: never above the base rate, which a 60 fps ask of a 30 fps stage is.
+        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
+        let fps = (stage.base_fps / divisor).max(1);
         let H264 {
             session, packets, ..
-        } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
+        } = H264::open(codecs, size.width(), size.height(), fps)?;
         let profiled = meter_h264(stream, &session);
-        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
         stage.attach_preview(size, divisor, session.input());
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
@@ -943,6 +951,18 @@ impl PreviewHub {
 
     fn next_id(&self) -> u64 {
         self.inner.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// The rate of each live stream, for tests of the engine's cap.
+    #[cfg(test)]
+    pub(crate) fn rates(&self) -> Vec<u32> {
+        lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.live())
+            .map(|stream| stream.settings.fps)
+            .collect()
     }
 
     /// The scenes the live streams show, which the engine plans for them.
@@ -1396,9 +1416,12 @@ fn serve(
         return Some(work.next_at);
     }
     // A running transition changes the picture with time, not with the snapshot, and so
-    // can a video filter (a scroll, a video delay) and a capture.
+    // can a video filter (a scroll, a video delay) and a capture. The slots' stamp is
+    // read before the draw: a frame a slot takes during it is drawn again next time.
+    let slots = snapshot.shot().slot_stamp();
     let changed = snapshot.shot().changes_with_time()
         || frames.is_some_and(|frames| work.frames != frames)
+        || slots != work.slots
         || !work
             .shown
             .as_ref()
@@ -1448,6 +1471,7 @@ fn serve(
     work.draw_errors = 0;
     work.shown = Some((Arc::clone(snapshot), Arc::clone(live)));
     work.frames = frames.unwrap_or_default();
+    work.slots = slots;
     stream.keyframe.store(false, Ordering::Release);
     let pts_us =
         i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX);

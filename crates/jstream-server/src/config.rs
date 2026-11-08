@@ -176,6 +176,11 @@ pub struct ServerConfig {
     /// turn it on. Turning it on for a listener reached over plain HTTP would send
     /// device tokens in the clear.
     pub tls: bool,
+    /// The network listener (ADR-0104): a second listener, TLS only, that admits device
+    /// tokens and never the control token, beside the loopback one. Off until the
+    /// person turns network access on; [`ServerConfig::new`] leaves it off.
+    #[cfg(feature = "tls")]
+    pub network: Option<crate::NetworkConfig>,
     /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
     /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
     /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
@@ -208,6 +213,8 @@ impl ServerConfig {
             device_file: None,
             ui_settings_file: None,
             tls: false,
+            #[cfg(feature = "tls")]
+            network: None,
             pairing: true,
         }
     }

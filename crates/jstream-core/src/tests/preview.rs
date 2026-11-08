@@ -16,7 +16,7 @@ use jstream_protocol::{
     Action, Batch, BinaryFrame, Call, Edit, ItemId, PreviewCodec, PreviewDraft, ProtocolError,
     Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, DeviceFormatWant};
 use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -248,7 +248,7 @@ fn subscriptions_are_checked() {
         }) => field,
         other => panic!("expected invalid_argument, got {other:?}"),
     };
-    let too_fast = act(&control, subscribe(1, Some(31), Vec::new())).expect_err("fps");
+    let too_fast = act(&control, subscribe(1, Some(61), Vec::new())).expect_err("fps");
     assert_eq!(field(too_fast), "fps");
     // No H.264 encoder without backends, and the client takes nothing else.
     let h264_only = act(&control, subscribe(1, None, vec![PreviewCodec::H264])).expect_err("codec");
@@ -582,7 +582,10 @@ fn the_preview_captures_what_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Display(None), CaptureSpec::Device(None)],
+        &[
+            CaptureSpec::Display(None),
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 
@@ -657,14 +660,18 @@ fn a_draft_stream_shows_a_webcam_before_it_is_a_source() {
         subscribe_draft(1, "webcam", serde_json::json!({})),
     )
     .expect("subscribed");
-    until_drawn(&mut frames, &seen, &[CaptureSpec::Device(None)]);
+    until_drawn(
+        &mut frames,
+        &seen,
+        &[CaptureSpec::Device(None, DeviceFormatWant::default())],
+    );
     assert_eq!(devices.open_streams(), 1, "the draft opened the webcam");
     assert!(
         !hub.load()
             .shot()
             .captures()
             .iter()
-            .any(|key| matches!(key.spec, CaptureSpec::Device(_))),
+            .any(|key| matches!(key.spec, CaptureSpec::Device(..))),
         "the program shows no webcam"
     );
     let after = engine.rev();
@@ -708,7 +715,10 @@ fn a_draft_shares_the_webcam_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Device(None), CaptureSpec::Display(None)],
+        &[
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Display(None),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 }
@@ -1084,4 +1094,25 @@ fn a_views_report_shows_in_the_profile() {
     let seen = views(&other);
     assert_eq!(seen.len(), 1, "{seen:?}");
     assert_eq!(seen[0].view, "projector");
+}
+
+/// A stream is never faster than the collection's base rate (ADR-0119): 60 fps asked of
+/// a 30 fps collection is 30, and of a 60 fps one is 60.
+#[test]
+fn a_stream_runs_no_faster_than_the_base_rate() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    act(&control, subscribe(1, Some(60), Vec::new())).expect("subscribed");
+    assert_eq!(engine.preview_rates(), vec![30]);
+    batch(
+        &control,
+        Batch::single(Edit::CanvasSetFrameRate { fps: 60 }),
+    )
+    .expect("60 fps");
+    act(&control, subscribe(2, Some(60), Vec::new())).expect("subscribed");
+    act(&control, subscribe(3, Some(15), Vec::new())).expect("subscribed");
+    let mut rates = engine.preview_rates();
+    rates.sort_unstable();
+    assert_eq!(rates, vec![15, 30, 60]);
 }

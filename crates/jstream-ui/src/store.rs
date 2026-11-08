@@ -30,6 +30,8 @@ pub struct Collection {
     pub canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119).
     pub base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126).
+    pub blending: jstream_control::protocol::Blending,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
     /// Every scene with its items, in display order. A keyframe scene's `items` are its
@@ -66,6 +68,7 @@ impl Collection {
                 rev,
                 canvas,
                 base_fps,
+                blending,
                 sources,
                 scenes,
                 outputs,
@@ -106,6 +109,7 @@ impl Collection {
                     rev,
                     canvas,
                     base_fps,
+                    blending,
                     sources,
                     scenes,
                     keyframe_children,
@@ -814,7 +818,7 @@ impl Studio {
 
     /// Re-reads the kinds with `kind.list`. A failure shows in the problem bar and keeps
     /// the kinds read before.
-    async fn relist_kinds(&self, session: &Session) {
+    pub async fn relist_kinds(&self, session: &Session) {
         match list_kinds(session).await {
             Ok(kinds) => self.kinds.set(Some(kinds)),
             Err(error) => self.report(&error),

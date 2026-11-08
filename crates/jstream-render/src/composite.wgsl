@@ -86,10 +86,11 @@ fn vs(
     return out;
 }
 
-// IEC 61966-2-1 decode.
+// IEC 61966-2-1 decode. The upper segment is written so that 1 decodes to exactly 1,
+// and white survives any number of encode and decode round trips (ADR-0126 §3).
 fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
     let low = c / 12.92;
-    let high = pow((c + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    let high = pow(vec3<f32>(1.0) + (c - vec3<f32>(1.0)) / 1.055, vec3<f32>(2.4));
     return select(high, low, c <= vec3<f32>(0.04045));
 }
 
@@ -165,20 +166,45 @@ fn decode(c: vec4<f32>, mode: f32) -> vec4<f32> {
     return vec4<f32>(rgb, alpha);
 }
 
+// Whether the target holds premultiplied sRGB-encoded colour rather than premultiplied
+// linear light: the project's browser-style blending (ADR-0126 §3). Each pipeline is
+// built with it set one way.
+override ENCODED: bool = false;
+
+// IEC 61966-2-1 encode, of a value in [0, 1]. Above 1 the curve continues, which
+// browser-style blending relies on for a gain past white. Written so that 1 encodes to
+// exactly 1, as the decode is.
+fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
+    let low = c * 12.92;
+    let high = vec3<f32>(1.0) + 1.055 * (pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(1.0));
+    return select(high, low, c <= vec3<f32>(0.0031308));
+}
+
+// Premultiplied linear colour as the target holds it: unchanged in linear light, and
+// encoded straight and premultiplied again in the encoded space. A fragment with no
+// alpha but some colour is pure added light: its colour is encoded as it is.
+fn to_target(c: vec4<f32>) -> vec4<f32> {
+    if !ENCODED {
+        return c;
+    }
+    if c.a > 0.0 {
+        return vec4<f32>(linear_to_srgb(max(c.rgb / c.a, vec3<f32>(0.0))) * c.a, c.a);
+    }
+    return vec4<f32>(linear_to_srgb(max(c.rgb, vec3<f32>(0.0))), 0.0);
+}
+
+// The item's colour at this fragment, in the target's space.
+fn item(in: VsOut) -> vec4<f32> {
+    return to_target(source(in));
+}
+
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    return source(in);
+    return item(in);
 }
 
 // The modes that read the backdrop. It is bound only to their pipelines.
 @group(1) @binding(0) var backdrop: texture_2d<f32>;
-
-// IEC 61966-2-1 encode, of a value in [0, 1].
-fn linear_to_srgb(c: vec3<f32>) -> vec3<f32> {
-    let low = c * 12.92;
-    let high = 1.055 * pow(c, vec3<f32>(1.0 / 2.4)) - vec3<f32>(0.055);
-    return select(high, low, c <= vec3<f32>(0.0031308));
-}
 
 fn unpremultiply(c: vec4<f32>) -> vec3<f32> {
     return select(vec3<f32>(0.0), c.rgb / c.a, c.a > 0.0);
@@ -217,14 +243,22 @@ fn mix_colour(mode: u32, cs: vec3<f32>, cb: vec3<f32>) -> vec3<f32> {
 }
 
 // The W3C source-over composite of a separable mode, premultiplied:
-// s·(1 − αb) + b·(1 − αs) + αs·αb·B(cs, cb), alpha αs + αb − αs·αb.
+// s·(1 − αb) + b·(1 − αs) + αs·αb·B(cs, cb), alpha αs + αb − αs·αb. In the encoded
+// space both are already encoded, so every mode mixes them as they are, as a browser
+// does (ADR-0126 §3).
 fn blended(in: VsOut, mode: u32) -> vec4<f32> {
-    let s = source(in);
+    let s = item(in);
     let b = textureLoad(backdrop, vec2<i32>(in.clip.xy), 0);
     var cs = unpremultiply(s);
     var cb = unpremultiply(b);
     var mixed: vec3<f32>;
-    if mode >= OVERLAY {
+    if ENCODED {
+        if mode >= OVERLAY {
+            cs = clamp(cs, vec3<f32>(0.0), vec3<f32>(1.0));
+            cb = clamp(cb, vec3<f32>(0.0), vec3<f32>(1.0));
+        }
+        mixed = mix_colour(mode, cs, cb);
+    } else if mode >= OVERLAY {
         // These blend in sRGB-encoded space, where their midpoint is perceptual, as in
         // other editors; the encoding needs [0, 1], so brighter-than-white is clamped.
         cs = linear_to_srgb(clamp(cs, vec3<f32>(0.0), vec3<f32>(1.0)));
@@ -260,35 +294,4 @@ fn fs_difference(in: VsOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_exclusion(in: VsOut) -> @location(0) vec4<f32> {
     return blended(in, EXCLUSION);
-}
-
-// Source-over and additive mixed in sRGB-encoded values, as a web browser blends
-// (ADR-0105): the straight colours are encoded, composited premultiplied in that space,
-// and the result decoded. Below 0 is clamped for the encoding; above 1 is kept (the
-// curve continues), so an additive gain still brightens.
-fn encoded_composite(in: VsOut, additive: bool) -> vec4<f32> {
-    let s = source(in);
-    let b = textureLoad(backdrop, vec2<i32>(in.clip.xy), 0);
-    let cs = linear_to_srgb(max(unpremultiply(s), vec3<f32>(0.0)));
-    let cb = linear_to_srgb(max(unpremultiply(b), vec3<f32>(0.0)));
-    let alpha = s.a + b.a - s.a * b.a;
-    var under = b.a * (1.0 - s.a);
-    if additive {
-        under = b.a;
-    }
-    let mixed = cs * s.a + cb * under;
-    if alpha <= 0.0 {
-        return vec4<f32>(0.0);
-    }
-    return vec4<f32>(srgb_to_linear(mixed / alpha) * alpha, alpha);
-}
-
-@fragment
-fn fs_normal_srgb(in: VsOut) -> @location(0) vec4<f32> {
-    return encoded_composite(in, false);
-}
-
-@fragment
-fn fs_additive_srgb(in: VsOut) -> @location(0) vec4<f32> {
-    return encoded_composite(in, true);
 }

@@ -16,10 +16,12 @@
 //! on loopback or on a TLS listener (`ServerConfig::tls`). On a TLS listener a browser
 //! pairs on the token-free page at [`PAIR_PAGE_PATH`] and keeps its device token in a
 //! cookie the gate also reads (ADR-0047). The server answers `pairing.start`,
-//! `device.list` and `device.revoke` itself, on every connection and MCP session.
-//! Layer 4.
+//! `device.list` and `device.revoke` itself, on every connection and MCP session. With
+//! the `tls` feature and `ServerConfig::network`, a second listener serves devices on the
+//! network: TLS only, with a self-signed certificate made on the host, device tokens only
+//! (ADR-0104). Layer 4.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0047-browser-pairing-page-and-device-cookie.md, docs/security/threat-model.md#server, docs/security/threat-model.md#pairing
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-server/README.md#purpose, crates/jstream-server/README.md#design, docs/adr/0006-mcp-full-access.md, docs/adr/0047-browser-pairing-page-and-device-cookie.md, docs/adr/0104-network-listener-over-tls.md, docs/security/threat-model.md#server, docs/security/threat-model.md#pairing
 
 #![forbid(unsafe_code)]
 
@@ -29,8 +31,12 @@ mod devices;
 mod envelope;
 mod error;
 mod gate;
+#[cfg(feature = "tls")]
+pub mod identity;
 mod listener;
 mod mcp;
+#[cfg(feature = "tls")]
+mod network;
 mod pair;
 mod pair_page;
 mod preview;
@@ -45,6 +51,8 @@ pub use config::{ServerConfig, Token};
 pub use error::ServerError;
 pub use jstream_control::WS_PATH;
 pub use mcp::MCP_PATH;
+#[cfg(feature = "tls")]
+pub use network::NetworkConfig;
 pub use pair::PAIR_PATH;
 pub use pair_page::PAIR_PAGE_PATH;
 pub use ui_settings::UiSettingsView;
@@ -89,10 +97,22 @@ const FRAME_LIMIT: usize = 16 << 20;
 pub struct Server {
     listener: TcpListener,
     local_addr: SocketAddr,
+    /// The network listener (ADR-0104), when configured.
+    #[cfg(feature = "tls")]
+    network: Option<Network>,
     max_tcp_connections: usize,
     header_read_timeout: Duration,
     app: Arc<App>,
     shutdown: watch::Sender<bool>,
+}
+
+/// The bound network listener.
+#[cfg(feature = "tls")]
+struct Network {
+    listener: TcpListener,
+    local_addr: SocketAddr,
+    acceptor: tokio_rustls::TlsAcceptor,
+    identity: Arc<identity::Identity>,
 }
 
 /// What every connection handler shares.
@@ -117,16 +137,25 @@ struct App {
     /// Whether the server listens on a loopback address or on a TLS listener, the only
     /// places pairing is offered and device tokens are accepted.
     pairing_offered: bool,
-    /// Whether the listener is reached over TLS (`ServerConfig::tls`): only then are the
-    /// pairing page and the device cookie (ADR-0047) served.
+    /// Whether the host's own listener is reached over TLS (`ServerConfig::tls`): only
+    /// then, or on the network listener, are the pairing page and the device cookie
+    /// (ADR-0047) served.
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
+    /// Where a device on the network reaches the network listener, while it is on:
+    /// `pairing.start` answers with it (0.97).
+    network_access: Option<jstream_protocol::NetworkAccess>,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
 }
 
 impl App {
+    /// Whether the connection came over TLS: the network listener's always do.
+    fn tls(&self, accepted: &Accepted) -> bool {
+        self.tls || accepted.network
+    }
+
     /// A new session from the connector, admitted by `credential`.
     fn open(&self, credential: Credential) -> Box<dyn Control> {
         Box::new(Admitted::new(
@@ -135,6 +164,7 @@ impl App {
             Arc::clone(&self.devices),
             self.pairing_offered,
             self.pairing,
+            self.network_access.clone(),
             Arc::clone(&self.ui_settings),
         ))
     }
@@ -159,11 +189,47 @@ impl Server {
         };
         let listener = TcpListener::bind(config.bind).await.map_err(bind_error)?;
         let local_addr = listener.local_addr().map_err(bind_error)?;
+        let gate = Gate::new(&config, local_addr, Arc::clone(&devices));
+        #[cfg(feature = "tls")]
+        let (network, gate) = match &config.network {
+            None => (None, gate),
+            Some(network) => {
+                let acceptor = network::acceptor(&network.identity)?;
+                let bind_error = |source| ServerError::Bind {
+                    addr: network.bind,
+                    source,
+                };
+                let listener = TcpListener::bind(network.bind).await.map_err(bind_error)?;
+                let local_addr = listener.local_addr().map_err(bind_error)?;
+                let gate = gate.with_network(local_addr.port(), network.identity.names());
+                tracing::info!(
+                    addr = %local_addr,
+                    fingerprint = network.identity.fingerprint(),
+                    "network listener on (TLS, device tokens only)"
+                );
+                let network = Network {
+                    listener,
+                    local_addr,
+                    acceptor,
+                    identity: Arc::clone(&network.identity),
+                };
+                (Some(network), gate)
+            }
+        };
+        #[cfg(feature = "tls")]
+        let network_access = network
+            .as_ref()
+            .map(|network| jstream_protocol::NetworkAccess {
+                urls: network_urls(&network.identity, network.local_addr.port()),
+                fingerprint: network.identity.fingerprint().to_owned(),
+            });
+        #[cfg(not(feature = "tls"))]
+        let network_access = None;
         let (shutdown, stopping) = watch::channel(false);
         let mcp = config.mcp.then(|| Mcp::new(&config));
         let app = Arc::new(App {
             connector,
-            gate: Gate::new(&config, local_addr, Arc::clone(&devices)),
+            gate,
             shutdown: stopping,
             connections: AtomicU64::new(0),
             slots: Arc::new(Semaphore::new(
@@ -180,11 +246,14 @@ impl Server {
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
             pairing: config.pairing,
+            network_access,
             ui_settings,
         });
         Ok(Server {
             listener,
             local_addr,
+            #[cfg(feature = "tls")]
+            network,
             max_tcp_connections: config.max_tcp_connections,
             header_read_timeout: config.header_read_timeout,
             app,
@@ -232,6 +301,32 @@ impl Server {
             .map(|_| format!("{}://{}/", self.http_scheme(), self.local_addr))
     }
 
+    /// The network listener's address (ADR-0104), when it is on.
+    #[cfg(feature = "tls")]
+    pub fn network_addr(&self) -> Option<SocketAddr> {
+        self.network.as_ref().map(|network| network.local_addr)
+    }
+
+    /// The network listener's URLs, one per name or address its certificate carries,
+    /// e.g. `https://studio.local:4456/`, when it is on. A device opens one of them,
+    /// checks the certificate's fingerprint and pairs (`GET /pair` for a browser).
+    #[cfg(feature = "tls")]
+    pub fn network_urls(&self) -> Vec<String> {
+        match &self.network {
+            Some(network) => network_urls(&network.identity, network.local_addr.port()),
+            None => Vec::new(),
+        }
+    }
+
+    /// The network listener's certificate fingerprint (SHA-256, `AB:CD:…`), when it is
+    /// on: what the host shows beside the pairing code and the address (ADR-0104 §5).
+    #[cfg(feature = "tls")]
+    pub fn network_fingerprint(&self) -> Option<&str> {
+        self.network
+            .as_ref()
+            .map(|network| network.identity.fingerprint())
+    }
+
     /// Serves until the listener fails.
     pub async fn serve(self) -> Result<(), ServerError> {
         self.serve_with_shutdown(std::future::pending()).await
@@ -248,6 +343,8 @@ impl Server {
     {
         let Server {
             listener,
+            #[cfg(feature = "tls")]
+            network,
             max_tcp_connections,
             header_read_timeout,
             app,
@@ -274,26 +371,54 @@ impl Server {
                 shutdown.send_replace(true);
             }
         };
-        // The peer address is only logged, never trusted: the gate decides on the headers.
-        let service = router.into_make_service_with_connect_info::<Accepted>();
+        // The peer address is only logged, never trusted: the gate decides on the
+        // headers. (The network listener counts pairing attempts by it.)
+        let service = router
+            .clone()
+            .into_make_service_with_connect_info::<Accepted>();
         let listener = Limited::new(listener, max_tcp_connections, header_read_timeout);
-        axum::serve(listener, service)
-            .with_graceful_shutdown(signal)
-            .await
-            .map_err(ServerError::Serve)?;
-        // axum doesn't wait for upgraded connections: they run in their own tasks, each
-        // holding a receiver of `shutdown` until it has sent its close and finished the
-        // closing handshake (bounded by `CLOSE_TIMEOUT`). Without this wait, a host that
-        // drops its runtime once this returns would cut those closes short (#294). The
-        // bound only guards against a receiver held elsewhere by mistake.
-        if tokio::time::timeout(session::CLOSE_TIMEOUT * 2, shutdown.closed())
-            .await
-            .is_err()
-        {
-            tracing::warn!("stopped without waiting for every connection to close");
+        let host = axum::serve(listener, service).with_graceful_shutdown(signal);
+        #[cfg(feature = "tls")]
+        if let Some(network) = network {
+            // Its own pool of open connections, the size of the host listener's, so the
+            // network can't use up the host's (#1129 N1).
+            let listener = network::TlsLimited::new(
+                Limited::new(network.listener, max_tcp_connections, header_read_timeout),
+                network.acceptor,
+            );
+            let service = router.into_make_service_with_connect_info::<Accepted>();
+            let mut stopping = shutdown.subscribe();
+            let stop = async move {
+                let _ = stopping.wait_for(|stop| *stop).await;
+            };
+            let remote = axum::serve(listener, service).with_graceful_shutdown(stop);
+            tokio::try_join!(async { host.await.map_err(ServerError::Serve) }, async {
+                remote.await.map_err(ServerError::Serve)
+            },)?;
+            return finish(shutdown).await;
         }
-        Ok(())
+        // The sessions' shutdown receivers must all be gone for `finish` to return, and
+        // this one is in the router's state.
+        drop(router);
+        host.await.map_err(ServerError::Serve)?;
+        finish(shutdown).await
     }
+}
+
+/// Waits for the upgraded connections to finish closing, after the listeners stopped.
+async fn finish(shutdown: Arc<watch::Sender<bool>>) -> Result<(), ServerError> {
+    // axum doesn't wait for upgraded connections: they run in their own tasks, each
+    // holding a receiver of `shutdown` until it has sent its close and finished the
+    // closing handshake (bounded by `CLOSE_TIMEOUT`). Without this wait, a host that
+    // drops its runtime once this returns would cut those closes short (#294). The
+    // bound only guards against a receiver held elsewhere by mistake.
+    if tokio::time::timeout(session::CLOSE_TIMEOUT * 2, shutdown.closed())
+        .await
+        .is_err()
+    {
+        tracing::warn!("stopped without waiting for every connection to close");
+    }
+    Ok(())
 }
 
 /// `GET /api/v1/ws`: checks the request (R-SEC-002) and that a connection slot is free,
@@ -310,7 +435,7 @@ async fn upgrade(
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
     let peer = accepted.peer;
-    let credential = match app.gate.admit(&headers, peer) {
+    let credential = match app.gate.admit(&headers, peer, accepted.on()) {
         Ok(credential) => credential,
         Err(refusal) => return refusal.into_response(),
     };
@@ -392,4 +517,18 @@ fn rejects_missing_token() {
 fn rejects_foreign_origin() {
     tests::check_rejects_foreign_origin();
     tests::check_mcp_rejects_foreign_origin();
+}
+
+/// The network listener's URLs on `port`, one per name or address `identity`'s
+/// certificate carries; an IPv6 address in brackets.
+#[cfg(feature = "tls")]
+fn network_urls(identity: &identity::Identity, port: u16) -> Vec<String> {
+    identity
+        .names()
+        .iter()
+        .map(|name| match name.parse::<std::net::Ipv6Addr>() {
+            Ok(v6) => format!("https://[{v6}]:{port}/"),
+            Err(_) => format!("https://{name}:{port}/"),
+        })
+        .collect()
 }

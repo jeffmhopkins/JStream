@@ -44,7 +44,8 @@ jstream-crash.workspace = true
 jstream-platform.workspace = true
 # On Windows, the output kinds the publish opener reads.
 jstream-protocol.workspace = true
-jstream-server.workspace = true
+# `tls` for the network listener, "Allow devices on my network" (ADR-0104).
+jstream-server = { workspace = true, features = ["tls"] }
 # The update check's one GET of GitHub's releases list (R-DEP-006: rustls with ring).
 rustls.workspace = true
 rustls-native-certs.workspace = true
@@ -70,6 +71,11 @@ jstream-platform-windows.workspace = true
 # Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).
 jstream-sources.workspace = true
 tauri.workspace = true
+
+# On Linux, the global hotkeys' X11 listener and the session kind that decides whether
+# it starts (ADR-0112).
+[target.'cfg(target_os = "linux")'.dependencies]
+jstream-platform-linux.workspace = true
 
 # Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
 [target.'cfg(windows)'.build-dependencies]

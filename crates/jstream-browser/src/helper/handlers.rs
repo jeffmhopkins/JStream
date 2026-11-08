@@ -4,6 +4,13 @@
 //! access its request policy allows the requesting origin ([`crate::permission`]). The
 //! request handler also answers a page given as HTML with its HTML ([`HtmlPage`],
 //! #1035). Plus a task that runs a closure on CEF's UI thread.
+//!
+//! # Behaviour
+//!
+//! The audio handler asks for 48 kHz stereo in 10 ms
+//! packets and sends each interleaved (mono doubled, channels past two dropped). A stream
+//! error fails the page's audio in the engine, which reopens its input, except while the
+//! page is closing, when "Socket closed unexpectedly" is CEF's normal end of the stream.
 
 use std::os::raw::c_int;
 use std::sync::Arc;

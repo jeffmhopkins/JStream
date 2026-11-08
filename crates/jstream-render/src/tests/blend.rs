@@ -1,10 +1,10 @@
-//! ADR-0082's blend modes, against a CPU reference of the W3C compositing formulas in
-//! premultiplied linear light (sRGB-encoded for overlay, difference and exclusion, and
-//! the whole composite for `normal_srgb` and `additive_srgb`, ADR-0105), on
-//! opaque and translucent backdrops and sources.
+//! ADR-0082's blend modes in both of ADR-0126's spaces, against a CPU reference of the
+//! W3C compositing formulas: in premultiplied linear light (sRGB-encoded for overlay,
+//! difference and exclusion) for `linear`, and in premultiplied sRGB-encoded values, as
+//! a browser composites, for `srgb`; on opaque and translucent backdrops and sources.
 
 use jstream_media::FrameSize;
-use jstream_protocol::{BlendMode, Finite32, ItemGeometry, Size, Vec2};
+use jstream_protocol::{BlendMode, Blending, Finite32, ItemGeometry, Size, Vec2};
 
 use super::{item, near, open, solid};
 use crate::color::srgb_channel_to_linear;
@@ -15,6 +15,17 @@ const TOLERANCE: u8 = 2;
 
 fn encode(c: f64) -> f64 {
     let c = c.clamp(0.0, 1.0);
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// The encode with the curve continued above 1 and values below 0 clamped, as the
+/// encoded space stores a gain past white (ADR-0126 §3).
+fn encode_extended(c: f64) -> f64 {
+    let c = c.max(0.0);
     if c <= 0.003_130_8 {
         c * 12.92
     } else {
@@ -50,37 +61,39 @@ fn mixed(mode: BlendMode, cs: f64, cb: f64) -> f64 {
 }
 
 /// The resolved straight sRGB pixel of `source` (straight sRGB 8-bit, times `opacity`)
-/// composited with `mode` over `backdrop` (straight sRGB in [0, 1], alpha linear).
-/// Opacity above 1 is a gain (#1101): the linear colour times the excess, the alpha
-/// times at most 1.
+/// composited with `mode` over `backdrop` (straight sRGB in [0, 1], alpha linear), in
+/// linear light. Opacity above 1 is a gain (#1101): the linear colour times the excess,
+/// the alpha times at most 1.
 fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) -> [u8; 4] {
+    reference_in(Blending::Linear, mode, source, opacity, backdrop)
+}
+
+/// As [`reference`], in `blending`'s space.
+fn reference_in(
+    blending: Blending,
+    mode: BlendMode,
+    source: [u8; 4],
+    opacity: f32,
+    backdrop: Color,
+) -> [u8; 4] {
     let opacity = f64::from(opacity);
     let sa = f64::from(source[3]) / 255.0 * opacity.min(1.0);
     let ba = f64::from(backdrop.a);
-    let back = [backdrop.r, backdrop.g, backdrop.b].map(|c| decode(f64::from(c)));
-    let src =
+    let mut back = [backdrop.r, backdrop.g, backdrop.b].map(|c| decode(f64::from(c)));
+    let mut src =
         [source[0], source[1], source[2]].map(|c| decode(f64::from(c) / 255.0) * opacity.max(1.0));
-    let alpha = if matches!(mode, BlendMode::Additive | BlendMode::AdditiveSrgb) {
+    let encoded = blending == Blending::Srgb;
+    if encoded {
+        // ADR-0126 §3: every colour is encoded first, and the formulas run on those.
+        src = src.map(encode_extended);
+        back = back.map(encode_extended);
+    }
+    let alpha = if mode == BlendMode::Additive {
         sa + ba * (1.0 - sa)
     } else {
         sa + ba - sa * ba
     };
     let mut out = [0u8; 4];
-    if matches!(mode, BlendMode::NormalSrgb | BlendMode::AdditiveSrgb) {
-        // ADR-0105: source-over or additive of the encoded straight colours.
-        let under = if mode == BlendMode::AdditiveSrgb {
-            ba
-        } else {
-            ba * (1.0 - sa)
-        };
-        for channel in 0..3 {
-            let mixed = encode(src[channel]) * sa + encode(back[channel]) * under;
-            let straight = if alpha > 0.0 { mixed / alpha } else { 0.0 };
-            out[channel] = (straight.clamp(0.0, 1.0) * 255.0).round() as u8;
-        }
-        out[3] = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
-        return out;
-    }
     for channel in 0..3 {
         let (s, b) = (src[channel] * sa, back[channel] * ba);
         let premultiplied = match mode {
@@ -88,7 +101,13 @@ fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) ->
             BlendMode::Additive => s + b,
             _ => {
                 let (cs, cb) = (src[channel], back[channel]);
-                let mix = if in_srgb(mode) {
+                let mix = if encoded {
+                    if in_srgb(mode) {
+                        mixed(mode, cs.clamp(0.0, 1.0), cb.clamp(0.0, 1.0))
+                    } else {
+                        mixed(mode, cs, cb)
+                    }
+                } else if in_srgb(mode) {
                     decode(mixed(mode, encode(cs), encode(cb)))
                 } else {
                     mixed(mode, cs, cb)
@@ -101,7 +120,12 @@ fn reference(mode: BlendMode, source: [u8; 4], opacity: f32, backdrop: Color) ->
         } else {
             0.0
         };
-        out[channel] = (encode(straight) * 255.0).round() as u8;
+        let code = if encoded {
+            straight.clamp(0.0, 1.0)
+        } else {
+            encode(straight)
+        };
+        out[channel] = (code * 255.0).round() as u8;
     }
     out[3] = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
     out
@@ -133,9 +157,9 @@ fn render(
         .clone()
 }
 
-/// Every mode, over every backdrop, from every source, matches the reference: an
-/// opaque, a translucent and a fully transparent backdrop, and opaque, faded and
-/// translucent sources, including values each side of overlay's midpoint.
+/// Every mode, in both spaces, over every backdrop, from every source, matches the
+/// reference: an opaque, a translucent and a fully transparent backdrop, and opaque,
+/// faded and translucent sources, including values each side of overlay's midpoint.
 #[test]
 fn every_mode_matches_the_reference() {
     let Some(mut opened) = open() else {
@@ -159,22 +183,27 @@ fn every_mode_matches_the_reference() {
         ([250, 128, 10, 128], 1.0),
         ([30, 30, 230, 200], 0.5),
     ];
-    for mode in BlendMode::ALL {
+    for (blending, mode) in Blending::ALL
+        .into_iter()
+        .flat_map(|b| BlendMode::ALL.map(|m| (b, m)))
+    {
+        compositor.set_blending(blending);
         for backdrop in backdrops {
             for (rgba, opacity) in sources {
                 let image = solid(compositor, 2, 2, rgba);
                 let items = [blended(&image, Placement::IDENTITY, opacity, mode)];
                 let shot = render(compositor, (4, 4), backdrop, &items);
-                let expected = reference(mode, rgba, opacity, backdrop);
+                let expected = reference_in(blending, mode, rgba, opacity, backdrop);
                 let got = shot.pixel(0, 0).expect("inside");
                 let close = (0..4).all(|c| got[c].abs_diff(expected[c]) <= TOLERANCE);
                 // A fully transparent result has no colour to compare.
                 let empty = expected[3] == 0 && got[3] == 0;
                 assert!(
                     close || empty,
-                    "{} of {rgba:?} at {opacity} over {backdrop:?}: {got:?}, expected \
-                     {expected:?}",
-                    mode.as_str()
+                    "{} ({}) of {rgba:?} at {opacity} over {backdrop:?}: {got:?}, \
+                     expected {expected:?}",
+                    mode.as_str(),
+                    blending.as_str()
                 );
                 // Outside the item the backdrop is left as it was.
                 let untouched = reference(BlendMode::Normal, [0, 0, 0, 0], 0.0, backdrop);
@@ -268,13 +297,17 @@ fn opacity_above_one_is_a_gain_on_the_light() {
         ([90, 60, 30, 128], 3.0),
         ([20, 30, 40, 255], jstream_protocol::MAX_OPACITY),
     ];
-    for mode in [BlendMode::Normal, BlendMode::Additive] {
+    for (blending, mode) in Blending::ALL
+        .into_iter()
+        .flat_map(|b| [BlendMode::Normal, BlendMode::Additive].map(|m| (b, m)))
+    {
+        compositor.set_blending(blending);
         for backdrop in backdrops {
             for (rgba, opacity) in sources {
                 let image = solid(compositor, 2, 2, rgba);
                 let items = [blended(&image, Placement::IDENTITY, opacity, mode)];
                 let shot = render(compositor, (4, 4), backdrop, &items);
-                let expected = reference(mode, rgba, opacity, backdrop);
+                let expected = reference_in(blending, mode, rgba, opacity, backdrop);
                 let got = shot.pixel(0, 0).expect("inside");
                 assert!(
                     (0..4).all(|c| got[c].abs_diff(expected[c]) <= TOLERANCE),
@@ -285,7 +318,8 @@ fn opacity_above_one_is_a_gain_on_the_light() {
             }
         }
     }
-    // Twice the light of the same item at 1, added to black.
+    // Twice the light of the same item at 1, added to black, in linear light.
+    compositor.set_blending(Blending::Linear);
     let image = solid(compositor, 2, 2, [60, 40, 20, 255]);
     let once = render(
         compositor,
@@ -474,9 +508,9 @@ fn a_3d_item_reads_the_backdrop_under_its_polygon() {
     }
 }
 
-/// A faint veil over a dark backdrop keeps the strength a browser gives it under
-/// `normal_srgb` (#1096): white at 10% over sRGB 30 is about 53 mixed encoded, as a
-/// browser composites, where `normal`, mixing linear light, lifts it to about 94.
+/// A faint veil over a dark backdrop keeps the strength a browser gives it in the
+/// browser-style space (#1096, ADR-0126): white at 10% over sRGB 30 is about 53 mixed
+/// encoded, as a browser composites, where linear light lifts it to about 94.
 #[test]
 fn a_faint_veil_keeps_its_browser_strength_in_srgb() {
     let Some(mut opened) = open() else {
@@ -486,18 +520,48 @@ fn a_faint_veil_keeps_its_browser_strength_in_srgb() {
     let white = solid(compositor, 2, 2, [255, 255, 255, 255]);
     let dark = 30.0 / 255.0;
     let background = Color::rgb(dark, dark, dark);
-    for (mode, expected) in [(BlendMode::NormalSrgb, 53), (BlendMode::Normal, 94)] {
-        let items = [blended(&white, Placement::IDENTITY, 0.1, mode)];
+    for (blending, expected) in [(Blending::Srgb, 53), (Blending::Linear, 94)] {
+        compositor.set_blending(blending);
+        let items = [blended(&white, Placement::IDENTITY, 0.1, BlendMode::Normal)];
         let shot = render(compositor, (2, 2), background, &items);
         near(&shot, 0, 0, [expected, expected, expected, 255], TOLERANCE);
     }
     // Additive adds the encoded values: 30 + 10% of 255.
+    compositor.set_blending(Blending::Srgb);
     let items = [blended(
         &white,
         Placement::IDENTITY,
         0.1,
-        BlendMode::AdditiveSrgb,
+        BlendMode::Additive,
     )];
     let shot = render(compositor, (2, 2), background, &items);
     near(&shot, 0, 0, [56, 56, 56, 255], TOLERANCE);
+}
+
+/// In the browser-style space a layer leaves the compositor as linear light, as in the
+/// other: a nested scene's veil, placed in its parent, keeps the browser strength and is
+/// not encoded twice; and the background alone round-trips exactly.
+#[test]
+fn a_browser_style_layer_is_linear_when_placed() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    compositor.set_blending(Blending::Srgb);
+    let white = solid(compositor, 2, 2, [255, 255, 255, 255]);
+    let dark = 30.0 / 255.0;
+    let background = Color::rgb(dark, dark, dark);
+    let layer = compositor.layer(2, 2).expect("layer");
+    let inner = [blended(&white, Placement::IDENTITY, 0.1, BlendMode::Normal)];
+    let scene = Scene {
+        canvas: FrameSize::new(2, 2).expect("non-zero"),
+        background,
+        items: &inner,
+    };
+    compositor.render_into(&scene, &layer).expect("render into");
+    let outer = [blended(&layer, Placement::IDENTITY, 1.0, BlendMode::Normal)];
+    let shot = render(compositor, (2, 2), Color::BLACK, &outer);
+    near(&shot, 0, 0, [53, 53, 53, 255], TOLERANCE);
+    let shot = render(compositor, (2, 2), background, &[]);
+    near(&shot, 0, 0, [30, 30, 30, 255], 0);
 }

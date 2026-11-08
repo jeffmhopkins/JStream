@@ -48,12 +48,12 @@ use jstream_graph::Graph;
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, CollectionCause,
-    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
-    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
+    CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
+    Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
     IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
     PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
     RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
@@ -537,6 +537,12 @@ impl Engine {
             }
             _ => None,
         }
+    }
+
+    /// The rate of each live preview stream.
+    #[cfg(test)]
+    pub(crate) fn preview_rates(&self) -> Vec<u32> {
+        self.shared.previews.rates()
     }
 
     /// Installs a pack update as the watcher, a blame or `effect.enable` does.
@@ -2034,7 +2040,7 @@ impl Engine {
                 source,
                 source_id,
             } => {
-                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let mut settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
                 // `source_id` first, so the error names the later field however many
                 // of the three are given.
                 if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
@@ -2067,6 +2073,9 @@ impl Engine {
                             id: source_id.as_str().to_owned(),
                         });
                     }
+                    // No faster than the program: a 60 fps ask of a 30 fps collection
+                    // gets 30, on the hub as on the program stage.
+                    settings.fps = settings.fps.min(state.graph.state().base_fps().max(1));
                     // Only the kinds and the canvas: the draft is planned unlocked.
                     let kinds = source
                         .as_ref()
@@ -2331,28 +2340,65 @@ impl Engine {
         self
     }
 
-    /// `capture.targets`: what the platform's capture backend can capture now, listed
-    /// with no engine lock held, since listing windows calls the OS.
+    /// `capture.targets`: what the platform's capture backend can capture now, then the
+    /// video devices with the formats the engine reads of each, listed with no engine
+    /// lock held, since listing windows and devices calls the OS. A list that fails is
+    /// left out, and logged; the query fails only when both do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
-        let capture = self.media.as_ref().and_then(|host| {
-            lock(&host.backends)
-                .as_ref()
-                .map(|backends| Arc::clone(&backends.capture))
+        let backends = self.media.as_ref().and_then(|host| {
+            lock(&host.backends).as_ref().map(|backends| {
+                (
+                    Arc::clone(&backends.capture),
+                    Arc::clone(&backends.video_devices),
+                )
+            })
         });
-        let Some(capture) = capture else {
+        let Some((capture, devices)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
         };
-        let mut targets: Vec<_> = capture
+        let captured = capture
             .targets()
-            .map_err(|err| ProtocolError::ActionFailed {
-                reason: format!("listing capture targets: {err}"),
-            })?
-            .into_iter()
-            .filter_map(capture_target_info)
-            .collect();
-        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+            .map_err(|err| format!("listing capture targets: {err}"));
+        let listed = devices
+            .devices()
+            .map_err(|err| format!("listing video devices: {err}"));
+        let (mut targets, devices_listed) = match (captured, listed) {
+            (Err(capture), Err(devices)) => {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!("{capture}; {devices}"),
+                });
+            }
+            (captured, listed) => {
+                let targets: Vec<_> = match captured {
+                    Ok(targets) => targets
+                        .into_iter()
+                        .filter_map(capture_target_info)
+                        .collect(),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
+                        Vec::new()
+                    }
+                };
+                let listed = listed.unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, "capture.targets lists no video devices");
+                    Vec::new()
+                });
+                (targets, listed)
+            }
+        };
+        let rank = |kind: CaptureTargetKind| match kind {
+            CaptureTargetKind::Display => 0,
+            CaptureTargetKind::Window => 1,
+            _ => 2,
+        };
+        targets.sort_by_key(|info| rank(info.kind));
+        targets.extend(
+            devices_listed
+                .into_iter()
+                .map(|device| device_target_info(devices.as_ref(), device)),
+        );
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -3074,6 +3120,12 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many plans of the program mix ran (ADR-0103's meters), for tests.
+    #[cfg(test)]
+    pub(crate) fn plans(&self) -> u64 {
+        lock(&self.shared.state).live.meters().plans()
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -3215,6 +3267,7 @@ impl Shared {
             }
         };
         Ok(frames::Sample {
+            pinned: snapshot.shot().pin(),
             snapshot,
             live: state.render.load_live(),
             rev: state.graph.rev(),
@@ -3938,6 +3991,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            removed_bindings: applied.removed_bindings,
             dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
@@ -4770,9 +4824,8 @@ impl State {
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
         if let Some(((from, shared), program, mut run)) = started {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -5096,9 +5149,8 @@ impl State {
                     transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
                     transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
                 };
-                let to_camera = transition::camera_of(&self.graph, &scene_id);
                 let from_camera = shared.unwrap_or(None);
-                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                if shared.is_err() {
                     run.pairs = false;
                 }
                 Some(transition::Running {
@@ -5220,9 +5272,8 @@ impl State {
             (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
         });
         if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -5543,7 +5594,7 @@ impl State {
         }
         // Every mix and preview has looked at what it draws: the rest can rest.
         live.rest_undrawn();
-        live.wake_at(wake);
+        live.wake_at(wake, graph.state().base_fps());
         live.meters().planned(started.elapsed());
         planning.end_ms
     }
@@ -6124,7 +6175,43 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
             height: size.height(),
         }),
         primary: info.primary,
+        formats: Vec::new(),
     })
+}
+
+/// A video device as `capture.targets` reports it, with the formats the engine reads
+/// of it: MJPEG among them, as every platform's codecs decode it. A device whose
+/// formats can't be read is listed without them.
+fn device_target_info(
+    devices: &dyn VideoDevices,
+    device: VideoDeviceInfo,
+) -> jstream_protocol::CaptureTargetInfo {
+    let formats = match devices.formats(&device.id) {
+        Ok(formats) => formats
+            .iter()
+            .filter(|format| crate::runtime::readable_format(format, true))
+            .filter_map(|format| {
+                Some(CaptureFormatInfo {
+                    width: format.size.width(),
+                    height: format.size.height(),
+                    fps: (crate::runtime::format_fps(format) * 100.0).round() / 100.0,
+                    pixel_format: crate::runtime::pixel_format_name(format.encoding)?.to_owned(),
+                })
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's formats");
+            Vec::new()
+        }
+    };
+    jstream_protocol::CaptureTargetInfo {
+        kind: CaptureTargetKind::Device,
+        target: device.id.as_str().to_owned(),
+        name: device.name,
+        size: None,
+        primary: false,
+        formats,
+    }
 }
 
 /// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves

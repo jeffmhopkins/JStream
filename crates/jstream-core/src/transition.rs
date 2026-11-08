@@ -21,7 +21,7 @@
 
 use std::sync::Arc;
 
-use jstream_graph::Graph;
+use jstream_graph::{Graph, Overrides};
 use jstream_media::MediaTime;
 use jstream_protocol::{
     Easing, EntityKind, FADE, Glide, ItemId, ItemTransition, MOVE, ProtocolError, Reference,
@@ -86,10 +86,10 @@ pub(crate) fn resolve(
     };
     // `cut`, and any kind this engine can't run (a pack that isn't installed), cut.
     let pairs = match preset.kind() {
-        // A Move between a 3D scene and a 2D one has no one space to move in, so it
-        // fades (ADR-0094 decision 7).
-        MOVE => from
-            .is_none_or(|from| camera_of(graph, from).is_some() == camera_of(graph, to).is_some()),
+        // A Move between a 3D scene and a 2D one moves too: the 2D side is seen through
+        // the framing camera (ADR-0128). The planner fades it only when that side's items
+        // can't be drawn the same through it.
+        MOVE => true,
         FADE | STINGER => false,
         _ => return Ok((id, None)),
     };
@@ -395,11 +395,16 @@ fn effect(effect: TransitionEffect, unmatched: TransitionEffect) -> Effect {
 /// `stagger_ms` × its index; a pair follows the new item's settings. The transition ends
 /// when its last item does. Beside the plan: the index in `from` of each track's
 /// partner, in the tracks' order, `Some` for a pair.
+///
+/// `into` is the keyframe scene's overrides when the switch moves into one: an item it
+/// times (ADR-0129) takes the keyframe's delay and easing in place of its own, and the
+/// keyframe's duration in place of the preset's, on either side.
 pub(crate) fn plan(
     from: &[Visual],
     to: &[Visual],
     run: &Run,
     by_item: bool,
+    into: Option<&Overrides>,
 ) -> (Planned, Vec<Option<usize>>) {
     if let Some(stinger) = &run.stinger {
         return (
@@ -407,8 +412,19 @@ pub(crate) fn plan(
             vec![None; from.len() + to.len()],
         );
     }
-    let duration_ms = run.duration_ms as f32;
-    let timing = |settings: &ItemTransition, delay_ms: f32| Timing {
+    let preset_ms = run.duration_ms as f32;
+    // An item's settings and duration in this switch, a keyframe's timing applied.
+    let timed = |item: &Visual| match into
+        .and_then(|overrides| overrides.get(&item.item_id))
+        .and_then(|o| o.timing)
+    {
+        Some(timing) => (
+            timing.apply(item.settings),
+            timing.duration_ms.map_or(preset_ms, |ms| ms as f32),
+        ),
+        None => (item.settings, preset_ms),
+    };
+    let timing = |(settings, duration_ms): (ItemTransition, f32), delay_ms: f32| Timing {
         delay_ms,
         duration_ms,
         easing: settings.easing.resolve(run.easing),
@@ -418,7 +434,8 @@ pub(crate) fn plan(
     let mut partners: Vec<Option<usize>> = Vec::with_capacity(from.len() + to.len());
     let mut arriving_partners = Vec::with_capacity(to.len());
     for (index, item) in to.iter().enumerate() {
-        let delay_ms = item.settings.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
+        let own = timed(item);
+        let delay_ms = own.0.delay_ms as f32 + index as f32 * run.stagger_ms as f32;
         let partner = (run.pairs && item.settings.glide == Glide::Auto)
             .then(|| {
                 from.iter().enumerate().position(|(j, f)| {
@@ -457,14 +474,14 @@ pub(crate) fn plan(
                 Track::Pair {
                     from: from[j].at,
                     to: item.at,
-                    timing: timing(&item.settings, delay_ms),
+                    timing: timing(own, delay_ms),
                     source: item.size,
                 }
             }
             None => Track::Appear {
                 to: item.at,
                 effect: effect(item.settings.appear, run.unmatched),
-                timing: timing(&item.settings, delay_ms),
+                timing: timing(own, delay_ms),
             },
         };
         let mut item = item.clone();
@@ -480,10 +497,11 @@ pub(crate) fn plan(
         .zip(&used)
         .filter(|(_, used)| !**used)
         .map(|(item, _)| {
+            let own = timed(item);
             let track = Track::Disappear {
                 from: item.at,
                 effect: effect(item.settings.disappear, run.unmatched),
-                timing: timing(&item.settings, item.settings.delay_ms as f32),
+                timing: timing(own, own.0.delay_ms as f32),
             };
             (item.clone(), track)
         })
@@ -606,10 +624,10 @@ mod tests {
     use jstream_render::Crop;
     use jstream_render::transition::{Effect, Endpoint, Track};
 
-    /// A Move between a 3D scene and a 2D one runs as a Fade; between two 3D scenes, or
-    /// two 2D ones, it moves (ADR-0094 decision 7).
+    /// A Move between a 3D scene and a 2D one moves, as between two 3D scenes or two 2D
+    /// ones: the planner sees the 2D side through the framing camera (ADR-0128).
     #[test]
-    fn a_move_between_3d_and_2d_fades() {
+    fn a_move_between_3d_and_2d_moves() {
         use jstream_graph::Graph;
         use jstream_protocol::{Canvas, Edit, SceneCamera, SceneId, Settings};
 
@@ -659,12 +677,12 @@ mod tests {
         };
         assert!(pairs("set", "set2"));
         assert!(pairs("flat", "flat2"));
-        assert!(!pairs("set", "flat"));
-        assert!(!pairs("flat", "set"));
+        assert!(pairs("set", "flat"));
+        assert!(pairs("flat", "set"));
     }
 
     fn plan(from: &[Visual], to: &[Visual], run: &Run, by_item: bool) -> Planned {
-        super::plan(from, to, run, by_item).0
+        super::plan(from, to, run, by_item, None).0
     }
 
     fn visual(source: &str, x: f32) -> Visual {

@@ -72,6 +72,11 @@ id = "alpha.5"
 version = "0.1.0-alpha.5"
 goal = "A seamless, full-quality preview on a thread model that uses more cores, proved by a bench, then pop-out projectors, application settings and saved projects"
 
+[[release]]
+id = "beta.1"
+version = "0.1.0-beta.1"
+goal = "No new features: what the alphas ship, dependable on Windows, unsigned, and with no promise that projects saved by earlier builds load (ROADMAP.md#beta)"
+
 [[target]]
 release = "alpha.5"
 title = "A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video"
@@ -87,6 +92,7 @@ title = "jstream bench: standard scenes on real hardware that pass or fail on fr
 priority = 1
 status = "planned"
 issues = [1220, 1140]
+prs = [1260, 1315]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
@@ -137,6 +143,8 @@ title = "A UI scrub of every panel, dialog and window, with a decluttered Inspec
 priority = 5
 status = "planned"
 issues = [1219, 1198, 1202, 1204, 1206]
+prs = [1279, 1373, 1389]
+note = "#1279 and #1373 redesign the Outputs panel (#1206); #1219, #1198, #1202 and #1204 remain"
 
 [[target]]
 release = "alpha.5"
@@ -148,9 +156,9 @@ issues = [1184, 1194, 1215]
 release = "alpha.5"
 title = "Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus"
 status = "planned"
-issues = [1225, 1216, 1214, 1188]
-prs = [1251, 1270, 1278]
-note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188)"
+issues = [1225, 1216, 1214, 1188, 1325]
+prs = [1251, 1270, 1278, 1329]
+note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188), and #1329 does on Linux under X11 (#1325)"
 
 [[target]]
 release = "alpha.5"
@@ -169,7 +177,9 @@ prs = [1240, 1245, 1255, 1257]
 release = "alpha.5"
 title = "Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter"
 status = "planned"
-issues = [1226, 1227, 1232]
+issues = [1226, 1227, 1232, 1295]
+prs = [1281, 1289, 1296, 1331, 1351, 1352]
+note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227) and #1352 its 9-slice image frame (#1294); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor and #1351 adds Save as pack and setting renames (#1295)"
 
 [[target]]
 release = "alpha.5"
@@ -207,6 +217,32 @@ release = "alpha.5"
 title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
 status = "planned"
 issues = [1182, 1181]
+
+[[target]]
+release = "beta.1"
+title = "The bench passes on the Windows pass machine, on the beta candidate build"
+status = "planned"
+issues = [1220, 1221, 1205, 1217]
+note = "builds on alpha.5's thread model, bench and seamless preview"
+
+[[target]]
+release = "beta.1"
+title = "Every merged item's Windows run passes, in one acceptance pass on the candidate build"
+status = "planned"
+issues = [778, 777, 690, 673, 620, 576, 563, 557, 546, 445, 436, 380, 357, 347, 341, 1290]
+note = "the items marked Windows run in What's left; the issues labelled windows-hardware, apart from the YouTube sign-in run and the waived N-edition run"
+
+[[target]]
+release = "beta.1"
+title = "No known Windows bug breaks going live, recording, the virtual camera, browser pages, media files, snapshots or a graceful stop"
+status = "planned"
+issues = [1184, 1194, 445, 436]
+
+[[target]]
+release = "beta.1"
+title = "Security basics: the threat-model follow-ups, a browser page permission policy, a GPU-hang story for shader packs, and asking before a new agent connects"
+status = "planned"
+issues = [347, 349, 1229]
 
 [[milestone]]
 id = "M0"

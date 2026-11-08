@@ -45,182 +45,30 @@ default). Each input is resampled so that the audio it captured at media time `t
 engine frame `t · rate`. Inputs therefore line up with each other and with anything else
 stamped on the clock, and no device is the master.
 
-**API.**
-- `Mixer::new(MixerConfig)`: engine rate, block size (default 1024 frames, one AAC
-  access unit), latency (default 1440 frames, 30 ms) and ring size (default 16384
-  frames) per input. `MixerConfig::validate` checks the ranges.
-- `Mixer::add_input(format)` and `MixerControl::add_input` (from `Mixer::control`)
-  take the stream's format (device rate, mono, stereo or 5.1, interleaved `f32`; 8 to
-  192 kHz at a 48 kHz engine) and return an `InputProducer`, which implements
-  `jstream_platform::AudioInputHandler` and goes to `AudioIo::open_input` as the
-  stream's handler, and an `InputControl` for the control plane. Both allocate on the
-  caller. `Mixer::add_input` installs the input before it returns. `MixerControl` does
-  not borrow the mixer, so another thread can add or `InputControl::remove` while
-  `poll` runs; the mixer applies those commands at the start of the next block and
-  does not allocate to do it. At most 64 inputs.
-- `Mixer::add_bus` and `MixerControl::add_bus` add a stereo bus and return its
-  `BusControl`; `BusControl::remove` removes it, and `Mixer::bus` is the master's,
-  which can't be removed. Like inputs, buses change through the command queue while
-  `poll` runs. At most 16 buses (`MAX_BUSES`, which `jstream-core` holds equal to the
-  protocol's limit), the master included. A bus's `BusId` is never reused,
-  so a send to a removed bus stays inert even after a new bus takes its buffer. It is
-  also tagged with its mixer, so an input ignores another mixer's bus,
-  `Mixer::bus_block` answers `None` for one and `add_output_tap` refuses one
-  (`Removed`); `BusId::MASTER` names every mixer's master.
-- `InputControl::set_send` (linear or dB, 0 to +24 dB) sends the input into a bus
-  after its fader and mute, or changes that send's gain; `remove_send` stops it. A new
-  bus has no sends. A send that starts, stops or changes ramps over one block.
-- `InputControl::set_activity_gain` (linear, 0 to 1) scales every send of the input,
-  after its fader, mute and meter: ADR-0028's activity gain, which `jstream-core` sets
-  from what the Program mix shows. It ramps over one block with the sends, and a new
-  input starts at 1.
-- `InputControl::add_filter` / `insert_filter` and the same on `BusControl` add a
-  filter (`FilterSpec`: gain, noise gate, compressor, keyed compressor, limiter or
-  delay, built at the engine rate) to the chain, and return a `FilterControl` whose `set(FilterParams)`
-  edits it and `remove` removes it. They go through the command queue like inputs. At
-  most 8 filters and 100 ms of latency per chain. `insert_host_filter(index, memory)`
-  on `InputControl`, `BusControl`, `MasterControl` and `OutputTapControl` adds a CLAP
-  filter instead:
-  the mixer's side of an out-of-process plugin host, through its shared block
-  (`HostMemory`, a [`jstream-plugin-proto`](../jstream-plugin-proto/README.md)
-  `EngineBlock`: the `Shared` block however it is mapped, and the miss counts beside
-  it). The block must be initialised for the mixer's rate
-  and block size (`mixer_rate` and `mixer_block_frames` on each of those handles) and
-  its host ready, with one filter on it at a time. On the master chain the plugin runs
-  on the master bus's copy, and another bus's copy delays its dry signal by the
-  filter's latency until `FilterControl::set_bus_host` gives that bus a host of its own
-  ([ADR-0086](../../docs/adr/0086-master-clap-filter-one-host-per-output-bus.md); see
-  [Master chain and output taps](#realtime)).
-  `Mixer::latency_frames` is the
-  chains' latency the mixer compensates, and each block's `pts` is its first frame minus
-  it, the master chain's included.
-- `Mixer::master` and `MixerControl::master` return the `MasterControl`, whose
-  `add_filter` / `insert_filter` add a filter to the master chain. Each bus that feeds
-  an output (the master bus, and every bus an output tap reads) runs its own copy after
-  its fader, and a bus added later is built with the master filters as they are set
-  then. `Mixer::add_output_tap(bus)` and `MixerControl::add_output_tap` add an
-  `OutputTapControl`: that bus after the master chain, through the tap's own chain
-  (`add_filter`, `insert_filter`), for an output with its own audio encode. At most 16
-  taps. `Mixer::output_block(tap)` reads its last block with its `pts`, which is the
-  block's minus the tap chain's latency (`None` until the tap has run once).
-  The `InputControl` also holds a reference to the input's ring and counters, so
-  whichever handle is dropped last, the free never happens on a real-time thread (see
-  [Real-time design](#realtime)).
-- `Mixer::poll(now, out)` mixes the next block once the media clock `now` has passed its
-  end by the latency, writes the master bus after the master chain into `out` (interleaved stereo), and returns
-  its `Block` (first
-  frame, length, and `pts` in ticks of `1 / rate`: the media time of the input in the
-  block, so the first frame minus the chains' latency). The first call starts the time line
-  at `now` minus the latency; after it, `Mixer::next_due()` is the clock time `poll`
-  mixes next, which a real-time loop sleeps until. `Mixer::mix(frame, out)` mixes a
-  given block regardless of the clock. A mixer that falls more than half a ring behind the clock jumps to the
-  newest due block and counts the skipped frames. `Mixer::bus_block(bus)` reads any
-  bus's output for the last block mixed, before the master chain: what a monitor
-  hears. `Mixer::input_block(input)` reads one input's signal in the last block mixed,
-  after its chain, fader, mute and activity gain and before its sends: what that input
-  contributes to the mix before each send's gain, which `jstream-core` draws for a
-  `waveform` or `spectrum` source that names the source (ADR-0028 defines a sidechain
-  key's signal at the same point, and a keyed compressor reads it there).
-- `FilterSpec::KeyedCompressor { params, key }` is a compressor that detects on
-  `key`'s `input_block` for the same block instead of its own signal: ADR-0028's
-  sidechain key, so music ducks under a mic. `FilterParams::Compressor` edits it.
-  `key: None`, a removed key input, and a key that would only run later (a cycle,
-  which the engine refuses) read as silence, so nothing ducks.
-  `InputControl::set_key_silenced(true)` makes the input read as silence to every
-  keyed filter while its own block keeps sounding: `jstream-core` sets it while a
-  source is muted by turning its sends off.
-- `Mixer::monitor_block(bus, tap)` reads what a monitor on `bus` hears in the last block
-  mixed, at its `MonitorTap`: `PostFilters` is `bus_block`, and `PreFilters` is the bus's
-  sum before its filter chain, through the same fader and mute (so only the filters
-  differ). Neither has the master chain. `PreFilters` skips the bus chain's latency and
-  its compensation, so it is that much earlier than `PostFilters`.
-- `MixerControl::add_monitor(format)` builds a `Monitor` for an output device of
-  `format` (the device's rate, 12 to 288 kHz at a 48 kHz engine, and layout, interleaved
-  `f32`): its `feed` (`MonitorFeed::push(frame, block)`) takes each block the mixer
-  thread monitors, its `player` (`MonitorPlayer`) implements
-  `jstream_platform::AudioOutputHandler` and goes to `AudioIo::open_output` as the
-  stream's handler, and its `control` reads `MonitorStats` (blocks, renders, underrun
-  frames, re-anchors, failure). The player maps stereo onto the device: both channels
-  averaged into mono, the front pair of anything wider, the rest silent. See
-  [Real-time design](#realtime) for its clock. `AudioIo::open_output` reports the
-  device's format only on the stream it returns, so the stream opens on a
-  `MonitorSocket` from `monitor_socket()`, which plays silence until
-  `MonitorPlug::plug` hands it the player built for that format, then plays the player.
-  It takes the player with a lock-free `try_recv` per render, and passes on a stream
-  failure reported before then.
-- `InputControl` and `BusControl` set the fader (linear or dB, 0 to +24 dB) and mute,
-  ramped over one block. They read meters (per channel, post-fader, so an input's is
-  before its sends: the peak held until taken, and the last block's RMS;
-  `BusControl::peek_meter` reads a bus's without restarting its held peak) and counters
-  (`InputStats`, `BusStats`): packets, discontinuities,
-  gap, late, overrun and underrun frames, resets, re-anchors, timestamp outliers, the
-  measured drift and stamp jitter, the controller's correction and timing error, and
-  whether the stream failed.
-- `meter::TruePeakMeter` and `meter::LoudnessMeter`: the true-peak and BS.1770 loudness
-  meters, not yet run by the mixer ([Meters](#meters)).
-- `filter::AudioFilter` and its kernels `Gain`, `NoiseGate`, `Compressor` (with a
-  sidechain key, run in a chain as `FilterSpec::KeyedCompressor`), `Limiter` and `Delay`
-  ([Filters](#filters)).
+**API.** Each entry point's contract (ranges, limits, threads, what allocates) is in its
+rustdoc: `cargo doc -p jstream-audio --open`. In outline:
 
-**Errors** (`AudioError`): an invalid configuration (including a loudness meter's
-rate, or a filter's rate or settings), an unsupported input or monitor device rate or
-sample layout, a
-wrong output length, more than 64 inputs, 16 buses, 16 output taps or 8 filters in a
-chain, an input, bus, output tap or filter already removed, a full command queue, or a collector thread that could
-not start. No variant allocates.
+| Entry point | What it does |
+|---|---|
+| `Mixer`, `MixerConfig` | the mixer: engine rate, block size (1024 frames), latency (30 ms) and ring size; `poll(now, out)` mixes the next block once the clock has passed it, `next_due` says when that is, `mix` mixes a given block |
+| `MixerControl` | adds inputs, buses, output taps and monitors from another thread while `poll` runs, through a command queue the mixer applies without allocating |
+| `InputProducer` | a device stream's `AudioInputHandler`, for `AudioIo::open_input` |
+| `InputControl`, `BusControl` | fader, mute, sends (inputs into buses, post-fader), activity gain, filter chains, meters and `InputStats` / `BusStats` |
+| `MasterControl`, `OutputTapControl` | the master chain on every bus that feeds an output, and an output's own chain |
+| `FilterSpec`, `FilterControl` | a chain's filters (gain, gate, compressor, keyed compressor, limiter, delay, or a CLAP filter's shared block, `insert_host_filter`) |
+| `Mixer::bus_block`, `input_block`, `monitor_block`, `output_block` | the last block of a bus, an input, a monitor tap or an output tap |
+| `Monitor`, `MonitorSocket`, `MonitorPlug` | a bus monitor played on an output device |
+| `meter::TruePeakMeter`, `meter::LoudnessMeter` | the true-peak and BS.1770 loudness meters ([Meters](#meters)) |
+| `filter::AudioFilter` and its kernels | the DSP behind each filter ([Filters](#filters)) |
 
-**Tests.** The unit tests in each `src/rt/` module cover:
-- ring: underrun, drop-oldest overrun, late frames, forward jumps, and a two-thread test
-  that no torn frame is ever accepted;
-- resampler: tone level and purity at 1 and 15 kHz, anti-aliasing when downsampling,
-  zero delay, output rate under a correction, long silences;
-- the controller, drift fit, continuity and downmix coefficients, ported from S3 with
-  S3's tests;
-- the input's anchoring, outlier runs, discontinuities (one whose stamp is off the line
-  re-anchors at once; unflagged outliers still wait for the run) and silent packets;
-- the mixer's gains, ramps, meters, under- and overrun counters, and clocked polling;
-- each input's own block after its fader, mute and activity gain, unaffected by its
-  send gains, and gone once the input is removed;
-- the send matrix: post-fader sends into each bus, each bus's own fader, mute and
-  meter, sends ramping in and out, a muted input feeding no bus, buses added from
-  another thread and removed, a send to a removed bus not reaching the bus that reuses
-  its buffer, the 16-bus limit, and a removed bus's state freed once its handle is gone;
-- CLAP filters (`host.rs`): the host's output heard `depth` blocks late, a missing
-  host bypassed with the same latency and each miss counted, a host rewriting the
-  status block leaving the miss counts alone, the crossfades both ways,
-  non-finite host samples as silence, a reset passed on to the host, a new filter on a
-  block an earlier one used carrying on its numbers with no miss, and blocks that
-  aren't ready or don't match refused;
-- filter chains: an input's chain before its fader and a bus's on its sum, edits and
-  removal applied live, latency compensation (a limiter on one input and one bus: every
-  input and bus lines up, and `pts` moves back by the total, then returns when they are
-  removed), a delay filter's output stamped later by its delay, and the limits and
-  rejected edits;
-- sidechain keys: an input's keyed compressor ducking it under another input that
-  runs after it in the slot order, nothing ducked while the key is muted, silenced as a
-  key or removed, and a bus chain keyed on an input;
-- monitor taps: a bus before its filters and after them, both through its fader and
-  mute and before the master chain, silent when muted, and gone with the bus;
-- monitors (`monitor.rs`): a 48 kHz device playing the bus at its level with no
-  re-anchor or underrun once playing; 44.1 kHz mono, 96 kHz 5.1 and 16 kHz stereo
-  devices at the right level on each channel; a device clock ±1000 ppm off steered out
-  over two minutes with no re-anchor; a feed that stops played as silence and picked up
-  where the player stands; a stalled device moving forward onto the target; silence
-  before the first block; a stream failure reported; device rates and planar formats
-  refused; the ring freed on the collector from both ends; and a socket silent until
-  its player is plugged in, then playing it, with an earlier failure passed on;
-- the master chain and output taps: the master chain on the master bus and on a
-  tapped bus but not before monitoring, a master filter's edit reaching every copy and
-  a bus added later, an output tap's own chain and stamp, a tap reading silence once
-  its bus is gone, and the 16-tap limit; a CLAP filter on the master chain heard
-  through the plugin on the master bus and as delayed dry, with the same stamp, on a
-  tapped bus and on a bus added later; each bus that feeds an output running it on a
-  host of its own once `set_bus_host` gives one, and back to delayed dry when it is
-  taken away;
-- inputs added from another thread while the mixer runs, then removed, the 64-input
-  limit, and the ring freed on the collector thread whichever of the mixer and the
-  producer lets go last, and the collector ending with its last handle.
+Limits: 64 inputs, 16 buses (`MAX_BUSES`, the master included), 16 output taps, and
+8 filters and 100 ms of latency per chain. `Mixer::latency_frames` is the chains'
+latency the mixer compensates, and each block's `pts` is its first frame minus it.
+Errors are `AudioError`, none of whose variants allocates.
 
+**Tests.** The unit tests in each `src/rt/`, `src/meter/` and `src/filter/` module cover
+that module's behaviour, including the threads (a two-thread ring test, inputs and buses
+added from another thread, frees on the collector thread).
 `tests/sim.rs` runs simulated devices through the public API on a simulated 100 ns
 clock, with no real devices or threads ([R-TEST-004](../../docs/RULES.md#R-TEST-004)).
 The time-line error is measured from the audio itself: each device plays a tone defined
