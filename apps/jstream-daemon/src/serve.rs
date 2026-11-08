@@ -147,6 +147,8 @@ pub fn engine(
     }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
+    #[cfg(not(windows))]
+    engine.set_clap_unavailable("CLAP plugins are hosted on Windows only so far");
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
@@ -170,7 +172,8 @@ pub fn engine(
 
 /// Scans the CLAP plugins on a worker thread, so they appear in `kind.list` as audio
 /// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
-/// `jstream-plugin-host.exe`; the daemon serves meanwhile.
+/// `jstream-plugin-host.exe`; the daemon serves meanwhile. The engine keeps the hosts
+/// for `plugin.clap_rescan`.
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
     let hosts: Arc<dyn jstream_platform::PluginHosts> =
@@ -178,6 +181,7 @@ fn scan_clap_plugins(engine: &Arc<Engine>) {
             Ok(hosts) => Arc::new(hosts),
             Err(e) => {
                 tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                engine.set_clap_unavailable(format!("the plugin host couldn't be set up: {e}"));
                 return;
             }
         };
@@ -185,11 +189,8 @@ fn scan_clap_plugins(engine: &Arc<Engine>) {
     let spawned = std::thread::Builder::new()
         .name("jstream-clap-scan".into())
         .spawn(move || {
-            let scan = engine.scan_clap_plugins(hosts);
-            for (file, error) in &scan.failed {
-                tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
-            }
-            tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
+            // The engine logs what the scan found and each file that failed.
+            engine.scan_clap_plugins(hosts);
         });
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "could not start the CLAP plugin scan");

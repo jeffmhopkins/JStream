@@ -974,6 +974,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "properties": {
+                  "type": {
+                    "const": "plugin.clap_rescan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
                 "properties": {
                   "download_id": {
@@ -7072,6 +7085,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "kind_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "properties": {
+                  "type": {
+                    "const": "plugin.clap_rescan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -14956,6 +14982,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "kind_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "properties": {
+                  "type": {
+                    "const": "plugin.clap_rescan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -23059,6 +23098,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "kind_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "properties": {
+                  "type": {
+                    "const": "plugin.clap_rescan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -31931,6 +31983,19 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "kind_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+                "properties": {
+                  "type": {
+                    "const": "plugin.clap_rescan",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
