@@ -1214,7 +1214,10 @@ first (D3D12 first on Windows); the software adapter is the fallback, so a machi
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
 on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
-a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
+a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
+transparent background remembers the box its items could reach, and its parent draws
+only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
+group of a few small items doesn't shade the whole canvas twice. The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,
