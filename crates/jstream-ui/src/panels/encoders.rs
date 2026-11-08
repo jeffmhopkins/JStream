@@ -1,10 +1,12 @@
 //! The encoder profiles and video mixes, in the Outputs panel's Encoders & mixes dialog
-//! (#1206): a row for each, with what it
-//! encodes or shows, and a form that creates or edits one (`encoder.create`,
-//! `encoder.update`, `video_mix.create`, `video_mix.update`). Delete sends
-//! `encoder.delete` or `video_mix.delete`, and is disabled while an output uses the
-//! profile or shows the mix, naming those outputs, as the engine refuses it then. An
-//! output's settings dialog picks its profile and mix ([`outputs`](super::outputs)).
+//! (#1206): a list on the left, each with its name and a short summary, and on the
+//! right the editor of the one picked, with the whole of what it encodes or shows, which
+//! creates or edits one (`encoder.create`, `encoder.update`, `video_mix.create`,
+//! `video_mix.update`). Its Delete sends `encoder.delete` or `video_mix.delete`, and is
+//! disabled while an output uses the profile or shows the mix, naming those outputs, as
+//! the engine refuses it then. An output's settings dialog picks its profile and mix,
+//! and its Edit encoder… and Edit mix… open this dialog on them
+//! ([`outputs`](super::outputs)).
 //!
 //! A profile has the video codec (H.264, HEVC or AV1), constant or variable bit rate
 //! with its peak, the keyframe interval, the hardware preference and the AAC bit rate. A
@@ -386,8 +388,59 @@ fn number(event: &leptos::ev::Event, fallback: u32) -> u32 {
     event_target_value(event).trim().parse().unwrap_or(fallback)
 }
 
-/// The encoder profiles and video mixes, in the Encoders & mixes dialog. `send` sends one edit
-/// and reports its failure in the panel.
+/// What the Encoders & mixes dialog's editor has open: an encoder profile or a video
+/// mix, by ID, or a new one (`None`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum LibraryPick {
+    /// An encoder profile, or a new one.
+    Encoder(Option<EncoderProfileId>),
+    /// A video mix, or a new one.
+    Mix(Option<VideoMixId>),
+}
+
+/// A profile in a few words, for its row in the dialog's list: "H.264 · 8000 kbps · HW".
+/// The editor shows the whole of it ([`encoder_summary`]).
+pub fn encoder_short(profile: &EncoderProfile) -> String {
+    let video = &profile.video;
+    let rate = match video.rate_control {
+        RateControl::Cbr { kbps } => format!("{kbps} kbps"),
+        RateControl::Vbr { kbps, .. } => format!("{kbps} kbps VBR"),
+        _ => "unknown rate".to_owned(),
+    };
+    let hardware = match video.hardware {
+        HardwarePreference::Prefer => "HW",
+        HardwarePreference::Require => "HW only",
+        HardwarePreference::Avoid => "SW",
+        _ => "unknown encoder",
+    };
+    format!("{} · {rate} · {hardware}", codec_label(video.codec))
+}
+
+/// A mix in a few words, for its row in the dialog's list: "1080 × 1920 · Program".
+pub fn mix_short(mix: &VideoMix, scenes: &[(SceneId, String)]) -> String {
+    format!(
+        "{} × {} · {}",
+        mix.resolution.width,
+        mix.resolution.height,
+        input_label(&mix.input, scenes)
+    )
+}
+
+/// The ID a create edit gives its new profile or mix, as the editor's pick.
+fn created_pick(edit: &Edit) -> Option<LibraryPick> {
+    match edit {
+        Edit::EncoderCreate { profile_id, .. } => {
+            Some(LibraryPick::Encoder(Some(profile_id.clone())))
+        }
+        Edit::VideoMixCreate { mix_id, .. } => Some(LibraryPick::Mix(Some(mix_id.clone()))),
+        _ => None,
+    }
+}
+
+/// The encoder profiles and video mixes, in the Encoders & mixes dialog: a list on the
+/// left, each profile and mix with its name and a short summary, and on the right the
+/// editor of the one `pick` names, or of a new one (#1206). `send` sends one edit and
+/// reports its failure in the panel.
 #[component]
 pub(crate) fn Profiles(
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
@@ -395,132 +448,177 @@ pub(crate) fn Profiles(
     outputs: Signal<Vec<OutputInfo>>,
     scenes: Signal<Vec<(SceneId, String)>>,
     send: Callback<Edit>,
+    pick: RwSignal<Option<LibraryPick>>,
 ) -> impl IntoView {
-    // Which form is open: `None` closed, `Some(None)` a new one, `Some(Some(id))` an edit.
-    let encoder_form = RwSignal::new(None::<Option<EncoderProfileId>>);
-    let mix_form = RwSignal::new(None::<Option<VideoMixId>>);
     let codecs = CodecDownloads::load();
+    // The pick a Save just created: until the engine lists it, the editor says so.
+    let pending = RwSignal::new(None::<LibraryPick>);
+    // The editor is drawn again only when the pick changes, or its profile or mix
+    // appears or goes, so another client's edit doesn't wipe what is typed.
+    let shown = Memo::new(move |_| {
+        let picked = pick.get();
+        let listed = match &picked {
+            Some(LibraryPick::Encoder(Some(id))) => {
+                encoders.with(|e| e.iter().any(|e| &e.profile_id == id))
+            }
+            Some(LibraryPick::Mix(Some(id))) => mixes.with(|m| m.iter().any(|m| &m.mix_id == id)),
+            _ => true,
+        };
+        (picked, listed)
+    });
+    let editor = move || {
+        let (picked, listed) = shown.get();
+        let missing = |what: &str| {
+            let note = if pending.with_untracked(|p| p == &picked) {
+                "Saving…".to_owned()
+            } else {
+                format!("This {what} isn't there any more.")
+            };
+            view! { <p class="hint library-empty">{note}</p> }.into_any()
+        };
+        match picked {
+            None => view! {
+                <Downloads state=codecs encoders=encoders />
+                <p class="hint library-empty">
+                    "Pick an encoder or a video mix to edit it, or make a new one."
+                </p>
+            }
+            .into_any(),
+            Some(LibraryPick::Encoder(_)) if !listed => missing("encoder"),
+            Some(LibraryPick::Mix(_)) if !listed => missing("video mix"),
+            Some(LibraryPick::Encoder(editing)) => view! {
+                <Downloads state=codecs encoders=encoders />
+                <EncoderForm
+                    editing=editing
+                    encoders=encoders
+                    outputs=outputs
+                    send=send
+                    pick=pick
+                    pending=pending
+                    codecs=codecs
+                />
+            }
+            .into_any(),
+            Some(LibraryPick::Mix(editing)) => view! {
+                <p class="hint">"An output shows the program at the canvas size unless it picks a mix."</p>
+                <MixForm
+                    editing=editing
+                    mixes=mixes
+                    outputs=outputs
+                    scenes=scenes
+                    send=send
+                    pick=pick
+                    pending=pending
+                />
+            }
+            .into_any(),
+        }
+    };
+    let item = move |mine: LibraryPick, name: String, summary: Signal<String>| {
+        let chosen = {
+            let mine = mine.clone();
+            Memo::new(move |_| pick.with(|p| p.as_ref() == Some(&mine)))
+        };
+        view! {
+            <li>
+                <button
+                    type="button"
+                    class="library-item"
+                    class:chosen=chosen
+                    aria-pressed=move || chosen.get().to_string()
+                    on:click=move |_| pick.set(Some(mine.clone()))
+                >
+                    <span class="library-name">{name}</span>
+                    <span class="library-summary">{summary}</span>
+                </button>
+            </li>
+        }
+    };
     view! {
-        <section class="profiles" aria-label="Encoders">
-            <h3>"Encoders"</h3>
-            <Downloads state=codecs encoders=encoders />
-            <ul class="profile-list">
-                <For
-                    each=move || encoders.get()
-                    key=|e| (e.profile_id.clone(), e.name.clone(), encoder_summary(&e.profile))
-                    let:encoder
-                >
-                    {
-                        let id = encoder.profile_id.clone();
-                        let users = {
-                            let id = id.clone();
-                            move || outputs.with(|o| using_encoder(o, &id))
-                        };
-                        let blocked = Memo::new(move |_| in_use(&users(), "Used by"));
-                        let edit_id = id.clone();
-                        let delete_id = id.clone();
-                        view! {
-                            <li class="profile">
-                                <strong>{encoder.name.clone()}</strong>
-                                <span class="profile-summary">{encoder_summary(&encoder.profile)}</span>
-                                <button
-                                    type="button"
-                                    aria-label=format!("Edit {}", encoder.name)
-                                    on:click=move |_| encoder_form.set(Some(Some(edit_id.clone())))
-                                >
-                                    "Edit…"
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label=format!("Delete {}", encoder.name)
-                                    disabled=move || blocked.with(Option::is_some)
-                                    title=move || blocked.get().unwrap_or_default()
-                                    on:click=move |_| {
-                                        send.run(Edit::EncoderDelete { profile_id: delete_id.clone() })
-                                    }
-                                >
-                                    "Delete"
-                                </button>
-                            </li>
-                        }
-                    }
-                </For>
-            </ul>
-            <button type="button" on:click=move |_| encoder_form.set(Some(None))>"New encoder…"</button>
-            {move || {
-                encoder_form
-                    .get()
-                    .map(|editing| {
-                        view! { <EncoderForm editing=editing encoders=encoders send=send open=encoder_form codecs=codecs /> }
-                    })
-            }}
-        </section>
-        <section class="profiles" aria-label="Video mixes">
-            <h3>"Video mixes"</h3>
-            <p class="hint">"An output shows the program at the canvas size unless it picks a mix."</p>
-            <ul class="profile-list">
-                <For
-                    each=move || mixes.get()
-                    key=|m| (m.mix_id.clone(), m.name.clone(), m.mix.clone())
-                    let:mix
-                >
-                    {
-                        let id = mix.mix_id.clone();
-                        let users = {
-                            let id = id.clone();
-                            move || outputs.with(|o| showing_mix(o, &id))
-                        };
-                        let blocked = Memo::new(move |_| in_use(&users(), "Shown by"));
-                        let edit_id = id.clone();
-                        let delete_id = id.clone();
-                        let shown = mix.mix.clone();
-                        let summary = move || scenes.with(|s| mix_summary(&shown, s));
-                        view! {
-                            <li class="profile">
-                                <strong>{mix.name.clone()}</strong>
-                                <span class="profile-summary">{summary}</span>
-                                <button
-                                    type="button"
-                                    aria-label=format!("Edit {}", mix.name)
-                                    on:click=move |_| mix_form.set(Some(Some(edit_id.clone())))
-                                >
-                                    "Edit…"
-                                </button>
-                                <button
-                                    type="button"
-                                    aria-label=format!("Delete {}", mix.name)
-                                    disabled=move || blocked.with(Option::is_some)
-                                    title=move || blocked.get().unwrap_or_default()
-                                    on:click=move |_| {
-                                        send.run(Edit::VideoMixDelete { mix_id: delete_id.clone() })
-                                    }
-                                >
-                                    "Delete"
-                                </button>
-                            </li>
-                        }
-                    }
-                </For>
-            </ul>
-            <button type="button" on:click=move |_| mix_form.set(Some(None))>"New video mix…"</button>
-            {move || {
-                mix_form
-                    .get()
-                    .map(|editing| {
-                        view! { <MixForm editing=editing mixes=mixes scenes=scenes send=send open=mix_form /> }
-                    })
-            }}
-        </section>
+        <div class="library">
+            <div class="library-list">
+                <section class="library-group" aria-label="Encoders">
+                    <h3>"Encoders"</h3>
+                    <ul>
+                        <For
+                            each=move || encoders.get()
+                            key=|e| (e.profile_id.clone(), e.name.clone(), encoder_short(&e.profile))
+                            let:encoder
+                        >
+                            {item(
+                                LibraryPick::Encoder(Some(encoder.profile_id.clone())),
+                                encoder.name.clone(),
+                                Signal::stored(encoder_short(&encoder.profile)),
+                            )}
+                        </For>
+                    </ul>
+                    <button
+                        type="button"
+                        class="secondary library-new"
+                        on:click=move |_| pick.set(Some(LibraryPick::Encoder(None)))
+                    >
+                        "+ New encoder"
+                    </button>
+                </section>
+                <section class="library-group" aria-label="Video mixes">
+                    <h3>"Video mixes"</h3>
+                    <ul>
+                        <For
+                            each=move || mixes.get()
+                            key=|m| (m.mix_id.clone(), m.name.clone(), m.mix.clone())
+                            let:mix
+                        >
+                            {
+                                let shown = mix.mix.clone();
+                                item(
+                                    LibraryPick::Mix(Some(mix.mix_id.clone())),
+                                    mix.name.clone(),
+                                    Signal::derive(move || scenes.with(|s| mix_short(&shown, s))),
+                                )
+                            }
+                        </For>
+                    </ul>
+                    <button
+                        type="button"
+                        class="secondary library-new"
+                        on:click=move |_| pick.set(Some(LibraryPick::Mix(None)))
+                    >
+                        "+ New video mix"
+                    </button>
+                </section>
+            </div>
+            <div class="library-editor">{editor}</div>
+        </div>
     }
 }
 
-/// The form that creates a profile, or edits `editing`.
+/// Sends a profile's or mix's save: an update keeps the editor on it, and a create
+/// moves the editor to the new one, which says "Saving…" until the engine lists it.
+fn save_edit(
+    edit: Edit,
+    send: Callback<Edit>,
+    pick: RwSignal<Option<LibraryPick>>,
+    pending: RwSignal<Option<LibraryPick>>,
+) {
+    let created = created_pick(&edit);
+    send.run(edit);
+    if let Some(created) = created {
+        pending.set(Some(created.clone()));
+        pick.set(Some(created));
+    }
+}
+
+/// The editor of a profile, or of a new one (`editing` `None`): its whole encoding in a
+/// line, the form, and Save, Cancel and Delete. Delete is off while an output uses it,
+/// naming those outputs, as the engine refuses it then.
 #[component]
 fn EncoderForm(
     editing: Option<EncoderProfileId>,
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
+    outputs: Signal<Vec<OutputInfo>>,
     send: Callback<Edit>,
-    open: RwSignal<Option<Option<EncoderProfileId>>>,
+    pick: RwSignal<Option<LibraryPick>>,
+    pending: RwSignal<Option<LibraryPick>>,
     codecs: CodecDownloads,
 ) -> impl IntoView {
     let start = editing
@@ -532,6 +630,14 @@ fn EncoderForm(
         .unwrap_or_default();
     let draft = RwSignal::new(start);
     let problem = RwSignal::new(None::<String>);
+    let saved = RwSignal::new(false);
+    // Any change after a save takes its "Saved." away.
+    Effect::new(move |first: Option<()>| {
+        draft.track();
+        if first.is_some() {
+            saved.set(false);
+        }
+    });
     let editing = StoredValue::new(editing);
     let save = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
@@ -539,12 +645,19 @@ fn EncoderForm(
             .with_untracked(|e| draft.with_untracked(|d| d.edit(editing.get_value().as_ref(), e)));
         match built {
             Ok(edit) => {
-                send.run(edit);
-                open.set(None);
+                problem.set(None);
+                saved.set(true);
+                save_edit(edit, send, pick, pending);
             }
             Err(why) => problem.set(Some(why)),
         }
     };
+    let blocked = Memo::new(move |_| {
+        editing.with_value(|id| {
+            id.as_ref()
+                .and_then(|id| outputs.with(|o| in_use(&using_encoder(o, id), "Used by")))
+        })
+    });
     let title = if editing.get_value().is_some() {
         "Edit encoder"
     } else {
@@ -552,6 +665,7 @@ fn EncoderForm(
     };
     view! {
         <form class="profile-form" aria-label=title on:submit=save>
+            <p class="profile-summary">{move || draft.with(|d| encoder_summary(&d.profile()))}</p>
             <label class="profile-field">
                 <span class="label">"Name"</span>
                 <input
@@ -705,21 +819,51 @@ fn EncoderForm(
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
             <p class="hint">"A running output keeps its encoding until it starts again."</p>
             <div class="buttons">
+                <Show when=move || editing.with_value(Option::is_some)>
+                    <button
+                        type="button"
+                        class="danger secondary library-delete"
+                        aria-label=move || {
+                            let name = editing.with_value(|id| {
+                                encoders.with(|e| {
+                                    e.iter().find(|e| Some(&e.profile_id) == id.as_ref()).map(|e| e.name.clone())
+                                })
+                            });
+                            format!("Delete {}", name.unwrap_or_default())
+                        }
+                        disabled=move || blocked.with(Option::is_some)
+                        title=move || blocked.get().unwrap_or_default()
+                        on:click=move |_| {
+                            if let Some(profile_id) = editing.get_value() {
+                                send.run(Edit::EncoderDelete { profile_id });
+                                pick.set(None);
+                            }
+                        }
+                    >
+                        "Delete"
+                    </button>
+                </Show>
+                <Show when=move || saved.get()>
+                    <span class="hint saved" role="status">"Saved."</span>
+                </Show>
+                <button type="button" class="secondary" on:click=move |_| pick.set(None)>"Cancel"</button>
                 <button type="submit" class="primary">"Save"</button>
-                <button type="button" on:click=move |_| open.set(None)>"Cancel"</button>
             </div>
         </form>
     }
 }
 
-/// The form that creates a video mix, or edits `editing`.
+/// The editor of a video mix, or of a new one (`editing` `None`), with Save, Cancel and
+/// Delete, which is off while an output shows it.
 #[component]
 fn MixForm(
     editing: Option<VideoMixId>,
     mixes: RwSignal<Vec<VideoMixInfo>>,
+    outputs: Signal<Vec<OutputInfo>>,
     scenes: Signal<Vec<(SceneId, String)>>,
     send: Callback<Edit>,
-    open: RwSignal<Option<Option<VideoMixId>>>,
+    pick: RwSignal<Option<LibraryPick>>,
+    pending: RwSignal<Option<LibraryPick>>,
 ) -> impl IntoView {
     let start = editing
         .as_ref()
@@ -729,6 +873,13 @@ fn MixForm(
         .unwrap_or_default();
     let draft = RwSignal::new(start);
     let problem = RwSignal::new(None::<String>);
+    let saved = RwSignal::new(false);
+    Effect::new(move |first: Option<()>| {
+        draft.track();
+        if first.is_some() {
+            saved.set(false);
+        }
+    });
     let editing = StoredValue::new(editing);
     let save = move |event: leptos::ev::SubmitEvent| {
         event.prevent_default();
@@ -736,12 +887,20 @@ fn MixForm(
             .with_untracked(|m| draft.with_untracked(|d| d.edit(editing.get_value().as_ref(), m)));
         match built {
             Ok(edit) => {
-                send.run(edit);
-                open.set(None);
+                problem.set(None);
+                saved.set(true);
+                save_edit(edit, send, pick, pending);
             }
             Err(why) => problem.set(Some(why)),
         }
     };
+    let blocked = Memo::new(move |_| {
+        editing.with_value(|id| {
+            id.as_ref()
+                .and_then(|id| outputs.with(|o| in_use(&showing_mix(o, id), "Shown by")))
+        })
+    });
+    let summary = move || scenes.with(|s| draft.with(|d| mix_summary(&d.mix(), s)));
     let preset = move || {
         draft.with(|d| {
             MIX_SIZES
@@ -757,6 +916,7 @@ fn MixForm(
     };
     view! {
         <form class="profile-form" aria-label=title on:submit=save>
+            <p class="profile-summary">{summary}</p>
             <label class="profile-field">
                 <span class="label">"Name"</span>
                 <input
@@ -885,8 +1045,35 @@ fn MixForm(
             {move || problem.get().map(|p| view! { <p class="problem" role="alert">{p}</p> })}
             <p class="hint">"A running output follows a new input at once; a new size or rate applies when it starts again."</p>
             <div class="buttons">
+                <Show when=move || editing.with_value(Option::is_some)>
+                    <button
+                        type="button"
+                        class="danger secondary library-delete"
+                        aria-label=move || {
+                            let name = editing.with_value(|id| {
+                                mixes.with(|m| {
+                                    m.iter().find(|m| Some(&m.mix_id) == id.as_ref()).map(|m| m.name.clone())
+                                })
+                            });
+                            format!("Delete {}", name.unwrap_or_default())
+                        }
+                        disabled=move || blocked.with(Option::is_some)
+                        title=move || blocked.get().unwrap_or_default()
+                        on:click=move |_| {
+                            if let Some(mix_id) = editing.get_value() {
+                                send.run(Edit::VideoMixDelete { mix_id });
+                                pick.set(None);
+                            }
+                        }
+                    >
+                        "Delete"
+                    </button>
+                </Show>
+                <Show when=move || saved.get()>
+                    <span class="hint saved" role="status">"Saved."</span>
+                </Show>
+                <button type="button" class="secondary" on:click=move |_| pick.set(None)>"Cancel"</button>
                 <button type="submit" class="primary">"Save"</button>
-                <button type="button" on:click=move |_| open.set(None)>"Cancel"</button>
             </div>
         </form>
     }
@@ -1030,5 +1217,47 @@ mod tests {
         assert!(using_encoder(&outputs, &EncoderProfileId::new("enc_2")).is_empty());
         assert_eq!(showing_mix(&outputs, &VideoMixId::new("mix_1")).len(), 1);
         assert_eq!(in_use(&[], "Shown by"), None);
+    }
+
+    #[test]
+    fn the_list_shows_each_profile_and_mix_in_a_few_words() {
+        let mut draft = EncoderDraft::new();
+        assert_eq!(encoder_short(&draft.profile()), "H.264 · 8000 kbps · HW");
+        draft.codec = VideoCodec::Av1;
+        draft.vbr = true;
+        draft.kbps = 6000;
+        draft.max_kbps = 9000;
+        draft.hardware = HardwarePreference::Avoid;
+        assert_eq!(encoder_short(&draft.profile()), "AV1 · 6000 kbps VBR · SW");
+        let scenes = vec![(SceneId::new("cam"), "Camera".to_owned())];
+        let mut mix = MixDraft::new();
+        assert_eq!(mix_short(&mix.mix(), &scenes), "1080 × 1920 · Program");
+        mix.input = input_of("scene:cam");
+        assert_eq!(mix_short(&mix.mix(), &scenes), "1080 × 1920 · Camera");
+    }
+
+    /// A create moves the editor to what it made; an update or delete doesn't move it.
+    #[test]
+    fn a_create_picks_what_it_made() {
+        let Ok(create) = EncoderDraft::new().edit(None, &[]) else {
+            panic!("a create");
+        };
+        assert_eq!(
+            created_pick(&create),
+            Some(LibraryPick::Encoder(Some(EncoderProfileId::new("enc_1"))))
+        );
+        let Ok(mix) = MixDraft::new().edit(None, &[]) else {
+            panic!("a create");
+        };
+        assert_eq!(
+            created_pick(&mix),
+            Some(LibraryPick::Mix(Some(VideoMixId::new("mix_1"))))
+        );
+        let id = EncoderProfileId::new("enc_1");
+        let Ok(update) = EncoderDraft::new().edit(Some(&id), &[]) else {
+            panic!("an update");
+        };
+        assert_eq!(created_pick(&update), None);
+        assert_eq!(created_pick(&Edit::EncoderDelete { profile_id: id }), None);
     }
 }

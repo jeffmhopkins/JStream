@@ -111,6 +111,18 @@ pub fn NumberField(
     /// scrubs up and down, up for larger values.
     #[prop(optional)]
     vertical: bool,
+    /// Shows the label as a short caption before the field, on its row, for a row of
+    /// small fields under one row label (an [`AxisRow`]).
+    #[prop(optional)]
+    inline: bool,
+    /// The caption shown in place of `label`, which stays the accessible name: "L" for
+    /// Left.
+    #[prop(optional)]
+    caption: &'static str,
+    /// Leaves out the − and + steppers, for a field too narrow for them; dragging,
+    /// the arrow keys and typing still change it.
+    #[prop(optional)]
+    bare: bool,
     /// The unit after the number, such as `px`.
     #[prop(optional)]
     unit: &'static str,
@@ -292,6 +304,8 @@ pub fn NumberField(
     };
 
     let name = move || named.map_or_else(|| label.to_owned(), |n| n.get());
+    // A caption that differs from the label would give the input two names.
+    let caption_hidden = (!caption.is_empty()).then_some("true");
     let field = move || {
         view! {
             <input
@@ -337,17 +351,39 @@ pub fn NumberField(
         .into_any();
     }
     view! {
-        <label class="number-field">
-            {named.is_none().then(|| view! { <span class="field-label">{label}</span> })}
+        <label class="number-field" class:inline=inline class:bare=bare>
+            {named.is_none().then(|| {
+                let shown = if caption.is_empty() { label } else { caption };
+                view! { <span class="field-label" aria-hidden=caption_hidden>{shown}</span> }
+            })}
             <span class="stepper">
-                {decrease()}
+                {(!bare).then(decrease)}
                 {field()}
                 <span class="unit">{unit}</span>
-                {increase()}
+                {(!bare).then(increase)}
             </span>
         </label>
     }
     .into_any()
+}
+
+/// A row of small fields under one label on its left, such as Position's X and Y or
+/// Crop's four sides (#1219), the same row the scene Properties dialog's camera uses
+/// (#1214). Its fields share the row's width equally and never push it wider than its
+/// column.
+#[component]
+pub fn AxisRow(
+    /// The row's label.
+    label: &'static str,
+    /// The fields, each usually an `inline` [`NumberField`].
+    children: Children,
+) -> impl IntoView {
+    view! {
+        <div class="axis-row" role="group" aria-label=label>
+            <span class="label">{label}</span>
+            <div class="axes">{children()}</div>
+        </div>
+    }
 }
 
 #[cfg(test)]

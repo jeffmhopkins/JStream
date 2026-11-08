@@ -15,7 +15,7 @@
 use super::curve::CurveEditor;
 use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
-use super::number::NumberField;
+use super::number::{AxisRow, NumberField};
 use super::scene_properties::SceneDialog;
 use super::source_properties::{self, PropertiesDialog};
 use super::studio;
@@ -1057,9 +1057,9 @@ fn Placement(
             });
             true
         };
-        let label = if across { "W %" } else { "H %" };
+        let (label, caption) = if across { ("W %", "W") } else { ("H %", "H") };
         view! {
-            <NumberField label unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
+            <NumberField label caption inline=true unit="%" value step=1.0 decimals=1 min=f64::from(MIN_PERCENT)
                 max=f64::from(MAX_PERCENT) send=commit />
         }
     };
@@ -1097,8 +1097,10 @@ fn Placement(
             Param::W | Param::H => (MIN_SIZE, MAX_SIZE),
             Param::Rotation => (-360.0, 360.0),
         };
+        // Rotation stands alone in the grid; the rest are an axis row's fields.
+        let inline = param != Param::Rotation;
         view! {
-            <NumberField label unit value step decimals fixed min=f64::from(min)
+            <NumberField label unit value step decimals fixed inline=inline min=f64::from(min)
                 max=f64::from(max) send=commit />
         }
     };
@@ -1202,7 +1204,7 @@ fn Placement(
     };
 
     let crop = Memo::new(move |_| current.with(|i| i.as_ref().map(|i| i.crop)));
-    let crop_field = move |side: Side, label: &'static str| {
+    let crop_field = move |side: Side, label: &'static str, caption: &'static str| {
         let value = Signal::derive(move || crop.get().map(|c| f64::from(crop_side(&c, side))));
         let commit = move |v: f64| {
             let Some(c) = crop.get_untracked() else {
@@ -1221,8 +1223,8 @@ fn Placement(
             true
         };
         view! {
-            <NumberField label unit="px" value step=1.0 decimals=0 min=0.0
-                max=f64::from(MAX_CROP) send=commit />
+            <NumberField label caption unit="px" value step=1.0 decimals=0 min=0.0
+                max=f64::from(MAX_CROP) inline=true bare=true send=commit />
         }
     };
     let crop_hint = Signal::derive(move || {
@@ -1360,13 +1362,10 @@ fn Placement(
                      source's size, so its box can't be edited here or on the canvas."
                 </p>
             </Show>
+            <AxisRow label="Position">{field(Param::X)} {field(Param::Y)}</AxisRow>
+            <AxisRow label="Size">{field(Param::W)} {field(Param::H)}</AxisRow>
+            <AxisRow label="Scale">{percent_field(true)} {percent_field(false)}</AxisRow>
             <div class="field-grid">
-                {field(Param::X)}
-                {field(Param::Y)}
-                {field(Param::W)}
-                {field(Param::H)}
-                {percent_field(true)}
-                {percent_field(false)}
                 {field(Param::Rotation)}
                 {fit_field}
             </div>
@@ -1380,11 +1379,11 @@ fn Placement(
             </div>
         </Fold>
         <Fold title="Crop" open=true hint=crop_hint>
-            <div class="field-grid">
-                {crop_field(Side::Left, "Left")}
-                {crop_field(Side::Right, "Right")}
-                {crop_field(Side::Top, "Top")}
-                {crop_field(Side::Bottom, "Bottom")}
+            <div class="axes four">
+                {crop_field(Side::Left, "Left", "L")}
+                {crop_field(Side::Right, "Right", "R")}
+                {crop_field(Side::Top, "Top", "T")}
+                {crop_field(Side::Bottom, "Bottom", "B")}
             </div>
         </Fold>
         <Fold title="Blending" open=true hint=blend_hint>
