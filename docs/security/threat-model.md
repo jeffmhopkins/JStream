@@ -151,7 +151,8 @@ a stolen token, local denial of service.
     only if the fingerprint matches the one the host shows
     ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes
     ADR-0114). The `/pair` page says the same next to its code field.
-  - **Device tokens only.** The control token is refused there, however it is presented.
+  - **Device tokens only.** The control token, and the host UI's own token, are refused
+    there, however they are presented.
     `Host` must be the listener's port with a name the certificate carries or the
     address the connection arrived on, and `Origin`, when present, `https://` and that
     host. Configured extra origins don't apply.

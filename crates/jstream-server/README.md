@@ -432,8 +432,8 @@ unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
   `Host` must carry the listener's port with a name the certificate carries or the
   address the connection arrived on (a `Host` without a port means 443). `Origin`,
   when present, must be `https://` and that host; the configured extra origins are the
-  host listener's only. The control token is refused there however it is presented,
-  with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
+  host listener's only. The control token, and the host UI's own token (`ui_token`), are
+  refused there however they are presented, with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
   A device token, or a browser's device cookie, gets in while pairing is on. The
   pairing exchange and `GET /pair` are served there, sharing the code's five
   attempts with the host's listener.
