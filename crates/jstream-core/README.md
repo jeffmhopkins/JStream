@@ -702,7 +702,8 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   snapshot mid-fade), keyframe scenes (`src/tests/keyframes.rs`: a variant drawing its
   parent's items with its overrides and following the parent, a `move` between a parent
   and its variant pairing by item where pairing by source would cross, and pairing an
-  item only where its overridden effects look the same on both sides, an undo of a
+  item only where its overridden effects look the same on both sides, a `move` that
+  blends a glow's radius from 80 to 4 padding the item's layer for 80, an undo of a
   keyframe effects step refused once another client changed those effects, and the
   overrides a batch drops reported and restored by undo, with a no-op clear that is no
   undo step, and a live value on a keyframe scene shown only where the keyframe draws the
@@ -1644,11 +1645,16 @@ as the scene that draws the item draws it: a keyframe scene's items have chains 
 their own, at their effective values, with the keyframe's own effects where it
 overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
-outset is the sum of their kinds' `max_outset_px`: drop shadow, outline, glow and bloom
-declare one (render › Filters). The chain grows the layer by it where the first effect
-that declares one runs (`Chain::pad_at`, that effect's `VideoFilter::set_pad`), so the
-effects before it frame the box itself
-([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)). A box
+outset is the sum of what each draws past its input at its settings
+(`jstream_render::video_filter_outset`: a drop shadow its offset plus its blur, a glow
+or a bloom its radius, an outline outside its width), each rounded up to 16 px
+(`OUTSET_STEP`) and at most its kind's `max_outset_px`; a kind it doesn't measure (a
+`border`, for now) and a pack effect that declares one take it whole (render › Filters). The chain grows the layer by it where the first
+effect that draws past its input runs (`Chain::pad_at`, that effect's
+`VideoFilter::set_pad`), so the effects before it frame the box itself
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
+[ADR-0136](../../docs/adr/0136-an-effects-outset-follows-its-settings.md)). While a Move blends an item's effects (ADR-0127), each effect's outset is
+the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both. A box
 longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into

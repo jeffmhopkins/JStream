@@ -9,6 +9,7 @@
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
 use super::drop_shadow::Under;
+use super::within;
 use crate::error::RenderError;
 use crate::filter::params::{Read, color, filter, float};
 use crate::filter::{Ctx, Pass};
@@ -70,6 +71,11 @@ fn read(settings: &Settings) -> Under {
         radius: read.f32("radius", 16.0),
         strength: read.f32("strength", 1.0),
     }
+}
+
+/// The radius: as far as the glow reaches past the shape's edge.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    within(read(settings).radius, MAX_RADIUS as f32)
 }
 
 impl Pass for Glow {
