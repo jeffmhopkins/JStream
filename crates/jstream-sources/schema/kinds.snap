@@ -1,5 +1,6 @@
 ---
 source: crates/jstream-sources/tests/kinds.rs
+assertion_line: 17
 ---
 [
   {
@@ -269,13 +270,13 @@ source: crates/jstream-sources/tests/kinds.rs
       {
         "id": "fps",
         "type": "int",
-        "min": 1,
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "fps",
-        "default": 30,
+        "default": 0,
         "label": "Frame rate",
-        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "description": "The most frames a second the page paints. It paints less when nothing changes. 0 follows the program's frame rate, so a page's animation is as smooth as the program.",
         "live": false
       },
       {

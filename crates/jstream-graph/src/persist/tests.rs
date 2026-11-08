@@ -1751,11 +1751,19 @@ fn a_collection_an_edit_would_refuse_is_refused() {
         load(&cycle)
     );
 
+    // A source of a kind this graph doesn't describe is kept as saved (#1412), as a
+    // filter of one is: a shader source loads before its pack.
     let unknown_kind = edit_file(|v| v["sources"][0]["kind"]["kind"] = json!("hologram"));
-    assert!(
-        matches!(load(&unknown_kind), Err(LoadError::Invalid { .. })),
-        "{:?}",
-        load(&unknown_kind)
+    let kept = load(&unknown_kind).expect("a missing kind's source loads");
+    let source = kept
+        .state()
+        .source(&SourceId::new("a_tint"))
+        .expect("a_tint");
+    assert_eq!(
+        source.kind(),
+        &SourceKind::Builtin {
+            kind: "hologram".into()
+        }
     );
 
     // Output `tw`.

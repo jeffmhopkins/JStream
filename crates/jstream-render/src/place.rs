@@ -92,6 +92,57 @@ impl Shape {
         }
     }
 
+    /// Cuts a 2D quad down to the part whose texture coordinates are inside `keep`,
+    /// `[u0, v0, u1, v1]`, which samples the same texels where it is drawn (#1070).
+    /// False when no part of it is. A 3D shape, a polygon that is not a quad, and a quad
+    /// whose texture is not laid along its sides are kept whole.
+    pub(crate) fn trim_to(&mut self, keep: [f32; 4]) -> bool {
+        if self.is_3d() || self.len != 4 {
+            return true;
+        }
+        let [a, b, c, d] = [0, 1, 2, 3].map(|i| self.vertices[i]);
+        let (du, dv) = (b.uv[0] - a.uv[0], d.uv[1] - a.uv[1]);
+        // `flat` lays u along a→b and v along a→d, on a parallelogram.
+        let along = a.uv[1] == b.uv[1]
+            && a.uv[0] == d.uv[0]
+            && c.uv == [b.uv[0], d.uv[1]]
+            && du != 0.0
+            && dv != 0.0;
+        let far = [
+            b.canvas[0] + d.canvas[0] - a.canvas[0],
+            b.canvas[1] + d.canvas[1] - a.canvas[1],
+        ];
+        let parallelogram = (0..2).all(|axis| (far[axis] - c.canvas[axis]).abs() <= 1e-3);
+        if !along || !parallelogram {
+            return true;
+        }
+        // The kept span as a fraction of the way along each side.
+        let span = |start: f32, delta: f32, low: f32, high: f32| {
+            let (p, q) = ((low - start) / delta, (high - start) / delta);
+            (p.min(q).max(0.0), p.max(q).min(1.0))
+        };
+        let (s0, s1) = span(a.uv[0], du, keep[0], keep[2]);
+        let (t0, t1) = span(a.uv[1], dv, keep[1], keep[3]);
+        // Also false for a NaN, which can't be kept.
+        if !(s0 < s1 && t0 < t1) {
+            return false;
+        }
+        if (s0, s1, t0, t1) == (0.0, 1.0, 0.0, 1.0) {
+            return true;
+        }
+        let at = |s: f32, t: f32| Vertex {
+            canvas: [0, 1].map(|axis| {
+                a.canvas[axis]
+                    + s * (b.canvas[axis] - a.canvas[axis])
+                    + t * (d.canvas[axis] - a.canvas[axis])
+            }),
+            uv: [a.uv[0] + s * du, a.uv[1] + t * dv],
+            w: 1.0,
+        };
+        self.vertices[..4].copy_from_slice(&[at(s0, t0), at(s1, t0), at(s1, t1), at(s0, t1)]);
+        true
+    }
+
     /// How many texels of a `texels`-sized texture a 2D item's canvas pixel spans along
     /// its quad's two axes, the least and the most: its top and left edges against the
     /// texels their texture coordinates cross. 1 or less is drawn at or above its size.
@@ -1208,5 +1259,66 @@ mod tests {
         .expect("finite")
         .expect("draws");
         close(dense.minification((800, 400)), (2.0, 2.0));
+    }
+
+    /// A rotated, scaled quad trimmed to a quarter of its texture keeps that quarter's
+    /// corners where the whole quad drew them (#1070).
+    #[test]
+    fn a_trimmed_quad_keeps_its_texels_where_they_were() {
+        let placement = Placement::Legacy(LegacyTransform {
+            position: [10.0, 20.0],
+            scale: [2.0, 3.0],
+            rotation_deg: 30.0,
+        });
+        let whole = shape(8, 8, placement, Crop::NONE).unwrap().unwrap();
+        // Where the whole quad draws a point of its texture.
+        let seen = |uv: [f32; 2]| {
+            let [a, b, _, d] = [0, 1, 2, 3].map(|i| whole.vertices()[i]);
+            let (s, t) = (
+                (uv[0] - a.uv[0]) / (b.uv[0] - a.uv[0]),
+                (uv[1] - a.uv[1]) / (d.uv[1] - a.uv[1]),
+            );
+            [0, 1].map(|axis| {
+                a.canvas[axis]
+                    + s * (b.canvas[axis] - a.canvas[axis])
+                    + t * (d.canvas[axis] - a.canvas[axis])
+            })
+        };
+        let mut trimmed = shape(8, 8, placement, Crop::NONE).unwrap().unwrap();
+        assert!(trimmed.trim_to([0.25, 0.5, 0.75, 1.0]));
+        for vertex in trimmed.vertices() {
+            near(vertex.canvas, seen(vertex.uv));
+        }
+        let uvs: Vec<_> = trimmed.vertices().iter().map(|vertex| vertex.uv).collect();
+        assert_eq!(uvs, [[0.25, 0.5], [0.75, 0.5], [0.75, 1.0], [0.25, 1.0]]);
+
+        // A flipped quad trims the same texels.
+        let flipped = Placement::Legacy(LegacyTransform {
+            scale: [-1.0, 1.0],
+            ..LegacyTransform::IDENTITY
+        });
+        let mut mirror = shape(8, 8, flipped, Crop::NONE).unwrap().unwrap();
+        assert!(mirror.trim_to([0.0, 0.0, 0.5, 1.0]));
+        for vertex in mirror.vertices() {
+            assert!((0.0..=0.5).contains(&vertex.uv[0]), "{:?}", vertex.uv);
+        }
+    }
+
+    /// Keeping nothing of a quad says so, and keeping all of it changes nothing.
+    #[test]
+    fn trimming_to_nothing_or_everything() {
+        let fresh = || {
+            shape(4, 4, Placement::IDENTITY, Crop::NONE)
+                .unwrap()
+                .unwrap()
+        };
+        let whole = fresh();
+        let mut none = fresh();
+        assert!(!none.trim_to([0.0, 0.0, 0.0, 0.0]));
+        let mut outside = fresh();
+        assert!(!outside.trim_to([1.0, 0.0, 1.5, 1.0]));
+        let mut all = fresh();
+        assert!(all.trim_to([-1.0, -1.0, 2.0, 2.0]));
+        assert_eq!(all.vertices(), whole.vertices());
     }
 }

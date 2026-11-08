@@ -7,7 +7,7 @@
 
 use std::any::Any;
 use std::fmt;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use jstream_media::{FrameSize, VideoFrameInfo};
 
@@ -27,11 +27,18 @@ pub struct AdapterId {
 /// one that drives the captured display and that capture and encoders use, so frames
 /// never cross adapters.
 ///
+/// Clones are the same context: they share the device, the [`ContextKey`], the
+/// [`SubmitLock`] and the platform's state, so the engine opens one and lends it to every
+/// compositor and to the browser engine (ADR-0117 §5).
+///
 /// Fields drop in declaration order: the platform's own state (which may hold raw
 /// objects taken from the device) goes first, before the queue, device and adapter, as
-/// ARCH › GPU pipeline step 2 requires.
+/// ARCH › GPU pipeline step 2 requires. Clones share that state, so it drops with the
+/// last clone, which still holds the device then.
+#[derive(Clone)]
 pub struct GpuContext {
-    platform: Option<Box<dyn Any + Send + Sync>>,
+    platform: Option<Arc<dyn Any + Send + Sync>>,
+    watch: Arc<OnceLock<Arc<dyn Any + Send + Sync>>>,
     queue: wgpu::Queue,
     device: wgpu::Device,
     adapter: wgpu::Adapter,
@@ -115,7 +122,8 @@ impl GpuContext {
         platform: Option<Box<dyn Any + Send + Sync>>,
     ) -> Self {
         Self {
-            platform,
+            platform: platform.map(Arc::from),
+            watch: Arc::default(),
             queue,
             device,
             adapter,
@@ -160,7 +168,17 @@ impl GpuContext {
     /// The platform's state, if it is of type `T`. A platform uses this to recognise its
     /// own contexts; another platform's context gives `None`.
     pub fn platform<T: Any>(&self) -> Option<&T> {
-        self.platform.as_ref()?.downcast_ref()
+        self.platform.as_deref()?.downcast_ref()
+    }
+
+    /// What watches the device for a loss, made by the first call's `init` and shared by
+    /// every clone and every later call. wgpu keeps one device-lost callback and one
+    /// error handler per device, so every compositor on the context shares the watch that
+    /// installs them, instead of each replacing the last one's (`jstream-render`). `None`
+    /// when the watch already made is not a `T`.
+    pub fn watch<T: Any + Send + Sync>(&self, init: impl FnOnce() -> T) -> Option<Arc<T>> {
+        let made = self.watch.get_or_init(|| Arc::new(init()));
+        Arc::clone(made).downcast().ok()
     }
 }
 

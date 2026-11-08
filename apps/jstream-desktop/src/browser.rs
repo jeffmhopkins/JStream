@@ -6,7 +6,7 @@
 //! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md
 
 use jstream_browser::{BrowserBackend, CefBackend, CefConfig};
-use jstream_platform::{GpuInterop, MediaClock};
+use jstream_platform::MediaClock;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -16,8 +16,8 @@ use std::sync::Arc;
 /// app, which doesn't link CEF.
 ///
 /// `None`, logged, when the helper's folder (the exe's) is unknown: the engine then runs
-/// without one and `browser` sources draw nothing. Without a GPU device pages still play
-/// their audio, but deliver no frames.
+/// without one and `browser` sources draw nothing. Without the engine's GPU context pages
+/// still play their audio, but deliver no frames.
 pub fn backend(data: &Path, clock: Arc<dyn MediaClock>) -> Option<Arc<dyn BrowserBackend>> {
     let mut config = match CefConfig::beside_exe(data) {
         Ok(config) => config,
@@ -27,14 +27,8 @@ pub fn backend(data: &Path, clock: Arc<dyn MediaClock>) -> Option<Arc<dyn Browse
         }
     };
     config.log_file = Some(data.join("logs").join("cef.log"));
+    // The engine hands it its GPU context, on the media adapter (ADR-0004, ADR-0117 §5),
+    // when the host gives it to the engine (`Engine::with_browser`).
     let backend = CefBackend::new(config, clock);
-    // The media adapter's device, as the engine's own media work opens it (ADR-0004),
-    // for paints before a program stage; the stage lends its own context in its place.
-    match jstream_platform_windows::WindowsGpu::new().open_device() {
-        Ok(gpu) => backend.use_device(Some(&gpu)),
-        Err(error) => {
-            tracing::warn!(%error, "browser sources get no GPU device, so they show no frames")
-        }
-    }
     Some(Arc::new(backend))
 }
