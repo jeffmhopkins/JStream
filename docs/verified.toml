@@ -204,13 +204,13 @@ stamp = { hash = "b3:38e986c9266d0712", by = "agent:readme-scrub", note = "gpu/m
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:9305044dcc5f9495", by = "agent:claude", note = "Added that the program stage's cache keeps an undrawn still's texture so a cut back is drawn at once; matches core still.rs and render README | merge: #1262 and #1352 change capture targets and the border filter; the still-texture sentence still holds | merge: #1383 measures a border's outset at its settings in render's filter pack; the still-texture sentence still holds | kept from the merged side: border.wgsl/border.rs gain the 9-slice frame and per-slice sampling (#1377); the pipeline's shape is unchanged | merge: Main's #1365 (ADR-0136) sizes item layers by each effect's outset at its settings via video_filter_outset; a border isn't measured and keeps its declared 129 px, which the 9-slice frame (inside the band) doesn't change. | kept from the merged side: Re-read: the pipeline stages list no filter kinds; the border's outset and uniform change don't affect them | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the pipeline lists no filter kinds; the vignette's restored defaults don't change it | merge: Merged #1314's mip chain sentence for small 2D items; this PR's item-layer padding (ADR-0125) still reads correctly | kept from the merged side: Added that 2D items drawn small (over 1.15 texels per pixel) sample the source's mip chain; render README step 2 matches | merge: #1302 changed the render README's transition/Move notes only (effect settings blending); the gpu-pipeline text on 2D mips is unaffected | kept from the merged side: render's transition.rs gained pure settings-blend helpers (ADR-0127); the capture, compositor and encode pipeline this section describes is unchanged | kept from the merged side: This branch: the program stage's and preview's caches hold a frame only items draw at its drawn size, floored at the plan over every mix (#1139). The upload is still converted by the ingest compute pass to premultiplied linear Rgba16Float, which can now also write a smaller texture as a box mean of the frame's texels; cache retirement after the fence is unchanged. The section's one added sentence holds. | merge: Main brought #1296's border filter (render filter pack); the pipeline steps and this branch's drawn-size sentence still hold. | kept from the merged side: render README gained video_filter_outset (ADR-0136) and the merged border kind with its declared-outset clause; the pipeline's shape is unchanged. | merge: Main's #1359 holds a still drawn small at its drawn size; this branch's video_filter_outset text is untouched by it. | kept from the merged side: render gains border's measured outset (#1376) and the README's outsets example is per ADR-0136; the pipeline's shape is unchanged | merge: Main brought #1352 (the border's 9-slice frame: frame, frame_slice, frame_edges, aux image) and #1382 (core README contents moved to rustdoc); this branch's measured border outset text still holds, the frame draws inside the band so it adds no outset." }
+stamp = { hash = "b3:1239deb3723f3b1f", by = "agent:sharpen-small-insets", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:8a1a50c3e47dcdb8", by = "agent:claude", note = "Re-read against the GPU ingest compute pass and the ReadbackRing: CPU frames convert on the GPU, CPU-path sessions and cameras are read back through a ring collected without waiting." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/schema/kinds.snap"]
-stamp = { hash = "b3:0e50b885c25bf33e", by = "agent:claude", note = "The border kind gains frame settings in kinds.snap and an aux image through set_reference; the pipeline's shape is unchanged | kept from the merged side: Re-read: the pipeline stages list no filter kinds; the border's outset and uniform change don't affect them | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the pipeline lists no filter kinds; the vignette's restored defaults don't change it" }
+stamp = { hash = "b3:4f2f9736a4ed26f1", by = "agent:sharpen-small-insets", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/blend.rs"]
 stamp = { hash = "b3:0f46a2b13e3171ab", by = "agent:claude-3d-cameras", note = "This branch added the depth-of-field sentence: each fragment of a flat item blurred by its distance from the focus plane, a disc of mip taps, a softened edge and no extra pass, matching composite.wgsl and the render README, and after the merge with #1113 it says a 3D model's layer isn't blurred (place.rs's Placement::Layer arm has zero dof). Round 2 (#1122 review N1, N4) adds the push-out by the shape's largest blur and the cap at it, VERTEX_STRIDE 116 and the tilted-plane goldens, render detail the sentence doesn't give. The merges brought ADR-0103's readback_wait in compositor.rs (pipeline order unchanged), #1121's place.rs draw-nothing for an overflowing neutral box (#1046), #1109's seven backdrop modes with the two _srgb ones, and #1113's model draw (ADR-0107), which follows the depth-of-field sentence. | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): seven modes read a backdrop copy, and the two _srgb modes mix sRGB-encoded values to match a browser" }
@@ -375,13 +375,19 @@ stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:d97fe7556bb5c2ce", by = "agent:claude", note = "render gains border's measured outset (#1376) and the README's outsets example is per ADR-0136; the pipeline's shape is unchanged" }
+stamp = { hash = "b3:3c33a276a1a979c7", by = "agent:sharpen-small-insets", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
 stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
 stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (render pack/*.rs and *.wgsl) and its README paragraph, and drops filter/mod.rs's allow. Every pack kind keeps the input's size, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scanlines.rs"]
+stamp = { hash = "b3:c2e7f593c36231d6", by = "agent:sharpen-small-insets", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scanlines.wgsl"]
+stamp = { hash = "b3:21f4a96c940d78c1", by = "agent:sharpen-small-insets", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
 stamp = { hash = "b3:ac2b889b8ac1dcce", by = "agent:claude", note = "Re-read: the GPU pipeline's filter stages are unchanged; scroll's gap is a per-filter setting described in render's filters section" }
@@ -486,7 +492,7 @@ stamp = { hash = "b3:950ada971dc31a24", by = "agent:claude-motion", note = "rend
 stamp = { hash = "b3:483e5e6198b00fad", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#mcp"."body"]
-stamp = { hash = "b3:12ebaeccb2106667", by = "agent:claude", note = "design guidance bullet now says a custom shader or shader source the UI's editor opens; matches design.rs" }
+stamp = { hash = "b3:5fd207f571d9a594", by = "agent:sharpen-small-insets", note = "The MCP notes' list of light and framing filters now includes scanlines" }
 
 ["ARCH#mcp"."dep:docs/RULES.md#R-API-002"]
 stamp = { hash = "b3:b1f1a1a0e75365c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 wording change only; MCP section's youtube and plugin no-tool notes and naming bullet still hold" }
@@ -510,7 +516,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:09879d6f277ae766", by = "agent:claude", note = "edited: a device's name in capture.targets is untrusted text, as a window's | kept from the merged side: Re-read it. The tool snapshot includes the longer canvas.set_frame_rate description. The section does not name a frame rate." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:349e6aaa66a35cf6", by = "agent:claude", note = "design guidance bullet now says a custom shader or shader source the UI's editor opens; matches design.rs" }
+stamp = { hash = "b3:b8907e9af24a9067", by = "agent:sharpen-small-insets", note = "The MCP notes' list of light and framing filters now includes scanlines" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2481,7 +2487,7 @@ stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d9b91e488d8d9030", by = "agent:shader-source", note = "Hot reload paragraph now names PackWatcher::mark_stale (forces the next poll to reload a folder a host replaced), load_pack (a poll's caught load on LOAD_THREAD, for checking a staged pack) and manifest_pack_id (the manifest's pack ID without shader validation), the three additions in pack.rs, watch.rs and lib.rs for ADR-0097." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:41f484e8ecb5d16a", by = "agent:claude", note = "render Filters now measures border's outset; the effects crate's purpose names no built-in kind | merge: render Filters gained #1352's 9-slice frame; the effects crate's purpose names no built-in kind. | kept from the merged side: render Filters gained the 9-slice frame and its per-slice sampling; the effects crate's purpose names no built-in kind's settings | merge: render Filters gained #1365's video_filter_outset; the effects crate's purpose names no built-in kind. | kept from the merged side: render › Filters only changed the border's outset to 129; the pack contract this section depends on is unchanged | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read against render filters' vignette edit: packs are unaffected | kept from the merged side: render Filters gained video_filter_outset (ADR-0136) and, from the merge, #1296's border kind, which it doesn't measure yet; the effects crate's purpose names no built-in kind." }
+stamp = { hash = "b3:a3364f1a10e0d35d", by = "agent:sharpen-small-insets", note = "Depends on the render filters section, which only gained the scanlines kind; effect packs are unaffected" }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -2754,7 +2760,7 @@ stamp = { hash = "b3:9f5cc48cea3021dc", by = "agent:r9bzj2", note = "Re-read aga
 stamp = { hash = "b3:bd0352fd8a70d806", by = "agent:claude", note = "design guidance list now names a shader source the editor opens from Properties, with @size, @feedback, @audio and scene lines (ADR-0135)" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
-stamp = { hash = "b3:12ebaeccb2106667", by = "agent:claude", note = "design guidance list now names a shader source the editor opens from Properties, with @size, @feedback, @audio and scene lines (ADR-0135)" }
+stamp = { hash = "b3:5fd207f571d9a594", by = "agent:sharpen-small-insets", note = "design notes now name scanlines and its three looks among the light and framing filters; the README's summary of the notes still holds" }
 
 ["CRATE-jstream-mcp#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2769,7 +2775,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:349e6aaa66a35cf6", by = "agent:claude", note = "design guidance list now names a shader source the editor opens from Properties, with @size, @feedback, @audio and scene lines (ADR-0135)" }
+stamp = { hash = "b3:b8907e9af24a9067", by = "agent:sharpen-small-insets", note = "design notes now name scanlines and its three looks among the light and framing filters; the README's summary of the notes still holds" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2802,7 +2808,7 @@ stamp = { hash = "b3:d3eeb18e517f4d4c", by = "agent:grok", note = "Re-read the s
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:349e6aaa66a35cf6", by = "agent:claude", note = "design.rs adds shader-source guidance to the design text; the crate's contents list (design guidance in design.rs) still holds" }
+stamp = { hash = "b3:b8907e9af24a9067", by = "agent:sharpen-small-insets", note = "design.rs gains scanlines guidance; the crate's purpose is unchanged" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -4437,13 +4443,19 @@ stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:d97fe7556bb5c2ce", by = "agent:claude", note = "pack/mod.rs gains outset for border beside build; Design is unaffected" }
+stamp = { hash = "b3:3c33a276a1a979c7", by = "agent:sharpen-small-insets", note = "The pack gains scanlines, documented in the filters section; the compositor design is unchanged" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
 stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
 stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the seven single-pass pack kinds (pack/*.rs, *.wgsl) and drops filter/mod.rs's unused_imports allow: one draw per apply_filter each, no new thread, I/O, cache or steady-path allocation (scroll's offset is per-call CPU math), so Design's passes, resources and threading text is unchanged; holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scanlines.rs"]
+stamp = { hash = "b3:c2e7f593c36231d6", by = "agent:sharpen-small-insets", note = "The pack gains scanlines, documented in the filters section; the compositor design is unchanged" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scanlines.wgsl"]
+stamp = { hash = "b3:21f4a96c940d78c1", by = "agent:sharpen-small-insets", note = "The pack gains scanlines, documented in the filters section; the compositor design is unchanged" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
 stamp = { hash = "b3:ac2b889b8ac1dcce", by = "agent:claude", note = "Re-read: the design's notes on filter passes and uniforms still hold with scroll's larger uniform block (a vec2 gap after the loop flags)" }
@@ -4545,7 +4557,7 @@ stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:950ada971dc31a24", by = "agent:claude-motion", note = "blend_settings allocates a settings map per blended filter per frame on jstream-core's render thread only during a Move; no GPU or I/O work, so the bounded-work and reclamation statements hold" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:41f484e8ecb5d16a", by = "agent:claude", note = "video_filter_outset now measures border (pack::outset, border::outset: outer gap + width + 1, 0 without an outer stroke, at most the declared 129); the outsets paragraph's layer example now says it's the largest, with the default's 1952x1112 per ADR-0136 | merge: Main brought #1352 (the border's 9-slice frame: frame, frame_slice, frame_edges, aux image) and #1382 (core README contents moved to rustdoc); this branch's measured border outset text still holds, the frame draws inside the band so it adds no outset. | kept from the merged side: This PR's 9-slice frame text, plus N1: each slice samples only its own texels, held half a texel inside it (#1377), as within_slice in border.wgsl does | merge: Main's #1365 (ADR-0136) sizes item layers by each effect's outset at its settings via video_filter_outset; a border isn't measured and keeps its declared 129 px, which the 9-slice frame (inside the band) doesn't change. | kept from the merged side: Edited: max_outset_px is 129 (the widest outer stroke after the widest gap, plus its antialiased pixel, review N1); each stroke's dots wrap by their own period (review B1), which the text's 'measured along the edge' already covers | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Edited for review B1: the vignette's strength stays the linear share of the colour, blend defaults to normal and radius/softness to 0.5, so a saved vignette keeps its look at version 1; the rest (bloom, outsets, set_pad, Bounds) re-read and holds | kept from the merged side: This branch: video_filter_outset for drop_shadow, outline, glow and bloom at their settings, within max_outset_px (ADR-0136). Merge brought #1296's border kind; the sentence now says a border takes its declared 129 px, as its descriptor's max_outset_px." }
+stamp = { hash = "b3:a3364f1a10e0d35d", by = "agent:sharpen-small-insets", note = "Added the scanlines entry: settings, ranges, the f64 roll and the SplitMix64 flicker per 60 Hz step, coverage kept, UI presets" }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -4686,13 +4698,19 @@ stamp = { hash = "b3:47ce8380b91f193a", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:d97fe7556bb5c2ce", by = "agent:claude", note = "video_filter_outset now measures border (pack::outset, border::outset: outer gap + width + 1, 0 without an outer stroke, at most the declared 129); the outsets paragraph's layer example now says it's the largest, with the default's 1952x1112 per ADR-0136" }
+stamp = { hash = "b3:3c33a276a1a979c7", by = "agent:sharpen-small-insets", note = "Added the scanlines entry: settings, ranges, the f64 roll and the SplitMix64 flicker per 60 Hz step, coverage kept, UI presets" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
 stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
 stamp = { hash = "b3:6113999234f41319", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scanlines.rs"]
+stamp = { hash = "b3:c2e7f593c36231d6", by = "agent:sharpen-small-insets", note = "Added the scanlines entry: settings, ranges, the f64 roll and the SplitMix64 flicker per 60 Hz step, coverage kept, UI presets" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scanlines.wgsl"]
+stamp = { hash = "b3:21f4a96c940d78c1", by = "agent:sharpen-small-insets", note = "Added the scanlines entry: settings, ranges, the f64 roll and the SplitMix64 flicker per 60 Hz step, coverage kept, UI presets" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
 stamp = { hash = "b3:ac2b889b8ac1dcce", by = "agent:claude", note = "Re-read: scroll now lists gap_x and gap_y, whole px between repeats on a looping axis, the offset wrapped to image plus gap and the gap read transparent" }
@@ -4923,13 +4941,19 @@ stamp = { hash = "b3:47ce8380b91f193a", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:6a82ca03dd16f573", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/mod.rs"]
-stamp = { hash = "b3:d97fe7556bb5c2ce", by = "agent:claude", note = "filter/mod.rs outset falls back to pack::outset for border; purpose still holds" }
+stamp = { hash = "b3:3c33a276a1a979c7", by = "agent:sharpen-small-insets", note = "A new built-in filter kind (scanlines) in the single-pass pack; purpose unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.rs"]
 stamp = { hash = "b3:b0265e5c45a9debb", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/rounded_corners.wgsl"]
 stamp = { hash = "b3:6113999234f41319", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the single-pass pack (pack/*.rs and *.wgsl: color_correction, chroma_key, color_key, luma_key, sharpen, rounded_corners, scroll), registers it in pack/mod.rs and drops filter/mod.rs's unused_imports allow. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scanlines.rs"]
+stamp = { hash = "b3:c2e7f593c36231d6", by = "agent:sharpen-small-insets", note = "A new built-in filter kind (scanlines) in the single-pass pack; purpose unchanged" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scanlines.wgsl"]
+stamp = { hash = "b3:21f4a96c940d78c1", by = "agent:sharpen-small-insets", note = "A new built-in filter kind (scanlines) in the single-pass pack; purpose unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pack/scroll.rs"]
 stamp = { hash = "b3:ac2b889b8ac1dcce", by = "agent:claude", note = "Re-read: the purpose describes the compositor and items, which the scroll filter's new gap settings don't change" }
@@ -5436,7 +5460,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:93a0d2748b2fed16", by = "agent:claude", note = "Add source paragraph names the Shader type; Filters' custom shader paragraph describes the shader source: write_new with Mode::Source, source_toml's one pass, open_shader, pack deleted on a failed add, no Save as pack for a source (ADR-0135)" }
+stamp = { hash = "b3:81a4823f6a630b41", by = "agent:sharpen-small-insets", note = "Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain" }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:8c9742657710ad9f", by = "agent:claude", note = "edited: the device list labels, one shared capture.targets answer per form, and the capture_format lists | kept from the merged side: Re-read Design against the control dependency. The UI still drives the engine through the protocol. It does not set the base frame rate yet." }
@@ -5547,10 +5571,10 @@ stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "The proj
 stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follow-up to #1373: the Outputs bullet now says Stop all sits beside Start all while any output runs, a copied recording gets a free path, Save/Delete wait for the engine (Saving…, Saved.), and a read an output.state_changed arrived during is re-read rather than applied (Panel::refresh's loop, REREADS); checked against outputs.rs and encoders.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:7a27ed228aefcfff", by = "agent:claude", note = "Edited: Add filter lists the border with vignette and bloom, and the presets include the border's Card, Neon and Broadcast frame; matches filters.rs and filter_presets.rs | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the preset select and the vignette's Subtle, Cinematic and Spotlight hold; only their strength values changed to linear ones" }
+stamp = { hash = "b3:9e56c1f38e44240d", by = "agent:sharpen-small-insets", note = "Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:7a3d4d1fc32ea307", by = "agent:claude", note = "Add source paragraph names the Shader type; Filters' custom shader paragraph describes the shader source: write_new with Mode::Source, source_toml's one pass, open_shader, pack deleted on a failed add, no Save as pack for a source (ADR-0135)" }
+stamp = { hash = "b3:cbb0ae927b9d33de", by = "agent:sharpen-small-insets", note = "Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:089c2baca7ad6864", by = "agent:claude-settings", note = "Re-read; the Inspector's box and crop fields moved into AxisRow rows, the camera rows share the axis-row class; nothing the design section states changes | merge: Merged main after #1303 landed: it brought #1303 itself (squashed), the Outputs redesign (fixtures helpers), filter presets and the border filter, Save as pack and renames, and #1372's capture-target fix. This branch's axis rows (AxisRow, compact crop) apply on top of #1303's tabs, and both sides' text holds. The Total is main's 139/126. | kept from the merged side: The Inspector bullet now describes the header's Properties & filters… button, the Transform/Motion/Behaviour tab strip kept as jstream.inspector.tab, the pinned header, and which sections each tab holds; Properties is no longer an Inspector section, and the properties-form bullet is unchanged since the form is the dialog's" }
@@ -5742,10 +5766,10 @@ stamp = { hash = "b3:658cfbcedd739684", by = "agent:ui-parity", note = "Projecto
 stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follow-up to #1373: outputs.rs and encoders.rs changed (Stop all beside Start all, a free path for a copied recording, the copy refusal, Save and Delete waiting for the engine, refresh re-reading instead of applying an overtaken read); the purpose entries for both still describe them." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:7a27ed228aefcfff", by = "agent:claude", note = "filter_presets.rs gains the border's presets and filters.rs its KNOWN entry; the contents list holds | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the panel list is unchanged by the presets' new values" }
+stamp = { hash = "b3:9e56c1f38e44240d", by = "agent:sharpen-small-insets", note = "filters.rs lists scanlines under Style and filter_presets.rs adds its three presets; purpose unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:7a3d4d1fc32ea307", by = "agent:claude", note = "contents list still names custom_shader.rs, add_source.rs and source_properties.rs correctly; the custom shader entry now says it tests a source's manifest too" }
+stamp = { hash = "b3:cbb0ae927b9d33de", by = "agent:sharpen-small-insets", note = "filters.rs lists scanlines under Style and filter_presets.rs adds its three presets; purpose unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:089c2baca7ad6864", by = "agent:claude-settings", note = "Added NumberField's inline and bare forms and AxisRow to the number.rs entry; matches number.rs and their use in inspector.rs and scene_properties.rs | merge: Merged main after #1303 landed: it brought #1303 itself (squashed), the Outputs redesign (fixtures helpers), filter presets and the border filter, Save as pack and renames, and #1372's capture-target fix. This branch's axis rows (AxisRow, compact crop) apply on top of #1303's tabs, and both sides' text holds. The Total is main's 139/126. | kept from the merged side: merge: main's #1275 moved Pairing and Plugins out of the Inspector into the Settings dialog; Contents now lists settings.rs and the Pairing/Plugins bullets no longer say they sit under the Inspector's properties, which this branch removed, so both changes agree" }
@@ -6465,7 +6489,7 @@ stamp = { hash = "b3:134f387287849ce3", by = "agent:claude", note = "Go Live ste
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
+stamp = { hash = "b3:296f9d2a4f91976e", by = "agent:sharpen-small-insets", note = "UI-FEATURES only gained the scanlines presets in FL-11; going live steps unchanged" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
@@ -6474,7 +6498,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
+stamp = { hash = "b3:296f9d2a4f91976e", by = "agent:sharpen-small-insets", note = "UI-FEATURES only gained the scanlines presets in FL-11; recording steps unchanged" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6492,7 +6516,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:eed5a8099d78c9a9", by = "agent:claude", note = "edited step 2: a webcam's resolution, frame rate and video format, or Auto | merge: #1259 adds Video settings and #1261 3D model items to this body and UI-FEATURES; step 2's webcam resolution, frame rate and format still hold | kept from the merged side: Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged. | kept from the merged side: UI-FEATURES DL-06 now lists the 3D model type, so step 2's list of types gains a 3D model (a glTF or GLB file, or a built-in shape such as a cube); the rest of the steps hold. | merge: The merge brought in #1259 (File › Video settings… for the canvas resolution and frame rate: video_settings.rs, a header menu entry, a Purpose bullet, a Design sentence, a GETTING-STARTED paragraph and UI-FEATURES rows); none of it touches the 3D model source. The new canvas-size paragraph sits before step 1; step 2's source list with the 3D model still holds. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
+stamp = { hash = "b3:296f9d2a4f91976e", by = "agent:sharpen-small-insets", note = "UI-FEATURES only gained the scanlines presets in FL-11; nothing in the getting-started scene steps changes" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -7119,16 +7143,16 @@ stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "edit
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking now says the Inspector shows the selected item only; workspace.rs mounts just Inspector for PanelId::Inspector; app.rs provides SettingsDialog and draws Settings in the shell" }
 
 ["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:c430522074ac8dd4", by = "agent:claude", note = "FL-12 now says only a scene setting can't be named previous (custom_shader.rs refuses previous for scene params only); every setting still refuses the source settings' IDs" }
+stamp = { hash = "b3:85e3262f7f2a00a5", by = "agent:sharpen-small-insets", note = "FL-11 now lists the scanlines' Monitor, CRT and Film grain presets (#1406), matching filter_presets.rs" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
 stamp = { hash = "b3:800bd9ecec02a5c3", by = "agent:claude", note = "FL-12 drops 'Not yet: a shader source' and describes the shader source's pack, its four annotations and the limits (no Save as, one pass); stays 🟡 as #1295's browser click-through is still open" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filter_presets.rs"]
-stamp = { hash = "b3:7a27ed228aefcfff", by = "agent:claude", note = "Edited FL-11: the border's Card, Neon and Broadcast frame presets; matches filter_presets.rs | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: FL-11 names the vignette's three presets, whose values changed to linear strengths but whose names and behaviour hold | merge: Resolved by hand: FL-11 (this PR's presets) and FL-12 (#1289's custom shader) both kept; covers now lists filters.rs, filter_presets.rs and custom_shader.rs" }
+stamp = { hash = "b3:9e56c1f38e44240d", by = "agent:sharpen-small-insets", note = "FL-11 now lists the scanlines' Monitor, CRT and Film grain presets (#1406), matching filter_presets.rs" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:7a3d4d1fc32ea307", by = "agent:claude", note = "FL-12 drops 'Not yet: a shader source' and describes the shader source's pack, its four annotations and the limits (no Save as, one pass); stays 🟡 as #1295's browser click-through is still open" }
+stamp = { hash = "b3:cbb0ae927b9d33de", by = "agent:sharpen-small-insets", note = "FL-11 now lists the scanlines' Monitor, CRT and Film grain presets (#1406), matching filter_presets.rs" }
 
 ["UI-FEATURES#header"."body"]
 stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; HD-10's File › Settings… launch check still holds (General page) | merge: main added HD-11 and video_settings.rs to covers; HD-01 now names Video settings… (HD-11) in the File menu alongside Settings… and Plugins…, and covers keeps both files | kept from the merged side: Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
@@ -7233,7 +7257,7 @@ stamp = { hash = "b3:23bc657bf1f5d312", by = "agent:claude", note = "no status c
 stamp = { hash = "b3:e562ed3306cd0292", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:c430522074ac8dd4", by = "agent:claude", note = "FL-12 wording only; no row status changed, so the counts hold" }
+stamp = { hash = "b3:85e3262f7f2a00a5", by = "agent:sharpen-small-insets", note = "FL-11 stays built; the summary counts are unchanged" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match | merge: main added HD-11 (Video settings), counted in its header totals; this branch adds no row | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }

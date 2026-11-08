@@ -1127,7 +1127,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
