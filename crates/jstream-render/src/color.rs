@@ -66,6 +66,13 @@ pub(crate) fn premultiplied_linear(color: Color) -> [f32; 4] {
     ]
 }
 
+/// `color` premultiplied, its straight sRGB values kept: the clear colour of a target
+/// that holds sRGB-encoded colour (ADR-0126 §3).
+pub(crate) fn premultiplied_srgb(color: Color) -> [f32; 4] {
+    let a = color.a;
+    [color.r * a, color.g * a, color.b * a, a]
+}
+
 #[cfg(test)]
 mod tests {
     use super::{linear_channel_to_srgb, premultiplied_linear, srgb_channel_to_linear, validate};

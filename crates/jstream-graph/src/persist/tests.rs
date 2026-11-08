@@ -3,10 +3,10 @@
 use super::{LoadError, Migration, SCHEMA_VERSION, migrate_with};
 use crate::Graph;
 use jstream_protocol::{
-    Action, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId, OutputKind,
-    ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions, SceneRole,
-    SourceId, SourceKind, SourceMeta, parity,
+    Action, BlendMode, Blending, BusId, Chord, Edit, EncoderProfile, EncoderProfileId, FilterChain,
+    FilterId, FilterOwner, FolderId, ItemId, KindCategory, KindDescriptor, LabelId, OutputId,
+    OutputKind, ParamDescriptor, ParamType, ProtocolError, Rev, SceneId, SceneMeta, SceneOptions,
+    SceneRole, SourceId, SourceKind, SourceMeta, parity,
 };
 use serde_json::{Value, json};
 
@@ -42,10 +42,28 @@ const V6: &str = include_str!("fixtures/v6.json");
 /// 1 must.
 const V7: &str = include_str!("fixtures/v7.json");
 
-/// A collection file at schema version 8, the current one: version 7, whose `browser`
-/// sources (it has none) would carry a checkbox per kind of page data (ADR-0124). The
-/// same rule applies once version 9 exists.
+/// A collection file at schema version 8: version 7, whose `browser` sources (it has
+/// none) would carry a checkbox per kind of page data (ADR-0124). It must keep loading
+/// as version 1 must.
 const V8: &str = include_str!("fixtures/v8.json");
+
+/// A collection file at schema version 9: version 8 with two controller bindings
+/// (ADR-0122). It must keep loading as version 1 must.
+const V9: &str = include_str!("fixtures/v9.json");
+
+/// A collection file at schema version 10: version 9 with keyframe scene
+/// `k`'s timing for item `i3` in transitions into it (ADR-0129). It must keep loading as
+/// version 1 must.
+const V10: &str = include_str!("fixtures/v10.json");
+
+/// A collection file at schema version 11: version 10 with a label on its hotkey `F6`
+/// and its timeline `t_intro` (ADR-0133). It must keep loading as version 1 must.
+const V11: &str = include_str!("fixtures/v11.json");
+
+/// A collection file at schema version 12, the current one: version 11 with the
+/// project's blending space, `linear` because its items use the linear modes
+/// (ADR-0126). The same rule applies once version 13 exists.
+const V12: &str = include_str!("fixtures/v12.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -339,6 +357,7 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t_intro"),
                     name: "Intro".into(),
                     duration_ms: 3000,
@@ -377,6 +396,103 @@ fn v6_graph() -> Graph {
     graph
 }
 
+/// The v6 collection plus two controller bindings (ADR-0122): what version 9 saves.
+fn v9_graph() -> Graph {
+    use jstream_protocol::{Action, Trigger};
+    let mut graph = v6_graph();
+    let applied = graph.apply(
+        &[
+            Edit::BindingSet {
+                trigger: Trigger::MidiNote {
+                    note: 36,
+                    channel: Some(10),
+                    input: Some("Pads".into()),
+                },
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("b"),
+                    preset_id: None,
+                },
+            },
+            Edit::BindingSet {
+                trigger: Trigger::MidiCc {
+                    controller: 64,
+                    channel: None,
+                    input: None,
+                },
+                action: Action::ItemToggle {
+                    item_id: ItemId::new("i_screen"),
+                    scene_id: None,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// The v9 collection plus keyframe scene `k`'s timing for item `i3`: a 120 ms delay, a
+/// cubic-bezier easing and a 900 ms duration (ADR-0129), in one more batch: what
+/// version 10 saves.
+fn v10_graph() -> Graph {
+    use jstream_protocol::{Bezier, Finite32, ItemEasing, KeyframeTiming};
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let mut graph = v9_graph();
+    let applied = graph.apply(
+        &[Edit::ItemSetTiming {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i3"),
+            timing: KeyframeTiming {
+                delay_ms: Some(120),
+                easing: Some(ItemEasing::CubicBezier(Bezier {
+                    x1: f(0.2),
+                    y1: f(-0.4),
+                    x2: f(0.3),
+                    y2: f(1.4),
+                })),
+                duration_ms: Some(900),
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// The v10 collection, plus label `l_show` on hotkey `F6` and timeline `t_intro`
+/// (ADR-0133), in one more batch: what version 11 saves.
+fn v11_graph() -> Graph {
+    use jstream_protocol::{Chord, LabelId, TimelineId};
+    let mut graph = v10_graph();
+    let mut timeline = graph
+        .state()
+        .timeline(&TimelineId::new("t_intro"))
+        .map(|(_, t)| t.clone())
+        .expect("v6 has t_intro");
+    timeline.labels = vec![LabelId::new("l_show")];
+    let applied = graph.apply(
+        &[
+            Edit::LabelCreate {
+                label_id: LabelId::new("l_show"),
+                name: "Show".into(),
+                color: "#3366ff".into(),
+                icon: None,
+            },
+            Edit::HotkeySetLabels {
+                chord: Chord::new("F6"),
+                labels: vec![LabelId::new("l_show")],
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -392,10 +508,13 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, clears the hotkeys and moves output `rec` back to
+/// deletes the virtual camera `vcam`, clears the hotkeys and the controller bindings
+/// (ADR-0122) and moves output `rec` back to
 /// the master bus, which the parity collection gained after the fixture was written;
 /// `a_virtual_camera_round_trips`, `hotkeys_round_trip` and
-/// `an_outputs_audio_bus_round_trips` cover them.
+/// `an_outputs_audio_bus_round_trips` cover them. The batch also sets the blending space
+/// to `linear`, which every older fixture loads as, since their items use the linear
+/// modes (ADR-0126).
 fn fixture_graph() -> Graph {
     let mut graph = Graph::new().with_kinds(kinds());
     let applied = graph.apply_batch(&parity::collection());
@@ -421,7 +540,17 @@ fn fixture_graph() -> Graph {
             Edit::HotkeyClear {
                 chord: Chord::new("Ctrl+Digit1"),
             },
-        ],
+            Edit::CanvasSetBlending {
+                blending: Blending::Linear,
+            },
+        ]
+        .into_iter()
+        .chain(
+            parity::bindings()
+                .into_iter()
+                .map(|b| Edit::BindingClear { trigger: b.trigger }),
+        )
+        .collect::<Vec<_>>(),
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
@@ -440,7 +569,166 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v6_graph().to_collection_json(), V8);
+    assert_eq!(v11_graph().to_collection_json(), V12);
+}
+
+#[test]
+fn the_v12_fixture_loads_exactly() {
+    let expected = v11_graph();
+    let loaded = load(V12);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(10)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 11 upgrades to the `linear` space, since its items use the linear modes, and a
+/// `blending` there is refused.
+#[test]
+fn the_v11_fixture_loads_as_linear_and_refuses_blending() {
+    let mut value: Value = serde_json::from_str(V11).unwrap_or_default();
+    value["blending"] = json!("srgb");
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 11, .. })
+    ));
+}
+
+/// A version 11 file whose items all used the `_srgb` modes loads as `srgb`, with those
+/// items `normal` and `additive`, so it keeps its browser look (ADR-0126 §5).
+#[test]
+fn a_v11_file_of_srgb_modes_only_loads_browser_style() {
+    let mut value: Value = serde_json::from_str(V11).unwrap_or_default();
+    let mut modes = ["normal_srgb", "additive_srgb"].into_iter().cycle();
+    for scene in value["scenes"].as_array_mut().into_iter().flatten() {
+        for item in scene["items"].as_array_mut().into_iter().flatten() {
+            item["blend"] = json!(modes.next());
+        }
+    }
+    let loaded = load(&value.to_string());
+    assert_eq!(
+        loaded.as_ref().map(|g| g.state().blending()),
+        Ok(Blending::Srgb)
+    );
+    let blends: Vec<BlendMode> = loaded
+        .as_ref()
+        .map(|g| {
+            g.state()
+                .scenes()
+                .iter()
+                .flat_map(|s| s.items().iter().map(|i| i.blend))
+                .collect()
+        })
+        .unwrap_or_default();
+    assert!(blends.contains(&BlendMode::Normal), "{blends:?}");
+    assert!(blends.contains(&BlendMode::Additive), "{blends:?}");
+    assert!(
+        blends
+            .iter()
+            .all(|b| matches!(b, BlendMode::Normal | BlendMode::Additive)),
+        "{blends:?}"
+    );
+}
+
+/// A version 11 file that mixed `_srgb` and linear modes keeps the linear look: the
+/// project is `linear` and the `_srgb` items are plain.
+#[test]
+fn a_v11_file_that_mixed_both_loads_linear() {
+    let mut value: Value = serde_json::from_str(V11).unwrap_or_default();
+    value["scenes"][0]["items"][0]["blend"] = json!("additive_srgb");
+    let loaded = load(&value.to_string());
+    assert_eq!(
+        loaded.as_ref().map(|g| g.state().blending()),
+        Ok(Blending::Linear)
+    );
+    let first = loaded.as_ref().ok().and_then(|g| {
+        g.state()
+            .scenes()
+            .first()
+            .and_then(|s| s.items().first())
+            .map(|i| i.blend)
+    });
+    assert_eq!(first, Some(BlendMode::Additive));
+}
+
+#[test]
+fn the_v9_fixture_loads_exactly() {
+    let expected = v9_graph();
+    let loaded = load(V9);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+#[test]
+fn the_v11_fixture_loads_exactly() {
+    let expected = v11_graph();
+    let loaded = load(V11);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(10)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 11 adds hotkey and timeline labels (ADR-0133). A version 10 hotkey's labels
+/// are refused, as version 10 refused them; a version 10 timeline's are dropped, as
+/// version 10 ignored them.
+#[test]
+fn a_version_10_hotkey_label_is_refused_and_a_timeline_label_dropped() {
+    let mut value: Value = serde_json::from_str(V10).unwrap_or_default();
+    value["hotkeys"][0]["labels"] = json!(["l_show"]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 10, .. })
+    ));
+    let mut value: Value = serde_json::from_str(V10).unwrap_or_default();
+    value["scenes"][1]["timelines"][0]["labels"] = json!(["l_missing"]);
+    let loaded = load(&value.to_string());
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(v10_graph().state()));
+}
+
+#[test]
+fn the_v10_fixture_loads_exactly() {
+    let expected = v10_graph();
+    let loaded = load(V10);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(9)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// A version 9 file has no keyframe timing (ADR-0129): one there is refused, and without
+/// it the file loads.
+#[test]
+fn a_version_9_keyframe_timing_is_refused() {
+    let mut value: Value = serde_json::from_str(V10).expect("the v10 fixture");
+    value["schema_version"] = json!(9);
+    assert_eq!(
+        load(&value.to_string()).map(|g| g.rev()),
+        Err(LoadError::Migration {
+            from: 9,
+            reason: "a version 9 keyframe override has no `timing`".into()
+        })
+    );
+    let k = value["scenes"]
+        .as_array()
+        .and_then(|scenes| scenes.iter().position(|s| s["id"] == "k"))
+        .expect("the v10 fixture has scene `k`");
+    let overrides = value["scenes"][k]["overrides"]
+        .as_array_mut()
+        .expect("overrides");
+    for o in overrides.iter_mut() {
+        o.as_object_mut().map(|o| o.remove("timing"));
+    }
+    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(9)));
+}
+
+/// Version 8 upgrades unchanged: it has no controller bindings, and one there is
+/// refused.
+#[test]
+fn the_v8_fixture_loads_with_no_bindings() {
+    let mut file: Value = serde_json::from_str(V8).unwrap_or_default();
+    file["bindings"] = json!([]);
+    assert_eq!(
+        load(&file.to_string()).map(|_| ()),
+        Err(LoadError::Migration {
+            from: 8,
+            reason: "a version 8 file has no `bindings`".into(),
+        })
+    );
 }
 
 #[test]
@@ -469,7 +757,7 @@ fn the_v7_migration_keeps_a_page_api_grant() {
         ],
     });
     assert_eq!(super::migrate(&mut file), Ok(()));
-    assert_eq!(file["schema_version"], json!(8));
+    assert_eq!(file["schema_version"], json!(super::SCHEMA_VERSION));
     let settings = |n: usize| file["sources"][n]["settings"].clone();
     assert_eq!(settings(0)["page_api_shared_values"], json!(true));
     assert_eq!(settings(0)["page_api_audio"], json!(true));

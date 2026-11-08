@@ -4,6 +4,9 @@
 //! panel, whichever "Edit labels…" was chosen from, that names, colours, gives icons to,
 //! adds and deletes labels. Labels are collection state (ADR-0024 §4): sources carry
 //! them, so a reference shares its original's, and scenes carry them too (ADR-0078).
+//! Hotkey bindings and timelines carry them too (ADR-0133), and each label's Actions
+//! view gathers what carries it: its keyframes, whose move preset it sets in one batch,
+//! and the hotkeys and timelines it puts the label on or takes it off.
 //! The edits each control sends are plain functions, tested natively.
 //!
 //! Docs: docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects
@@ -13,7 +16,10 @@ use crate::dock::PanelId;
 use crate::icons::{Icon, named};
 use crate::store::{Collection, Studio};
 use crate::workspace::DockState;
-use jstream_control::protocol::{Edit, LabelId, LabelInfo, SceneId, SceneMeta, SourceId};
+use jstream_control::protocol::{
+    Chord, Edit, LabelId, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, SceneId,
+    SceneMeta, SourceId, TimelineId, TransitionPresetId,
+};
 use leptos::prelude::*;
 
 /// The label colours (G9).
@@ -142,8 +148,9 @@ pub fn new_label_edit(collection: &Collection, label_id: LabelId) -> Edit {
     }
 }
 
-/// The edits that delete a label: taken off every source, then every scene, that
-/// carries it, then deleted, in one batch so it is one undo step.
+/// The edits that delete a label: taken off every source, every scene, every hotkey
+/// binding and every timeline that carries it, in the engine's `delete.plan` order,
+/// then deleted, in one batch so it is one undo step.
 pub fn delete_edits(collection: &Collection, label: &LabelId) -> Vec<Edit> {
     let sources = collection
         .sources
@@ -162,9 +169,122 @@ pub fn delete_edits(collection: &Collection, label: &LabelId) -> Vec<Edit> {
                 .then(|| set_labels_edit(collection, &target, with_label(carried, label, false)))
                 .flatten()
         })
+        .chain(
+            collection
+                .hotkeys
+                .iter()
+                .filter(|b| b.labels.contains(label))
+                .filter_map(|b| hotkey_toggle_edit(collection, &b.chord, label)),
+        )
+        .chain(
+            collection
+                .scenes
+                .iter()
+                .flat_map(|s| &s.timelines)
+                .filter(|t| t.labels.contains(label))
+                .filter_map(|t| timeline_toggle_edit(collection, &t.timeline_id, label)),
+        )
         .chain(std::iter::once(Edit::LabelDelete {
             label_id: label.clone(),
         }))
+        .collect()
+}
+
+/// The edit that puts `label` on the binding of `chord` or takes it off, or `None` when
+/// there is no such binding (ADR-0133).
+pub fn hotkey_toggle_edit(collection: &Collection, chord: &Chord, label: &LabelId) -> Option<Edit> {
+    let binding = collection.hotkeys.iter().find(|b| &b.chord == chord)?;
+    let on = !binding.labels.contains(label);
+    Some(Edit::HotkeySetLabels {
+        chord: chord.clone(),
+        labels: with_label(&binding.labels, label, on),
+    })
+}
+
+/// The edit that puts `label` on timeline `id` or takes it off: the timeline written
+/// whole, as `timeline.set` takes it. `None` when there is no such timeline.
+pub fn timeline_toggle_edit(
+    collection: &Collection,
+    id: &TimelineId,
+    label: &LabelId,
+) -> Option<Edit> {
+    let (scene, timeline) = collection.scenes.iter().find_map(|scene| {
+        let timeline = scene.timelines.iter().find(|t| &t.timeline_id == id)?;
+        Some((scene, timeline))
+    })?;
+    let mut timeline = timeline.clone();
+    let on = !timeline.labels.contains(label);
+    timeline.labels = with_label(&timeline.labels, label, on);
+    Some(Edit::TimelineSet {
+        scene_id: scene.scene_id.clone(),
+        timeline,
+    })
+}
+
+/// Everything that carries `label`, as `label.members` lists it: its scenes, keyframe
+/// scenes among them, in display order; its sources by ID; its hotkey bindings by
+/// chord; and its timelines by scene then ID. `None` when there is no such label.
+pub fn members(collection: &Collection, label: &LabelId) -> Option<LabelMembers> {
+    let info = collection.labels.iter().find(|l| &l.label_id == label)?;
+    Some(LabelMembers {
+        label: info.clone(),
+        scenes: collection
+            .scenes
+            .iter()
+            .filter(|s| s.meta.labels.contains(label))
+            .map(|s| LabelledScene {
+                scene_id: s.scene_id.clone(),
+                name: s.name.clone(),
+                variant_of: s.variant_of.clone(),
+            })
+            .collect(),
+        sources: collection
+            .sources
+            .iter()
+            .filter(|s| s.meta.labels.contains(label))
+            .map(|s| s.source_id.clone())
+            .collect(),
+        hotkeys: collection
+            .hotkeys
+            .iter()
+            .filter(|b| b.labels.contains(label))
+            .cloned()
+            .collect(),
+        timelines: collection
+            .scenes
+            .iter()
+            .flat_map(|scene| {
+                scene
+                    .timelines
+                    .iter()
+                    .filter(|t| t.labels.contains(label))
+                    .map(|t| LabelledTimeline {
+                        timeline_id: t.timeline_id.clone(),
+                        name: t.name.clone(),
+                        scene_id: scene.scene_id.clone(),
+                    })
+            })
+            .collect(),
+    })
+}
+
+/// The edits that make `preset` the preset every scene in `scenes` is moved into
+/// with, each keeping its preset out: one batch, so one undo step (ADR-0133). A
+/// scene that is gone, or already has it, gives none.
+pub fn preset_edits(
+    collection: &Collection,
+    scenes: &[SceneId],
+    preset: Option<&TransitionPresetId>,
+) -> Vec<Edit> {
+    scenes
+        .iter()
+        .filter_map(|id| collection.scene(id))
+        .filter(|scene| scene.transition_in.as_ref() != preset)
+        .map(|scene| Edit::SceneSetTransitions {
+            scene_id: scene.scene_id.clone(),
+            transition_in: preset.cloned(),
+            transition_out: scene.transition_out.clone(),
+        })
         .collect()
 }
 
@@ -479,6 +599,8 @@ pub fn LabelEditor() -> impl IntoView {
     let manager = expect_context::<LabelManager>();
     // The label whose icon picker is open.
     let picking = RwSignal::new(None::<LabelId>);
+    // The label whose Actions view is open (ADR-0133).
+    let acting = RwSignal::new(None::<LabelId>);
     let labels = move || {
         studio
             .collection
@@ -604,6 +726,20 @@ pub fn LabelEditor() -> impl IntoView {
                     />
                     <button
                         type="button"
+                        class="link label-actions-toggle"
+                        title="What carries this label"
+                        aria-expanded=move || (acting.get().as_ref() == Some(&id.get_value())).to_string()
+                        on:click=move |_| {
+                            let mine = id.get_value();
+                            acting.update(|a| {
+                                *a = if a.as_ref() == Some(&mine) { None } else { Some(mine) };
+                            });
+                        }
+                    >
+                        "Actions"
+                    </button>
+                    <button
+                        type="button"
                         class="label-delete"
                         title="Delete label"
                         aria-label=format!("Delete label {name}")
@@ -614,6 +750,10 @@ pub fn LabelEditor() -> impl IntoView {
                 </div>
                 <div class="swatches">{swatches}</div>
                 {groups}
+                {move || {
+                    (acting.get().as_ref() == Some(&id.get_value()))
+                        .then(|| view! { <LabelActions label=id.get_value() /> })
+                }}
             </div>
         }
     };
@@ -630,6 +770,180 @@ pub fn LabelEditor() -> impl IntoView {
                 children=row
             />
             <button type="button" class="link new-label" on:click=add>"+ New label"</button>
+        </div>
+    }
+}
+
+/// A label's Actions view (ADR-0133): its keyframes, with one control that sets the
+/// move preset of the chosen ones in one batch, then every hotkey binding and every
+/// timeline, each with a checkbox that puts the label on it or takes it off.
+#[component]
+fn LabelActions(label: LabelId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let session = expect_context::<SessionContext>();
+    let label = StoredValue::new(label);
+    let gathered = move || {
+        studio
+            .collection
+            .with(|c| c.as_ref().and_then(|c| members(c, &label.get_value())))
+    };
+    // The keyframes left out of the preset change; every one is in until unticked.
+    let skipped = RwSignal::new(Vec::<SceneId>::new());
+    let preset = RwSignal::new(String::new());
+    let options = move || {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| crate::panels::inspector::transition_options(&c.transitions))
+                .unwrap_or_default()
+        })
+    };
+    let apply = move |_| {
+        let chosen: Vec<SceneId> = gathered()
+            .map(|m| {
+                m.scenes
+                    .into_iter()
+                    .filter(|s| s.variant_of.is_some())
+                    .map(|s| s.scene_id)
+                    .filter(|id| !skipped.with(|k| k.contains(id)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let value = preset.get_untracked();
+        let to = (!value.is_empty()).then(|| TransitionPresetId::new(value));
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| preset_edits(c, &chosen, to.as_ref()))
+                .unwrap_or_default()
+        });
+        send(studio, session, edits);
+    };
+    let keyframes = move || {
+        let scenes = gathered().map(|m| m.scenes).unwrap_or_default();
+        let keyframes: Vec<LabelledScene> = scenes
+            .into_iter()
+            .filter(|s| s.variant_of.is_some())
+            .collect();
+        if keyframes.is_empty() {
+            return view! { <p class="field-note">"No keyframe carries this label."</p> }
+                .into_any();
+        }
+        keyframes
+            .into_iter()
+            .map(|scene| {
+                let id = StoredValue::new(scene.scene_id.clone());
+                view! {
+                    <label class="check">
+                        <input
+                            type="checkbox"
+                            prop:checked=move || !skipped.with(|k| k.contains(&id.get_value()))
+                            on:change=move |_| {
+                                let mine = id.get_value();
+                                skipped.update(|k| {
+                                    if let Some(at) = k.iter().position(|s| *s == mine) {
+                                        k.remove(at);
+                                    } else {
+                                        k.push(mine);
+                                    }
+                                });
+                            }
+                        />
+                        {scene.name}
+                    </label>
+                }
+            })
+            .collect_view()
+            .into_any()
+    };
+    let toggle = move |edit: Option<Edit>| send(studio, session, edit.into_iter().collect());
+    let hotkeys = move || {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| c.hotkeys.clone())
+                .unwrap_or_default()
+                .into_iter()
+                .map(|binding| {
+                    let chord = StoredValue::new(binding.chord.clone());
+                    let on = binding.labels.contains(&label.get_value());
+                    view! {
+                        <label class="check">
+                            <input
+                                type="checkbox"
+                                prop:checked=on
+                                on:change=move |_| {
+                                    let edit = studio.collection.with_untracked(|c| {
+                                        hotkey_toggle_edit(c.as_ref()?, &chord.get_value(), &label.get_value())
+                                    });
+                                    toggle(edit);
+                                }
+                            />
+                            <kbd>{crate::hotkeys::label(&binding.chord)}</kbd>
+                        </label>
+                    }
+                })
+                .collect_view()
+        })
+    };
+    let timelines = move || {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .map(|c| {
+                    c.scenes
+                        .iter()
+                        .flat_map(|s| s.timelines.iter().map(move |t| (s.name.clone(), t.clone())))
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(scene, timeline)| {
+                    let tid = StoredValue::new(timeline.timeline_id.clone());
+                    let on = timeline.labels.contains(&label.get_value());
+                    let name = if timeline.name.is_empty() {
+                        timeline.timeline_id.to_string()
+                    } else {
+                        timeline.name.clone()
+                    };
+                    view! {
+                        <label class="check">
+                            <input
+                                type="checkbox"
+                                prop:checked=on
+                                on:change=move |_| {
+                                    let edit = studio.collection.with_untracked(|c| {
+                                        timeline_toggle_edit(c.as_ref()?, &tid.get_value(), &label.get_value())
+                                    });
+                                    toggle(edit);
+                                }
+                            />
+                            {format!("{name} ({scene})")}
+                        </label>
+                    }
+                })
+                .collect_view()
+        })
+    };
+    view! {
+        <div class="label-actions" role="group" aria-label="Label actions">
+            <span class="section-title">"Keyframes"</span>
+            {keyframes}
+            <div class="label-actions-preset">
+                <select aria-label="Move preset" on:change=move |event| preset.set(event_target_value(&event))>
+                    {move || {
+                        let now = preset.get();
+                        options()
+                            .into_iter()
+                            .map(|(value, name)| {
+                                let selected = value == now;
+                                view! { <option value=value selected=selected>{name}</option> }
+                            })
+                            .collect_view()
+                    }}
+                </select>
+                <button type="button" on:click=apply>"Set preset"</button>
+            </div>
+            <span class="section-title">"Hotkeys"</span>
+            {hotkeys}
+            <span class="section-title">"Timelines"</span>
+            {timelines}
         </div>
     }
 }
@@ -821,5 +1135,124 @@ mod tests {
         );
         assert_eq!(tint("#E8A33D"), "#E8A33D29");
         assert_eq!(pick_tint("#E8A33D"), "#E8A33D38");
+    }
+
+    /// Keyframes `k1` (carrying `l1`) and `k2` of `s1`, timeline `t1` in `s1` carrying
+    /// `l1`, and bindings `F1` (carrying `l1`) and `F2`.
+    fn gathering() -> Collection {
+        use jstream_control::protocol::{Action, HotkeyBinding, TimelineInfo, TimelineLoop};
+        let mut collection = collection();
+        for (id, labels) in [("k1", &["l1"][..]), ("k2", &[][..])] {
+            let mut keyframe = scene(id, labels);
+            keyframe.variant_of = Some(SceneId::new("s1"));
+            keyframe.transition_out = Some(TransitionPresetId::new("cut"));
+            collection.scenes.push(keyframe);
+        }
+        collection.scenes[0].timelines = vec![TimelineInfo {
+            labels: vec![LabelId::new("l1")],
+            timeline_id: TimelineId::new("t1"),
+            name: "Cues".into(),
+            duration_ms: 1000,
+            looping: TimelineLoop::Once,
+            cues: Vec::new(),
+        }];
+        let switch = |to: &str| Action::SceneSwitch {
+            scene_id: SceneId::new(to),
+            preset_id: None,
+        };
+        collection.hotkeys = vec![
+            HotkeyBinding::new(Chord::new("F1"), &switch("k1")).with_labels(vec!["l1".into()]),
+            HotkeyBinding::new(Chord::new("F2"), &switch("k2")),
+        ];
+        collection
+    }
+
+    #[test]
+    fn the_actions_view_gathers_what_carries_a_label() {
+        let collection = gathering();
+        let found = members(&collection, &"l1".into()).expect("a label");
+        let scenes: Vec<_> = found.scenes.iter().map(|s| s.scene_id.as_str()).collect();
+        assert_eq!(scenes, ["s1", "k1"]);
+        assert_eq!(found.scenes[1].variant_of, Some(SceneId::new("s1")));
+        assert_eq!(found.sources, [SourceId::new("a"), SourceId::new("b")]);
+        let chords: Vec<_> = found.hotkeys.iter().map(|b| b.chord.as_str()).collect();
+        assert_eq!(chords, ["F1"]);
+        assert_eq!(
+            found.timelines,
+            [LabelledTimeline {
+                timeline_id: TimelineId::new("t1"),
+                name: "Cues".into(),
+                scene_id: SceneId::new("s1"),
+            }]
+        );
+        assert_eq!(members(&collection, &"gone".into()), None);
+    }
+
+    #[test]
+    fn a_hotkey_or_timeline_takes_a_label_on_and_off() {
+        let collection = gathering();
+        assert_eq!(
+            hotkey_toggle_edit(&collection, &Chord::new("F2"), &"l1".into()),
+            Some(Edit::HotkeySetLabels {
+                chord: Chord::new("F2"),
+                labels: vec!["l1".into()],
+            })
+        );
+        assert_eq!(
+            hotkey_toggle_edit(&collection, &Chord::new("F1"), &"l1".into()),
+            Some(Edit::HotkeySetLabels {
+                chord: Chord::new("F1"),
+                labels: vec![],
+            })
+        );
+        assert_eq!(
+            hotkey_toggle_edit(&collection, &Chord::new("F9"), &"l1".into()),
+            None
+        );
+        let Some(Edit::TimelineSet { scene_id, timeline }) =
+            timeline_toggle_edit(&collection, &TimelineId::new("t1"), &"l2".into())
+        else {
+            panic!("a timeline.set");
+        };
+        assert_eq!(scene_id, SceneId::new("s1"));
+        assert_eq!(timeline.labels, [LabelId::new("l1"), LabelId::new("l2")]);
+        assert_eq!(timeline.name, "Cues");
+    }
+
+    #[test]
+    fn the_chosen_keyframes_preset_changes_in_one_batch_keeping_their_preset_out() {
+        let collection = gathering();
+        let slide = TransitionPresetId::new("slide");
+        let edits = preset_edits(
+            &collection,
+            &[SceneId::new("k1"), SceneId::new("k2"), SceneId::new("gone")],
+            Some(&slide),
+        );
+        let expect = |id: &str| Edit::SceneSetTransitions {
+            scene_id: SceneId::new(id),
+            transition_in: Some(slide.clone()),
+            transition_out: Some(TransitionPresetId::new("cut")),
+        };
+        assert_eq!(edits, [expect("k1"), expect("k2")]);
+        // A keyframe that has it already gives none.
+        assert!(preset_edits(&collection, &[SceneId::new("k1")], None).is_empty());
+    }
+
+    #[test]
+    fn deleting_a_label_takes_it_off_hotkeys_and_timelines_too() {
+        let edits = delete_edits(&gathering(), &"l1".into());
+        let names: Vec<_> = edits.iter().map(Edit::name).collect();
+        assert_eq!(
+            names,
+            [
+                "source.set_meta",
+                "source.set_meta",
+                "scene.set_meta",
+                "scene.set_meta",
+                "hotkey.set_labels",
+                "timeline.set",
+                "label.delete",
+            ]
+        );
     }
 }

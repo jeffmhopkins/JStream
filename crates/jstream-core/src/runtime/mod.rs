@@ -9,6 +9,7 @@
 
 mod captures;
 mod devices;
+mod pass_guard;
 mod pipeline;
 mod publish;
 mod render;
@@ -19,17 +20,19 @@ pub(crate) use captures::Backends as CaptureBackends;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
+pub(crate) use captures::{format_fps, pixel_format_name, readable as readable_format};
 pub(crate) use devices::SharedVideoDevices;
-pub(crate) use pipeline::DeviceLoss;
+pub(crate) use pass_guard::{PassGuard, SlowPass};
 pub use pipeline::OutputStats;
+pub(crate) use pipeline::{DeviceLoss, GpuEvent};
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 #[cfg(test)]
 pub(crate) use pipeline::{DrawHook, gpu_draw_with};
 pub(crate) use pipeline::{
-    EncodeKey, Encoders, FRAME_DEN, FRAME_NUM, Gate, MediaHost, MixKey, OpenDraw, OutputEncode,
-    Pending, PipelineEvent, Program, Release, Running, StartError, cpu_draw, frame_budget, launch,
-    launch_program, launch_vcam, output_size, parts_from,
+    EncodeKey, Encoders, Gate, MediaHost, MixKey, OpenDraw, OutputEncode, Pending, PipelineEvent,
+    Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,
+    launch_program, launch_vcam, on_frame_grid, output_size, parts_from,
 };
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;

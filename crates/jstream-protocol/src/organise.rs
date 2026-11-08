@@ -11,7 +11,8 @@
 //! The checks every engine and the mock run on these values are here
 //! ([`check_icon`], [`check_color`]), so they reject the same ones.
 
-use crate::id::{FolderId, LabelId};
+use crate::hotkey::HotkeyBinding;
+use crate::id::{FolderId, LabelId, SceneId, SourceId, TimelineId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +29,50 @@ pub struct FolderInfo {
     /// The folder it sits in. Omitted for a top-level folder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub parent: Option<FolderId>,
+}
+
+/// Everything that carries one label (ADR-0133): its action group, as `label.members`
+/// reports it. Each list is omitted when empty.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct LabelMembers {
+    /// The label.
+    pub label: LabelInfo,
+    /// The scenes carrying it, keyframe scenes among them, in display order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub scenes: Vec<LabelledScene>,
+    /// The sources carrying it, ordered by ID.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<SourceId>,
+    /// The hotkey bindings carrying it, ordered by chord, each with its action.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub hotkeys: Vec<HotkeyBinding>,
+    /// The timelines carrying it, ordered by ID, each with the scene that holds it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub timelines: Vec<LabelledTimeline>,
+}
+
+/// A scene in a [`LabelMembers`]: its ID and name, and for a keyframe scene its parent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LabelledScene {
+    /// The scene.
+    pub scene_id: SceneId,
+    /// Its display name.
+    pub name: String,
+    /// The scene it is a keyframe of; omitted for a scene that isn't one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant_of: Option<SceneId>,
+}
+
+/// A timeline in a [`LabelMembers`]: its ID and name, and the scene that holds it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct LabelledTimeline {
+    /// The timeline.
+    pub timeline_id: TimelineId,
+    /// Its display name; omitted when empty.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// The scene that holds it.
+    pub scene_id: SceneId,
 }
 
 /// One label, as `state.get` reports it.

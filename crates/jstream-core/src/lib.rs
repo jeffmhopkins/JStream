@@ -16,7 +16,7 @@
 //! [`Engine::with_collection_file`](engine::Engine::with_collection_file), the collection
 //! is loaded from a file and saved there after every change.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#design, crates/jstream-core/README.md#timelines, crates/jstream-core/README.md#keyframe-tracks, crates/jstream-core/README.md#dependencies, crates/jstream-core/README.md#calls, crates/jstream-core/README.md#undo, crates/jstream-core/README.md#live-values, crates/jstream-core/README.md#program-scene, crates/jstream-core/README.md#privacy, crates/jstream-core/README.md#snapshots, crates/jstream-core/README.md#frame-sheets, crates/jstream-core/README.md#preview-streams, crates/jstream-core/README.md#events, crates/jstream-core/README.md#drop-counts, crates/jstream-core/README.md#engine-load, crates/jstream-core/README.md#output-stats, crates/jstream-core/README.md#audio-routing, crates/jstream-core/README.md#outputs, crates/jstream-core/README.md#wasm-plugins, crates/jstream-core/README.md#locking, crates/jstream-core/README.md#logging, crates/jstream-core/README.md#audit-log, crates/jstream-core/README.md#collection-file, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md, docs/adr/0032-live-edits-and-undo.md, crates/jstream-core/README.md#shared-values
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-core/README.md#purpose, crates/jstream-core/README.md#contents-engine, crates/jstream-core/README.md#contents-records, crates/jstream-core/README.md#contents-plugins, crates/jstream-core/README.md#contents-sources, crates/jstream-core/README.md#contents-motion, crates/jstream-core/README.md#contents-media, crates/jstream-core/README.md#contents-tests, crates/jstream-core/README.md#design, crates/jstream-core/README.md#timelines, crates/jstream-core/README.md#keyframe-tracks, crates/jstream-core/README.md#dependencies, crates/jstream-core/README.md#calls, crates/jstream-core/README.md#undo, crates/jstream-core/README.md#live-values, crates/jstream-core/README.md#program-scene, crates/jstream-core/README.md#privacy, crates/jstream-core/README.md#snapshots, crates/jstream-core/README.md#frame-sheets, crates/jstream-core/README.md#preview-streams, crates/jstream-core/README.md#events, crates/jstream-core/README.md#drop-counts, crates/jstream-core/README.md#engine-load, crates/jstream-core/README.md#output-stats, crates/jstream-core/README.md#audio-routing, crates/jstream-core/README.md#outputs, crates/jstream-core/README.md#wasm-plugins, crates/jstream-core/README.md#locking, crates/jstream-core/README.md#logging, crates/jstream-core/README.md#audit-log, crates/jstream-core/README.md#collection-file, crates/jstream-core/README.md#runtime, docs/adr/0001-library-first-engine.md, docs/adr/0013-command-model.md, docs/adr/0030-studio-state-and-scene-switching.md, docs/adr/0032-live-edits-and-undo.md, crates/jstream-core/README.md#shared-values
 
 #![forbid(unsafe_code)]
 
@@ -25,6 +25,7 @@ mod activity_log;
 mod audio;
 mod audio_sources;
 mod audit;
+mod camera_controls;
 mod chain;
 mod codec_downloads;
 mod collection;
@@ -55,6 +56,7 @@ mod projects;
 mod reactive;
 mod runtime;
 mod session;
+mod slot;
 mod snapshot;
 mod studio;
 #[cfg(test)]

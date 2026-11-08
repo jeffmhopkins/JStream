@@ -12,7 +12,8 @@
 //! The off switch is the UI setting [`GLOBAL_KEY`] (ADR-0084), on unless it holds
 //! `false`. Off, every chord is let go, and the page hears them only while it has the
 //! focus, as before. A chord the OS refuses (another application holds it) is logged and
-//! heard only while JStream has the focus.
+//! heard only while JStream has the focus. Wheel chords (ADR-0112 §3) aren't keys, so
+//! they aren't registered: the page hears them while it has the focus.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -75,8 +76,14 @@ pub async fn run<C: Control>(
     let mut registered: Option<Vec<String>> = None;
     let mut switch_open = true;
     let result = loop {
+        // Keyboard chords only: the wheel needs a hook of its own (ADR-0112 §5), so a
+        // wheel chord is heard only while the page has the focus for now.
         let wanted: Vec<String> = if (switch.on)() {
-            bindings.iter().map(|b| b.chord.to_string()).collect()
+            bindings
+                .iter()
+                .filter(|b| !b.chord.is_wheel())
+                .map(|b| b.chord.to_string())
+                .collect()
         } else {
             Vec::new()
         };
@@ -296,6 +303,14 @@ mod tests {
                 Edit::HotkeySet {
                     chord: Chord::new("F9"),
                     action: switch_to("b"),
+                },
+                // A wheel chord isn't a key: it isn't registered.
+                Edit::HotkeySet {
+                    chord: Chord::new("Ctrl+WheelUp"),
+                    action: Action::SceneZoomCamera {
+                        scene_id: SceneId::new("a"),
+                        steps: 1,
+                    },
                 },
             ]))
             .await

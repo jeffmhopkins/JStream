@@ -13,7 +13,7 @@ use crate::target::{broadcast_id_problem, record_path_problem, rtmp_url_problem}
 use crate::touched::Touched;
 use jstream_anim::Value as KeyValue;
 use jstream_protocol::{
-    Batch, Blocker, BusId, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
+    Batch, Binding, Blocker, BusId, Canvas, Crop, DroppedOverride, Edit, EntityKind, Finite32,
     GeometryError, HotkeyBinding, ItemGeometry, ItemId, ItemTransform, ItemTransition,
     KindCategory, KindDescriptor, Media, OutputId, OutputKind, ParamDescriptor, ParamType,
     ProtocolError, RecordContainer, Reference, Rev, RtmpTarget, SceneId, SceneMeta, SceneOptions,
@@ -41,6 +41,9 @@ pub struct Applied {
     /// The hotkey bindings the batch removed because their action named an object it
     /// deleted (ADR-0040 §3), in the order it removed them. The inverse restores them.
     pub removed_hotkeys: Vec<HotkeyBinding>,
+    /// The controller bindings it removed the same way (ADR-0122), in the order it
+    /// removed them. The inverse restores them.
+    pub removed_bindings: Vec<Binding>,
     /// The keyframe-scene overrides the batch dropped because their item left the
     /// variant's tree (ADR-0040 §1), in the order it dropped them. The inverse
     /// restores them.
@@ -148,10 +151,9 @@ impl Graph {
         // does not drop the keyframes the engine switched (ADR-0118).
         let mut work = self.state.clone();
         let mut undo: Vec<Vec<Edit>> = Vec::with_capacity(edits.len());
-        let mut removed_hotkeys = Vec::new();
+        let mut removed = crate::hotkey::Removed::default();
         let mut dropped_overrides = Vec::new();
         for (at, edit) in edits.iter().enumerate() {
-            let mut removed = Vec::new();
             let mut inverse = apply_edit(&mut work, &self.kinds, edit, at, running)?;
             // Overrides whose item left its keyframe scene's tree go with the edit, and
             // come back after its inverse (ADR-0040 §1).
@@ -168,7 +170,6 @@ impl Graph {
             }
             // So does any edit that takes an item away (ADR-0101).
             inverse.extend(crate::hotkey::remove_missing_items(&mut work, &mut removed));
-            removed_hotkeys.append(&mut removed);
             undo.push(inverse);
         }
         self.state = work;
@@ -176,7 +177,8 @@ impl Graph {
         let inverse: Vec<Edit> = undo.into_iter().rev().flatten().collect();
         Ok(Applied {
             rev,
-            removed_hotkeys,
+            removed_hotkeys: removed.hotkeys,
+            removed_bindings: removed.bindings,
             dropped_overrides,
             touched: Touched::of(edits, &inverse),
             inverse: Batch {
@@ -728,6 +730,10 @@ fn apply_edit(
             }
             let old = std::mem::replace(&mut state.base_fps, *fps);
             Ok(vec![Edit::CanvasSetFrameRate { fps: old }])
+        }
+        Edit::CanvasSetBlending { blending } => {
+            let old = std::mem::replace(&mut state.blending, *blending);
+            Ok(vec![Edit::CanvasSetBlending { blending: old }])
         }
         Edit::ItemSetSource { item_id, source_id } => {
             let (si, ii) = find_item(state, item_id)?;

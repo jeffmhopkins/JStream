@@ -16,13 +16,13 @@ pub use audio::MediaAudio;
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
 use crate::source::{self, changed_non_live, setting};
-use crate::{Context, Limits, Source, SourceError, SourceKind};
+use crate::{Context, Limits, Painter, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_platform::{HardwarePreference, MediaDecoder, MediaDecoderConfig, PlatformError};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
 use player::{Player, Start, Timing, micros};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// The slowest and fastest `speed`.
 const MIN_SPEED: f64 = 0.25;
@@ -161,14 +161,17 @@ impl SourceKind for MediaKind {
         Ok(Box::new(MediaSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
-            play,
-            player,
-            video,
             audio,
-            current,
-            current_at: 0,
-            timing,
-            last: 0,
+            head: Arc::new(Head(Mutex::new(Playhead {
+                play,
+                player,
+                video,
+                current,
+                current_at: 0,
+                timing,
+                last: 0,
+                path: file_path(settings),
+            }))),
         }))
     }
 }
@@ -314,13 +317,30 @@ fn bad(param: &str, reason: &str) -> SourceError {
 struct MediaSource {
     descriptor: KindDescriptor,
     settings: Settings,
+    /// The file's audio, when it has some.
+    audio: Option<MediaAudio>,
+    /// Where the picture is, which the host's own thread also moves on, as the
+    /// source's [`Painter`] (ADR-0117 §3).
+    head: Arc<Head>,
+}
+
+/// A media file's [`Playhead`], shared by the source and its [`Painter`].
+struct Head(Mutex<Playhead>);
+
+impl Head {
+    fn lock(&self) -> MutexGuard<'_, Playhead> {
+        self.0.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+/// Where a media file's picture is: the frame shown and how the clock maps onto the
+/// timeline.
+struct Playhead {
     play: Play,
     /// `None` with no file.
     player: Option<Player>,
     /// Whether the file has video.
     video: bool,
-    /// The file's audio, when it has some.
-    audio: Option<MediaAudio>,
     /// The frame shown and its timeline position.
     current: Arc<VideoFrame>,
     current_at: i64,
@@ -328,9 +348,11 @@ struct MediaSource {
     timing: Timing,
     /// The latest clock time asked about, so a speed change keeps the position.
     last: i64,
+    /// The `file` setting's path, for errors.
+    path: String,
 }
 
-impl MediaSource {
+impl Playhead {
     /// The timeline position at clock time `at`, in microseconds.
     fn position(&self, at: i64) -> i64 {
         self.timing.position(at)
@@ -356,9 +378,9 @@ impl MediaSource {
             player.seek(timeline);
         }
     }
-}
 
-impl Source for MediaSource {
+    /// Takes the decoded frames due by `at` and gives the one to show then. Never
+    /// decodes: the player's thread does, ahead.
     fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
         let at = micros(at).unwrap_or(0).max(0);
         self.last = at;
@@ -369,7 +391,7 @@ impl Source for MediaSource {
         let mut state = player.state();
         if let Some(reason) = &state.failure {
             return Err(SourceError::Decode {
-                path: self.file_path(),
+                path: self.path.clone(),
                 format: FORMAT,
                 reason: reason.clone(),
             });
@@ -415,21 +437,59 @@ impl Source for MediaSource {
         };
         Some(MediaTime::new(next, Timebase::MICROS))
     }
+}
+
+impl Painter for Head {
+    /// Takes the frames due by `at`, as [`Source::frame`] does; a failed decode shows
+    /// there.
+    fn paint(&self, at: MediaTime) {
+        let _ = self.lock().frame(at);
+    }
+
+    fn frame(&self) -> Arc<VideoFrame> {
+        Arc::clone(&self.lock().current)
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        self.lock().next_change(at)
+    }
+}
+
+impl Source for MediaSource {
+    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+        self.head.lock().frame(at)
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        self.head.lock().next_change(at)
+    }
+
+    /// A file with video's: the host takes its frames as they come due on its own
+    /// thread, without a plan. One with no file or no video has none.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        let head = self.head.lock();
+        let moving = head.player.is_some() && head.video;
+        drop(head);
+        let painter: Arc<dyn Painter> = self.head.clone();
+        moving.then_some(painter)
+    }
 
     fn sound(&self) -> Option<MediaAudio> {
         self.audio.clone()
     }
 
     fn show(&mut self, at: MediaTime) {
-        if self.play.restart_on_show && self.player.is_some() {
-            self.restart_at(micros(at).unwrap_or(0).max(0), 0);
+        let mut head = self.head.lock();
+        if head.play.restart_on_show && head.player.is_some() {
+            head.restart_at(micros(at).unwrap_or(0).max(0), 0);
         }
     }
 
     /// Plays the file from its start (`source.restart`).
     fn restart(&mut self, at: MediaTime) {
-        if self.player.is_some() {
-            self.restart_at(micros(at).unwrap_or(0).max(0), 0);
+        let mut head = self.head.lock();
+        if head.player.is_some() {
+            head.restart_at(micros(at).unwrap_or(0).max(0), 0);
         }
     }
 
@@ -440,31 +500,31 @@ impl Source for MediaSource {
             });
         }
         let play = Play::from(settings)?;
-        if play.speed != self.play.speed {
+        let mut head = self.head.lock();
+        if play.speed != head.play.speed {
             // Keep the position: the new speed applies from the latest time asked about.
-            let timeline = self.position(self.last);
-            self.set_timing(Timing {
-                clock: self.last,
+            let (clock, timeline) = (head.last, head.position(head.last));
+            head.set_timing(Timing {
+                clock,
                 timeline,
                 speed: play.speed,
             });
         }
-        if let Some(player) = &self.player {
-            player.set_looping(play.looping, self.position(self.last));
+        if let Some(player) = &head.player {
+            player.set_looping(play.looping, head.position(head.last));
         }
-        self.play = play;
+        head.play = play;
+        drop(head);
         self.settings = settings.clone();
         Ok(())
     }
 }
 
-impl MediaSource {
-    /// The `file` setting's path, for errors.
-    fn file_path(&self) -> String {
-        source::asset(&self.settings, "file")
-            .ok()
-            .flatten()
-            .map(|(_, path)| path)
-            .unwrap_or_default()
-    }
+/// The `file` setting's path, for errors.
+fn file_path(settings: &Settings) -> String {
+    source::asset(settings, "file")
+        .ok()
+        .flatten()
+        .map(|(_, path)| path)
+        .unwrap_or_default()
 }

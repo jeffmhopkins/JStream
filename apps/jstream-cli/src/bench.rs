@@ -18,7 +18,7 @@ use jstream_control::protocol::{
     Action, ActionResult, Batch, BlendMode, Call, CallResult, DropCounts, Edit, Event, FrameSheet,
     FrameStrip, ItemGeometry, ItemId, OutputId, OutputKind, OutputStatsInfo, ProfileInfo, Query,
     QueryResult, RecordContainer, SceneId, Settings, Size, SourceId, SourceKind,
-    TransitionPresetId, Vec2,
+    TransitionPresetId, Vec2, ViewCounts,
 };
 use jstream_control::{Control, EventStream};
 use serde::{Deserialize, Serialize};
@@ -128,12 +128,35 @@ pub struct Gates {
     pub max_over_budget_pct: f64,
     /// Scene switches whose frame sheet couldn't be read.
     pub failed_switches: u64,
+    /// Video frames any encoded stream (an output's or a preview's) lost between its
+    /// encoder's input and where it sends them, from `profile.get`'s `streams`.
+    pub stream_dropped_frames: u64,
+    /// Video frames any encoded stream's encoder took more than a frame period late.
+    pub stream_late_frames: u64,
+    /// Mixer blocks whose mix took longer than the audio they hold.
+    pub mixer_late_blocks: u64,
+    /// Frames the mixer skipped to catch up with the clock.
+    pub mixer_skipped_frames: u64,
+    /// Frames the audio inputs had no audio for when the mixer read them.
+    pub mixer_underrun_frames: u64,
+    /// Frames the audio inputs dropped before the mixer read them.
+    pub mixer_dropped_frames: u64,
+    /// Times a client's view showed its waiting text where a picture belongs, from
+    /// `profile.get`'s `views` (ADR-0132). A scene switch that flashes "Starting…"
+    /// counts here.
+    pub view_placeholders: u64,
+    /// Times a client's view showed why it had no picture instead of one.
+    pub view_blanks: u64,
+    /// Frames a client's view left undecoded to catch up.
+    pub view_skipped: u64,
+    /// Frames or decoders a client's view had refused.
+    pub view_decode_errors: u64,
 }
 
 impl Default for Gates {
-    /// The alpha.5 bar: nothing dropped anywhere, the recording at the program's rate
-    /// (within 2%, for the stats' one-second granularity) and every program frame in
-    /// budget.
+    /// The alpha.5 bar: nothing dropped or late anywhere, the recording at the
+    /// program's rate (within 2%, for the stats' one-second granularity), every program
+    /// frame in budget, and every client view showing pictures without a placeholder.
     fn default() -> Self {
         Gates {
             capture_frames: 0,
@@ -147,6 +170,16 @@ impl Default for Gates {
             min_fps_ratio: 0.98,
             max_over_budget_pct: 0.0,
             failed_switches: 0,
+            stream_dropped_frames: 0,
+            stream_late_frames: 0,
+            mixer_late_blocks: 0,
+            mixer_skipped_frames: 0,
+            mixer_underrun_frames: 0,
+            mixer_dropped_frames: 0,
+            view_placeholders: 0,
+            view_blanks: 0,
+            view_skipped: 0,
+            view_decode_errors: 0,
         }
     }
 }
@@ -922,6 +955,28 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
         0.0
     };
     let failed = switches.iter().filter(|s| s.sheet.is_none()).count() as u64;
+    let streams = profile
+        .streams
+        .iter()
+        .fold((0u64, 0u64), |(dropped, late), stream| {
+            (
+                dropped.saturating_add(stream.dropped),
+                late.saturating_add(stream.late),
+            )
+        });
+    let mixer = profile.mixer.unwrap_or_default();
+    let views = profile
+        .views
+        .iter()
+        .fold(ViewCounts::default(), |sum, view| ViewCounts {
+            received: sum.received.saturating_add(view.counts.received),
+            shown: sum.shown.saturating_add(view.counts.shown),
+            skipped: sum.skipped.saturating_add(view.counts.skipped),
+            decode_errors: sum.decode_errors.saturating_add(view.counts.decode_errors),
+            placeholders: sum.placeholders.saturating_add(view.counts.placeholders),
+            blanks: sum.blanks.saturating_add(view.counts.blanks),
+            reopens: sum.reopens.saturating_add(view.counts.reopens),
+        });
     let count = |n: u64| n as f64;
     let checks = vec![
         Check::at_most(
@@ -970,6 +1025,54 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
             "failed_switches",
             count(failed),
             count(gates.failed_switches),
+        ),
+        Check::at_most(
+            "stream_dropped_frames",
+            count(streams.0),
+            count(gates.stream_dropped_frames),
+        ),
+        Check::at_most(
+            "stream_late_frames",
+            count(streams.1),
+            count(gates.stream_late_frames),
+        ),
+        Check::at_most(
+            "mixer_late_blocks",
+            count(mixer.late_blocks),
+            count(gates.mixer_late_blocks),
+        ),
+        Check::at_most(
+            "mixer_skipped_frames",
+            count(mixer.skipped_frames),
+            count(gates.mixer_skipped_frames),
+        ),
+        Check::at_most(
+            "mixer_underrun_frames",
+            count(mixer.underrun_frames),
+            count(gates.mixer_underrun_frames),
+        ),
+        Check::at_most(
+            "mixer_dropped_frames",
+            count(mixer.dropped_frames),
+            count(gates.mixer_dropped_frames),
+        ),
+        // A client that reports no view (a CLI, an MCP agent) passes these vacuously;
+        // the summary says so.
+        Check::at_most(
+            "view_placeholders",
+            count(views.placeholders),
+            count(gates.view_placeholders),
+        ),
+        Check::at_most("view_blanks", count(views.blanks), count(gates.view_blanks)),
+        Check::at_most(
+            "view_skipped",
+            count(views.skipped),
+            count(gates.view_skipped),
+        ),
+        Check::at_most(
+            "view_decode_errors",
+            count(views.decode_errors),
+            count(gates.view_decode_errors),
         ),
     ];
     let pass = checks.iter().all(|check| check.pass);
@@ -1043,6 +1146,28 @@ pub fn summary(report: &Report) -> String {
             run.ticks,
             run.switches.len(),
         );
+        if run.profile.views.is_empty() {
+            let _ = writeln!(
+                text,
+                "No client reported a view, so the view gates pass without a picture shown.\n"
+            );
+        } else {
+            for view in &run.profile.views {
+                let c = &view.counts;
+                let _ = writeln!(
+                    text,
+                    "View `{}` of `{}`: {} frames received, {} shown, {} skipped, {} placeholders, {} reopens.",
+                    view.view,
+                    view.client,
+                    c.received,
+                    c.shown,
+                    c.skipped,
+                    c.placeholders,
+                    c.reopens,
+                );
+            }
+            text.push('\n');
+        }
         let _ = writeln!(text, "| Gate | Measured | Limit | |\n|---|---|---|---|");
         for check in &run.checks {
             let _ = writeln!(
@@ -1195,6 +1320,69 @@ mod tests {
         assert!(text.starts_with("# jstream bench: FAIL"), "{text}");
         assert!(
             text.contains("| render_ticks | 2 | <= 0 | **fail** |"),
+            "{text}"
+        );
+    }
+
+    /// ADR-0132: a stream's late frame, a late mixer block and a view's placeholder fail
+    /// the run like a drop does, and the summary lists the views.
+    #[test]
+    fn a_late_stream_a_late_block_or_a_placeholder_fails() {
+        let tick = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(0, 0, 0, 0)),
+        };
+        let last = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(600, 10_000, 1, 0)),
+        };
+        let mut info = profile(1000.0 / 60.0, 600, 0);
+        info.streams = vec![
+            serde_json::from_value(json!({
+                "stream": {"type": "preview", "channel": 1},
+                "late": 2,
+            }))
+            .expect("a stream"),
+        ];
+        info.mixer = Some(jstream_control::protocol::MixerProfile {
+            late_blocks: 1,
+            ..Default::default()
+        });
+        info.views = vec![
+            serde_json::from_value(json!({
+                "client": "jstream-ui",
+                "view": "canvas",
+                "counts": {"received": 600, "shown": 600, "placeholders": 1, "reopens": 2},
+            }))
+            .expect("a view"),
+        ];
+        let run = judge(
+            Scenario::Basic,
+            measured(tick, last, info),
+            &Gates::default(),
+        );
+        let failed: Vec<_> = run
+            .checks
+            .iter()
+            .filter(|check| !check.pass)
+            .map(|check| check.name)
+            .collect();
+        assert_eq!(
+            failed,
+            [
+                "stream_late_frames",
+                "mixer_late_blocks",
+                "view_placeholders"
+            ]
+        );
+        let text = summary(&Report {
+            cli: "test",
+            gates: Gates::default(),
+            runs: vec![run],
+            pass: false,
+        });
+        assert!(
+            text.contains("View `canvas` of `jstream-ui`: 600 frames received"),
             "{text}"
         );
     }

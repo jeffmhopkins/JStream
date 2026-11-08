@@ -2,14 +2,15 @@
 id = "ADR-0105"
 title = "Blend modes that mix in sRGB-encoded values, to match a browser"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "agent"
+superseded_by = "docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md"
 -->
 
 # ADR-0105: Blend modes that mix in sRGB-encoded values, to match a browser
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0126: One set of blend modes, and a project setting for the space they mix in](0126-one-set-of-blend-modes-and-a-blending-space.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

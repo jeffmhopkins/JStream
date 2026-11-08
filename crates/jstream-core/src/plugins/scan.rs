@@ -1,5 +1,5 @@
 //! What the engine knows of its CLAP plugin scan, for `plugin.clap_scan` and
-//! `plugin.clap_rescan` (protocol 0.95, ADR-0035): the plugin hosts the host gave it,
+//! `plugin.clap_rescan` (protocol 0.106, ADR-0035): the plugin hosts the host gave it,
 //! why there are none when it knows, and the last finished scan. A scan holds
 //! [`ClapScans::scan_lock`] while it runs, so a rescan that arrives during one waits for
 //! it, then scans again. None of these locks is taken with the collection lock held.

@@ -10,6 +10,13 @@
 //! item's edge, and clamping to the chain's edge keeps the anisotropic footprint inside
 //! it too (#641). An image keeps one chain per crop it is drawn with.
 //!
+//! A 2D item drawn small samples a chain too (#1217): one whose canvas pixel spans more
+//! than `MINIFIED` texels along an axis aliases with one bilinear tap. When it spans two
+//! or more along both, the sampler never reads the full-size level, so its chain starts
+//! a level down ([`Mips::skip`]): level 0 is the region halved, which the first pass
+//! averages from 2×2 texels with its one linear tap, and the chain holds a quarter of the
+//! texels.
+//!
 //! A chain is rebuilt on the GPU only when its image changed since its last build, so
 //! once per source and frame however many mixes or nested scenes draw it: an upload
 //! when it was rewritten, a layer when `render_into` drew into it, and an import when
@@ -206,8 +213,11 @@ const REGION_BYTES: u64 = 16;
 pub(crate) struct Mips {
     /// What the composite pass binds: the whole chain and the anisotropic sampler.
     pub(crate) bind_group: wgpu::BindGroup,
-    /// The source texels level 0 holds.
+    /// The source texels the chain is built from.
     region: Region,
+    /// How many levels below the region's own size level 0 is: 0, or 1 for a chain that
+    /// starts at half size.
+    skip: u32,
     /// Level 0's second group: the region, in the source's texture coordinates.
     region_group: wgpu::BindGroup,
     /// Each level's render-target view, level 0 first.
@@ -227,7 +237,8 @@ pub(crate) fn level_count(width: u32, height: u32) -> u32 {
 }
 
 impl Mips {
-    /// A chain of `region` of `image`, not built yet.
+    /// A chain of `region` of `image`, not built yet, whose level 0 is `skip` levels
+    /// below the region's size (0 or 1: the first pass averages 2×2 texels at most).
     pub(crate) fn new(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -235,8 +246,13 @@ impl Mips {
         pipelines: &MipPipelines,
         image: &Image,
         region: Region,
+        skip: u32,
     ) -> Self {
-        let (width, height) = (region.width, region.height);
+        let skip = skip.min(1);
+        let (width, height) = (
+            (region.width >> skip).max(1),
+            (region.height >> skip).max(1),
+        );
         let levels = level_count(width, height);
         let uniform = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("jstream-render-mip-region"),
@@ -306,6 +322,7 @@ impl Mips {
         Self {
             bind_group: bind(&whole, &pipelines.anisotropic),
             region,
+            skip,
             region_group,
             targets,
             inputs,
@@ -315,9 +332,14 @@ impl Mips {
         }
     }
 
-    /// The source texels the chain holds.
+    /// The source texels the chain is built from.
     pub(crate) fn region(&self) -> Region {
         self.region
+    }
+
+    /// How many levels below the region's size level 0 is.
+    pub(crate) fn skip(&self) -> u32 {
+        self.skip
     }
 
     /// How many times the chain was recorded.
