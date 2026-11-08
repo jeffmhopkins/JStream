@@ -400,6 +400,10 @@ impl Compositor {
     /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
     /// A scene with no camera has no depth, and leaves `target` all 0.
     ///
+    /// It prepares the scene again (placement, vertices, mips) rather than reusing the
+    /// colour pass's work; recording both in one encoder is left for when the engine
+    /// draws it every frame.
+    ///
     /// # Errors
     /// As for [`Self::render_into`].
     pub fn render_view_depth(
@@ -460,7 +464,9 @@ impl Compositor {
     /// Adds a model's own depth to a view depth that [`Self::render_view_depth`] drew
     /// into `target` (ADR-0137 decision 4): `1 / w` per fragment of the model where its
     /// material's alpha is at least one half, the larger value winning. Only a model seen
-    /// through a camera has depth there; without one this draws nothing.
+    /// through a camera has depth there; without one this draws nothing. It doesn't know
+    /// its item's visibility or opacity: the caller skips a hidden item, and one whose
+    /// opacity is under one half, as the cards' pass does.
     ///
     /// # Errors
     /// As for [`Self::draw_model`].

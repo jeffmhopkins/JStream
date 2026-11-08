@@ -2,9 +2,10 @@
 // red holds 1 / w = f / D, 0 where nothing was drawn. At distance D the fog amount is
 // (D - start) / (end - start) for linear, 1 - exp(-density (D - start) / 1000) for
 // exponential, clamped to 0..1 and then to `most`, and 0 nearer than `start`; where
-// nothing was drawn it is `most` with `background` and 0 without. The pixel becomes
-// mix(pixel, fog, amount), both premultiplied linear: fog is a layer of that opacity
-// over what is there. Without a depth (`has_depth` 0) the input passes through.
+// nothing was drawn it is `most` with `background` and 0 without. The fog is laid over
+// the pixel source-over, premultiplied linear, at `amount` times its own alpha:
+// fog * amount + pixel * (1 - fog.a * amount), so a translucent fog colour covers the
+// picture and never thins it. Without a depth (`has_depth` 0) the input passes through.
 
 struct Params {
     // Straight-alpha linear light.
@@ -45,5 +46,5 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         }
     }
     let fog = vec4<f32>(p.color.rgb * p.color.a, p.color.a);
-    return mix(c, fog, amount);
+    return fog * amount + c * (1.0 - fog.a * amount);
 }

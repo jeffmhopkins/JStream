@@ -300,6 +300,7 @@ fn three_d(c: &mut Criterion) {
             geometry: placed,
             camera: Some(camera),
             lighting: Lighting::Studio,
+            lights: None,
         };
         group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
             b.iter(|| {

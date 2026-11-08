@@ -118,16 +118,16 @@ impl BlendPipelines {
         }
     }
 
-    /// How `mode` is drawn.
-    ///
-    /// # Errors
-    /// [`RenderError::Invalid`] for a mode this compositor does not draw: one added to
-    /// the protocol after it.
     /// The pipeline that draws a scene's view depth (ADR-0137 decision 4).
     pub(crate) fn depth(&self) -> &wgpu::RenderPipeline {
         &self.depth
     }
 
+    /// How `mode` is drawn.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] for a mode this compositor does not draw: one added to
+    /// the protocol after it.
     pub(crate) fn steps(&self, mode: BlendMode) -> Result<Steps<'_>, RenderError> {
         Ok(match mode {
             BlendMode::Normal => Steps::Fixed(std::slice::from_ref(&self.normal)),

@@ -51,7 +51,11 @@ pub(super) fn descriptor() -> KindDescriptor {
                 ..float("start_px", "Start", 0.0, MAX_DISTANCE, 0.0, "px")
             },
             ParamDescriptor {
-                description: Some("Linear: the distance where fog is at its most.".into()),
+                description: Some(
+                    "Linear: the distance where fog is at its most. At or before Start, fog \
+                     goes straight to its most at Start."
+                        .into(),
+                ),
                 ..float("end_px", "End", 0.0, MAX_DISTANCE, 4000.0, "px")
             },
             ParamDescriptor {

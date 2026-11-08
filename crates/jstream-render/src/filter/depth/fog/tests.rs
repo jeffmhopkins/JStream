@@ -348,6 +348,7 @@ fn golden_view_depth_takes_a_models_own_depth() {
         geometry: pose,
         camera: Some(camera()),
         lighting: Lighting::Unlit,
+        lights: None,
     };
     let layer = opened.compositor.layer(W, H).expect("a layer");
     let image = solid(&opened.compositor, 4, 4, WHITE);
@@ -362,4 +363,28 @@ fn golden_view_depth_takes_a_models_own_depth() {
     near(&shot, 80, 50, grey(at_front), 3);
     // Beside the cube, the card: (3f - f) / 2f, full fog.
     near(&shot, 64, 50, WHITE, 1);
+}
+
+/// ADR-0137 decision 6: a translucent fog colour is laid over the picture, source-over,
+/// so an opaque picture stays opaque. Half-alpha white fog at full amount over black
+/// gives linear 0.5 grey, not a half-transparent picture; fog at alpha 0 changes nothing.
+#[test]
+fn translucent_fog_covers_an_opaque_picture() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, 4, 1, BLACK);
+    let depth = known_depth(&opened);
+    let mut half = filter(
+        KIND,
+        json!({"color": "#ffffff80", "mode": "linear", "start_px": 1000.0, "end_px": 3000.0}),
+    );
+    half.set_depth(Some(depth.clone()));
+    let shot = apply(&mut opened, &mut half, &input);
+    near(&shot, 2, 0, grey(128.0 / 255.0), 2);
+    near(&shot, 0, 0, grey(0.5 * 128.0 / 255.0), 2);
+    let mut clear = filter(KIND, json!({"color": "#ffffff00"}));
+    clear.set_depth(Some(depth));
+    let shot = apply(&mut opened, &mut clear, &input);
+    near(&shot, 2, 0, BLACK, 0);
 }

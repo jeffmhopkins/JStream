@@ -15,14 +15,20 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::scene::Color;
 
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Bytes of one vertex: position, normal, tangent, texture coordinate and colour.
 const VERTEX_STRIDE: u64 = jstream_media::model::VERTEX_BYTES;
-/// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns) and a
-/// `vec4`.
-const FRAME_BYTES: u64 = 64 + 64 + 48 + 16;
+/// The most point, spot and directional lights a `scene`-lit model is shaded with
+/// (ADR-0137 decision 3); any after them are ignored.
+pub const MAX_SCENE_LIGHTS: usize = 8;
+/// Bytes of one light in the frame uniform: four `vec4`.
+const LIGHT_BYTES: u64 = 64;
+/// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns), a
+/// `vec4` of parameters, a `vec4` of ambient light, and the lights.
+const FRAME_BYTES: u64 = 64 + 64 + 48 + 16 + 16 + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES;
 /// Bytes of a material's uniform: four `vec4`.
 const MATERIAL_BYTES: u64 = 64;
 
@@ -90,6 +96,55 @@ pub struct ModelDraw<'a> {
     pub camera: Option<SceneCamera>,
     /// How it is lit.
     pub lighting: Lighting,
+    /// The lights of the scene the item is in, which light the model in place of the
+    /// studio rig (ADR-0137 decision 3), or `None` for `lighting`'s own. A caller passes
+    /// `Some` only for a model whose source asks to be lit by its scene, in the scene's
+    /// stacking order before any depth sort; the first [`MAX_SCENE_LIGHTS`] that aren't
+    /// ambient shade it, lit or not, and the caller logs any it drops. Only a 3D scene
+    /// has them: without a `camera` they are ignored and `lighting` applies. An `unlit`
+    /// model, and an unlit material, ignore them too.
+    pub lights: Option<&'a [SceneLight]>,
+}
+
+/// What kind of light a [`SceneLight`] is (ADR-0137 decision 1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LightKind {
+    /// From its position in every direction, fading out to its range.
+    Point,
+    /// From its position along its aim, within its cone, fading out to its range.
+    Spot,
+    /// Along its aim from infinitely far, with no falloff.
+    Directional,
+    /// From everywhere: scales the model's environment for its ambient and reflected
+    /// light. Ambient lights add up.
+    Ambient,
+}
+
+/// One light of a scene, as its item places it (ADR-0137 decisions 1 and 2), in the
+/// scene's space.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SceneLight {
+    /// What kind it is.
+    pub kind: LightKind,
+    /// Where it is, in the scene's space (x right, y down, z toward the viewer), for a
+    /// point or spot light: its item's centre and `depth_px`.
+    pub position: [f64; 3],
+    /// The direction it shines, in the scene's space, for a spot or directional light:
+    /// its item's back normal. Need not be unit length; a zero aim lights nothing.
+    pub aim: [f64; 3],
+    /// Its colour, straight sRGB. Alpha is ignored.
+    pub color: Color,
+    /// Irradiance on a surface facing it, before falloff: the kind's `intensity` times its
+    /// item's opacity. At or under 0 it lights nothing but still takes its slot. A light
+    /// with a non-finite intensity, range, cone, softness or (point or spot) position
+    /// lights nothing too.
+    pub intensity: f32,
+    /// Where a point or spot light has faded to nothing, in scene pixels; 0 never fades.
+    pub range_px: f32,
+    /// A spot light's full cone angle, in degrees.
+    pub cone_deg: f32,
+    /// The share of a spot light's cone, from its edge inward, over which it fades, 0 to 1.
+    pub softness: f32,
 }
 
 /// The pipelines, layouts and shared resources the model draw needs, and the depth
@@ -551,7 +606,13 @@ impl ModelRuntime {
             })
             .fold(1.0f64, f64::max);
         let clip = solid.clip_matrix(canvas, 0.45 / reach);
-        let frame = frame_bytes(&solid, &clip, draw.lighting);
+        let lights = match (draw.lights, camera.as_ref()) {
+            (Some(lights), Some(view)) if draw.lighting != Lighting::Unlit => {
+                Some(SceneLighting::new(lights, view))
+            }
+            _ => None,
+        };
+        let frame = frame_bytes(&solid, &clip, draw.lighting, lights.as_ref());
         let depth = self.depth_view(gpu, width, height);
         // Blended primitives far to near by their centres.
         self.order.clear();
@@ -659,7 +720,7 @@ impl ModelRuntime {
             .map_err(placement)?;
         // With perspective the orthographic depth scale is unused.
         let clip = solid.clip_matrix(canvas, 0.0);
-        let frame = frame_bytes(&solid, &clip, Lighting::Unlit);
+        let frame = frame_bytes(&solid, &clip, Lighting::Unlit, None);
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
         gpu.queue.write_buffer(&self.frame, 0, &frame);
@@ -739,8 +800,106 @@ fn placement(err: jstream_protocol::GeometryError) -> RenderError {
     }
 }
 
-fn frame_bytes(solid: &Solid, clip: &[[f32; 4]; 4], lighting: Lighting) -> Vec<u8> {
-    let mut values = Vec::with_capacity(48);
+/// A scene's lights in the shader's terms: the model's viewing frame, linear light.
+struct SceneLighting {
+    ambient: [f32; 3],
+    /// Four `vec4` per light, as `model.wgsl`'s `Light`.
+    lights: Vec<[f32; 16]>,
+}
+
+impl SceneLighting {
+    fn new(lights: &[SceneLight], view: &jstream_protocol::CameraView) -> Self {
+        let mut ambient = [0.0f32; 3];
+        let mut packed = Vec::with_capacity(MAX_SCENE_LIGHTS);
+        // Slots taken by the shading lights so far, lit or not.
+        let mut slots = 0;
+        for light in lights {
+            let positive = |v: f32| v.is_finite() && v > 0.0;
+            if light.kind != LightKind::Ambient {
+                // Every shading light takes one of the 8 in order, lit or not, so fading
+                // one of them out never switches a ninth on (ADR-0137 decision 3).
+                slots += 1;
+                if slots > MAX_SCENE_LIGHTS {
+                    continue;
+                }
+            }
+            // Unlit, or a value no settings check would let through: lights nothing.
+            let placed = light.kind == LightKind::Directional
+                || light.kind == LightKind::Ambient
+                || light.position.iter().all(|c| c.is_finite());
+            if !positive(light.intensity)
+                || !placed
+                || !light.cone_deg.is_finite()
+                || !light.softness.is_finite()
+                || !light.range_px.is_finite()
+            {
+                continue;
+            }
+            let [r, g, b, _] = crate::color::premultiplied_linear(Color {
+                a: 1.0,
+                ..light.color
+            });
+            let radiance = [r, g, b].map(|c| c * light.intensity);
+            if light.kind == LightKind::Ambient {
+                for (sum, c) in ambient.iter_mut().zip(radiance) {
+                    *sum += c;
+                }
+                continue;
+            }
+            let aim = view.direction_in_view(light.aim);
+            let length = aim.iter().map(|c| c * c).sum::<f64>().sqrt();
+            let needs_aim = light.kind != LightKind::Point;
+            if needs_aim && !(length > 0.0 && length.is_finite()) {
+                continue;
+            }
+            let aim = if length > 0.0 {
+                aim.map(|c| (c / length) as f32)
+            } else {
+                [0.0, 0.0, -1.0]
+            };
+            let at = view.in_view(light.position).map(|c| c as f32);
+            let kind = match light.kind {
+                LightKind::Point => 0.0,
+                LightKind::Spot => 1.0,
+                _ => 2.0,
+            };
+            let half = (light.cone_deg.clamp(1.0, 170.0) * 0.5).to_radians();
+            let softness = light.softness.clamp(0.0, 1.0);
+            let outer = half.cos();
+            let inner = (half * (1.0 - softness)).cos();
+            packed.push([
+                at[0],
+                at[1],
+                at[2],
+                kind,
+                aim[0],
+                aim[1],
+                aim[2],
+                light.range_px.max(0.0),
+                radiance[0],
+                radiance[1],
+                radiance[2],
+                0.0,
+                outer,
+                inner,
+                0.0,
+                0.0,
+            ]);
+        }
+        Self {
+            ambient,
+            lights: packed,
+        }
+    }
+}
+
+fn frame_bytes(
+    solid: &Solid,
+    clip: &[[f32; 4]; 4],
+    lighting: Lighting,
+    lights: Option<&SceneLighting>,
+) -> Vec<u8> {
+    let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
     values.extend(solid.view_matrix().iter().flatten());
     for column in solid.normal_matrix() {
@@ -756,8 +915,15 @@ fn frame_bytes(solid: &Solid, clip: &[[f32; 4]; 4], lighting: Lighting) -> Vec<u
         } else {
             0.0
         },
-        0.0,
+        if lights.is_some() { 1.0 } else { 0.0 },
     ]);
+    let (ambient, count) = lights.map_or(([0.0; 3], 0), |l| (l.ambient, l.lights.len()));
+    values.extend(ambient);
+    values.push(count as f32);
+    for light in lights.into_iter().flat_map(|l| &l.lights) {
+        values.extend(light);
+    }
+    values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
 }
 
