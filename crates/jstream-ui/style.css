@@ -1977,6 +1977,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 
 /* Agent activity (AG-01): newest first, a mono meta line over the engine's sentence. */
 .agent-activity .problem { margin: 0; }
+/* A client names itself, so a long name wraps instead of widening the dialog. */
+.agent-prompt { max-width: min(480px, 100vw - 32px); }
+.agent-name { overflow-wrap: anywhere; }
 .activity-bar { display: flex; justify-content: flex-end; margin: -2px 0 4px; }
 .activity-bar button.link { border: none; background: none; padding: 2px 4px; color: var(--link); font-size: 12px; cursor: pointer; }
 .activity-bar button.link:hover { text-decoration: underline; }

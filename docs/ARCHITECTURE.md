@@ -53,7 +53,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, and with "Allow devices on my network" the TLS network listener for paired devices ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2) and on Linux with its `webkitgtk` feature (WebKitGTK, [ADR-0141](adr/0141-desktop-app-on-linux.md)), on Windows and 64-bit Linux with the engine live as in the daemon, with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, and with "Allow devices on my network" the TLS network listener for paired devices ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
@@ -818,6 +818,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Agent approval** (protocol 0.108, [ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)):
+  where the host asks (the desktop app with `--mcp`), `jstream-server` holds a control-
+  token session at `hello` until the person approves its client, telling every client
+  with `agent.approval_requested` and `agent.approval_resolved`; `agent.approve`,
+  `agent.forget` and `agent.approved` are answered by the server too, and a denied or
+  unanswered `hello` fails with `not_allowed`. A notice with a veto, not a control.
 - **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
   the actions `collection.open`, `collection.new` and `collection.save_as` switch the
   collection file the engine saves to, the query `collection.info` reports it and the
@@ -1082,7 +1088,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
   `gpu.device_lost` and `gpu.effect_slow` events that report it reach agents. And for the `codec.*` ops:
   Cisco's OpenH264 downloads only when a person asks, after seeing Cisco's licence
-  ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). The `pack.*` ops are not
+  ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). And for the `agent.*`
+  ops and events: the person, not another agent, lets a new agent in
+  ([ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)). The `pack.*` ops are not
   held back: an agent may write, read and delete an effect pack's WGSL
   ([ADR-0097](adr/0097-agents-write-effect-packs.md)), and `pack.list` shows a person
   which client last wrote each.
