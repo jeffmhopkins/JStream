@@ -13,11 +13,14 @@ import { createInterface } from 'node:readline';
 export { expect };
 
 export const test = base.extend({
-  daemon: async ({}, use) => {
+  // Extra mock daemon arguments, which a spec sets with `test.use`.
+  daemonArgs: [[], { option: true }],
+
+  daemon: async ({ daemonArgs }, use) => {
     const token = randomBytes(18).toString('hex');
     const child = spawn(
       process.env.JSTREAM_E2E_DAEMON,
-      ['--ui-dir', process.env.JSTREAM_E2E_DIST, '--token', token],
+      ['--ui-dir', process.env.JSTREAM_E2E_DIST, '--token', token, ...daemonArgs],
       { stdio: ['pipe', 'pipe', 'inherit'] },
     );
     const exited = new Promise((done) => child.once('exit', done));

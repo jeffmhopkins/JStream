@@ -32,7 +32,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
   an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
+  less the people-only `youtube.*`, `plugin.*`, `effect.*`, `codec.*` and `agent.*` ops
   (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
@@ -78,7 +78,12 @@ pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
 `gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
-([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). So are the
+`agent.*` ops and events (`agent.approve`, `agent.forget`, `agent.approved`): the person,
+not another agent, lets a new agent in
+([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). While the person
+is being asked, a tool call's `hello` times out as any slow one does, and its error says
+the person may be being asked; the next call waits on the same request.
 The `pack` tool, by contrast, reaches agents (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
 [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
 WGSL of an effect pack, which loads at once, and `pack.list` names the client that
