@@ -2,7 +2,9 @@
 // (top-left, top-right, bottom-right, bottom-left). `clip` cuts the picture to it. An
 // inner stroke runs inside its edge and an outer stroke past it, after a gap, each
 // solid, double, dashed or dotted, in a flat colour or a linear or conic gradient that
-// can travel around. Coverage is antialiased over one pixel by the shape's signed
+// can travel around. With a frame image (`framed`), the inner stroke is the image as a
+// 9-slice frame: its corners, `slice` image px square, fill the stroke's `width` px
+// corners, and its edges stretch or tile along the sides. Coverage is antialiased over one pixel by the shape's signed
 // distance. Colours are premultiplied linear light.
 
 struct Params {
@@ -31,6 +33,12 @@ struct Params {
     clip: u32,
     // The same for the outer stroke, whose dots repeat at its own width.
     outer_along: f32,
+    // The frame image's corner, image px.
+    slice: f32,
+    // 1 when a frame image is bound, as the aux image.
+    framed: u32,
+    // 1 tiles the frame's edges, 0 stretches them.
+    tile: u32,
 }
 
 @group(0) @binding(4) var<uniform> p: Params;
@@ -143,6 +151,49 @@ fn pattern(across: f32, s: f32, w: f32, along: f32) -> f32 {
     return 1.0;
 }
 
+// `v` held half a texel inside the image px span `lo..hi`, so a bilinear sample never
+// blends in the next slice's texels (#1377); a span under a texel takes its middle.
+fn within_slice(v: f32, lo: f32, hi: f32) -> f32 {
+    let mid = (lo + hi) * 0.5;
+    return clamp(v, min(lo + 0.5, mid), max(hi - 0.5, mid));
+}
+
+// One axis of the 9-slice: the image coordinate, px, for `x` px along a side `len` px
+// long whose corners are `w` px, from an image `img` px long whose corners are `s`.
+// Each slice samples only its own texels.
+fn slice_axis(x: f32, len: f32, w: f32, s: f32, img: f32) -> f32 {
+    let corner = min(s, img * 0.5);
+    if (x < w) {
+        return within_slice(x / w * corner, 0.0, corner);
+    }
+    if (x > len - w) {
+        return within_slice(img - (len - x) / w * corner, img - corner, img);
+    }
+    let mid_img = max(img - 2.0 * corner, 1e-3);
+    if (p.tile == 1u) {
+        // Each tile at the corners' scale.
+        let t = (x - w) * corner / w;
+        return within_slice(corner + (t - floor(t / mid_img) * mid_img), corner, img - corner);
+    }
+    return within_slice(
+        corner + (x - w) / max(len - 2.0 * w, 1e-3) * mid_img,
+        corner,
+        img - corner,
+    );
+}
+
+// The frame image at `q`, for a rectangle of half-size `half`.
+fn frame_at(q: vec2<f32>, half: vec2<f32>) -> vec4<f32> {
+    let at = q + half;
+    let size = 2.0 * half;
+    let w = min(p.width, min(half.x, half.y));
+    let px = vec2<f32>(
+        slice_axis(at.x, size.x, w, p.slice, frame.aux_size.x),
+        slice_axis(at.y, size.y, w, p.slice, frame.aux_size.y),
+    );
+    return aux(px / frame.aux_size);
+}
+
 // A source-over b, premultiplied.
 fn over(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
     return a + b * (1.0 - a.a);
@@ -162,7 +213,13 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     }
     let s = along_edge(q, half, r4);
     var out = picture;
-    if (p.width > 0.0) {
+    if (p.width > 0.0 && p.framed == 1u) {
+        // The frame: the band `width` in from the rectangle's sides, cut to the shape.
+        let to_side = half - abs(q);
+        let inside = saturate(0.5 - d);
+        let band = select(0.0, 1.0, min(to_side.x, to_side.y) < p.width);
+        out = over(frame_at(q, half) * band * inside, out);
+    } else if (p.width > 0.0) {
         // Inside the edge: from the edge (across 0) to `width` in.
         let band = saturate(0.5 - d) - saturate(0.5 - d - p.width);
         let cover = band * pattern(-d, s, p.width, p.along);

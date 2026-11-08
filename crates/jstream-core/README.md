@@ -151,77 +151,17 @@ covers = ["crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/au
 covers = ["crates/jstream-core/src/filters.rs", "crates/jstream-core/src/plugins/**"]
 -->
 
-- **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
-  one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
-  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
-  master's or an output tap's filters in line with its owner's audio chain. A
-  `compressor`'s `key` ("Duck under", a `source` reference to an audio source, not
-  live) is ADR-0028's sidechain key: the program stage's audio sources thread resolves
-  it to the key source's mixer input once every input is open (`resolve_keys`), and
-  builds the filter as a `FilterSpec::KeyedCompressor` on it, so the source ducks
-  while the key plays. A key that names no playing input reads as silence. Setting,
-  clearing or re-resolving it rebuilds the filter. A master or output filter holds no
-  reference yet, so only a source's compressor has a key; the graph refuses a key on
-  its own source and a cycle of keys as it refuses any reference cycle, and a key blocks
-  deleting the source it names. A CLAP
-  filter's plugin host (`ClapHosts`) runs on the program stage's
-  `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
-  and the master's and the output taps' chains, which the routing keeps under the
-  collection lock, take each ready host's block from that thread, so starting or
-  stopping a host process never holds the lock.
-- **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
-  - `Engine::scan_clap_plugins(Arc<dyn PluginHosts>)` scans the CLAP search directories
-    (recursively, for `.clap` entries, each scanned in its own host process) and adds
-    every audio effect found to the graph's kinds as an audio-filter kind,
-    `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
-    it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
-    stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
-    read-only and bypass parameters and ones without a finite range are left out. When
-    two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351, #977): control and bidirectional formatting characters
-    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
-    with each kind's file and plugin id, and the files that failed. Kinds stay until
-    the engine ends. It is slow, so a host calls it on a worker thread; the engine's
-    lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
-    hosts, and each kind's file and plugin id, added to earlier scans').
-  - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
-    control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
-    `Ready` (with its block and latency) once its block says so. One that exits, isn't
-    ready within `start_timeout` (it may load the plugin without beating until then),
-    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
-    up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
-    between them, or at once when the host marks a failure a restart can't fix (load,
-    not an effect, activate, configuration), it is `Disabled` until `enable`. The
-    supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
-    the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
-    `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
-    `Recovered`; the mixer counts them in the engine's memory (`EngineBlock`), where
-    the host can't reset them. What the host sends back is checked first (#351):
-    parameter descriptions with a non-finite or inverted range, a default outside it,
-    or a repeated id are dropped from `Params`; a parameter change, from a control
-    message or the block's `params_out` ring (read only once the run's first `Params`
-    has arrived), must name a parameter of the last `Params` and be finite and within its range to become `ParamChanged`; and a saved
-    state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
-    and the first of each host run is an `Error`. `stop` asks the host to stop and
-    kills it after `STOP_GRACE`.
-  - A CLAP filter runs as `plugins::filter::ClapFilter`, one host per filter. In a
-    source's audio chain the input's `filters::Chain` owns it (see *Audio sources*). On
-    the master stage's audio chain or an output's (ADR-0080), the program stage's
-    `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
-    the filter on its host's block once that is ready (see *Audio routing*): on the
-    master bus's copy of the mixer's master chain, and on each other bus that feeds an
-    output (an output tap reads it) its copy on a host of that bus's own (ADR-0086).
-    A bus's copy delays its dry signal by the filter's latency while its host starts
-    and once the bus feeds no output. A collection holding one
-    loads before the scan describes its kind (the graph keeps such a filter verbatim),
-    and the filter is bypassed until then.
-  - **Not yet:** writing the plugin's own parameter changes and saved state back to the
-    filter's settings (the supervisor keeps the state for its restarts only, so a new
-    host after an engine restart starts from the plugin's defaults and the filter's
-    settings); a new mixer filter when a restarted plugin reports a new latency; the
-    plugin's editor; rescanning; and stopping a removed filter's host off the
-    `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
+Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
+--document-private-items --open`).
+
+- **Audio filters** (`filters.rs`,
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)): the `audio_filter` kinds,
+  their mapping onto `jstream-audio`'s kernels, and `Chain`, which keeps a chain's
+  filters in line with its owner's, sidechain keys included.
+- **CLAP plugins** (`plugins/`,
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the scan that adds
+  `clap/<plugin id>` filter kinds (`Engine::scan_clap_plugins`), `HostSupervisor`, which
+  keeps each filter's host process running, and `ClapFilter`, the filter on its host.
 - **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
   by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
@@ -315,75 +255,18 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
+Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
+--document-private-items --open`).
+
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
-  motion modifiers, turned into `jstream-anim`'s once when the shot is planned, are
-  evaluated each time a pass draws the item, at the frame's animation time, and added
-  to its placement, crop and opacity after any live value (`apply`: position, size,
-  rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
-  placement, crop rounded and never below 0, opacity kept within 0 and `MAX_OPACITY`, so a gain above 1 (#1101) stays one; a 3D model's drawn layer,
-  already placed in its pixels, stays put). An item whose effects run over the canvas
-  (ADR-0106) moves inside its canvas-sized layer, which stays over the canvas, also in
-  a transition, where that layer takes only the motion's opacity. The item's
-  stored values never change. A shot with motion anywhere (`Shot::moves`) changes with
-  time (`Shot::changes_with_time`), as a running transition does, so a preview stream
-  sends it each frame too. During a transition each track
-  carries both sides' motion (`TrackMotion`): a matched pair blends their offsets by
-  the eased progress, an appearing item moves by its new side's and a disappearing one
-  by its old side's. The `shown` clock starts when an item starts being drawn in any
-  pass of the program shot, a video mix's included: the engine keeps when each drawn
-  item appeared (`ShownSince`) and stamps it on each program shot it publishes
-  (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
-  modifier stays at its start there. The `triggered` clock (#1107) starts when
-  `item.trigger_motion` fires a modifier: the engine keeps when each item's modifiers
-  were last fired (`Fired`: all of them together, or one by ID, a modifier counting from
-  the later), forgets a fire after an hour (the longest an impulse runs), stamps the
-  fires on each program shot (`Shot::set_fired`) and plans the shot again, so the render
-  thread draws the fire from its next frame. A fire changes no `rev` and emits nothing;
-  a preview shot isn't stamped, so a `triggered` modifier adds nothing there. An item
-  with only `triggered` modifiers still counts as moving, so its shot draws each frame
-  while it waits to be fired.
-  A legacy placement's signed scale keeps its flip,
-  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
-  legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
-  `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
-  moves one only where every moved value is back within them (a shrinking modifier).
+  motion modifiers, turned into `jstream-anim`'s when the shot is planned.
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
-  modifier hears the program mix, a bus or a source (`Hearing`), as a `spectrum` source
-  with the same settings would. The live sources find what items' and keyframe
-  overrides' motion hears on each sync (`audio::heard_by_motion`, so those buses and
-  sources are fed as a scope source's are) and keep its scopes in `FilterAssets`
-  (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
-  (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
-  loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
-  scope is first heard, never while it is steady), running the FFT only for a scope a
-  `band` binding hears (`measure_levels` otherwise), and advances each modifier's
-  envelope by the tick's media time, per item and modifier ID, so every pass and mix of
-  the tick reads the same level. The follower names a meter by its scope's address and
-  measures through the shot's binding, never holding a scope itself, so no scope's last
-  reference drops on the render thread (R-RT-003). An item drawn through two lists that
-  share a modifier ID (a keyframe and its parent) shares one envelope, and the first
-  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
-  draw paths read by item and ID without allocating. A modifier with nothing heard, a
-  preview shot (no follower) and the program mix while no output runs read silence,
-  the modifier's `from`. A scene frame sheet follows those scopes itself, across its
-  pictures, so an audio modifier there hears the mix (#1189).
+  modifier hearing the program mix, a bus or a source.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
-  camera motion and follow camera, planned with the shot as its pass camera's
-  `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
-  box at its committed geometry, its crop, fit and flips, and the capture it shows). As a
-  pass draws, the follow camera glides after the pointer the capture reports
-  (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
-  springs of the follow-cursor mock, keeping the box filling the frame, and focuses where
-  it looks when the camera has a blur; camera motion is then added, clamped to the
-  camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
-  family), step once per frame time, and are dropped after 10 s undrawn. A transition
-  moves each end's camera the same way, so a Move into or out of a follow scene follows
-  it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
-  live-value channel carries (`LiveParams::with_zooms`); a follow camera takes the steps
-  asked for since it started. A shot whose camera moves changes with time.
+  camera motion and follow camera, planned with the shot.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -1711,13 +1594,14 @@ lists the master's and outputs' video filters with the rest, and `plan_stages` h
 each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
-`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+`image_mask`'s `image`, whose first frame is the mask, and `border`'s `frame`, the
+image of its 9-slice frame, #1294) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
 name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
-layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+layout (`jstream_render::lut_image`) or the mask or frame uploaded as straight sRGB. A reference
 kind keeps no state between frames, so a new load makes the filter again with the new
 image, and the old filter, which holds the old image, is retired through the cache. A
 file that can't be read or decoded is logged and its filter passes its input through
