@@ -250,6 +250,9 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                     ));
                 }
                 options.jtunnel.push(sender);
+                // The setup's own checks: the limit, and one address and port twice.
+                jstream_core::JtunnelSetup::new(options.jtunnel.clone())
+                    .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
             }
             "--log-dir" => {
                 let dir = value()?;
@@ -364,6 +367,11 @@ mod tests {
         assert!(
             error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-accept A@10.0.0.2:1").contains("twice")
         );
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-accept B@10.0.0.1:1")
+                .contains("both send from")
+        );
+        assert!(error("--jtunnel-accept A@[::1]:9000").contains("IPv4 only"));
     }
 
     /// ADR-0104 §1: network access is off unless `--lan` turns it on, on a fixed port.

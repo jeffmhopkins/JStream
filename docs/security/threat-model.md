@@ -690,7 +690,10 @@ somewhere it shouldn't.
   must be loopback, private IPv4 or link-local. It never announces itself and never
   sends audio or MIDI.
 - It drops and counts every datagram from outside those ranges, from an address it
-  didn't subscribe to, or that `jstream-jtunnel`'s parser refuses (fuzzed on its own).
+  didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
+  refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
+  (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
+  address and port, since datagrams are told apart by where they come from.
   Parsing and playout allocate nothing; a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
@@ -705,7 +708,11 @@ somewhere it shouldn't.
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
-same network who already targets this machine.
+same network who already targets this machine. The check is of the source address a
+datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN
+that can deliver a datagram with a spoofed private source, and guesses an accepted
+sender's address and port, gets past it. Binding only the interface that routes to the
+accepted senders would narrow that, and is still to come.
 
 <a id="gaps"></a>
 ## Known gaps
