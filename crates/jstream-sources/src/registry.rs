@@ -9,7 +9,7 @@ use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::image::ImageKind;
 use crate::media::MediaKind;
-use crate::midi::{CcKind, KeyboardKind, PadsKind, PianoRollKind};
+use crate::midi::{BeatKind, CcKind, KeyboardKind, PadsKind, PianoRollKind};
 use crate::model::ModelKind;
 use crate::scope::{SpectrumKind, WaveformKind};
 use crate::shape::ShapeKind;
@@ -29,10 +29,10 @@ impl Registry {
     /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
     /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
     /// `spectrum`, `youtube_chat` and the MIDI kinds (`midi_keyboard`, `midi_piano_roll`,
-    /// `midi_pads`, `midi_cc`) produce frames (`browser` and its `youtube_chat`
+    /// `midi_pads`, `midi_beat`, `midi_cc`) produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
     /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
-    /// capture card. `audio_input`, `desktop_audio` and `app_audio` are audio-only: the
+    /// capture card. `audio_input`, `desktop_audio`, `app_audio` and `network_audio` are audio-only: the
     /// engine records them, and `create` fails with [`SourceError::AudioOnly`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();
@@ -51,6 +51,7 @@ impl Registry {
         add(Box::new(KeyboardKind::new()));
         add(Box::new(PianoRollKind::new()));
         add(Box::new(PadsKind::new()));
+        add(Box::new(BeatKind::new()));
         add(Box::new(CcKind::new()));
         add(Box::<ModelKind>::default());
         add(Box::new(ShapeKind::new()));

@@ -2,14 +2,14 @@
 id = "ADR-0141"
 title = "The desktop app on Linux: Tauri on WebKitGTK, behind a feature"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0141: The desktop app on Linux: Tauri on WebKitGTK, behind a feature
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

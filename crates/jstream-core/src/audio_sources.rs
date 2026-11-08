@@ -107,6 +107,9 @@ pub(crate) struct Wanted {
     changed: Condvar,
     /// The audio sources' open inputs, for the routing.
     routed: Routed,
+    /// The JTunnel receiver `network_audio` sources record from, while the host has it
+    /// on (ADR-0123).
+    jtunnel: Mutex<Option<Arc<crate::jtunnel::Receiver>>>,
 }
 
 /// A bus monitor the program stage plays: the collection's monitor, and the mixer bus
@@ -118,6 +121,21 @@ pub(crate) struct WantedMonitor {
 }
 
 impl Wanted {
+    /// Sets the JTunnel receiver, or with `None` turns it off, and wakes the thread so
+    /// a `network_audio` source opens or closes now.
+    pub(crate) fn set_jtunnel(&self, receiver: Option<Arc<crate::jtunnel::Receiver>>) {
+        *lock(&self.jtunnel) = receiver;
+        // Under the state lock, so the thread can't miss the wake between its check
+        // and its wait.
+        let _guard = lock(&self.state);
+        self.changed.notify_all();
+    }
+
+    /// The JTunnel receiver, while it is on.
+    pub(crate) fn jtunnel_receiver(&self) -> Option<Arc<crate::jtunnel::Receiver>> {
+        lock(&self.jtunnel).clone()
+    }
+
     /// Brings the monitors to play in line with `monitors`, and wakes the program
     /// stage's thread when they changed. The routing calls it under the collection lock
     /// on every sync, and with none when its mixer goes.
@@ -498,6 +516,11 @@ enum Want {
     /// The audio input paired with the video device with this ID, or with the first one
     /// listed.
     Paired(Option<DeviceId>),
+    /// A network sender's stream, by name, held this long.
+    Network {
+        sender: String,
+        latency_ms: u32,
+    },
 }
 
 impl Want {
@@ -514,6 +537,14 @@ impl Want {
             } => Self::Target(AudioInputTarget::Input(DeviceId::new(device.clone()))),
             AudioTarget::Desktop => Self::Target(AudioInputTarget::DefaultOutputLoopback),
             AudioTarget::App { exe } => Self::App(exe.clone()),
+            AudioTarget::Network {
+                transport: jstream_sources::Transport::Jtunnel,
+                sender,
+                latency_ms,
+            } => Self::Network {
+                sender: sender.clone(),
+                latency_ms: *latency_ms,
+            },
         }
     }
 }
@@ -1230,6 +1261,9 @@ impl Open {
                 return self.open_live(id, live);
             }
             Want::Own(audio) => return self.open_own(key, audio),
+            Want::Network { sender, latency_ms } => {
+                return self.open_network(key, sender, *latency_ms);
+            }
             Want::Target(target) => (target.clone(), None),
             Want::App(exe) => {
                 let processes = match processes {
@@ -1276,6 +1310,46 @@ impl Open {
             control,
             drops,
             pid,
+            chain: Chain::default(),
+        })
+    }
+
+    /// Opens a network sender's stream (ADR-0122 §6): a mixer input in the format its
+    /// stream arrives in, fed by the JTunnel receiver's thread, opened muted and listed
+    /// for the routing as a device's is. Unavailable while the receiver is off, the
+    /// sender isn't accepted, or nothing has arrived from it yet.
+    fn open_network(&mut self, key: &Key, sender: &str, latency_ms: u32) -> Result<Live, String> {
+        let Some(receiver) = self.wanted.jtunnel_receiver() else {
+            return Err("receiving from JTunnel senders is off on this machine".into());
+        };
+        let format = receiver.input_format(sender)?;
+        let (producer, control) = self
+            .mixer
+            .add_input(format)
+            .map_err(|err| format!("mixer input: {err}"))?;
+        control.set_muted(true);
+        let stream = match receiver.open(sender, latency_ms, Box::new(producer)) {
+            Ok(stream) if stream.format() == format => stream,
+            Ok(_) => {
+                self.remove(control);
+                return Err(format!(
+                    "the JTunnel sender `{sender}` changed its rate while opening"
+                ));
+            }
+            Err(err) => {
+                self.remove(control);
+                return Err(err);
+            }
+        };
+        let drops = lock_ledger(&self.ledger).add(AudioInputDrops::new(control.clone()));
+        if let Key::Source(id) = key {
+            self.wanted.routed.insert(id.clone(), control.clone());
+        }
+        Ok(Live {
+            stream,
+            control,
+            drops,
+            pid: None,
             chain: Chain::default(),
         })
     }
