@@ -310,14 +310,25 @@ measured the same way on every machine (#1220).
   default (the alpha.5 bar) a run fails on any dropped frame or packet at any stage of
   `stats.tick`'s drop counts or the recording's own, a skipped render tick, a program
   frame over its budget, a recording under 98% of the program's frame rate, or a
-  switch without a frame sheet. `--gates
+  switch without a frame sheet. From `profile.get` (protocol 0.103,
+  [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)) it also fails
+  on any encoded stream's dropped or late frame (`streams`, outputs and preview streams
+  alike), the mixer's late block or skipped frame, an audio input's underrun or drop
+  (`mixer`), and a client view's placeholder, blank, skipped frame or decode error
+  (`views`; a view's reopens are listed, not gated, since a scene switch reopens the
+  canvas's stream). The view gates read what the clients connected to the engine
+  reported, such as the desktop app's canvas and projectors; with none, they pass, and
+  the summary says no client reported a view. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
-  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets` and
-  `failed_switches`, `min_fps_ratio` (the share of the program's rate, 0.98) and
-  `max_over_budget_pct` (0). An unknown field is a usage error.
+  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets`,
+  `failed_switches`, `stream_dropped_frames`, `stream_late_frames`,
+  `mixer_late_blocks`, `mixer_skipped_frames`, `mixer_underrun_frames`,
+  `mixer_dropped_frames`, `view_placeholders`, `view_blanks`, `view_skipped` and
+  `view_decode_errors` (each 0), `min_fps_ratio` (the share of the program's rate, 0.98)
+  and `max_over_budget_pct` (0). An unknown field is a usage error.
 - **Output.** It prints and writes `<dir>/summary.md`, a table per scenario of each
-  gate's measured value, limit and verdict, and writes `<dir>/report.json` with
+  gate's measured value, limit and verdict after a line per reported view, and writes `<dir>/report.json` with
   everything measured: the drops, the recording's frames, rate, bit rate and drops, the
   switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
   when one failed (the files are written either way). It exits 5 when a run couldn't

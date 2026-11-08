@@ -73,7 +73,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
   `scene.zoom_camera`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
-  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
+  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
@@ -160,7 +160,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -257,7 +257,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
-  queues frames applies ([Binary streams](#binary-streams)).
+  queues frames applies ([Binary streams](#binary-streams)); and `ViewCounts`, what a
+  client's view did with its pictures, with `check_view_label`, `MAX_VIEW_LABEL_CHARS`
+  and `MAX_SESSION_VIEWS` (`preview.report`, 0.103).
 
 <a id="contents-errors"></a>
 ## Contents: errors, IDs and numbers
@@ -322,7 +324,10 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.104 because a chord may end in the wheel, `WheelUp` or
 `WheelDown`, bound only to an action that takes steps (`Chord::WHEEL`,
 `Action::takes_steps`, [ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md)
-§3, a number the release queue set); 0.102 because the engine quarantines an effect-pack kind that runs
+§3, a number the release queue set); 0.103 because a client's views report back: the action
+`preview.report` (`ViewCounts`) and `profile.get`'s `views` (`ViewProfile`)
+([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md), a number the
+release queue set); 0.102 because the engine quarantines an effect-pack kind that runs
 too long on the GPU, before the OS resets the device, and says so in `gpu.effect_slow`
 (#349, [Effect quarantine](#quarantine), a number the release queue set); 0.101 because a
 collection has one blending space, `canvas.set_blending` and `state.get`'s `blending`,
@@ -1545,6 +1550,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
   mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
   inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Since 0.103, `views` lists what the clients' views did with their preview pictures, as
+  they reported it with `preview.report`
+  ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)): one
+  `ViewProfile` per view a session reported in the window, with the session's `client`
+  name and the `view` label (both third-party text), each `ViewCounts` count's growth
+  over the window (from zero for a view, or a restarted view, the window's start
+  doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
+  view whose session has ended stays while a window reaches back to its last report.
   Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
@@ -2742,6 +2755,20 @@ the JSON text messages of the same connection (0.20,
   `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
   while its stream is open ends the stream with the end frame "the source was
   deleted".
+- **Views report back.** A client that shows preview streams reports what each of its
+  *views* (the canvas, a projector picture) did with them: `preview.report {view,
+  counts}` (0.103, [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md))
+  carries the view's own label (1 to 64 characters, no control characters) and its
+  running `ViewCounts` since it opened, over every stream it has shown: frames
+  `received`, pictures `shown`, frames `skipped` to catch up, `decode_errors`, the
+  `placeholders` it showed where a picture belongs (its first included), the `blanks` it
+  showed when a stream ended or failed, and the streams it `reopens` after its first. A
+  client sends it about once a second while the counts change. Counts only grow; a
+  report whose counts fall below the view's last starts the view again (a reloaded
+  page). It serves only its session: nothing reaches the collection, no `rev` changes,
+  it is not in the activity log, and neither a hotkey nor a plugin may carry it. A
+  session reports at most 16 views; a bad label or a 17th view fails with
+  `invalid_argument` on `view`. `profile.get`'s `views` reads them back.
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

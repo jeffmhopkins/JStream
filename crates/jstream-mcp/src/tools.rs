@@ -116,12 +116,12 @@ pub(crate) const OPEN_WORLD: [&str; 2] = ["output", "source"];
 /// it back, and nothing stores it), a source's restart (ADR-0115: a page or file starts
 /// again, as a switch to a scene with `restart_on_show` restarts it), the keyframe a
 /// placed scene is drawn through (ADR-0116: another `scene.set_keyframe` puts it back,
-/// and nothing stores it), and a preview stream
-/// (which MCP can't receive anyway). A tool whose actions are all here
+/// and nothing stores it), a preview stream (which MCP can't receive anyway), and a
+/// view's report (ADR-0132: it only replaces the session's own counts). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 15] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 16] = [
     "audio.reset_loudness",
     "item.hide",
     "item.show",
@@ -129,6 +129,7 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 15] = [
     "item.trigger_motion",
     "live.cancel",
     "live.set",
+    "preview.report",
     "preview.subscribe",
     "preview.unsubscribe",
     "scene.set_keyframe",

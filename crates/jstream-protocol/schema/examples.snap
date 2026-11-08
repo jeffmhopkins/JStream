@@ -23,42 +23,43 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r24","call":{"kind":"action","action":{"type":"audio.reset_loudness"}}}
 {"type":"request","id":"r25","call":{"kind":"action","action":{"type":"preview.subscribe","channel":1,"max_width":960,"fps":30,"codecs":["h264","jpeg"]}}}
 {"type":"request","id":"r26","call":{"kind":"action","action":{"type":"preview.unsubscribe","channel":1}}}
-{"type":"request","id":"r27","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_2"}}}
-{"type":"request","id":"r28","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_1","preset_id":"tr_move"}}}
-{"type":"request","id":"r29","call":{"kind":"action","action":{"type":"studio.set_preview","scene_id":"scn_1"}}}
-{"type":"request","id":"r30","call":{"kind":"action","action":{"type":"scene.zoom_camera","scene_id":"scn_1","steps":-2}}}
-{"type":"request","id":"r31","call":{"kind":"action","action":{"type":"scene.set_keyframe","scene_id":"scn_panels","keyframe_id":"scn_panels_wide","preset_id":"tr_move"}}}
-{"type":"request","id":"r32","call":{"kind":"action","action":{"type":"scene.set_keyframe","scene_id":"scn_panels"}}}
-{"type":"request","id":"r33","call":{"kind":"action","action":{"type":"pairing.start"}}}
-{"type":"request","id":"r34","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
-{"type":"request","id":"r35","call":{"kind":"action","action":{"type":"ui_settings.set","key":"workspace.dock","value":{"current":"Live","version":1}}}}
-{"type":"request","id":"r36","call":{"kind":"action","action":{"type":"plugin.install","plugin_id":"plg_1","path":"/home/me/plugins/chat-scenes","grant":{"classes":["read","edit","live"],"hosts":["https://api.example.com:443"],"folders":["/home/me/clips"]}}}}
-{"type":"request","id":"r37","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
-{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
-{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"effect.enable","kind_id":"fx/blur"}}}
-{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"codec.download","download_id":"openh264"}}}
-{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"codec.delete","download_id":"openh264"}}}
-{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
-{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
-{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
-{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
-{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
-{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"collection.open","path":"C:/Users/me/Videos/Show/show.json"}}}
-{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"collection.new","path":"/home/me/shows/talk.json"}}}
-{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"collection.save_as","path":"D:/Projects/show copy.json"}}}
-{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
-{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
-{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
-{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
-{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
-{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
-{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
-{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
-{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
-{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r60","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
-{"type":"request","id":"r61","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r62","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
+{"type":"request","id":"r27","call":{"kind":"action","action":{"type":"preview.report","view":"projector:program","counts":{"received":300,"shown":299,"skipped":1,"decode_errors":0,"placeholders":1,"blanks":0,"reopens":0}}}}
+{"type":"request","id":"r28","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_2"}}}
+{"type":"request","id":"r29","call":{"kind":"action","action":{"type":"scene.switch","scene_id":"scn_1","preset_id":"tr_move"}}}
+{"type":"request","id":"r30","call":{"kind":"action","action":{"type":"studio.set_preview","scene_id":"scn_1"}}}
+{"type":"request","id":"r31","call":{"kind":"action","action":{"type":"scene.zoom_camera","scene_id":"scn_1","steps":-2}}}
+{"type":"request","id":"r32","call":{"kind":"action","action":{"type":"scene.set_keyframe","scene_id":"scn_panels","keyframe_id":"scn_panels_wide","preset_id":"tr_move"}}}
+{"type":"request","id":"r33","call":{"kind":"action","action":{"type":"scene.set_keyframe","scene_id":"scn_panels"}}}
+{"type":"request","id":"r34","call":{"kind":"action","action":{"type":"pairing.start"}}}
+{"type":"request","id":"r35","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
+{"type":"request","id":"r36","call":{"kind":"action","action":{"type":"ui_settings.set","key":"workspace.dock","value":{"current":"Live","version":1}}}}
+{"type":"request","id":"r37","call":{"kind":"action","action":{"type":"plugin.install","plugin_id":"plg_1","path":"/home/me/plugins/chat-scenes","grant":{"classes":["read","edit","live"],"hosts":["https://api.example.com:443"],"folders":["/home/me/clips"]}}}}
+{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
+{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
+{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"effect.enable","kind_id":"fx/blur"}}}
+{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"codec.download","download_id":"openh264"}}}
+{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"codec.delete","download_id":"openh264"}}}
+{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
+{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
+{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
+{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
+{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
+{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"collection.open","path":"C:/Users/me/Videos/Show/show.json"}}}
+{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"collection.new","path":"/home/me/shows/talk.json"}}}
+{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"collection.save_as","path":"D:/Projects/show copy.json"}}}
+{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
+{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
+{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
+{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
+{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
+{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
+{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
+{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
+{"type":"request","id":"r60","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r61","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
+{"type":"request","id":"r62","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r63","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -142,7 +143,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"pack.list","packs":[{"id":"glow","folder":"glow","kinds":["glow/ramp"],"loaded":true,"written_by":"claude-desktop"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"values.list","values":[{"name":"counter.a","value":2},{"name":"status.text","value":"On air"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"pack.read","files":[{"path":"effect.toml","size":32,"digest":"af1349b9f5f9a1a6a0404dea36dcc9499bcb25c9adc112b7cc9a93cae41f3262","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","size":8,"digest":"6c63b9b2c6b1cca5d8f7a1d2a9a7e5e6e8f8a1a2b3c4d5e6f708192a3b4c5d6e"}]}}}
-{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"profile.get","seconds":5.0,"frame_budget_ms":33.333,"gpu_timing":false,"thread_cpu":true,"drawers":[{"drawer":"program","frames":300,"frame_ms":9.5,"frame_p95_ms":12.25,"frame_max_ms":21.0,"over_budget":2,"skipped":1,"phases":{"uploads_ms":1.25,"captures_ms":0.5,"chains_ms":5.5,"passes_ms":1.0,"finish_ms":1.25}}],"units":[{"drawer":"program","unit":{"type":"item_effects","scene_id":"scn_1","item_id":"itm_1"},"frames":300,"ms":4.0,"recent_max_ms":6.5,"share":0.42},{"drawer":"program","unit":{"type":"upload","source_id":"src_browser"},"frames":150,"ms":1.5,"recent_max_ms":2.0,"share":0.08},{"drawer":"preview","unit":{"type":"capture","source_id":"src_display"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"source_chain","source_id":"src_shader"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"scene_chain","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"placed_chain","source_id":"src_scene","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"scene_pass","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"composite"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"master_chain"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"output_chain","output_id":"out_yt"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125}],"sources":[{"source_id":"src_wave","paints":300,"paint_ms":0.75,"looks":300,"look_ms":0.01,"build_ms":3.0}],"plan":{"plans":310,"ms":0.2,"recent_max_ms":1.5},"process_cpu_pct":85.0,"threads":[{"name":"jstream-render","count":1,"cpu_pct":48.0},{"remote_name":"GPU driver worker","count":2,"cpu_pct":6.5}],"streams":[{"stream":{"type":"output","output_id":"out_yt"},"fps":30.0,"frames_in":150,"encoded":149,"frames_out":148,"dropped":2,"late":3,"encode_ms":4.5,"kbps":6210,"target_kbps":6160},{"stream":{"type":"preview","channel":1,"scene_id":"scn_2"},"fps":15.0,"frames_in":75,"encoded":75,"frames_out":75,"dropped":0,"late":0,"encode_ms":2.0,"kbps":1700,"target_kbps":1728}],"mixer":{"blocks":234,"late_blocks":1,"block_max_ms":22.5,"block_ms":21.333,"skipped_frames":0,"underrun_frames":480,"dropped_frames":0}}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"profile.get","seconds":5.0,"frame_budget_ms":33.333,"gpu_timing":false,"thread_cpu":true,"drawers":[{"drawer":"program","frames":300,"frame_ms":9.5,"frame_p95_ms":12.25,"frame_max_ms":21.0,"over_budget":2,"skipped":1,"phases":{"uploads_ms":1.25,"captures_ms":0.5,"chains_ms":5.5,"passes_ms":1.0,"finish_ms":1.25}}],"units":[{"drawer":"program","unit":{"type":"item_effects","scene_id":"scn_1","item_id":"itm_1"},"frames":300,"ms":4.0,"recent_max_ms":6.5,"share":0.42},{"drawer":"program","unit":{"type":"upload","source_id":"src_browser"},"frames":150,"ms":1.5,"recent_max_ms":2.0,"share":0.08},{"drawer":"preview","unit":{"type":"capture","source_id":"src_display"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"source_chain","source_id":"src_shader"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"scene_chain","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"placed_chain","source_id":"src_scene","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"scene_pass","scene_id":"scn_2"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"composite"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"master_chain"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125},{"drawer":"preview","unit":{"type":"output_chain","output_id":"out_yt"},"frames":30,"ms":0.25,"recent_max_ms":0.5,"share":0.01,"gpu_ms":0.125}],"sources":[{"source_id":"src_wave","paints":300,"paint_ms":0.75,"looks":300,"look_ms":0.01,"build_ms":3.0}],"plan":{"plans":310,"ms":0.2,"recent_max_ms":1.5},"process_cpu_pct":85.0,"threads":[{"name":"jstream-render","count":1,"cpu_pct":48.0},{"remote_name":"GPU driver worker","count":2,"cpu_pct":6.5}],"streams":[{"stream":{"type":"output","output_id":"out_yt"},"fps":30.0,"frames_in":150,"encoded":149,"frames_out":148,"dropped":2,"late":3,"encode_ms":4.5,"kbps":6210,"target_kbps":6160},{"stream":{"type":"preview","channel":1,"scene_id":"scn_2"},"fps":15.0,"frames_in":75,"encoded":75,"frames_out":75,"dropped":0,"late":0,"encode_ms":2.0,"kbps":1700,"target_kbps":1728}],"mixer":{"blocks":234,"late_blocks":1,"block_max_ms":22.5,"block_ms":21.333,"skipped_frames":0,"underrun_frames":480,"dropped_frames":0},"views":[{"client":"jstream-ui","view":"canvas","counts":{"received":150,"shown":148,"skipped":2,"decode_errors":0,"placeholders":1,"blanks":0,"reopens":1},"received_fps":30.0,"shown_fps":29.6}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"font.list","fonts":[{"remote_family":"Inter","remote_style":"Bold","path":"/usr/share/fonts/inter/Inter-Bold.otf"},{"remote_family":"Inter","remote_style":"Regular","path":"/usr/share/fonts/inter/Inter-Regular.otf"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"live.list","gestures":[{"gesture_id":"drag_1","client_id":"cli_7","values":[{"type":"item.set_geometry","item_id":"itm_1","geometry":{"center":{"x":1600.0,"y":900.0},"size":{"width":480.0,"height":270.0},"fit_mode":"fit","rotation_deg":0.0,"tilt_deg":0.0,"turn_deg":0.0,"depth_px":0.0}},{"type":"item.set_crop","item_id":"itm_2","crop":{"left":4,"top":0,"right":4,"bottom":0}}]}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"youtube.status","auth":"signed_in"}}}
