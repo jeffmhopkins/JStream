@@ -1,12 +1,14 @@
-//! The Properties dialog (spec-workspace.md 6.2): a source's name and settings on the
-//! left, its filters on the right. The settings form is the Inspector's (`properties.rs`),
+//! The Properties dialog (spec-workspace.md 6.2), one dialog for a source and its
+//! filters (#1219): on the left a Properties entry and the source's filter chains, on
+//! the right the entry picked, the source's name and settings or a filter's settings
+//! ([`PropertiesAndFilters`]). The settings form is the one filters use (`properties.rs`),
 //! here editing a draft: each setting the kind marks `live` shows on output as it is
 //! edited, as a live value of the dialog's gesture (ADR-0091). OK sends what the user
 //! changed since it opened as one batch, ending the gesture, so one undo step; Cancel,
 //! Escape and the backdrop drop the draft and cancel the gesture, leaving nothing. Defaults
 //! empties the draft, so OK resets each value the dialog opened with. Filter changes
-//! apply at once, as in the prototype; the
-//! filter rows and dialogs are the Filters panel's (`filters.rs`). A display, window
+//! apply at once, and Cancel puts back each one the dialog sent ([`FilterUndo`]); the
+//! filter rows, pane and dialogs are the Filters panel's (`filters.rs`). A display, window
 //! or webcam source shows a live picture of what its edited settings capture above the
 //! form (`device_preview.rs`).
 //!
@@ -17,12 +19,12 @@ use crate::dialog::Modal;
 use crate::icons::Icon;
 use crate::panels::add_source::type_label;
 use crate::panels::device_preview::{self, DevicePreview};
-use crate::panels::filters::{Chains, FilterDialogs, chains_of};
+use crate::panels::filters::{FilterUndo, PropertiesAndFilters, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, Edit, FilterOwner, GestureId, KindDescriptor, Settings,
-    SourceId, SourceKind,
+    Action, Batch, Call, CallResult, Edit, FilterId, FilterOwner, GestureId, KindDescriptor,
+    Settings, SourceId, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -140,6 +142,12 @@ fn PropertiesBody(
     };
     let (type_name, icon) = type_label(&kind_id).unwrap_or(("Source", "image"));
     let (picture, audio) = chains_of(&source);
+    // Filter edits apply at once; Cancel puts back each one the dialog sent.
+    let owner = FilterOwner::Source {
+        source_id: source_id.clone(),
+    };
+    let undo = FilterUndo::begin(std::slice::from_ref(&owner));
+    let selected = RwSignal::new(None::<FilterId>);
 
     // What the dialog opened on: OK sends only what the user changed from it, so an
     // edit another client made meanwhile stays (ADR-0032, last writer wins per field).
@@ -328,8 +336,18 @@ fn PropertiesBody(
         }
     };
 
+    // Cancel: the draft and its gesture go (on cleanup), and every filter edit is put
+    // back.
+    let cancel = move || {
+        let edits = undo.restore();
+        if let (false, Some(s)) = (edits.is_empty(), session.get()) {
+            studio.apply(&s, edits);
+        }
+        close();
+    };
+
     view! {
-        <Modal label="Properties" class="props-dialog" cancel=close>
+        <Modal label="Properties" class="props-dialog" cancel=cancel>
             <div class="modal-header">
                 <div class="props-head">
                     <Icon name=icon size=20 />
@@ -338,56 +356,40 @@ fn PropertiesBody(
                         <span class="modal-sub">{subtitle}</span>
                     </div>
                 </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>
                     "×"
                 </button>
             </div>
-            <div class="props-body">
-                <div class="props-settings">
-                    {preview}
-                    <label class="field props-name">
-                        <span class="label">"Name"</span>
-                        <input type="text" bind:value=name />
-                    </label>
-                    {form}
-                    {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
-                </div>
-                <FilterSide source_id=source_id.clone() video=picture audio=audio />
-            </div>
+            <PropertiesAndFilters
+                owner=owner
+                video=picture
+                audio=audio
+                selected=selected
+                note="everywhere this source appears"
+            >
+                {preview}
+                <label class="field props-name">
+                    <span class="label">"Name"</span>
+                    <input type="text" bind:value=name />
+                </label>
+                {form}
+                {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
+            </PropertiesAndFilters>
             <div class="modal-footer">
-                <button type="button" class="secondary props-defaults" on:click=defaults>"Defaults"</button>
-                <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
+                <button
+                    type="button"
+                    class="secondary props-defaults"
+                    hidden=move || selected.with(Option::is_some)
+                    on:click=defaults
+                >
+                    "Defaults"
+                </button>
+                <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
                 <button type="button" class="primary" data-primary on:click=ok>"OK"</button>
             </div>
         </Modal>
     }
     .into_any()
-}
-
-/// The source's filter chains, each change sent at once, and the Add filter button.
-#[component]
-fn FilterSide(source_id: SourceId, video: bool, audio: bool) -> impl IntoView {
-    let dialogs = expect_context::<FilterDialogs>();
-    let add = {
-        let source_id = source_id.clone();
-        move |_| {
-            dialogs.add(FilterOwner::Source {
-                source_id: source_id.clone(),
-            })
-        }
-    };
-    let owner = FilterOwner::Source { source_id };
-    view! {
-        <div class="props-side">
-            <div class="props-side-head">
-                <span class="props-side-title">"Filters"</span>
-                <span class="props-side-note">"everywhere this source appears"</span>
-            </div>
-            <Chains owner=owner video=video audio=audio />
-            <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
-            <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
-        </div>
-    }
 }
 
 #[cfg(test)]

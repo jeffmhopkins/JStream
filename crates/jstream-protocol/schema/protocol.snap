@@ -361,6 +361,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+          "properties": {
+            "counts": {
+              "$ref": "#/$defs/ViewCounts",
+              "description": "Its running totals."
+            },
+            "type": {
+              "const": "preview.report",
+              "type": "string"
+            },
+            "view": {
+              "description": "The view's label, the client's own.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "view",
+            "counts"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
           "properties": {
             "preset_id": {
@@ -833,7 +856,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
           "properties": {
             "kind_id": {
               "description": "The kind, `<pack>/<effect>`.",
@@ -851,7 +874,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Scans the CLAP search folders again (0.95, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+          "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
           "properties": {
             "type": {
               "const": "plugin.clap_rescan",
@@ -1071,6 +1094,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
+            },
+            "network": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NetworkAccess"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where a device on the network reaches the host, while the host's network\nlistener is on ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md),\n0.97). Absent otherwise: then only a device on this machine can pair."
             },
             "type": {
               "const": "pairing.start",
@@ -1415,8 +1449,54 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "Bezier": {
+      "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+      "properties": {
+        "x1": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The first control point's time."
+        },
+        "x2": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The second control point's time."
+        },
+        "y1": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The first control point's progress."
+        },
+        "y2": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The second control point's progress."
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "type": "object"
+    },
+    "Binding": {
+      "description": "One binding, as `state.get`, `delete.plan` and a batch result report it.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "The action request it runs, as `binding.set` bound it. Read as plain JSON, so a\nclient older than an action type still reads the collection: it keeps the\nbinding and can't run it. [`Binding::action`] parses it."
+        },
+        "trigger": {
+          "$ref": "#/$defs/Trigger",
+          "description": "What fires it."
+        }
+      },
+      "required": [
+        "trigger",
+        "action"
+      ],
+      "type": "object"
+    },
     "BlendMode": {
-      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
       "oneOf": [
         {
           "const": "normal",
@@ -1462,15 +1542,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "exclusion",
           "description": "Like difference, with lower contrast.",
           "type": "string"
-        },
+        }
+      ]
+    },
+    "Blending": {
+      "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+      "oneOf": [
         {
-          "const": "normal_srgb",
-          "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+          "const": "srgb",
+          "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
           "type": "string"
         },
         {
-          "const": "additive_srgb",
-          "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+          "const": "linear",
+          "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
           "type": "string"
         }
       ]
@@ -1885,6 +1970,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "const": "batch",
               "type": "string"
             },
+            "removed_bindings": {
+              "description": "The controller bindings the batch removed the same way (0.96), in the order\nit removed them. Omitted when there are none, and missing (from a server\nolder than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "removed_hotkeys": {
               "description": "The hotkey bindings the batch removed because their action named an object it\ndeleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores\nthem. Omitted when there are none, and missing (from a server older than 0.25)\nparses as empty.",
               "items": {
@@ -1983,6 +2075,56 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         }
       ]
+    },
+    "CameraControlInfo": {
+      "description": "One camera control a video capture device offers, in a `capture.targets` result:\nwhat a `webcam` source's `camera_controls` setting takes for it (since 0.105).\nValues are in the platform's own units, from `min` to `max` in steps of `step`.",
+      "properties": {
+        "auto": {
+          "description": "Whether the device can set it itself, and is now: omitted when it can't, else\n`true` while it does.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "default": {
+          "description": "The device's default value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "max": {
+          "description": "The highest value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "min": {
+          "description": "The lowest value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "name": {
+          "description": "The control's name, the key it takes in the setting: `brightness`, `contrast`,\n`saturation`, `hue`, `sharpness`, `gamma`, `gain`, `white_balance`,\n`backlight_compensation`, `power_line_frequency`, `exposure`, `focus`, `zoom`,\n`pan`, `tilt` or `iris`. A later engine may list others.",
+          "type": "string"
+        },
+        "step": {
+          "description": "The step between values; at least 1.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "value": {
+          "description": "The value now; while `auto` is `true`, as the device last reported it.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "min",
+        "max",
+        "step",
+        "default",
+        "value"
+      ],
+      "type": "object"
     },
     "CameraFollow": {
       "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
@@ -2375,15 +2517,82 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
-    "CaptureTargetInfo": {
-      "description": "One display or window in a `capture.targets` result.",
+    "CaptureFormatInfo": {
+      "description": "One format a video capture device captures in, in a `capture.targets` result: the\nvalues a `webcam` source's `capture_format` settings take to pick it (since 0.90).",
       "properties": {
+        "fps": {
+          "description": "Frames per second, to two decimal places (`29.97`).",
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "description": "The frame size in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pixel_format": {
+          "description": "How the device encodes its frames, as a `pixel_format` setting names it:\n`mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.",
+          "type": "string"
+        },
+        "width": {
+          "description": "The frame size in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps",
+        "pixel_format"
+      ],
+      "type": "object"
+    },
+    "CaptureFormatPart": {
+      "description": "Which part of a video capture device's format a [`ParamType::CaptureFormat`]\nparameter picks.",
+      "oneOf": [
+        {
+          "const": "resolution",
+          "description": "The frame size: `<width>x<height>`, or `\"\"` for the engine's choice.",
+          "type": "string"
+        },
+        {
+          "const": "fps",
+          "description": "Frames per second: a number from 0 to [`MAX_CAPTURE_FPS`], `0` for the engine's\nchoice.",
+          "type": "string"
+        },
+        {
+          "const": "pixel_format",
+          "description": "How the device encodes its frames: one of [`PIXEL_FORMATS`], or `\"\"` for the\nengine's choice.",
+          "type": "string"
+        }
+      ]
+    },
+    "CaptureTargetInfo": {
+      "description": "One display, window or video capture device in a `capture.targets` result.",
+      "properties": {
+        "controls": {
+          "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.105). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
+          "items": {
+            "$ref": "#/$defs/CameraControlInfo"
+          },
+          "type": "array"
+        },
+        "formats": {
+          "description": "For a device, the formats it captures in that the engine reads, in the order the\ndevice lists them (since 0.90). Omitted when empty: always for a display or a\nwindow, and for a device whose formats couldn't be read.",
+          "items": {
+            "$ref": "#/$defs/CaptureFormatInfo"
+          },
+          "type": "array"
+        },
         "kind": {
           "$ref": "#/$defs/CaptureTargetKind",
-          "description": "Whether it is a display or a window: the kind of source that captures it."
+          "description": "Whether it is a display, a window or a device: the kind of source that captures\nit."
         },
         "name": {
-          "description": "A name to show: the display's name, or the window's title (or, on macOS, its\napplication's name when it has no usable title). A window's name is set by the\napplication that owns the window, so it is third-party text (ADR-0059,\nADR-0085): data to show, never instructions. The field isn't `remote_`-prefixed,\nso its name doesn't mark it.",
+          "description": "A name to show: the display's name, the window's title (or, on macOS, its\napplication's name when it has no usable title), or the device's name. A window's\nname is set by the application that owns the window, and a device's by its\ndriver, so they are third-party text (ADR-0059, ADR-0085): data to show, never\ninstructions. The field isn't `remote_`-prefixed, so its name doesn't mark it.",
           "type": "string"
         },
         "primary": {
@@ -2402,7 +2611,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its size in pixels now, when the OS reports it without capturing."
         },
         "target": {
-          "description": "Its capture target ID, the value of that source's `target` setting.",
+          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam` source's `device` setting.",
           "type": "string"
         }
       },
@@ -2424,6 +2633,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "window",
           "description": "One top-level window, captured by a `window` source.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.90.",
           "type": "string"
         }
       ]
@@ -2505,7 +2719,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "Chord": {
-      "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
+      "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
       "type": "string"
     },
     "ClapFailed": {
@@ -3085,6 +3299,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/SceneId",
           "description": "The keyframe scene that held the override."
         },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyframeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The item's timing in transitions into this keyframe: its delay, easing and\nduration there (since 0.99, ADR-0129). Never an empty timing: clearing every\nfield removes the override."
+        },
         "transform": {
           "anyOf": [
             {
@@ -3111,7 +3336,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "Easing": {
-      "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+      "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
       "oneOf": [
         {
           "const": "ease_in_out",
@@ -3124,6 +3349,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         {
+          "const": "ease_in",
+          "description": "Cubic ease-in: slow at the start, fast at the end.",
+          "type": "string"
+        },
+        {
           "const": "linear",
           "description": "Constant speed.",
           "type": "string"
@@ -3132,6 +3362,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "spring",
           "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
           "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "A step: the value holds its start until the end, then takes its end at once.",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+          "properties": {
+            "cubic_bezier": {
+              "$ref": "#/$defs/Bezier"
+            }
+          },
+          "required": [
+            "cubic_bezier"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3293,6 +3541,34 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "item_id",
             "motion"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in the parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "timing": {
+              "$ref": "#/$defs/KeyframeTiming",
+              "description": "Its timing in transitions into the keyframe."
+            },
+            "type": {
+              "const": "item.set_timing",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "timing"
           ],
           "type": "object"
         },
@@ -4160,6 +4436,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+          "properties": {
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "description": "The space."
+            },
+            "type": {
+              "const": "canvas.set_blending",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "blending"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.\nIts stream key is removed from the credential store, so an output created later\nwith the same ID doesn't inherit it. Hotkey bindings whose action names the output\nare removed with it (ADR-0040 §3). Inverse: `output.create` with its kind,\n`output.set_encoder` if it had a profile, then `hotkey.set` for each removed\nbinding; it can't restore the key: set it again with `output.set_key`.",
           "properties": {
             "output_id": {
@@ -4645,7 +4939,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, a coordinate past the\ndrawable bound, or a camera on a keyframe scene whose parent has none. Removing a\nparent's camera also removes its keyframe scenes' overrides. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
+          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, or a coordinate past\nthe drawable bound. A keyframe of a 2D scene may have a camera of its own\n(ADR-0128). Removing a parent's camera also removes its keyframe scenes'\noverrides; a removal on a parent that has none removes nothing. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
           "properties": {
             "camera": {
               "anyOf": [
@@ -4908,6 +5202,73 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "chord"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,\nso it shows in each label's action group beside the keyframes and timelines that\ncarry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't\nbound, `not_found` for a label that doesn't exist, and `invalid_argument` on\n`labels` for one listed twice. `hotkey.clear` drops the labels with the binding,\nand its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)\nstarts with none. Inverse: `hotkey.set_labels` with the old set.",
+          "properties": {
+            "chord": {
+              "$ref": "#/$defs/Chord",
+              "description": "The bound chord."
+            },
+            "labels": {
+              "description": "Its labels; empty for none.",
+              "items": {
+                "$ref": "#/$defs/LabelId"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "hotkey.set_labels",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "chord",
+            "labels"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound\n(rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Inverse: `binding.clear`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action",
+              "description": "The action request it runs, checked as an `action` call is."
+            },
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "What fires it."
+            },
+            "type": {
+              "const": "binding.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that\nisn't bound. Inverse: `binding.set` with its action.",
+          "properties": {
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "The trigger to unbind."
+            },
+            "type": {
+              "const": "binding.clear",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger"
           ],
           "type": "object"
         },
@@ -5634,6 +5995,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         {
+          "const": "binding",
+          "description": "A controller binding (0.96), named by its trigger as `Display` writes it, such as\n`MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,\nso a client older than 0.96, which sends none, never reads it.",
+          "type": "string"
+        },
+        {
           "const": "plugin",
           "description": "An installed plugin (0.35). Only an error answering a `plugin.*` action names it,\nso a client older than 0.35, which sends none, never reads it.",
           "type": "string"
@@ -6342,6 +6708,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "An effect-pack kind ran too long on the program stage's GPU (0.102, #349): its\npass took more than half the frame budget in 30 frames running, as timestamp\nqueries measure it where the GPU has them. The engine quarantines it before the\nOS resets a device it hangs, as after a device loss (`gpu.device_lost`): its\nfilters are bypassed until a person re-enables it (`effect.enable`), and a kind\nblamed a second time in a run quarantines its whole pack. Runtime state: a client\nthat misses it sees the quarantine in `kind.list`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind that ran too long.",
+              "type": "string"
+            },
+            "limit_us": {
+              "description": "The limit it ran over, half the frame budget, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this quarantined, ordered by ID: the slow one, or every kind of its\npack when the pack was blamed before in this run. Empty when its pack was\nunloaded meanwhile.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "took_us": {
+              "description": "Its pass's GPU time in the last of those frames, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "gpu.effect_slow",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id",
+            "took_us",
+            "limit_us"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,\nsince 0.87): never once a frame. Playing is studio state, so it carries no `rev`.",
           "properties": {
             "change": {
@@ -6954,6 +7360,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         "chord": {
           "$ref": "#/$defs/Chord",
           "description": "The chord."
+        },
+        "labels": {
+          "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, as\n`hotkey.set_labels` sets them. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/LabelId"
+          },
+          "type": "array"
         }
       },
       "required": [
@@ -7018,6 +7431,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "spring",
           "description": "[`Easing::Spring`].",
           "type": "string"
+        },
+        {
+          "const": "ease_in",
+          "description": "[`Easing::EaseIn`] (since 0.99).",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "[`Easing::Hold`] (since 0.99).",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "[`Easing::CubicBezier`] (since 0.99).",
+          "properties": {
+            "cubic_bezier": {
+              "$ref": "#/$defs/Bezier"
+            }
+          },
+          "required": [
+            "cubic_bezier"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7232,6 +7668,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The overridden opacity, from 0 to [`MAX_OPACITY`](crate::MAX_OPACITY)."
         },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyframeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The item's timing in transitions into this keyframe: its delay, easing and\nduration there (since 0.99, ADR-0129). Never an empty timing: clearing every\nfield removes the override."
+        },
         "transform": {
           "anyOf": [
             {
@@ -7308,6 +7755,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Glide",
           "default": "auto",
           "description": "Whether it may pair in a `move` transition."
+        }
+      },
+      "type": "object"
+    },
+    "KeyframeTiming": {
+      "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+      "properties": {
+        "delay_ms": {
+          "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemEasing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its easing in place of its own."
         }
       },
       "type": "object"
@@ -7410,7 +7892,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         "quarantined": {
-          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,\n`gpu.effect_slow`): its filters are bypassed until a person re-enables it\n(`effect.enable`). Omitted when `false`.",
           "type": "boolean"
         },
         "version": {
@@ -7459,6 +7941,98 @@ source: crates/jstream-protocol/src/fixtures.rs
         "label_id",
         "name",
         "color"
+      ],
+      "type": "object"
+    },
+    "LabelMembers": {
+      "description": "Everything that carries one label (ADR-0133): its action group, as `label.members`\nreports it. Each list is omitted when empty.",
+      "properties": {
+        "hotkeys": {
+          "description": "The hotkey bindings carrying it, ordered by chord, each with its action.",
+          "items": {
+            "$ref": "#/$defs/HotkeyBinding"
+          },
+          "type": "array"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelInfo",
+          "description": "The label."
+        },
+        "scenes": {
+          "description": "The scenes carrying it, keyframe scenes among them, in display order.",
+          "items": {
+            "$ref": "#/$defs/LabelledScene"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "description": "The sources carrying it, ordered by ID.",
+          "items": {
+            "$ref": "#/$defs/SourceId"
+          },
+          "type": "array"
+        },
+        "timelines": {
+          "description": "The timelines carrying it, ordered by ID, each with the scene that holds it.",
+          "items": {
+            "$ref": "#/$defs/LabelledTimeline"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "type": "object"
+    },
+    "LabelledScene": {
+      "description": "A scene in a [`LabelMembers`]: its ID and name, and for a keyframe scene its parent.",
+      "properties": {
+        "name": {
+          "description": "Its display name.",
+          "type": "string"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene."
+        },
+        "variant_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SceneId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The scene it is a keyframe of; omitted for a scene that isn't one."
+        }
+      },
+      "required": [
+        "scene_id",
+        "name"
+      ],
+      "type": "object"
+    },
+    "LabelledTimeline": {
+      "description": "A timeline in a [`LabelMembers`]: its ID and name, and the scene that holds it.",
+      "properties": {
+        "name": {
+          "description": "Its display name; omitted when empty.",
+          "type": "string"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene that holds it."
+        },
+        "timeline_id": {
+          "$ref": "#/$defs/TimelineId",
+          "description": "The timeline."
+        }
+      },
+      "required": [
+        "timeline_id",
+        "scene_id"
       ],
       "type": "object"
     },
@@ -8110,6 +8684,27 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "NetworkAccess": {
+      "description": "How a device on the network reaches the host's network listener (ADR-0104, 0.97):\nwhat the host shows beside a pairing code.",
+      "properties": {
+        "fingerprint": {
+          "description": "The SHA-256 fingerprint of the listener's certificate, as `AB:CD:…` (32 bytes in\nupper-case hex, colon-separated), the way a browser's certificate viewer writes\nit. The person compares it with the one the device's browser shows before they\npair, and again whenever a paired device warns about the certificate\n([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)).",
+          "type": "string"
+        },
+        "urls": {
+          "description": "The listener's addresses, one per name and address its certificate carries, as\n`https://<name>:<port>/`. The device opens one of them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls",
+        "fingerprint"
+      ],
+      "type": "object"
+    },
     "OutputHealth": {
       "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
       "oneOf": [
@@ -8380,6 +8975,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "motion",
           "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+          "type": "string"
+        },
+        {
+          "const": "timing",
+          "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
           "type": "string"
         }
       ]
@@ -8761,6 +9361,47 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "kind",
             "max_len"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "One part of the format a video capture device is opened in, picked from the\nformats `capture.targets` lists for the device that parameter `target` names, so\na UI can offer those. Since 0.90. Its value is `part`'s:\n[`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),\n[`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]\none of [`PIXEL_FORMATS`]. Its default, `\"\"` or `0`, leaves that part to the\nengine.",
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/CaptureFormatPart",
+              "description": "Which part of the format."
+            },
+            "target": {
+              "description": "The ID of the parameter naming the device, a\n[`ParamType::CaptureTarget`] of kind `device`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "capture_format",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "part",
+            "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The camera controls set on a video capture device (exposure, focus, white\nbalance and the like), each picked from the controls `capture.targets` lists\nfor the device that parameter `target` names, so a UI can offer those with their\nranges. Since 0.105. Its value is an object from a control's `name` to an\ninteger, which sets it by hand, or `\"auto\"`, which hands it to the device; a\ncontrol not in the object is left as the device has it. Its default is `{}`.",
+          "properties": {
+            "target": {
+              "description": "The ID of the parameter naming the device, a\n[`ParamType::CaptureTarget`] of kind `device`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "camera_controls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "target"
           ],
           "type": "object"
         }
@@ -10178,7 +10819,25 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the displays and windows the engine can capture now: what a `display` or\n`window` source's `target` setting can name. They are runtime state, not\ncollection state, so the result carries no `rev`, and a window closed since may\nstill be named by a source. Fails with `action_failed` when the engine has no\ncapture backend, or the OS refuses to list them.",
+          "description": "Lists everything that carries a label (ADR-0133, since 0.100): its scenes,\nkeyframe scenes among them, its sources, its hotkey bindings with their actions,\nand its timelines, so a client or an agent sees a label's action group in one\ncall. `not_found` for a label that doesn't exist.",
+          "properties": {
+            "label_id": {
+              "$ref": "#/$defs/LabelId",
+              "description": "The label."
+            },
+            "type": {
+              "const": "label.members",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "label_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lists the displays, windows and video capture devices the engine can capture now:\nwhat a `display` or `window` source's `target` setting, or a `webcam` source's\n`device` setting (since 0.90), can name. A device comes with the formats it\ncaptures in that the engine reads, which its `capture_format` settings pick from.\nThey are runtime state, not collection state, so the result carries no `rev`, and\na window closed or a device unplugged since may still be named by a source. Fails\nwith `action_failed` when the engine has no capture backend, or the OS refuses to\nlist both the displays and windows and the devices; when only one of them lists,\nthe result holds what did.",
           "properties": {
             "type": {
               "const": "capture.targets",
@@ -10337,7 +10996,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads the CLAP audio plugin scan (0.95, ADR-0035): whether this engine hosts CLAP\nplugins, the folders it searches (with whether each exists), the effects its last\nscan found and the files it couldn't scan, with why. A client shows it so a person\ncan see where to install a plugin and why one is missing. For a person only, like\n`plugin.clap_rescan`: no plugin is granted it and no MCP tool carries it, since it\nnames files on the machine. Runtime state, so no `rev`.",
+          "description": "Reads the CLAP audio plugin scan (0.106, ADR-0035): whether this engine hosts CLAP\nplugins, the folders it searches (with whether each exists), the effects its last\nscan found and the files it couldn't scan, with why. A client shows it so a person\ncan see where to install a plugin and why one is missing. For a person only, like\n`plugin.clap_rescan`: no plugin is granted it and no MCP tool carries it, since it\nnames files on the machine. Runtime state, so no `rev`.",
           "properties": {
             "type": {
               "const": "plugin.clap_scan",
@@ -10560,6 +11219,18 @@ source: crates/jstream-protocol/src/fixtures.rs
               "format": "uint32",
               "minimum": 0,
               "type": "integer"
+            },
+            "bindings": {
+              "description": "Every controller binding (ADR-0122), ordered by trigger. Kept apart from\n`hotkeys`, which lists key chords only. Omitted when there are none, and\nmissing (from a server older than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "default": "linear",
+              "description": "The space every blend mode mixes in (ADR-0126, since 0.101). Missing, from an\nolder server, parses as `linear`, the only space it drew."
             },
             "buses": {
               "default": [],
@@ -11133,6 +11804,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `delete.plan`.",
           "properties": {
+            "bindings": {
+              "description": "The controller bindings the batch removes the same way, ordered by trigger.\nOmitted when there are none, and missing (from a server older than 0.96)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "edits": {
               "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` and `filter.set_settings` setting each reference to a\ndeleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
               "items": {
@@ -11160,6 +11838,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "rev",
             "edits"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `label.members` (since 0.100).",
+          "properties": {
+            "members": {
+              "$ref": "#/$defs/LabelMembers",
+              "description": "The label and what carries it."
+            },
+            "rev": {
+              "$ref": "#/$defs/Rev",
+              "description": "The revision it was read at."
+            },
+            "type": {
+              "const": "label.members",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "rev",
+            "members"
           ],
           "type": "object"
         },
@@ -11406,7 +12107,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `plugin.clap_scan` (0.95). Runtime state, so it carries no `rev`.",
+          "description": "The result of `plugin.clap_scan` (0.106). Runtime state, so it carries no `rev`.",
           "properties": {
             "scan": {
               "$ref": "#/$defs/ClapScanInfo",
@@ -11539,6 +12240,14 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The units of drawing work the drawers did, costliest first.",
               "items": {
                 "$ref": "#/$defs/UnitProfile"
+              },
+              "type": "array"
+            },
+            "views": {
+              "default": [],
+              "description": "What the clients' views did with their preview streams in the window, as they\nreported it with `preview.report` (since 0.103, ADR-0132): one per view a session\nreported in the window, the session's that has ended included while the window\nreaches back to its last report.",
+              "items": {
+                "$ref": "#/$defs/ViewProfile"
               },
               "type": "array"
             }
@@ -11800,7 +12509,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera; the keyframe shows the parent's camera where\nit has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
+          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera, which a keyframe of a 2D scene may have too\n(ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
         "camera_follow": {
           "anyOf": [
@@ -12714,6 +13423,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "labels": {
+          "description": "The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.\nEvery one must exist. Omitted for none.",
+          "items": {
+            "$ref": "#/$defs/LabelId"
+          },
+          "type": "array"
+        },
         "loop": {
           "$ref": "#/$defs/TimelineLoop",
           "default": "once",
@@ -12893,6 +13609,125 @@ source: crates/jstream-protocol/src/fixtures.rs
         "default"
       ],
       "type": "object"
+    },
+    "Trigger": {
+      "description": "What fires a binding: one MIDI message, from one input or any, on one channel or any.\n\n- A note fires on note-on (a note-on with velocity 0 is a note-off, and never fires).\n- A control change fires when its value crosses the middle upward, from 63 or below\n  to 64 or above, so a button that sends 127 then 0 fires once per press.\n- A program change fires each time it arrives.\n\n`channel` is 1 to 16, as a MIDI device's panel shows it, or missing for any channel.\n`input` is the name of the input (a MIDI port, or a JTunnel sender), or missing for\nany. Two triggers are the same exactly when they are equal, so `channel: 1` and any\nchannel are two triggers: a message that matches both fires both.",
+      "oneOf": [
+        {
+          "description": "A note-on.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_note",
+              "type": "string"
+            },
+            "note": {
+              "description": "The note number, 0 to 127 (60 is middle C).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A control change crossing the middle upward.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_cc",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "controller"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A program change.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_program",
+              "type": "string"
+            },
+            "program": {
+              "description": "The program number, 0 to 127, as sent (a device that shows programs from 1\nsends its program 1 as 0).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "program"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "UnitProfile": {
       "description": "One unit of drawing work and what it cost ([`ProfileInfo::units`]).",
@@ -13085,6 +13920,102 @@ source: crates/jstream-protocol/src/fixtures.rs
         "mix_id",
         "name",
         "mix"
+      ],
+      "type": "object"
+    },
+    "ViewCounts": {
+      "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+      "properties": {
+        "blanks": {
+          "default": 0,
+          "description": "Times its stream ended or failed and it showed why instead of a picture.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decode_errors": {
+          "default": 0,
+          "description": "Frames or decoders the client refused.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "placeholders": {
+          "default": 0,
+          "description": "Times it showed its waiting text where a picture belongs, the first included.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "received": {
+          "default": 0,
+          "description": "Preview frames that arrived for it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reopens": {
+          "default": 0,
+          "description": "Streams it opened after its first.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shown": {
+          "default": 0,
+          "description": "Pictures it drew.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "default": 0,
+          "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ViewProfile": {
+      "description": "One client view's preview pictures in the window ([`ProfileInfo::views`]), as its\nclient reported them.",
+      "properties": {
+        "client": {
+          "description": "The name the session's client gave in `hello`: third-party text (ADR-0059).",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/ViewCounts",
+          "default": {
+            "blanks": 0,
+            "decode_errors": 0,
+            "placeholders": 0,
+            "received": 0,
+            "reopens": 0,
+            "shown": 0,
+            "skipped": 0
+          },
+          "description": "Each count's growth over the window."
+        },
+        "received_fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Frames that arrived, a second."
+        },
+        "shown_fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Pictures drawn, a second."
+        },
+        "view": {
+          "description": "The view's label, as the client reported it: third-party text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client",
+        "view"
       ],
       "type": "object"
     },
@@ -13535,5 +14466,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.95"
+  "title": "JStream protocol 0.106"
 }

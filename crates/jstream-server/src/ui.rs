@@ -241,9 +241,11 @@ pub(crate) async fn handle(
     let Some(ui) = &app.ui else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    let credential = match app.gate.admit(&headers, accepted.peer) {
+    let credential = match app.gate.admit(&headers, accepted.peer, accepted.on()) {
         Ok(credential) => credential,
-        Err(refusal) if refusal.is_credential() => return challenge(app.tls && app.pairing),
+        Err(refusal) if refusal.is_credential() => {
+            return challenge(app.tls(&accepted) && app.pairing);
+        }
         Err(refusal) => return refusal.into_response(),
     };
     accepted.request_read();
@@ -290,9 +292,9 @@ pub(crate) async fn handle(
             Ok(text) => text.replace(NONCE_PLACEHOLDER, &nonce).into_bytes(),
             Err(error) => error.into_bytes(),
         };
-        (body, csp(&host, Some(&nonce), app.tls))
+        (body, csp(&host, Some(&nonce), app.tls(&accepted)))
     } else {
-        (body, csp(&host, None, app.tls))
+        (body, csp(&host, None, app.tls(&accepted)))
     };
     let mut response = body.into_response();
     set_page_headers(&mut response, content_type, &policy);

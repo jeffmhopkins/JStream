@@ -1647,12 +1647,34 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        // A still drawn small holds only the texels it is drawn with (#1139).
+        cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
         let mut readbacks = Readbacks::default();
+        // Whether the compositor was asked to time the pack passes yet: once a meter
+        // guards them (#349).
+        let mut timing = false;
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
+            }
+            // A device wgpu has said is lost is replaced before anything is drawn on it.
+            // Its draws don't always fail: on a destroyed device a submit can be a quiet
+            // no-op and a readback's map fail at once, so the ring never fills and the
+            // frames stop with no error to say why (#1370).
+            if let Some(why) = compositor.lost_already() {
+                return Err(DrawError::Lost(why.to_owned()));
+            }
+            // The pack passes' GPU times that came back since the last tick, a tick or
+            // two late, go to the guard (#349).
+            if let Some(guard) = meter.pass_guard() {
+                if !timing {
+                    timing = true;
+                    compositor.time_passes();
+                }
+                compositor.gpu_times(|kind, took| guard.measured(kind, took));
+                guard.end_tick();
             }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
@@ -1886,6 +1908,16 @@ pub(crate) enum PipelineEvent {
     LinkDown,
     /// The publish link is up again: `active`.
     LinkUp,
+}
+
+/// What the program stage's render thread tells the engine about the effect packs it
+/// draws (#349), on the engine's `jstream-device-losses` thread.
+#[derive(Debug)]
+pub(crate) enum GpuEvent {
+    /// The device was lost.
+    Lost(DeviceLoss),
+    /// A pack kind's pass ran too long ([`PassGuard`](crate::runtime::PassGuard)).
+    Slow(crate::runtime::SlowPass),
 }
 
 /// A lost GPU device on the program stage's render thread (#349), for the engine to
@@ -2124,7 +2156,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
             losses: loss_tx,
-            meter: engine.profiler().program_meter(),
+            meter: {
+                let mut meter = engine.profiler().program_meter();
+                meter.guard_passes();
+                meter
+            },
         };
         move || {
             let _raised = raise(priority.as_deref(), ThreadRole::Video);
@@ -2467,7 +2503,8 @@ fn engine_format() -> Result<AudioFormat, String> {
     .map_err(|err| format!("engine audio format: {err}"))
 }
 
-fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
+/// The base frame period at `fps` in the clock's time base, as the render thread steps.
+pub(crate) fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
     let base =
         Timebase::new(FRAME_NUM, fps.max(1)).map_err(|err| format!("frame period: {err}"))?;
     MediaTime::new(1, base)
@@ -2889,10 +2926,12 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
-    /// Told of each lost device, with the pack kinds drawn before it (#349): the
-    /// engine handles it on its `jstream-device-losses` thread, never on this one.
-    losses: Sender<DeviceLoss>,
-    /// Times each tick and its units for `profile.get` (ADR-0103).
+    /// Told of each lost device, with the pack kinds drawn before it, and of each pack
+    /// kind whose pass ran too long (#349): the engine handles them on its
+    /// `jstream-device-losses` thread, never on this one.
+    losses: Sender<GpuEvent>,
+    /// Times each tick and its units for `profile.get` (ADR-0103), and guards the pack
+    /// passes' GPU time (#349, [`PassGuard`](crate::runtime::PassGuard)).
     meter: DrawMeter,
 }
 
@@ -3375,6 +3414,12 @@ fn render_loop(job: RenderJob) {
                 // A tick that failed part-way leaves its units' time uncounted.
                 meter.discard_frame();
             }
+            // A pack kind that ran too long on the GPU is quarantined by the engine, on
+            // its own thread, as a lost device's are (#349). Its passes draw until the
+            // engine publishes the snapshot without it, a tick or two.
+            if let Some(slow) = meter.pass_guard().and_then(|guard| guard.take()) {
+                let _unsent = loss_sender.send(GpuEvent::Slow(slow));
+            }
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).
@@ -3430,12 +3475,12 @@ fn render_loop(job: RenderJob) {
                     // writes no file. A loss it can't take is handled (dropped) here.
                     let (handled, flag) = LossHandled::new();
                     loss_handled = Some(flag);
-                    let _unsent = loss_sender.send(DeviceLoss {
+                    let _unsent = loss_sender.send(GpuEvent::Lost(DeviceLoss {
                         cause,
                         drawn: reader.held().0.shot().pack_kinds(),
                         recovering: started.is_ok(),
                         handled,
-                    });
+                    }));
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {
@@ -3564,10 +3609,17 @@ fn render_loop(job: RenderJob) {
                 collector.free(Garbage::Vcam(cams.swap_remove(at)));
             }
         }
-        next = match due.checked_add(period) {
-            Ok(next) => Some(next),
-            Err(err) => {
-                report(&fail, format!("frame time overflow: {err}"));
+        // The next tick on the frame grid, where the live sources' thread plans for it
+        // (ADR-0117 §3): a period on from a tick on the grid, and sooner from the first,
+        // which is drawn at once wherever it falls.
+        let after = due
+            .checked_add(MediaTime::new(1, due.timebase()))
+            .ok()
+            .and_then(|after| on_frame_grid(after, period));
+        next = match after {
+            Some(next) => Some(next),
+            None => {
+                report(&fail, "frame time overflow: the next tick".to_string());
                 break;
             }
         };
@@ -3756,6 +3808,22 @@ impl EncodeRing {
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
 /// many whole periods before it were missed. Not late by a period: `due`, none missed.
+/// The first program tick at or after `at`: the render thread ticks on multiples of
+/// `period` on the media clock, so other threads can time their work to its ticks
+/// (ADR-0117 §3). `None` on overflow; `at` itself for a period too fine to step.
+pub(crate) fn on_frame_grid(at: MediaTime, period: MediaTime) -> Option<MediaTime> {
+    let step = period
+        .rescale(at.timebase(), Rounding::Nearest)
+        .ok()?
+        .ticks();
+    if step <= 0 {
+        return Some(at);
+    }
+    let ticks = at.ticks();
+    let frames = ticks.div_euclid(step) + i64::from(ticks.rem_euclid(step) != 0);
+    Some(MediaTime::new(frames.checked_mul(step)?, at.timebase()))
+}
+
 fn catch_up(due: MediaTime, now: MediaTime, period: MediaTime) -> Result<(MediaTime, u64), String> {
     let overflow = |err: jstream_media::MediaError| format!("frame time overflow: {err}");
     let late = now.checked_sub(due).map_err(overflow)?.ticks();
@@ -5160,6 +5228,50 @@ mod tests {
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
         }
+    }
+
+    /// #1370: once wgpu has said the device is lost, the next draw says so, even one with
+    /// nothing on it that would fail on a lost device. Before, such draws went on
+    /// "succeeding" and the frames stopped with no loss counted.
+    #[test]
+    fn a_draw_after_a_reported_loss_says_the_device_is_lost() {
+        struct NoCaptures;
+        impl Captures for NoCaptures {
+            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
+                None
+            }
+        }
+        let lose = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&lose);
+        let hook: super::DrawHook = Arc::new(move |compositor: &jstream_render::Compositor| {
+            if flag.swap(false, Ordering::SeqCst) {
+                compositor.device().destroy();
+                let _ = compositor.device().poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(Duration::from_secs(5)),
+                });
+            }
+        });
+        // Without an adapter there is nothing to lose; CI's Linux jobs have lavapipe.
+        let Ok(mut draw) = (super::gpu_draw_with(hook))(None) else {
+            return;
+        };
+        let mut call = || {
+            draw(
+                &Shot::default(),
+                &LiveParams::default(),
+                &NoCaptures,
+                &mut [],
+                MediaTime::zero(Timebase::NANOS),
+                &mut crate::profile::DrawMeter::default(),
+            )
+        };
+        assert!(call().is_ok(), "a usable device draws");
+        lose.store(true, Ordering::SeqCst);
+        assert!(
+            matches!(call(), Err(super::DrawError::Lost(_))),
+            "a lost device is reported"
+        );
     }
 
     /// A virtual camera holds the program at the program stage's size: its frame is drawn on

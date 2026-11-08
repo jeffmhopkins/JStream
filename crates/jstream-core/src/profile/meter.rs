@@ -255,6 +255,8 @@ pub(crate) struct DrawMeter {
     frame_phases: [u64; PHASES],
     /// When the meter last published, or `None` before its first frame.
     published: Option<Instant>,
+    /// The program stage's GPU-time guard (#349), once [`Self::guard_passes`] set it.
+    guard: Option<crate::runtime::PassGuard>,
 }
 
 impl Default for DrawMeter {
@@ -279,11 +281,25 @@ impl Default for DrawMeter {
             phases: [0; PHASES],
             frame_phases: [0; PHASES],
             published: None,
+            guard: None,
         }
     }
 }
 
 impl DrawMeter {
+    /// Guards the effect-pack passes this drawer draws against running too long on the
+    /// GPU (#349): half the budget the meter was made with. The program stage's render
+    /// thread does; a preview's doesn't.
+    pub(crate) fn guard_passes(&mut self) {
+        self.guard = Some(crate::runtime::PassGuard::new(self.budget));
+    }
+
+    /// The GPU-time guard, when [`Self::guard_passes`] set one: the drawer hands it the
+    /// times its compositor collected once per tick.
+    pub(crate) fn pass_guard(&mut self) -> Option<&mut crate::runtime::PassGuard> {
+        self.guard.as_mut()
+    }
+
     /// Adds `took` to `phase` in the frame being drawn.
     pub(crate) fn phase(&mut self, phase: Phase, took: Duration) {
         let slot = &mut self.frame_phases[phase as usize];

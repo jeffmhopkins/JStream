@@ -124,6 +124,37 @@ mod os {
             assert!(after > before, "{before:?} then {after:?}");
         }
 
+        /// The calling thread's own CPU time, from `CLOCK_THREAD_CPUTIME_ID`.
+        fn thread_cpu() -> std::time::Duration {
+            let mut ts = libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            };
+            // SAFETY: `ts` is a valid, writable `timespec` for the duration of the call,
+            // and CLOCK_THREAD_CPUTIME_ID names the calling thread's CPU-time clock.
+            let rc = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) };
+            assert_eq!(rc, 0, "the thread's CPU clock reads");
+            std::time::Duration::new(
+                u64::try_from(ts.tv_sec).expect("a non-negative time"),
+                u32::try_from(ts.tv_nsec).expect("nanoseconds fit"),
+            )
+        }
+
+        /// Spins until this thread has had `millis` of CPU, however long a busy machine
+        /// takes to give it that (#1322). A wall-clock spin can get far less CPU than it
+        /// lasted on a loaded runner.
+        fn spin_cpu(millis: u64) {
+            let want = thread_cpu() + std::time::Duration::from_millis(millis);
+            let deadline = Instant::now() + std::time::Duration::from_secs(60);
+            let mut x = 0u64;
+            while thread_cpu() < want {
+                assert!(Instant::now() < deadline, "no {millis} ms of CPU in 60 s");
+                for _ in 0..10_000 {
+                    x = std::hint::black_box(x.wrapping_add(1));
+                }
+            }
+        }
+
         /// A named thread is listed by its name, and its time grows while it spins.
         #[test]
         fn a_named_thread_is_listed_with_its_time() {
@@ -132,7 +163,7 @@ mod os {
             let handle = std::thread::Builder::new()
                 .name("jstream-spinner".into())
                 .spawn(move || {
-                    spin(40);
+                    spin_cpu(40);
                     let _ = ready_tx.send(());
                     let _ = rx.recv();
                 })
@@ -145,7 +176,7 @@ mod os {
                 .expect("listed by name");
             assert!(
                 spinner.cpu.as_millis() >= 20,
-                "it spun for 40 ms: {spinner:?}"
+                "it had 40 ms of CPU: {spinner:?}"
             );
             assert!(threads.len() >= 2, "this test's thread too");
             drop(tx);

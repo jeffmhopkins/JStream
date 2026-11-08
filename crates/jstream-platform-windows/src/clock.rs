@@ -4,6 +4,8 @@
 //! time line. WASAPI already reports packet times that way (`pu64QPCPosition`), so a raw
 //! counter reading is converted with the same formula, [`qpc_to_hns`], and both share one
 //! time line.
+//!
+//! `QpcClock::now` never decreases.
 
 use jstream_platform::media::Timebase;
 

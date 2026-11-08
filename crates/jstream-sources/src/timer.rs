@@ -217,7 +217,7 @@ struct TimerSource {
 impl Source for TimerSource {
     /// Hands out the frame drawn last. It neither draws nor allocates, and never fails.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(Arc::clone(&lock(&self.painter.ready).frame))
+        Ok(self.painter.frame())
     }
 
     /// Now, when the frame drawn last doesn't show `at`'s value (the painter hasn't
@@ -225,16 +225,7 @@ impl Source for TimerSource {
     /// or of the wall clock (its next minute for a clock without seconds). `None` once
     /// a countdown has ended or a stopwatch has stopped.
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        let (count, shown) = {
-            let ready = lock(&self.painter.ready);
-            (ready.plan.count.mode_timing(), ready.key)
-        };
-        let elapsed = millis(at);
-        let wall = count.needs_wall().then(wall_millis).unwrap_or(0);
-        if count.key(elapsed, wall) != shown {
-            return Some(at);
-        }
-        count.next(elapsed, wall).map(at_millis)
+        self.painter.next_change(at)
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -326,6 +317,24 @@ struct Ready {
 }
 
 impl Painter for TimerPainter {
+    fn frame(&self) -> Arc<VideoFrame> {
+        Arc::clone(&lock(&self.ready).frame)
+    }
+
+    /// As [`TimerSource`]'s `next_change`.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        let (count, shown) = {
+            let ready = lock(&self.ready);
+            (ready.plan.count.mode_timing(), ready.key)
+        };
+        let elapsed = millis(at);
+        let wall = count.needs_wall().then(wall_millis).unwrap_or(0);
+        if count.key(elapsed, wall) != shown {
+            return Some(at);
+        }
+        count.next(elapsed, wall).map(at_millis)
+    }
+
     /// Draws `at`'s value if the frame drawn last shows another. Only that redraw
     /// allocates, once a second at most (a minute for a clock without seconds).
     fn paint(&self, at: MediaTime) {

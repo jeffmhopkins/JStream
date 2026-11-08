@@ -1,0 +1,196 @@
+[
+  {
+    "name": "three_d",
+    "about": "24 shapes turned, tilted and pushed back in 3D",
+    "edits": [
+      {
+        "each": {
+          "count": 24,
+          "cols": 6,
+          "cycle": {
+            "colour": [
+              "#e6194bff",
+              "#3cb44bff",
+              "#ffe119ff",
+              "#4363d8ff",
+              "#f58231ff",
+              "#911eb4ff",
+              "#46f0f0ff",
+              "#f032e6ff",
+              "#bcf60cff",
+              "#fabebeff",
+              "#008080ff",
+              "#e6beffff",
+              "#9a6324ff"
+            ],
+            "turn": [
+              0,
+              15,
+              30,
+              45,
+              60,
+              75
+            ],
+            "tilt": [
+              0,
+              7,
+              14,
+              21,
+              28,
+              35,
+              42,
+              49,
+              56
+            ],
+            "depth": [
+              0,
+              -200,
+              -400,
+              -600,
+              -800
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "3d_{i}",
+            "name": "3d_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "shape"
+            },
+            "settings": {
+              "width": 200,
+              "height": 200,
+              "radius": 16,
+              "color": "$colour"
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "three_d",
+            "item_id": "3di_{i}",
+            "source_id": "3d_{i}",
+            "geometry": {
+              "$cell": 1,
+              "turn_deg": "$turn",
+              "tilt_deg": "$tilt",
+              "depth_px": "$depth"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "item_3d_perspective",
+    "about": "one still placed 12 times, turned with its own perspective",
+    "edits": [
+      {
+        "type": "source.create",
+        "source_id": "p3_img",
+        "name": "p3_img",
+        "kind": {
+          "type": "builtin",
+          "kind": "image"
+        },
+        "settings": {
+          "file": "$asset:still.png"
+        }
+      },
+      {
+        "each": {
+          "count": 12,
+          "cols": 4,
+          "cycle": {
+            "turn": [
+              25,
+              28,
+              31,
+              34,
+              37,
+              40,
+              43,
+              46,
+              49,
+              52,
+              55,
+              58
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "item.add",
+            "scene_id": "item_3d_perspective",
+            "item_id": "p3_{i}",
+            "source_id": "p3_img",
+            "geometry": {
+              "$cell": 1,
+              "turn_deg": "$turn",
+              "perspective_px": 1200
+            }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "models_12",
+    "about": "12 built-in 3D model shapes",
+    "edits": [
+      {
+        "each": {
+          "count": 12,
+          "cols": 4,
+          "cycle": {
+            "shape": [
+              "cube",
+              "sphere",
+              "cylinder",
+              "cone"
+            ],
+            "colour": [
+              "#e6194bff",
+              "#3cb44bff",
+              "#ffe119ff",
+              "#4363d8ff",
+              "#f58231ff",
+              "#911eb4ff",
+              "#46f0f0ff",
+              "#f032e6ff",
+              "#bcf60cff",
+              "#fabebeff",
+              "#008080ff",
+              "#e6beffff",
+              "#9a6324ff"
+            ]
+          }
+        },
+        "edits": [
+          {
+            "type": "source.create",
+            "source_id": "md_{i}",
+            "name": "md_{i}",
+            "kind": {
+              "type": "builtin",
+              "kind": "model"
+            },
+            "settings": {
+              "shape": "$shape",
+              "color": "$colour"
+            }
+          },
+          {
+            "type": "item.add",
+            "scene_id": "models_12",
+            "item_id": "mdi_{i}",
+            "source_id": "md_{i}",
+            "geometry": "$cell"
+          }
+        ]
+      }
+    ]
+  }
+]

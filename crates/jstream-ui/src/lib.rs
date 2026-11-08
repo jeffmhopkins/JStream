@@ -4,14 +4,14 @@
 //! it never links the engine (R-ARCH-003).
 //!
 //! It holds connecting and the session (`session`), the shell (`app`), the header bar
-//! (`header`) and its Help menu's links, About dialog (`about`) and update check (`updates`), the dock model (`dock`) and the workspace that draws it (`workspace`),
+//! (`header`) and its Help menu's links, About dialog (`about`) and update check (`updates`), the views' reports to the engine (`views`), the dock model (`dock`) and the workspace that draws it (`workspace`),
 //! the hotkeys the page runs (`hotkeys`), the state the panels share (`store`), the
 //! panels (`panels`), the Browse buttons on path fields (`browse`), the pairing panel
 //! (`pairing`), the Plugins section (`plugins`), the preview canvas (`canvas`), the right-click menu (`menu`) and the
 //! selected items' entries in it (`item_menu`), copy and paste (`clipboard`), screenshots (`screenshot`), the modal dialog frame (`dialog`) and
 //! the prototype's icons (`icons`).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#menus, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#filters, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#transitions, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-ui/README.md#purpose, crates/jstream-ui/README.md#design, crates/jstream-ui/README.md#canvas, crates/jstream-ui/README.md#views, crates/jstream-ui/README.md#build, crates/jstream-ui/tests/e2e/README.md#harness, crates/jstream-ui/tests/e2e/README.md#tests, crates/jstream-ui/tests/e2e/README.md#running, docs/UI-FEATURES.md#theme, docs/UI-FEATURES.md#header, docs/UI-FEATURES.md#docking, docs/UI-FEATURES.md#canvas, docs/UI-FEATURES.md#menus, docs/UI-FEATURES.md#dialogs, docs/UI-FEATURES.md#scenes, docs/UI-FEATURES.md#objects, docs/UI-FEATURES.md#inspector, docs/UI-FEATURES.md#transform, docs/UI-FEATURES.md#filters, docs/UI-FEATURES.md#mixer, docs/UI-FEATURES.md#outputs, docs/UI-FEATURES.md#transitions, docs/UI-FEATURES.md#keyboard, docs/UI-FEATURES.md#beyond, docs/adr/0045-leptos-web-ui.md
 
 #![forbid(unsafe_code)]
 
@@ -41,6 +41,7 @@ pub mod store;
 pub mod ui_settings;
 pub mod updates;
 pub mod video_settings;
+pub mod views;
 pub mod workspace;
 
 pub use app::{App, SessionContext};

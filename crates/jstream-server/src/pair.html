@@ -23,6 +23,9 @@
   <h1>Pair this browser</h1>
   <p>On the host, open JStream's pairing panel and start pairing, then type the code it
      shows. The code works once, for two minutes.</p>
+  <p>Check the certificate before you pair: its SHA-256 fingerprint in your browser must
+     match the one the host shows. Once paired, a new certificate warning for this host
+     means continue only if the fingerprint matches the one the host shows.</p>
   <form id="pair">
     <label>Pairing code
       <input id="code" name="code" required autocomplete="off" autocapitalize="characters"

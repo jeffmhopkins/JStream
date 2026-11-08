@@ -9,6 +9,7 @@ use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::image::ImageKind;
 use crate::media::MediaKind;
+use crate::midi::{CcKind, KeyboardKind, PadsKind, PianoRollKind};
 use crate::model::ModelKind;
 use crate::scope::{SpectrumKind, WaveformKind};
 use crate::shape::ShapeKind;
@@ -27,7 +28,8 @@ pub struct Registry {
 impl Registry {
     /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
     /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
-    /// `spectrum` and `youtube_chat` produce frames (`browser` and its `youtube_chat`
+    /// `spectrum`, `youtube_chat` and the MIDI kinds (`midi_keyboard`, `midi_piano_roll`,
+    /// `midi_pads`, `midi_cc`) produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
     /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
     /// capture card. `audio_input`, `desktop_audio` and `app_audio` are audio-only: the
@@ -46,6 +48,10 @@ impl Registry {
         add(Box::new(CaptureKind::webcam()));
         add(Box::new(ImageKind::new()));
         add(Box::new(MediaKind::new()));
+        add(Box::new(KeyboardKind::new()));
+        add(Box::new(PianoRollKind::new()));
+        add(Box::new(PadsKind::new()));
+        add(Box::new(CcKind::new()));
         add(Box::<ModelKind>::default());
         add(Box::new(ShapeKind::new()));
         add(Box::new(TextKind::new()));

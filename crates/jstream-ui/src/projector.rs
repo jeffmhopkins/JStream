@@ -388,19 +388,50 @@ fn Picture(
     let canvas = NodeRef::<Canvas>::new();
     let shown = RwSignal::new(Shown::Starting);
     let channel = channels.take();
+    // What the picture did with its frames, reported to the engine (`preview.report`,
+    // ADR-0132), under a label naming what it shows.
+    let tally = crate::views::ViewTally::default();
+    {
+        let tally = tally.clone();
+        Effect::new(move |before: Option<Shown>| {
+            let now = shown.get();
+            if before.as_ref() != Some(&now) {
+                match now {
+                    Shown::Starting => tally.placeholder(),
+                    Shown::Ended(_) => tally.blank(),
+                    Shown::Live => {}
+                }
+            }
+            now
+        });
+    }
+    // The channel comes first, so two pictures of one scene (a multiview's preview and
+    // its scene row) stay two views, even when the label is cut.
+    let kind = format!("projector#{channel}");
+    let view = match (&source, &scene) {
+        (Some(source), _) => crate::views::label(&kind, Some(&format!("source:{source}"))),
+        (None, Some(scene)) => crate::views::label(&kind, Some(scene.as_str())),
+        (None, None) => crate::views::label(&kind, Some("program")),
+    };
+    let reporting = StoredValue::new_local(None::<leptos::prelude::IntervalHandle>);
     let control: Option<Weak<dyn Control>> = session.get().map(|s| Rc::downgrade(&s.control));
     canvas.on_load({
         let channels = channels.clone();
         let control = control.clone();
+        let tally = tally.clone();
         move |element| {
             let Some(control) = control else {
                 return;
             };
-            let Some(screen) = Screen::new(element, move || {
-                if shown.try_get_untracked() == Some(Shown::Starting) {
-                    shown.try_set(Shown::Live);
-                }
-            }) else {
+            let Some(screen) = Screen::new(
+                element,
+                move || {
+                    if shown.try_get_untracked() == Some(Shown::Starting) {
+                        shown.try_set(Shown::Live);
+                    }
+                },
+                tally.clone(),
+            ) else {
                 shown.set(Shown::Ended("this browser can't draw on a canvas".into()));
                 return;
             };
@@ -411,6 +442,7 @@ fn Picture(
                 let h264 = Rc::clone(&h264);
                 let scene = scene.clone();
                 let source = source.clone();
+                let tally = tally.clone();
                 Box::new(move |frame| {
                     let header = frame.header;
                     if header.end {
@@ -430,11 +462,13 @@ fn Picture(
                         // reused.
                         h264.set(false);
                         let control = control.clone();
+                        let tally = tally.clone();
                         let shows = (scene.clone(), source.clone());
                         spawn_local(async move {
                             let close = Action::PreviewUnsubscribe { channel };
                             let _closed = act(&control, close).await;
                             let again = subscribe(channel, shows, max, fps, false);
+                            tally.opened();
                             if let Some(Err(error)) = act(&control, again).await {
                                 shown.try_set(Shown::Ended(error));
                             }
@@ -443,7 +477,13 @@ fn Picture(
                 })
             };
             channels.handlers.borrow_mut().insert(channel, handler);
+            reporting.set_value(crate::views::report_every_second(
+                control.clone(),
+                view.clone(),
+                tally.clone(),
+            ));
             let shows = (scene.clone(), source.clone());
+            tally.opened();
             spawn_local(async move {
                 let open = subscribe(channel, shows, max, fps, h264.get());
                 if let Some(Err(error)) = act(&control, open).await {
@@ -454,6 +494,9 @@ fn Picture(
     });
     // Handles only: the cleanup runs where any other may.
     on_cleanup(move || {
+        if let Some(handle) = reporting.try_update_value(Option::take).flatten() {
+            handle.clear();
+        }
         shared
             .0
             .try_with_value(|channels| channels.handlers.borrow_mut().remove(&channel));
@@ -590,14 +633,32 @@ pub fn Projector(
     });
     on_cleanup(move || escape.remove());
 
+    // A single picture runs at the collection's base rate, full quality as the canvas
+    // is, and opens again when the rate changes (ADR-0119).
+    let live_fps = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            crate::canvas::preview::live_fps(
+                c.as_ref()
+                    .map_or(crate::canvas::preview::FPS, |c| c.base_fps),
+            )
+        })
+    });
     let content = match request.target {
-        Target::Program => view! { <Picture scene=None max=screen_pixels() fps=30 /> }.into_any(),
-        Target::Scene(id) => {
-            view! { <Picture scene=Some(id) max=screen_pixels() fps=30 /> }.into_any()
-        }
-        Target::Source(id) => {
-            view! { <Picture scene=None source=id max=screen_pixels() fps=30 /> }.into_any()
-        }
+        Target::Program => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=None max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
+        Target::Scene(id) => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=Some(id.clone()) max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
+        Target::Source(id) => (move || {
+            let fps = live_fps.get();
+            view! { <Picture scene=None source=id.clone() max=screen_pixels() fps=fps /> }
+        })
+        .into_any(),
         Target::Multiview => view! { <Multiview /> }.into_any(),
     };
     view! {
@@ -776,13 +837,14 @@ mod tests {
             codecs,
             scene_id,
             ..
-        } = subscribe(3, (Some(SceneId::new("s")), None), (3840, 2160), 60, true)
+        } = subscribe(3, (Some(SceneId::new("s")), None), (3840, 2160), 120, true)
         else {
             panic!("a subscribe");
         };
         assert_eq!(channel, 3);
         assert_eq!((max_width, max_height), (Some(1920), Some(1080)));
-        assert_eq!(fps, Some(30));
+        // Up to a 60 fps base rate (protocol 0.95), and no faster.
+        assert_eq!(fps, Some(60));
         assert_eq!(codecs, vec![PreviewCodec::H264, PreviewCodec::Jpeg]);
         assert_eq!(scene_id, Some(SceneId::new("s")));
         let Action::PreviewSubscribe {

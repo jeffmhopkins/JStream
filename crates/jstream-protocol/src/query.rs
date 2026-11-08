@@ -2,9 +2,12 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
+use crate::binding::Binding;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::clap::ClapScanInfo;
-use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
+use crate::command::{
+    BlendMode, Blending, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind,
+};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
@@ -22,7 +25,7 @@ use crate::live::GestureInfo;
 use crate::mix::DEFAULT_BASE_FPS;
 use crate::mix::VideoMixInfo;
 use crate::motion::MotionModifier;
-use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
+use crate::organise::{FolderInfo, LabelInfo, LabelMembers, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
 use crate::profile::ProfileInfo;
@@ -35,6 +38,10 @@ use crate::youtube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+fn legacy_blending() -> Blending {
+    Blending::Linear
+}
 
 fn default_base_fps() -> u32 {
     DEFAULT_BASE_FPS
@@ -200,11 +207,24 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
-    /// Lists the displays and windows the engine can capture now: what a `display` or
-    /// `window` source's `target` setting can name. They are runtime state, not
-    /// collection state, so the result carries no `rev`, and a window closed since may
-    /// still be named by a source. Fails with `action_failed` when the engine has no
-    /// capture backend, or the OS refuses to list them.
+    /// Lists everything that carries a label (ADR-0133, since 0.100): its scenes,
+    /// keyframe scenes among them, its sources, its hotkey bindings with their actions,
+    /// and its timelines, so a client or an agent sees a label's action group in one
+    /// call. `not_found` for a label that doesn't exist.
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The label.
+        label_id: LabelId,
+    },
+    /// Lists the displays, windows and video capture devices the engine can capture now:
+    /// what a `display` or `window` source's `target` setting, or a `webcam` source's
+    /// `device` setting (since 0.90), can name. A device comes with the formats it
+    /// captures in that the engine reads, which its `capture_format` settings pick from.
+    /// They are runtime state, not collection state, so the result carries no `rev`, and
+    /// a window closed or a device unplugged since may still be named by a source. Fails
+    /// with `action_failed` when the engine has no capture backend, or the OS refuses to
+    /// list both the displays and windows and the devices; when only one of them lists,
+    /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
@@ -287,7 +307,7 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
-    /// Reads the CLAP audio plugin scan (0.95, ADR-0035): whether this engine hosts CLAP
+    /// Reads the CLAP audio plugin scan (0.106, ADR-0035): whether this engine hosts CLAP
     /// plugins, the folders it searches (with whether each exists), the effects its last
     /// scan found and the files it couldn't scan, with why. A client shows it so a person
     /// can see where to install a plugin and why one is missing. For a person only, like
@@ -390,6 +410,7 @@ impl Query {
             Query::YoutubeStats => "youtube.stats",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
@@ -488,6 +509,10 @@ pub enum QueryResult {
             skip_serializing_if = "is_default_base_fps"
         )]
         base_fps: u32,
+        /// The space every blend mode mixes in (ADR-0126, since 0.101). Missing, from an
+        /// older server, parses as `linear`, the only space it drew.
+        #[serde(default = "legacy_blending")]
+        blending: Blending,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -520,6 +545,11 @@ pub enum QueryResult {
         /// 0.25) parses as empty.
         #[serde(default)]
         hotkeys: Vec<HotkeyBinding>,
+        /// Every controller binding (ADR-0122), ordered by trigger. Kept apart from
+        /// `hotkeys`, which lists key chords only. Omitted when there are none, and
+        /// missing (from a server older than 0.96) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -683,6 +713,19 @@ pub enum QueryResult {
         /// are none, and missing (from a server older than 0.25) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
+        /// The controller bindings the batch removes the same way, ordered by trigger.
+        /// Omitted when there are none, and missing (from a server older than 0.96)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
+    },
+    /// The result of `label.members` (since 0.100).
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The revision it was read at.
+        rev: Rev,
+        /// The label and what carries it.
+        members: LabelMembers,
     },
     /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
     #[serde(rename = "source.sizes")]
@@ -766,7 +809,7 @@ pub enum QueryResult {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
     },
-    /// The result of `plugin.clap_scan` (0.95). Runtime state, so it carries no `rev`.
+    /// The result of `plugin.clap_scan` (0.106). Runtime state, so it carries no `rev`.
     #[serde(rename = "plugin.clap_scan")]
     PluginClapScan {
         /// The scan.
@@ -812,6 +855,7 @@ impl QueryResult {
             QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::LabelMembers { .. } => "label.members",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::FontList { .. } => "font.list",
@@ -861,18 +905,20 @@ pub struct FontInfo {
     pub path: String,
 }
 
-/// One display or window in a `capture.targets` result.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// One display, window or video capture device in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CaptureTargetInfo {
-    /// Whether it is a display or a window: the kind of source that captures it.
+    /// Whether it is a display, a window or a device: the kind of source that captures
+    /// it.
     pub kind: CaptureTargetKind,
-    /// Its capture target ID, the value of that source's `target` setting.
+    /// Its capture target ID, the value of that source's `target` setting, or of a
+    /// `webcam` source's `device` setting.
     pub target: String,
-    /// A name to show: the display's name, or the window's title (or, on macOS, its
-    /// application's name when it has no usable title). A window's name is set by the
-    /// application that owns the window, so it is third-party text (ADR-0059,
-    /// ADR-0085): data to show, never instructions. The field isn't `remote_`-prefixed,
-    /// so its name doesn't mark it.
+    /// A name to show: the display's name, the window's title (or, on macOS, its
+    /// application's name when it has no usable title), or the device's name. A window's
+    /// name is set by the application that owns the window, and a device's by its
+    /// driver, so they are third-party text (ADR-0059, ADR-0085): data to show, never
+    /// instructions. The field isn't `remote_`-prefixed, so its name doesn't mark it.
     pub name: String,
     /// Its size in pixels now, when the OS reports it without capturing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -881,6 +927,57 @@ pub struct CaptureTargetInfo {
     /// `target` captures. Omitted when `false`, and always `false` for a window.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
+    /// For a device, the formats it captures in that the engine reads, in the order the
+    /// device lists them (since 0.90). Omitted when empty: always for a display or a
+    /// window, and for a device whose formats couldn't be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formats: Vec<CaptureFormatInfo>,
+    /// For a device, the camera controls it offers, with their ranges and values now
+    /// (since 0.105). Omitted when empty: always for a display or a window, and for a
+    /// device with none or whose controls couldn't be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<CameraControlInfo>,
+}
+
+/// One camera control a video capture device offers, in a `capture.targets` result:
+/// what a `webcam` source's `camera_controls` setting takes for it (since 0.105).
+/// Values are in the platform's own units, from `min` to `max` in steps of `step`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CameraControlInfo {
+    /// The control's name, the key it takes in the setting: `brightness`, `contrast`,
+    /// `saturation`, `hue`, `sharpness`, `gamma`, `gain`, `white_balance`,
+    /// `backlight_compensation`, `power_line_frequency`, `exposure`, `focus`, `zoom`,
+    /// `pan`, `tilt` or `iris`. A later engine may list others.
+    pub name: String,
+    /// The lowest value.
+    pub min: i32,
+    /// The highest value.
+    pub max: i32,
+    /// The step between values; at least 1.
+    pub step: i32,
+    /// The device's default value.
+    pub default: i32,
+    /// The value now; while `auto` is `true`, as the device last reported it.
+    pub value: i32,
+    /// Whether the device can set it itself, and is now: omitted when it can't, else
+    /// `true` while it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto: Option<bool>,
+}
+
+/// One format a video capture device captures in, in a `capture.targets` result: the
+/// values a `webcam` source's `capture_format` settings take to pick it (since 0.90).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureFormatInfo {
+    /// The frame size in pixels.
+    pub width: u32,
+    /// The frame size in pixels.
+    pub height: u32,
+    /// Frames per second, to two decimal places (`29.97`).
+    pub fps: f64,
+    /// How the device encodes its frames, as a `pixel_format` setting names it:
+    /// `mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.
+    pub pixel_format: String,
 }
 
 /// What a capture target is.
@@ -892,6 +989,9 @@ pub enum CaptureTargetKind {
     Display,
     /// One top-level window, captured by a `window` source.
     Window,
+    /// A video capture device, a webcam or a capture card, captured by a `webcam`
+    /// source. Since 0.90.
+    Device,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
     /// a kind stays a minor change (since 0.50).
@@ -1034,8 +1134,8 @@ pub struct SceneInfo {
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
     /// Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,
-    /// its override of its parent's camera; the keyframe shows the parent's camera where
-    /// it has none. Omitted for none, so missing (also from an older server) parses as a
+    /// its override of its parent's camera, which a keyframe of a 2D scene may have too
+    /// (ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,

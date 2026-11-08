@@ -4,6 +4,52 @@
 //! are always interleaved `f32` at the device's own rate: WASAPI converts sample types
 //! or downmixes where needed, and never resamples (`format`). Timestamps are the QPC
 //! times WASAPI reports, in the crate's 100 ns [`timebase`](crate::timebase).
+//!
+//! # Behaviour
+//!
+//! **`WasapiAudio`** (`AudioIo`):
+//! - **Listing** the active capture and render endpoints, with the console-role default
+//!   of each, and the running processes (a ToolHelp snapshot: each one's ID, its
+//!   parent's and its executable's file name), which process loopback can record.
+//! - **Format query:** `input_format` returns the format a stream on a target would
+//!   have, without opening it: the format below for the target's endpoint (the current
+//!   default for a default target), found by activating a client and reading its mix
+//!   format, and 48 kHz stereo for process loopback of a running process (`NotFound`
+//!   for one that isn't).
+//! - **Streams** for every target the traits define: an input, the default input, loopback
+//!   of an output or the default output, process loopback (a process and its children,
+//!   through the virtual process-loopback device), an output and the default output.
+//!   Each stream is event-driven and shared-mode, on its own thread registered with MMCSS
+//!   "Pro Audio" (ARCH › Threads, clock and sync).
+//!   That thread owns the stream's COM objects. In its loop it calls the handler and does
+//!   not allocate, lock or log (R-RT-001): the sample
+//!   buffer is allocated once, before the stream starts.
+//! - **Format:** samples are interleaved `f32` at the device's own rate. A device whose
+//!   mix format is already `f32` in a layout `jstream-media` has (mono, stereo, 5.1) is
+//!   opened as is. For any other format the backend asks WASAPI to convert
+//!   (`AUTOCONVERTPCM`) to `f32` at the same rate: it converts integer samples and
+//!   downmixes other channel counts to stereo, and never resamples. For an output with
+//!   another channel count the stream is stereo, and WASAPI maps it onto the device's
+//!   speakers. `jstream-media`'s 5.1 has its surround pair at the back, so a 5.1 device
+//!   whose mix puts it at the side is opened through the same conversion, and WASAPI
+//!   maps its channels into that order. Process loopback is asked for 48 kHz stereo,
+//!   since it has no mix format.
+//! - **Times and positions:** packet times are WASAPI's QPC positions, `None` when the
+//!   device flags a timestamp error. Device positions count frames since the stream
+//!   started.
+//! - **Default devices are followed:** a stream on a default device moves to the new
+//!   default when the user changes it or the device goes away. Its positions continue, and
+//!   the first packet after the move is flagged as a discontinuity. If the new device has
+//!   a different format, the stream ends with `DeviceLost` so the engine can reopen it. A
+//!   stream on one device ends with `DeviceLost` when that device goes away.
+//! - **Failures and panics:** a failure in a stream's loop is reported once through the
+//!   handler's `on_error`, and the stream ends. A panic on the stream thread, the
+//!   handler's included, is caught there. The stream ends, and `on_error` gets
+//!   `InvalidState`. COM callbacks (activation completion, device notifications) catch
+//!   panics too (R-UNSAFE-005).
+//! - **Buffers:** capture and loopback ask for a 200 ms buffer, as S3 did, so a late
+//!   thread loses nothing. Render asks for 40 ms, which bounds how far ahead the output
+//!   handler is asked for samples.
 
 #[cfg(windows)]
 mod device;

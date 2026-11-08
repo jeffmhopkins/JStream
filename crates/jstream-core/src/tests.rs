@@ -559,7 +559,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
 }
 
 /// `plugin.clap_scan` reports the folders, what the last scan found and what failed, and
-/// `plugin.clap_rescan` finds a plugin installed since, without a restart (0.95).
+/// `plugin.clap_rescan` finds a plugin installed since, without a restart (0.106).
 #[test]
 fn clap_rescan_finds_a_plugin_installed_since_and_the_scan_reports_it() {
     use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
