@@ -8,10 +8,13 @@
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
 //!   script, full screen when the page asks for it. A link to one of the project's own
 //!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
-//!   system browser instead. Any other is refused.
-//! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
-//!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
-//!   only over the WebSocket API. The scheme's one other answer is the update check.
+//!   system browser instead (through Explorer on Windows, `xdg-open` on Linux). Any
+//!   other is refused.
+//! - It runs on WebView2 on Windows and WebKitGTK on Linux (the `webkitgtk` feature).
+//! - The page gets two Tauri commands, `pick_path` ([`crate::pick`]) and `set_network`
+//!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
+//!   global's `browse` and `allowNetwork`, and talks to the engine only over the
+//!   WebSocket API. The scheme's one other answer is the update check.
 //! - When the app exits, the host stops: the server closes its connections and the
 //!   engine stops.
 //!
@@ -90,8 +93,20 @@ fn open_in_browser(url: &Url) {
         .unwrap_or_else(|| "explorer.exe".into());
     #[cfg(not(windows))]
     let opener = std::path::PathBuf::from("xdg-open");
-    if let Err(error) = std::process::Command::new(opener).arg(url.as_str()).spawn() {
-        tracing::warn!(%error, "could not open a link in the browser");
+    match std::process::Command::new(opener).arg(url.as_str()).spawn() {
+        // Waited for on a thread of its own, so the opener doesn't linger as a zombie
+        // (`xdg-open` and Explorer exit once they have handed the URL over).
+        Ok(mut child) => {
+            let reaped = std::thread::Builder::new()
+                .name("jstream-link-opener".into())
+                .spawn(move || {
+                    let _ = child.wait();
+                });
+            if let Err(error) = reaped {
+                tracing::warn!(%error, "could not wait for the link opener");
+            }
+        }
+        Err(error) => tracing::warn!(%error, "could not open a link in the browser"),
     }
 }
 

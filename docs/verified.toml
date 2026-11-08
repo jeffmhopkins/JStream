@@ -2460,7 +2460,7 @@ stamp = { hash = "b3:76fb9a3c1344855a", by = "agent:linux-desktop", note = "Re-r
 stamp = { hash = "b3:12f642337c2b3ebf", by = "agent:linux-desktop", note = "Re-read against build.rs's webview cfg, the Linux live engine in host.rs (LinuxBackends, LinuxSecrets, capture-tokens, CPU readers), pick.rs's portal command off the main thread, shell.rs's xdg-open, set_network on cfg(webview), the X11 listener now running in the Linux window, and the 'Linux behind a feature' paragraph replacing 'Windows only'" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:883c6b8726b28bab", by = "agent:linux-desktop", note = "Re-read against build.rs's webview cfg, the Linux live engine in host.rs (LinuxBackends, LinuxSecrets, capture-tokens, CPU readers), pick.rs's portal command off the main thread, shell.rs's xdg-open, set_network on cfg(webview), the X11 listener now running in the Linux window, and the 'Linux behind a feature' paragraph replacing 'Windows only'" }
+stamp = { hash = "b3:4bc3c33b5d53b4ea", by = "agent:linux-desktop", note = "Re-read against build.rs's webview cfg, the Linux live engine in host.rs (LinuxBackends, LinuxSecrets, capture-tokens, CPU readers), pick.rs's portal command off the main thread, shell.rs's xdg-open (r1: its child is now waited for on a thread, so it leaves no zombie, which the design's one-argument, no-shell description still matches), set_network on cfg(webview), the X11 listener in the Linux window, and the 'Linux behind a feature' paragraph" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -2514,7 +2514,7 @@ stamp = { hash = "b3:76fb9a3c1344855a", by = "agent:linux-desktop", note = "Re-r
 stamp = { hash = "b3:12f642337c2b3ebf", by = "agent:linux-desktop", note = "Re-read against the Linux window: contents now say the window runs on Windows and on Linux with webkitgtk (ADR-0141), the host is live on 64-bit Linux, pick.rs uses the FileChooser portal there, tests list tests/webkitgtk.rs, and 'not here yet' drops the Linux window and adds Linux packages" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/shell.rs"]
-stamp = { hash = "b3:883c6b8726b28bab", by = "agent:linux-desktop", note = "Re-read against the Linux window: contents now say the window runs on Windows and on Linux with webkitgtk (ADR-0141), the host is live on 64-bit Linux, pick.rs uses the FileChooser portal there, tests list tests/webkitgtk.rs, and 'not here yet' drops the Linux window and adds Linux packages" }
+stamp = { hash = "b3:4bc3c33b5d53b4ea", by = "agent:linux-desktop", note = "Re-read against the Linux window: contents say the window runs on Windows and on Linux with webkitgtk (ADR-0141), the host is live on 64-bit Linux, pick.rs uses the FileChooser portal there, tests list tests/webkitgtk.rs, and 'not here yet' drops the Linux window and adds Linux packages. r1: shell.rs now waits for the link opener on a thread (no zombie) and its module doc names both commands; the Window bullet still holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/ui.rs"]
 stamp = { hash = "b3:45624952598c1f3a" }
@@ -2532,7 +2532,7 @@ stamp = { hash = "b3:6caa3af75f382d1a", by = "agent:linux-desktop", note = "Re-r
 stamp = { hash = "b3:0d189695bb9fdbfb", by = "agent:linux-desktop", note = "Re-read: added the Linux build (libwebkit2gtk-4.1-dev, --features webkitgtk), Linux's data folder, key store, no vcam or browser sources, Browse via the portal, and the no-window message main.rs now prints without the feature" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/Cargo.toml"]
-stamp = { hash = "b3:f82cf3816a4c8389", by = "agent:linux-desktop", note = "Re-read: added the Linux build (libwebkit2gtk-4.1-dev, --features webkitgtk), Linux's data folder, key store, no vcam or browser sources, Browse via the portal, and the no-window message main.rs now prints without the feature" }
+stamp = { hash = "b3:0ffe58cef940b221", by = "agent:linux-desktop", note = "Re-read: the Linux build (libwebkit2gtk-4.1-dev, --features webkitgtk), Linux's data folder, key store, no vcam or browser sources, Browse via the portal, and main.rs's no-window message without the feature. r1: the Cargo.toml feature comment no longer names a dist-linux command that doesn't exist yet; usage is unchanged" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
 stamp = { hash = "b3:5c59ccf50aa6459f", by = "agent:claude", note = "Devices on the network covers the switch, network.json, port 4456, token.tls and token.devices, the port-in-use fallback and its notice, the firewall, and that off keeps paired devices; with #1366 review r1's N1-N5: networkOpen on the global and the UI's port-failed notice, the retry log wording, allowNetwork resolving false on a failed command, the firewall note, and turning off keeping paired devices" }
