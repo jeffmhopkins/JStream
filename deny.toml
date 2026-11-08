@@ -14,8 +14,9 @@ ignore = [
     # graph only through Tauri's Linux webview (WebKitGTK), built only with jstream-desktop's
     # `webkitgtk` feature (ADR-0141), and at build time only (a proc-macro): no code of it
     # reaches the app. Tauri 2 pins gtk-rs 0.18, so it goes when Tauri moves to GTK 4 or
-    # gtk-rs drops it. The advisory is unmaintained-only, with no vulnerability.
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; a build-time proc-macro under Tauri's gtk3-macros, Linux only with jstream-desktop's webkitgtk feature (ADR-0141). Expires: Tauri on GTK 4 or gtk-rs without it" },
+    # gtk-rs drops it. The advisory is unmaintained-only, with no vulnerability. The M2
+    # exit stays as the backstop: by then it is gone or looked at again.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error is unmaintained; a build-time proc-macro under Tauri's gtk3-macros, Linux only with jstream-desktop's webkitgtk feature (ADR-0141). Expires: M2 exit, or sooner with Tauri on GTK 4 or gtk-rs without it" },
 ]
 
 [licenses]

@@ -30,8 +30,8 @@ cef = ["dep:jstream-browser", "jstream-browser/cef"]
 dox = ["cef", "jstream-browser/dox"]
 # The window on Linux: Tauri on WebKitGTK 4.1, which needs its development packages
 # (`libwebkit2gtk-4.1-dev`) to build. Off by default, so the rest of Linux CI builds the
-# workspace without GTK; the `desktop-linux` job, `cargo xtask dist-linux` and the
-# Linux installer turn it on. Without it the Linux binary says to use the daemon. Builds
+# workspace without GTK; CI's `desktop-linux` job turns it on, as Linux packages will
+# (ADR-0141). Without it the Linux binary says to use the daemon. Builds
 # nothing elsewhere: Windows always has its window.
 webkitgtk = ["dep:tauri", "dep:tauri-build"]
 
