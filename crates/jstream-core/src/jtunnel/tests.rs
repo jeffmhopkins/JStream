@@ -179,7 +179,7 @@ fn setup(name: &str, sender: &FakeSender) -> JtunnelSetup {
 }
 
 fn start(setup: &JtunnelSetup) -> Receiver {
-    Receiver::start(setup, Arc::new(Clock(Instant::now()))).expect("a receiver")
+    Receiver::start(setup, Arc::new(Clock(Instant::now())), None).expect("a receiver")
 }
 
 /// Waits up to 5 s for `check`.
@@ -353,4 +353,58 @@ fn ipv4_addresses_match_mapped_or_not() {
         plain,
         "192.168.1.5:9001".parse().expect("an address")
     ));
+}
+
+/// ADR-0142 §2: a sender's MIDI reaches its own MIDI input and the every-input one, from a
+/// MIDI-only stream that no source records, stamped on the media clock.
+#[test]
+fn a_senders_midi_feeds_its_midi_input_without_a_source() {
+    let sender = FakeSender::new();
+    let midi = Arc::new(MidiInputs::new());
+    let receiver = Receiver::start(
+        &setup("Keys", &sender),
+        Arc::new(Clock(Instant::now())),
+        Some(Arc::clone(&midi)),
+    )
+    .expect("a receiver");
+    let (_, to) = sender.next();
+    let note_on: &[u8] = &[0x90, 60, 100];
+    let cc: &[u8] = &[0xB3, 7, 99];
+    let start: &[u8] = &[0xFA];
+    let clock: &[u8] = &[0xF8];
+    let events = [(0_u16, note_on), (10, cc), (20, start), (30, clock)];
+    for seq in 0..40 {
+        let header = AudioHeader {
+            stream_id: 3,
+            seq,
+            sample_rate: 48_000,
+            codec: Codec::None,
+            frame_samples: 48,
+        };
+        let frames = [FrameOut {
+            events: if seq == 0 { &events } else { &[] },
+            audio: &[],
+        }];
+        let mut out = [0; wire::MAX_PACKET_BYTES];
+        let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
+        sender.socket.send_to(&out[..n], to).expect("sent");
+        thread::sleep(Duration::from_millis(1));
+    }
+    let keys = midi.drawn("Keys");
+    assert!(eventually(
+        || keys.held(0, 60) == 100 && keys.controller(3, 7) == 99
+    ));
+    assert_eq!(midi.any().held(0, 60), 100);
+    assert!(eventually(|| receiver.stats().midi == 4));
+    // Its clock runs the input's tempo (ADR-0142 §3).
+    let tempo = keys.tempo().expect("a tempo from the sender's clock");
+    assert!(tempo.playing);
+    assert_eq!(midi.any().tempo(), Some(tempo));
+    assert_eq!(
+        receiver.stats().played,
+        0,
+        "a MIDI-only stream feeds no input"
+    );
+    // Stamped on the media clock: some time after the test's clock started.
+    assert!(keys.last_ms().is_some());
 }
