@@ -836,7 +836,7 @@ impl Studio {
                     self.refresh(session);
                 }
             }
-            // A dropped `studio.changed` is recovered too.
+            // A dropped `studio.changed` or `kinds.changed` is recovered too.
             Event::EventsDropped { .. } => {
                 self.refresh(session);
                 let studio = *self;
@@ -844,6 +844,7 @@ impl Studio {
                 spawn_local(async move {
                     studio.read_studio(&session).await;
                     studio.read_sizes(&session).await;
+                    studio.relist_kinds(&session).await;
                 });
             }
             Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
@@ -855,6 +856,13 @@ impl Studio {
                 preview_scene,
                 ..
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
+            // A CLAP scan or an effect pack changed the kinds (0.107), perhaps from
+            // another client.
+            Event::KindsChanged { .. } => {
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move { studio.relist_kinds(&session).await });
+            }
             // The kinds it quarantined are marked in `kind.list` now.
             Event::GpuDeviceLost { quarantined, .. } | Event::GpuEffectSlow { quarantined, .. }
                 if !quarantined.is_empty() =>
