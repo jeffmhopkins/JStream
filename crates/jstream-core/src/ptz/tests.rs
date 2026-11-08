@@ -306,7 +306,7 @@ fn each_transport_aims_the_head_and_reads_its_pose() {
     }
 }
 
-/// Drives, presets, home and focus become the VISCA commands ADR-0138 §3 names.
+/// Drives, presets, home and focus become the VISCA commands ADR-0146 §3 names.
 #[test]
 fn actions_become_visca_commands() {
     let head = FakeHead::start(PtzTransport::ViscaIp);
@@ -533,7 +533,7 @@ fn cameras_parse_and_are_checked() {
     assert!(PtzSetup::new(vec![a, b2]).is_ok());
 }
 
-/// The fastest step up to half a second, then slower, never below 1 (ADR-0138 §7).
+/// The fastest step up to half a second, then slower, never below 1 (ADR-0146 §7).
 #[test]
 fn pose_shots_slow_down_with_the_transition() {
     assert_eq!(matched_speed(0), 24);

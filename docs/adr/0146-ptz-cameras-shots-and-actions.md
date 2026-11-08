@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0138"
+id = "ADR-0146"
 title = "PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0138: PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire
+# ADR-0146: PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

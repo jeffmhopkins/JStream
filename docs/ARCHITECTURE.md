@@ -159,7 +159,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
 | 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); MIDI keyboard, piano roll, drum pads and controller meters ([ADR-0137](adr/0137-midi-visualization-sources.md)); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
-| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)); drives the PTZ heads the host lists over `jstream-visca` ([ADR-0138](adr/0138-ptz-cameras-shots-and-actions.md)) | no |
+| 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)); drives the PTZ heads the host lists over `jstream-visca` ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
 | 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) and, on Linux, its executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)) | no |
@@ -764,8 +764,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   to the family's scene; the action `scene.zoom_camera` steps a follow camera's live
   zoom, with no `rev` change
   ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
-- **PTZ cameras** ([ADR-0138](adr/0138-ptz-cameras-shots-and-actions.md), protocol
-  0.110, a placeholder): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
+- **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
+  0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
   query `ptz.list` reports each one's reachability and pose; the protocol can't add a
   head. The edit `scene.set_ptz_shots` gives a scene a preset or pose per camera, fired
@@ -1127,7 +1127,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   every output and clears undo, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)),
   `device`, `history`, `output`,
   `pack` (writes and deletes files undo never reaches), `pairing`, `ptz` (moves physical
-  cameras, [ADR-0138](adr/0138-ptz-cameras-shots-and-actions.md)), `timeline` (its cues
+  cameras, [ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)), `timeline` (its cues
   may set a shared value a page may send off the machine,
   [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
   is not an undoable edit, and a page granted the value may send it off,
@@ -1515,8 +1515,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   ignored them. Version 12's `blending` (ADR-0126) also migrates what an older
   file means: its `normal_srgb` and `additive_srgb` items become `normal` and
   `additive`, and it is `srgb` only when no item used another mode, else `linear`, so
-  its scenes keep their look. Version 13 (ADR-0138) adds a scene's PTZ `ptz_shots`,
-  with a migration that refuses them in an older file. `jstream-core`
+  its scenes keep their look. Version 14 (ADR-0146) adds a scene's PTZ `ptz_shots`,
+  with a migration that refuses them in an older file (version 13 is the pulse change's,
+  #1417, which lands first). `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

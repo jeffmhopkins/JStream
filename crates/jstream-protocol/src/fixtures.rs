@@ -497,7 +497,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             follow: None,
         },
-        // PTZ shots (ADR-0138): a preset, and a pose.
+        // PTZ shots (ADR-0146): a preset, and a pose.
         Edit::SceneSetPtzShots {
             scene_id: SceneId::new("scn_1"),
             shots: vec![
@@ -1464,7 +1464,7 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
-        // PTZ heads (ADR-0138).
+        // PTZ heads (ADR-0146).
         Action::PtzDrive {
             camera: "close".into(),
             pan: -12,

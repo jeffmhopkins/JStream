@@ -370,7 +370,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   differently, the one listed later wins when both name the device the same way (an
   empty `device` and the first device's ID are told apart: then the last changed wins). `capture.targets` lists each device's
   `controls` from `VideoDevices::controls`.
-- **PTZ cameras** (`ptz/`, [ADR-0138](../../docs/adr/0138-ptz-cameras-shots-and-actions.md)):
+- **PTZ cameras** (`ptz/`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)):
   the physical heads this machine drives over VISCA, off until the host calls
   `Engine::start_ptz` with its camera list (ADR-0123 §1). Each camera, checked against
   the LAN ranges of `lan.rs` and with its address, port and VISCA address unique, gets
@@ -719,7 +719,7 @@ covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests
 - **PTZ** (`src/ptz/tests.rs`, `src/tests/ptz.rs`): a VISCA head emulator on loopback
   (`FakeHead`, VISCA over IP, raw UDP or raw TCP) that takes each command as a head
   does and answers inquiries with its pose; each transport aiming the head and its
-  pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0138 names; a
+  pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0146 names; a
   queued drive replacing the one before it; the checks and refusals; a reply from
   another address dropped and counted, and a silent head reported; the daemon's camera
   syntax; the speed curve; and through the engine, the actions and the list, program
@@ -796,7 +796,7 @@ publisher and the recording file sink), `jstream-sources` (the built-in kinds: t
 descriptors and the sources that draw them), `jstream-jtunnel` (JTunnel's packets and
 the playout the JTunnel receiver drives, ADR-0122), `jstream-plugin-proto` (the CLAP host
 supervisor's block and control messages), `jstream-visca` (the VISCA commands, inquiries
-and replies the PTZ heads exchange, ADR-0138), `jstream-plugin-wasm` (the wasmtime host the
+and replies the PTZ heads exchange, ADR-0146), `jstream-plugin-wasm` (the wasmtime host the
 WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
 by default, ADR-0075), `serde` (the derives of the installed plugins' file,
 ADR-0076), `jstream-youtube` (Google sign-in and the
@@ -3229,7 +3229,7 @@ collection lock; that thread takes no engine lock while it sets them on the devi
 (`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
 its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
 collection lock under its scan lock only to add the kinds it found. The PTZ heads work
-the same way as the camera controls (ADR-0138): actions and shots go to each `jstream-ptz` thread over a channel,
+the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply.

@@ -664,7 +664,7 @@ struct Scene {
     camera: Option<jstream_protocol::SceneCamera>,
     /// Its camera motion (ADR-0113); empty for a keyframe scene.
     camera_motion: Vec<jstream_protocol::CameraMotionModifier>,
-    /// Its own PTZ shots (ADR-0138), a keyframe scene's included.
+    /// Its own PTZ shots (ADR-0146), a keyframe scene's included.
     ptz_shots: Vec<jstream_protocol::PtzShot>,
     /// Its follow camera (ADR-0113); `None` for a keyframe scene.
     camera_follow: Option<jstream_protocol::CameraFollow>,
@@ -1110,7 +1110,7 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
-            // The mock controls no PTZ camera (ADR-0138): it checks the call as the
+            // The mock controls no PTZ camera (ADR-0146): it checks the call as the
             // engine does, then refuses it as an engine with none listed does.
             Action::PtzDrive { .. }
             | Action::PtzAim { .. }

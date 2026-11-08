@@ -1,5 +1,5 @@
 //! The LAN ranges JStream's sockets outside the TLS listener may talk to (ADR-0123 §2,
-//! ADR-0138 §8).
+//! ADR-0146 §8).
 
 use std::net::IpAddr;
 

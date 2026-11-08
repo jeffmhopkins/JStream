@@ -102,7 +102,7 @@ pub(crate) struct Tools {
 /// The group tools whose ops reach outside JStream: `output.start` publishes to a
 /// streaming server, a `browser` source (made or changed by a `source` edit) loads
 /// any http or https page an agent names, and `ptz` moves physical cameras on the LAN
-/// (ADR-0138). Their `openWorldHint` is true, and so is `batch`'s, since it carries
+/// (ADR-0146). Their `openWorldHint` is true, and so is `batch`'s, since it carries
 /// their edits; every other tool's is false.
 pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 
@@ -1098,7 +1098,7 @@ mod tests {
         // settings, `values.set` replaces a value that a page granted it may send off
         // the machine (ADR-0102), `timeline.play` runs cues that may set such a value
         // (ADR-0115), `ptz` moves cameras and `ptz.store` overwrites a camera's preset
-        // (ADR-0138), and an undo past an `output.create` removes a stream key redo doesn't
+        // (ADR-0146), and an undo past an `output.create` removes a stream key redo doesn't
         // restore.
         let destructive: Vec<&str> = all
             .iter()

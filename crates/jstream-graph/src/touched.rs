@@ -101,7 +101,7 @@ enum Prop {
     Options,
     /// A scene's camera (ADR-0094), its camera motion or its follow camera (ADR-0113).
     Camera,
-    /// A scene's PTZ shots (ADR-0138).
+    /// A scene's PTZ shots (ADR-0146).
     PtzShots,
     /// A label's colour and icon.
     Look,

@@ -1,10 +1,10 @@
-//! PTZ cameras (ADR-0138, #1182): the shots a scene frames its physical heads with, and
+//! PTZ cameras (ADR-0146, #1182): the shots a scene frames its physical heads with, and
 //! the types the `ptz.*` actions and `ptz.list` carry.
 //!
 //! A head is named by the name the host's PTZ camera list gives it: the list, with each
 //! head's address, belongs to the machine (ADR-0123 §4), so the protocol never carries
 //! an address in. Positions and speeds are the head's own VISCA counts and steps
-//! (ADR-0138 §5).
+//! (ADR-0146 §5).
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -82,7 +82,7 @@ impl PtzPose {
 }
 
 /// One shot of a scene: a camera, and the preset it recalls or the pose it moves to
-/// (ADR-0138 §6). Exactly one of `preset` and a pose is set.
+/// (ADR-0146 §6). Exactly one of `preset` and a pose is set.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct PtzShot {
     /// The camera's name on the machine's PTZ camera list.
@@ -228,7 +228,7 @@ pub enum PtzFocus {
     Stop,
 }
 
-/// How a PTZ camera on the machine's list is reached (ADR-0138 §2).
+/// How a PTZ camera on the machine's list is reached (ADR-0146 §2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum PtzTransport {

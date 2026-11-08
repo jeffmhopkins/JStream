@@ -1,4 +1,4 @@
-//! PTZ cameras (ADR-0138, #1182): the physical heads this machine drives over VISCA.
+//! PTZ cameras (ADR-0146, #1182): the physical heads this machine drives over VISCA.
 //!
 //! The host gives the engine its camera list with [`Engine::start_ptz`]; with none, no
 //! socket is open (ADR-0123 §1). Each camera gets a `jstream-ptz` thread with its own
@@ -50,7 +50,7 @@ const REACHABLE_FOR: Duration = Duration::from_secs(3);
 const CONNECT_WAIT: Duration = Duration::from_secs(1);
 
 /// One camera on this machine's list: its name, LAN address, transport and VISCA
-/// address (ADR-0138 §1).
+/// address (ADR-0146 §1).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PtzCamera {
     name: String,
@@ -179,7 +179,7 @@ impl fmt::Display for PtzCamera {
     }
 }
 
-/// The cameras this machine controls (ADR-0138 §1), for [`Engine::start_ptz`].
+/// The cameras this machine controls (ADR-0146 §1), for [`Engine::start_ptz`].
 ///
 /// [`Engine::start_ptz`]: crate::Engine::start_ptz
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -363,7 +363,7 @@ impl Ptz {
             .collect()
     }
 
-    /// Fires the shots of the scenes the studio now shows (ADR-0138 §7): the program
+    /// Fires the shots of the scenes the studio now shows (ADR-0146 §7): the program
     /// scene's when it changed, paced to `duration_ms` (the switch's transition), and the
     /// preview scene's when it changed, for the cameras the program's shots don't name.
     pub(crate) fn follow(
@@ -415,7 +415,7 @@ impl Ptz {
 }
 
 /// The pan speed a pose shot moves at when a switch with a transition of `duration_ms`
-/// fires it (ADR-0138 §7): the fastest up to half a second, then proportionally slower,
+/// fires it (ADR-0146 §7): the fastest up to half a second, then proportionally slower,
 /// never below the slowest step.
 pub(crate) fn matched_speed(duration_ms: u32) -> u8 {
     if duration_ms <= 500 {
@@ -825,7 +825,7 @@ impl Worker {
 }
 
 /// Adds `cmd` to the queue: a drive replaces an unsent drive just before it, so a
-/// joystick never builds a backlog (ADR-0138 §3), and nothing is reordered.
+/// joystick never builds a backlog (ADR-0146 §3), and nothing is reordered.
 fn enqueue(queue: &mut VecDeque<Cmd>, cmd: Cmd) {
     if matches!(cmd, Cmd::Drive { .. })
         && let Some(slot @ Cmd::Drive { .. }) = queue.back_mut()

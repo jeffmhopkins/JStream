@@ -1,4 +1,4 @@
-//! PTZ cameras through the engine (ADR-0138): `ptz.*` actions and `ptz.list` reach an
+//! PTZ cameras through the engine (ADR-0146): `ptz.*` actions and `ptz.list` reach an
 //! emulated head, and scenes fire their shots when they go on program or preview.
 
 use super::{add, batch, block_on, code, connected, create, edits, query};
@@ -141,7 +141,7 @@ fn actions_and_the_list_reach_the_heads_the_host_starts() {
 
 /// A scene going on program sends its shots; a keyframe scene sends its own shot for a
 /// camera and its parent's for the others; a shot for a camera this machine doesn't
-/// list is skipped (ADR-0138 §6, §7). A longer transition paces a pose more slowly.
+/// list is skipped (ADR-0146 §6, §7). A longer transition paces a pose more slowly.
 #[test]
 fn program_switches_fire_the_scenes_shots() {
     let engine = Engine::new().with_cpu_compositor();
@@ -234,7 +234,7 @@ fn program_switches_fire_the_scenes_shots() {
 }
 
 /// A scene going on preview moves only the cameras the program's shots don't name, so
-/// a preview never moves a live shot (ADR-0138 §7). Editing shots moves nothing.
+/// a preview never moves a live shot (ADR-0146 §7). Editing shots moves nothing.
 #[test]
 fn preview_never_moves_a_camera_the_program_frames() {
     let engine = Engine::new();

@@ -28,7 +28,7 @@ Options:
                        (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
   --ptz-camera <name@address:port[/transport][#n]>
-                       drive this PTZ camera over VISCA (ADR-0138): its name,
+                       drive this PTZ camera over VISCA (ADR-0146): its name,
                        which scenes and `ptz.*` actions use, and its LAN
                        address and port (repeatable). The transport is
                        visca_ip (Sony-style UDP, the default; port 52381),
@@ -130,7 +130,7 @@ pub struct Options {
     pub effects_dir: Option<String>,
     /// `--lan` and its options: the network listener, off without it.
     pub lan: Option<Lan>,
-    /// `--ptz-camera`: the PTZ cameras to drive, in the order given (ADR-0138). None
+    /// `--ptz-camera`: the PTZ cameras to drive, in the order given (ADR-0146). None
     /// leaves PTZ control off.
     pub ptz: Vec<jstream_core::PtzCamera>,
     /// `--jtunnel-accept`: the JTunnel senders to receive from, in the order given.
@@ -430,7 +430,7 @@ mod tests {
         );
     }
 
-    /// ADR-0138 §1: PTZ control is off unless `--ptz-camera` lists a camera, and each
+    /// ADR-0146 §1: PTZ control is off unless `--ptz-camera` lists a camera, and each
     /// one is checked as the engine checks it.
     #[test]
     fn ptz_cameras_are_opt_in_and_checked() {

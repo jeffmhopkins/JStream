@@ -130,7 +130,7 @@ fn family_scene(
     Ok(si)
 }
 
-/// `scene.set_ptz_shots` (ADR-0138 §6): replaces the scene's own shots, a keyframe
+/// `scene.set_ptz_shots` (ADR-0146 §6): replaces the scene's own shots, a keyframe
 /// scene's included.
 fn set_ptz_shots(
     state: &mut State,
@@ -288,7 +288,7 @@ fn unused_id(state: &State, item_id: &ItemId) -> FilterId {
 }
 
 /// The edits that put back a deleted scene's camera motion, after its camera, and its
-/// PTZ shots (ADR-0138). Its follow camera comes back with its items' effects
+/// PTZ shots (ADR-0146). Its follow camera comes back with its items' effects
 /// (ADR-0120).
 pub(crate) fn restore(scene: &Scene) -> Vec<Edit> {
     let mut edits = Vec::new();
@@ -318,7 +318,7 @@ impl State {
         })
     }
 
-    /// The PTZ shots `scene` sends when it goes on program or preview (ADR-0138 §6): a
+    /// The PTZ shots `scene` sends when it goes on program or preview (ADR-0146 §6): a
     /// keyframe scene's own, then its parent's for every camera it has none for. Each
     /// camera once, in that order.
     pub fn effective_ptz_shots(&self, scene: &Scene) -> Vec<PtzShot> {

@@ -421,7 +421,7 @@ impl Collection {
         Ok(si)
     }
 
-    /// `scene.set_ptz_shots` (ADR-0138), as the engine applies it: any scene, a keyframe
+    /// `scene.set_ptz_shots` (ADR-0146), as the engine applies it: any scene, a keyframe
     /// scene included.
     fn set_ptz_shots(
         &mut self,

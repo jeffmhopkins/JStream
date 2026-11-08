@@ -667,7 +667,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -709,7 +709,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -773,7 +773,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -791,7 +791,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -817,7 +817,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -843,7 +843,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -3619,7 +3619,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -5738,7 +5738,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",
@@ -7111,7 +7111,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -7153,7 +7153,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -7217,7 +7217,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -7235,7 +7235,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -7261,7 +7261,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -7287,7 +7287,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -10063,7 +10063,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -12182,7 +12182,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",
@@ -15337,7 +15337,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -15379,7 +15379,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -15443,7 +15443,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -15461,7 +15461,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -15487,7 +15487,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -15513,7 +15513,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -18289,7 +18289,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -20408,7 +20408,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",
@@ -23782,7 +23782,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -23824,7 +23824,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -23888,7 +23888,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -23906,7 +23906,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -23932,7 +23932,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -23958,7 +23958,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -26734,7 +26734,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -28849,7 +28849,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",
@@ -30683,7 +30683,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `ptz` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30725,7 +30725,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30789,7 +30789,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30807,7 +30807,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30833,7 +30833,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30859,7 +30859,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -30892,7 +30892,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Lists the PTZ cameras on this machine's list (ADR-0138 §4), in the order the host\ngave them: each one's address, whether it answered lately, its last pose and its\nlast error. Runtime state, so no `rev`. Empty when the machine controls no PTZ\ncameras, which is the default (ADR-0123 §1).",
+                "description": "Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host\ngave them: each one's address, whether it answered lately, its last pose and its\nlast error. Runtime state, so no `rev`. Empty when the machine controls no PTZ\ncameras, which is the default (ADR-0123 §1).",
                 "properties": {
                   "type": {
                     "const": "ptz.list",
@@ -31414,7 +31414,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",
@@ -31889,7 +31889,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -33364,7 +33364,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -33406,7 +33406,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -33470,7 +33470,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.",
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -33488,7 +33488,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -33514,7 +33514,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -33540,7 +33540,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
                 "properties": {
                   "camera": {
                     "description": "The camera's name.",
@@ -36316,7 +36316,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -38435,7 +38435,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "PtzShot": {
-            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0138 §6). Exactly one of `preset` and a pose is set.",
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
             "properties": {
               "camera": {
                 "description": "The camera's name on the machine's PTZ camera list.",

@@ -326,7 +326,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.110 (a placeholder until the release queue sets the number)
+`PROTOCOL_VERSION` is 0.111 (a number the release queue set)
 because the engine drives PTZ cameras: the actions `ptz.drive`, `ptz.aim`,
 `ptz.home`, `ptz.recall`, `ptz.store` and `ptz.focus`, the query `ptz.list`, and a
 scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.107 because the event `kinds.changed` (`KindsCause`) tells
@@ -1230,11 +1230,11 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 ## PTZ cameras
 <!-- @section
 covers = ["crates/jstream-protocol/src/ptz.rs"]
-depends_on = ["docs/adr/0138-ptz-cameras-shots-and-actions.md"]
+depends_on = ["docs/adr/0146-ptz-cameras-shots-and-actions.md"]
 -->
 
-PTZ cameras (0.110, a placeholder) are physical heads the engine drives over VISCA
-([ADR-0138](../../docs/adr/0138-ptz-cameras-shots-and-actions.md)). The camera list,
+PTZ cameras (0.111) are physical heads the engine drives over VISCA
+([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)). The camera list,
 with each head's address, belongs to the machine (ADR-0123 §4): the host gives it to
 the engine, and nothing on the wire adds, changes or removes a camera. A call names a
 camera by its name on that list, 1 to 64 bytes with no control characters. Positions
@@ -2168,11 +2168,11 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  a camera's motion and follow camera, a scene's PTZ shots (ADR-0138), `live.set` and `live.cancel`, and `undo`/`redo` on
+  a camera's motion and follow camera, a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
-  never granted: the `ptz.*` actions and `ptz.list` (ADR-0138: a plugin moves no
+  never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves

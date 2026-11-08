@@ -211,7 +211,7 @@ the user's desktop session can read it while it is there. Failed tokens are not 
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
-The daemon's `--ptz-camera` (ADR-0123, [ADR-0138](../adr/0138-ptz-cameras-shots-and-actions.md))
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
 is the one way to make it send VISCA to a camera: the protocol can't add, change or
 remove a camera, so a client with the token, an agent or a paired device can move only
 the heads the person listed, by name. An address outside the LAN ranges is refused at

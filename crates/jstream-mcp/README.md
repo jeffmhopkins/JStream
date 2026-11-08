@@ -128,7 +128,7 @@ today `collection` (an open or a new stops every output and clears every client'
 [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
 `output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ptz` (which moves physical cameras, and whose
-`ptz.store` overwrites a preset in the camera, ADR-0138), `ui_settings`, `values` (whose values a
+`ptz.store` overwrites a preset in the camera, ADR-0146), `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
@@ -146,7 +146,7 @@ opposite action takes back) only change what JStream shows, so the tools a scene
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
-server, `ptz`, whose actions move physical cameras on the network (ADR-0138), and `source`, whose `browser` kind loads any http or https page set as its `url`
+server, `ptz`, whose actions move physical cameras on the network (ADR-0146), and `source`, whose `browser` kind loads any http or https page set as its `url`
 (or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
 covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
 or `output.start` also asks before `output.list`.

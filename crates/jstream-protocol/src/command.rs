@@ -850,7 +850,7 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
     },
-    /// Sets a scene's PTZ shots (ADR-0138 §6): the whole list of physical camera
+    /// Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera
     /// framings the scene sends when it goes on program or preview. At most 16, one per
     /// camera; each names a camera of the machine's PTZ list and either a preset or a
     /// pose. A keyframe scene's shot for a camera replaces its parent's for that camera,
@@ -1709,7 +1709,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
     },
-    /// Drives a PTZ camera (ADR-0138 §3): pans, tilts and zooms it at signed speeds in
+    /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
     /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
     /// (negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative
     /// wide). Not an edit: nothing is stored or undone. A drive queued behind another
@@ -1731,7 +1731,7 @@ pub enum Action {
         #[serde(default)]
         zoom: i8,
     },
-    /// Moves a PTZ camera to an absolute pose in its own counts (ADR-0138 §3, §5): pan
+    /// Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan
     /// and tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,
     /// the fastest by default) paces pan and tilt; the tilt step is held to 23. Fails
     /// as `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`
@@ -1747,13 +1747,13 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         speed: Option<u8>,
     },
-    /// Sends a PTZ camera to its home position (ADR-0138 §3). Fails as `ptz.drive` does.
+    /// Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.
     #[serde(rename = "ptz.home")]
     PtzHome {
         /// The camera's name.
         camera: String,
     },
-    /// Recalls a preset stored in a PTZ camera (ADR-0138 §3), 0 to 127. Fails as
+    /// Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as
     /// `ptz.drive` does, and with `invalid_argument` on `preset` past 127.
     #[serde(rename = "ptz.recall")]
     PtzRecall {
@@ -1762,7 +1762,7 @@ pub enum Action {
         /// The preset number.
         preset: u8,
     },
-    /// Stores a PTZ camera's current pose as one of its presets (ADR-0138 §3), 0 to
+    /// Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to
     /// 127, in the head's own memory: nothing is stored in the collection or undone, and
     /// it replaces what the head held there. Fails as `ptz.recall` does.
     #[serde(rename = "ptz.store")]
@@ -1772,7 +1772,7 @@ pub enum Action {
         /// The preset number.
         preset: u8,
     },
-    /// Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0138 §3).
+    /// Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).
     /// `speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.
     /// Fails as `ptz.drive` does.
     #[serde(rename = "ptz.focus")]
@@ -2249,7 +2249,7 @@ impl Action {
             Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
-            // A PTZ camera belongs to the machine, not the collection (ADR-0138 §1).
+            // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
             Action::PtzDrive { .. }
             | Action::PtzAim { .. }
             | Action::PtzHome { .. }

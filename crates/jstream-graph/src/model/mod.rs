@@ -861,7 +861,7 @@ pub struct Scene {
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
-    /// Its PTZ shots (ADR-0138 §6). On a keyframe scene, only its own, which replace
+    /// Its PTZ shots (ADR-0146 §6). On a keyframe scene, only its own, which replace
     /// its parent's for the same cameras; [`State::effective_ptz_shots`] merges them.
     pub(crate) ptz_shots: Vec<PtzShot>,
     /// Its timelines (ADR-0115), by ID.
@@ -930,7 +930,7 @@ impl Scene {
         &self.camera_motion
     }
 
-    /// Its own PTZ shots (ADR-0138 §6), which `scene.set_ptz_shots` sets. On a keyframe
+    /// Its own PTZ shots (ADR-0146 §6), which `scene.set_ptz_shots` sets. On a keyframe
     /// scene they replace its parent's for the same cameras;
     /// [`State::effective_ptz_shots`] gives what the scene sends.
     pub fn ptz_shots(&self) -> &[PtzShot] {

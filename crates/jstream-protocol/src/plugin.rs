@@ -85,7 +85,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
-    // LAN addresses of the machine's PTZ heads (ADR-0138) are the person's.
+    // LAN addresses of the machine's PTZ heads (ADR-0146) are the person's.
     ("ptz.list", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
@@ -209,7 +209,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
-    // They move a physical head on the LAN (ADR-0138), which no plugin scope covers.
+    // They move a physical head on the LAN (ADR-0146), which no plugin scope covers.
     ("ptz.drive", N),
     ("ptz.aim", N),
     ("ptz.home", N),

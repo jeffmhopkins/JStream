@@ -150,7 +150,7 @@ pub fn engine(
         engine
             .start_ptz(&setup)
             .map_err(|err| anyhow::anyhow!("starting PTZ control: {err}"))?;
-        tracing::info!(cameras = setup.cameras().len(), "PTZ control on (ADR-0138)");
+        tracing::info!(cameras = setup.cameras().len(), "PTZ control on (ADR-0146)");
     }
     #[cfg(windows)]
     scan_clap_plugins(&engine);

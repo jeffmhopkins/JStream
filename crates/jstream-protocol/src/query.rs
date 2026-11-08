@@ -227,7 +227,7 @@ pub enum Query {
     /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
-    /// Lists the PTZ cameras on this machine's list (ADR-0138 §4), in the order the host
+    /// Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host
     /// gave them: each one's address, whether it answered lately, its last pose and its
     /// last error. Runtime state, so no `rev`. Empty when the machine controls no PTZ
     /// cameras, which is the default (ADR-0123 §1).
@@ -1158,7 +1158,7 @@ pub struct SceneInfo {
     /// Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub camera_motion: Vec<CameraMotionModifier>,
-    /// Its PTZ shots (ADR-0138 §6): the physical camera framings it sends when it goes
+    /// Its PTZ shots (ADR-0146 §6): the physical camera framings it sends when it goes
     /// on program or preview. On a keyframe scene, only its own, which replace its
     /// parent's for the same cameras. Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
