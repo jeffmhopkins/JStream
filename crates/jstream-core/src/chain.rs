@@ -2977,6 +2977,45 @@ mod tests {
         assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
     }
 
+    /// A `border` with rounded corners and an outer stroke on an opaque item (#1227): the
+    /// stroke rings the box past its edge, in the room the border's own outset gives it,
+    /// and the corners of the picture are cut round. The `?` samples fall on the
+    /// antialiased curve of a corner; the grid's samples sit right of and below each
+    /// cell's centre, so the right and bottom corners show more of them.
+    #[test]
+    fn golden_a_border_rings_an_opaque_items_box() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "border",
+                    serde_json::json!({
+                        "width": 0.0, "radius": 6.0, "outer_width": 3.0,
+                        "outer_color": "#0000ff"
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            ................
+            ................
+            .....BBBBB?.....
+            ....BWWWWW??....
+            ....BWWWWWWB....
+            ....??WWWW?.....
+            .....?BBBB......
+            ................
+            ................
+            ",
+            "the outer stroke rings the box",
+        );
+    }
+
     /// A vignette before an effect that draws past the box (a glow, here an invisible
     /// one) frames the box itself, as it does alone: the layer grows only where the glow
     /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep

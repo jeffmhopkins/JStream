@@ -790,6 +790,25 @@ premultiplied linear light on the way out.
   transparent. It frames whatever its chain runs on: a source's whole frame, an item's
   cropped box or a scene's composite (ADR-0065, #529).
 
+- `border` (#1227): the full set of border tools in one kind, in a custom pass (its
+  movement needs the clock). A rounded rectangle, the frame inset by the padding the
+  chain gives the filter (`Pass::set_pad`, so on an item it is the box, ADR-0125):
+  `corners` `same` with `radius`, or `each` with `radius_top_left`, `_top_right`,
+  `_bottom_right` and `_bottom_left` (0 to 2000 px, held to half the shorter side), and
+  `clip` (default on) cuts the picture to it, so a shadow or glow after it follows the
+  rounded shape. An inner stroke, `width` (0 to 64 px, default 4) and `color`, runs
+  inside the edge over the picture; an outer one, `outer_width` (0 to 64, default 0),
+  `outer_color` and `outer_gap` (0 to 64), past it, so the kind declares a
+  `max_outset_px` of 129. `style` is `solid`, `double` (two lines of a third of the
+  width), `dashed` (`dash` 1 to 400 px, `gap`) or `dotted` (round dots the stroke's
+  width across, `gap` apart), measured along the edge: each straight side by its
+  length and each corner by its arc, clockwise from the top-left. `fill` is the
+  `color`, or a `linear` (at `angle`) or `conic` gradient from `color` to `color2`, as
+  a triangle wave so it loops without a seam. `speed` (−2000 to 2000 px/s) moves the
+  dashes along the edge and the gradient round it once per perimeter; the distance is
+  worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
+  stays exact. On a source or scene chain the outer stroke past the frame is cut.
+
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
 `custom_width` and `custom_height` from 1 to 10000 shown only for `custom`), `mode`
@@ -872,7 +891,8 @@ scratch layer that size, transparent around it, then runs the pass over that. Ea
 these kinds declares the
 most it can draw past its input at any settings: drop shadow 300 (the largest offset
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
-and bloom 100 (the largest radius). So on an item the glow and shadow of an opaque
+and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
+widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
 picture show around its box (#1226). That room costs layer memory and fill: a
 1920×1080 box with a drop shadow is a 2520×1680 layer.
 

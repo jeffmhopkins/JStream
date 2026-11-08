@@ -163,6 +163,7 @@ impl VideoFilter {
     /// ones before it frame the item's box itself (ADR-0065 §5).
     pub fn set_pad(&mut self, pad: u32) {
         self.pad = pad;
+        self.pass.set_pad(pad);
     }
 
     /// The padding [`Self::set_pad`] set.
