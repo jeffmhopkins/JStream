@@ -5447,17 +5447,21 @@ impl Shared {
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             // Sources and filters of a changed kind follow its renames (#1353, #1412,
-            // ADR-0025): one loaded before its pack, or one a reload raised the version of.
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of. A new
+            // version is logged even when nothing moved, so an undo step still holding a
+            // deleted filter's or source's old settings conflicts with it (#1418).
             let migrations = &update.migrations;
             let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
                 migrations.get(kind)?.migrate(stored, from)
             });
             if let Some(upgraded) = upgraded {
-                tracing::info!(
-                    rev = %upgraded.rev,
-                    changed = upgraded.set.len(),
-                    "stored settings moved to their pack kind's current version"
-                );
+                if !upgraded.set.is_empty() {
+                    tracing::info!(
+                        rev = %upgraded.rev,
+                        changed = upgraded.set.len(),
+                        "stored settings moved to their pack kind's current version"
+                    );
+                }
                 // A shader source's new settings (its size among them) reach its live
                 // source as after any batch.
                 if upgraded
