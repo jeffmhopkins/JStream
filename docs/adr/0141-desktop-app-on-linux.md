@@ -2,14 +2,14 @@
 id = "ADR-0141"
 title = "The desktop app on Linux: Tauri on WebKitGTK, behind a feature"
 kind = "adr"
-status = "accepted"
-tier = "agent"
+status = "proposed"
+tier = "maintainer"
 -->
 
 # ADR-0141: The desktop app on Linux: Tauri on WebKitGTK, behind a feature
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Status:** proposed
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -22,7 +22,9 @@ waits for a window to run in ([ADR-0112](0112-assignable-camera-zoom-bindings.md
 and the UI is one code path for every host
 ([ADR-0045](0045-leptos-web-ui.md)). The maintainer asked for the platform-specific
 desktop apps to be built: "All right. Go ahead and start out the threads to build up the
-platform. Specific desktop apps as well then that should be done."
+platform. Specific desktop apps as well then that should be done." Supported platforms
+and their hosts are maintainer-tier scope ([R-GOV-005](../RULES.md#R-GOV-005)), so this
+ADR records that direction for the maintainer's decision.
 
 Tauri 2 already runs on Linux through wry on
 WebKitGTK 4.1 ([Tauri's Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux)),
