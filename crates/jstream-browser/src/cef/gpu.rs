@@ -1,6 +1,20 @@
 //! Frames on the GPU: each of the helper's shared textures opened once on the engine's
 //! D3D12 device, and each paint copied from it into a texture the page owns (ARCH ›
 //! Browser source). Nothing is read back to the CPU.
+//!
+//! # Behaviour
+//!
+//! Each shared texture the helper names is duplicated out of
+//! the helper's process, opened once per slot on the engine's D3D12 device
+//! (`OpenSharedHandle`), checked to be a single-mip BGRA8 texture of the size the helper
+//! said, imported into wgpu, and each paint copied from it into the next of three
+//! textures the page owns, waiting for the copy before the slot goes back to the helper.
+//! The copy is submitted under the context's `SubmitLock`, so it can't take a fence wait
+//! or signal that render staged for its own submit on the same queue. The lock is let go
+//! before the wait. Nothing is read back to the CPU. The frame is `Bgra8`, premultiplied, BT.709 full
+//! range, stamped on arrival. A paint that can't be copied keeps the last frame and is
+//! logged once until one succeeds. `use_device` also tells the helper the device's adapter
+//! LUID; without a device, or one without a LUID, pages deliver no frames.
 
 use std::os::windows::io::{AsRawHandle, OwnedHandle};
 use std::sync::{Arc, Mutex, PoisonError};

@@ -13,6 +13,34 @@
 //! **A helper that stops** (it crashed, or its pipe broke) ends the link: every page's
 //! audio fails, so the engine's input sees the stream end, frames stop, and every later
 //! request fails. The backend starts a new helper for the next page.
+//!
+//! # Behaviour
+//!
+//! The pipe (`wire.rs` and this module, built everywhere and tested over in-memory pipes):
+//! length-prefixed messages of at most 256 KiB (room for a page opened with 128 KiB of
+//! HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
+//! opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads
+//! it (`BrowserPage::reload`, which the helper does with CEF's own reload, the custom CSS
+//! going in again on load), hides or shows it (`BrowserPage::set_hidden`, which the
+//! helper does with CEF's `WasHidden` on its UI thread, so a hidden page stops painting;
+//! a hide sent before the browser exists applies when it arrives, #1071), closes it,
+//! tells the helper which adapter to paint on, and shuts it down.
+//! A reload hides the page until the reloaded document paints for real: the helper skips
+//! the page's paints from the reload until the main frame's load has ended or failed and
+//! the first paint since its start has been skipped, 500 ms after that start counting
+//! as the load's end (`reload_hold.rs`), since Chromium's first paint of a new document can be its
+//! blank, opaque white (#1151). It asks for a paint 100 ms after the hold ends if none
+//! came, so a static page shows again. A new page starts held the same way, so its first
+//! load's white paint never reaches the engine either (#1155); a first load that fails
+//! before its document starts ends that hold at once, as no paint is coming to wait for. It says when it took the reload (`Reloading`), and the engine
+//! drops paints that left before that, so a `restart_on_show` page is transparent while
+//! it reloads, never the end of its last run nor a white frame. An `Open` carries the
+//! page API grant in one flags byte, and a granted page's updates go as `PageData`,
+//! already split to fit. The helper sends
+//! frames, reload acknowledgements, audio, audio failures, refused-request counts (never URLs) and warnings for
+//! the engine's log. A reader thread hands each to its page, stamping frames and audio on
+//! the media clock as they arrive. When the helper's pipe ends, every page's audio fails
+//! (`DeviceLost`), unless the engine was shutting it down.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};

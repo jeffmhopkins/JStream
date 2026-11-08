@@ -54,7 +54,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 | Host (`apps/`) | What it is |
 |---|---|
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 | `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
@@ -135,6 +135,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-midi` | MIDI 1.0 model for controller input ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): messages parsed from bytes, and the tempo, beat and bar a MIDI clock gives on the media clock; no I/O, no allocation, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
+| 0 | `jstream-visca` | VISCA format for PTZ control in both directions ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): commands, inquiries and replies encoded and parsed, and Sony-style VISCA-over-IP framing; no sockets, no allocation, no dependencies | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
 | 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
@@ -327,7 +328,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
   no scene filters of its own, but may override an item's effects, the `keyframe` owner
   of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
-  effects over its box in a layer grown by their outset, before its opacity and blend,
+  effects over its box in a layer grown by their outset where the first effect that
+  draws past the box runs ([ADR-0125](adr/0125-item-effects-layer-grows-where-it-is-needed.md)),
+  before its opacity and blend,
   or with its `effects_space` `canvas` over a canvas-sized layer it is placed into
   ([ADR-0106](adr/0106-item-effects-in-canvas-space.md)).
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
@@ -997,8 +1000,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token (the control token, or a paired device's on loopback or a TLS
   listener) required and `Origin`/`Host` validated
-  ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
-  for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)). The host's own
+  listener is plain `ws://`. A host can also open the network listener
+  ([ADR-0104](adr/0104-network-listener-over-tls.md), the daemon's `--lan`): TLS only,
+  with a self-signed certificate the person trusts by its fingerprint, admitting paired
+  devices only and never the control token. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
@@ -1120,7 +1126,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, layering light, masks and reflections, 3D sets through a scene camera, a camera
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1213,7 +1220,9 @@ scene's to the other's in linear light while a transition runs (`Color::over_bla
 `Color::mix`; [ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4). `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+[Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
+a source's frame that only items draw at the size those items draw it, not the frame's
+(#1139), so a 1080p still in a small box keeps a small texture. On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it

@@ -49,6 +49,18 @@ pub enum ServerError {
         /// What is wrong with it.
         reason: String,
     },
+    /// The network listener's key and certificate file can't be read, made or written
+    /// (ADR-0104 §4).
+    #[error("unusable network certificate file `{}`: {reason}", path.display())]
+    Identity {
+        /// The file.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
+    /// The network listener's TLS setup refused its key and certificate.
+    #[error("could not set up TLS for the network listener: {0}")]
+    Tls(String),
     /// The listening socket could not be opened.
     #[error("could not listen on {addr}: {source}")]
     Bind {

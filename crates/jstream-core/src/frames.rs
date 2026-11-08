@@ -19,7 +19,7 @@ use jstream_media::MediaTime;
 use jstream_protocol::{CallResult, FrameSheet, ProtocolError, Rev, SheetFrame};
 
 use crate::runtime::RenderSnapshot;
-use crate::snapshot::LiveParams;
+use crate::snapshot::{LiveParams, Pinned};
 
 /// The most sheets taken at once, across every session.
 pub(crate) const MAX_SHEETS: usize = 4;
@@ -34,6 +34,8 @@ const BACKGROUND: [u8; 4] = [24, 24, 27, 255];
 /// What one picture draws: as `video.snapshot` reads it, at one moment.
 pub(crate) struct Sample {
     pub(crate) snapshot: Arc<RenderSnapshot>,
+    /// What its frame slots held when it was read, which the picture shows (ADR-0117 §3).
+    pub(crate) pinned: Pinned,
     pub(crate) live: Arc<LiveParams>,
     pub(crate) rev: Rev,
     pub(crate) at: MediaTime,
