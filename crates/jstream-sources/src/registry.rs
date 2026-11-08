@@ -32,7 +32,7 @@ impl Registry {
     /// `midi_pads`, `midi_cc`) produce frames (`browser` and its `youtube_chat`
     /// preset through the injected backend, on the GPU). `display` and `window` say what
     /// the platform captures ([`Source::capture`]), and so does `webcam`, a webcam or
-    /// capture card. `audio_input`, `desktop_audio` and `app_audio` are audio-only: the
+    /// capture card. `audio_input`, `desktop_audio`, `app_audio` and `network_audio` are audio-only: the
     /// engine records them, and `create` fails with [`SourceError::AudioOnly`].
     pub fn builtin() -> Self {
         let mut kinds: BTreeMap<String, Box<dyn SourceKind>> = BTreeMap::new();

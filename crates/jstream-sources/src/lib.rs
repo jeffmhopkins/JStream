@@ -18,7 +18,7 @@
 //! and `webcam` (a webcam or capture card), which say what the platform captures
 //! ([`CaptureSpec`]). `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
 //! (ADR-0137) draw a MIDI input's notes and controllers from the [`MidiInputs`] in
-//! [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio` and
+//! [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio`, `network_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
 //! name. `jstream-core` drives sources from its `jstream-sources` thread
 //! through [`Registry::create`], [`Source::frame`], [`Source::next_change`],
@@ -52,7 +52,7 @@ mod text;
 mod timer;
 mod youtube_chat;
 
-pub use audio::AudioTarget;
+pub use audio::{AudioTarget, LATENCY_MS, MAX_SENDER_NAME, Transport};
 pub use browser::opens_browser;
 pub use capture::{
     CameraControlSetting, CaptureSpec, DeviceFormatWant, fps_centi, webcam_controls, webcam_device,
