@@ -642,6 +642,25 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
 .number-field, .select-field { display: grid; gap: 4px; min-width: 0; }
 .field-label { color: var(--muted); font-size: 12px; }
+/* A row of small fields under one label (#1219), as the scene Properties dialog's
+   camera rows are (#1214): the label column, then the fields sharing the rest equally.
+   Nothing in it can push the row wider than its column. */
+.axis-row {
+  display: grid;
+  grid-template-columns: minmax(0, var(--axis-label, 4.25rem)) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+.axis-row > .label { color: var(--muted); font-size: 12px; min-width: 0; }
+.axes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; min-width: 0; }
+.axes.four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; margin-bottom: 2px; }
+.number-field.inline { display: flex; align-items: center; gap: 4px; }
+.number-field.inline .field-label { flex: none; color: var(--dim); font-size: 11px; }
+.number-field.inline .stepper { flex: 1 1 auto; min-width: 0; }
+.number-field.bare .stepper input { padding: 0 2px; }
+.number-field.bare .stepper .unit { padding: 0 4px 0 1px; }
 .stepper {
   display: flex;
   align-items: center;
@@ -1457,7 +1476,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   min-width: 0;
 }
 .camera-hint { color: var(--dim); font-size: 11px; min-width: 0; }
-.camera-row,
+.camera-row { --axis-label: 110px; margin-bottom: 0; }
 .camera-sub .number-field,
 .camera-sub .select-field,
 .camera-field .hotkey-row {
@@ -1468,7 +1487,6 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   min-width: 0;
   justify-content: stretch;
 }
-.camera-row > .label,
 .camera-sub .field-label,
 .camera-field .hotkey-row .key { color: var(--muted); font-size: 12px; min-width: 0; }
 .camera-axes {
