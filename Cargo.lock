@@ -3221,6 +3221,7 @@ dependencies = [
  "jiff",
  "jstream-browser",
  "jstream-media",
+ "jstream-midi",
  "jstream-platform",
  "jstream-protocol",
  "png",
@@ -3272,6 +3273,10 @@ dependencies = [
  "windows",
  "windows-core",
 ]
+
+[[package]]
+name = "jstream-visca"
+version = "0.0.0"
 
 [[package]]
 name = "jstream-youtube"

@@ -19,6 +19,25 @@
 //!
 //! Capture reaches the context through `WgcCapture::on_gpu`, and the encoders through
 //! `MfCodecs`' `Codecs::on_context`.
+//!
+//! # Behaviour
+//!
+//! **`WindowsGpu`** (`GpuInterop`, ARCH › GPU pipeline
+//! step 2, plus the D3D11 device that steps 1 and 5 use; ported from spike S1):
+//! - **`open_device`** opens the DX12 wgpu device on the media adapter. That is the
+//!   hardware adapter that drives the primary display, else the first hardware adapter
+//!   with NV12 textures. It also creates a multithread-protected D3D11 device on the same
+//!   adapter, and two fences shared between D3D11 and D3D12: the context's fence and the
+//!   release fence. The `AdapterId` carries the adapter's LUID and PCI vendor ID.
+//! - **`encode_target`** allocates an NV12 texture with a shared NT handle on the D3D11
+//!   side, opens it on D3D12, and wraps it as a `wgpu::Texture` through wgpu-hal (in the
+//!   `COMMON` state, which wgpu calls `PRESENT`).
+//! - **Fences** are ordered as described above. An encode target's stage waits on the
+//!   release fence for its last read. A queue of another device (or backend) is
+//!   `InvalidState`.
+//! - **Driver lifetime:** the raw D3D11 and D3D12 objects live in platform state that
+//!   also holds a `wgpu::Device` clone, declared last, so `d3d12.dll` stays loaded until
+//!   they are released.
 
 mod capture;
 mod d3d;

@@ -3487,6 +3487,34 @@ fn the_base_frame_rate_defaults_to_30_and_60_is_an_option() {
     assert!(!saved.contains("base_fps"), "{saved}");
 }
 
+/// ADR-0126 §2: a new collection blends browser-style, `linear` is one edit away and
+/// undoes back, and the file names the space only when it is `linear`.
+#[test]
+fn the_blending_space_defaults_to_srgb_and_linear_is_an_option() {
+    use jstream_protocol::Blending;
+    let mut graph = fixture();
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Linear,
+        }],
+    );
+    assert_eq!(graph.state().blending(), Blending::Linear);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Srgb
+        }]
+    );
+    let saved = graph.to_collection_json();
+    assert!(saved.contains("\"blending\": \"linear\""), "{saved}");
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let saved = graph.to_collection_json();
+    assert!(!saved.contains("blending"), "{saved}");
+}
+
 #[test]
 fn canvas_set_size_is_checked_and_undone() {
     let mut graph = fixture();

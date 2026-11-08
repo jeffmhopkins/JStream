@@ -567,6 +567,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 ],
             }),
         ),
+        // A label the collection doesn't have (ADR-0133).
+        (
+            Query::LabelMembers {
+                label_id: crate::LabelId::new("ghost"),
+            },
+            Err(ProtocolError::NotFound {
+                entity: EntityKind::Label,
+                id: "ghost".into(),
+            }),
+        ),
         // Sources by ID, whatever order they were created in.
         (
             Query::SourceList,
@@ -610,6 +620,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
                 base_fps: 30,
+                blending: crate::Blending::Srgb,
                 sources: sources(),
                 scenes: vec![
                     SceneInfo {
@@ -1797,6 +1808,27 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 "`output.set_key` can't be bound: a stream key is never stored in the \
                  collection (R-SEC-001)",
             ),
+        ),
+        // A binding's labels (ADR-0133): the binding must exist, then each label.
+        (
+            Batch::single(Edit::HotkeySetLabels {
+                chord: Chord::new("F2"),
+                labels: Vec::new(),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Hotkey,
+                id: "F2".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySetLabels {
+                chord: Chord::new("F1"),
+                labels: vec![crate::LabelId::new("ghost")],
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Label,
+                id: "ghost".into(),
+            },
         ),
         (
             Batch::single(Edit::HotkeyClear {

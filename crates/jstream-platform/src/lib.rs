@@ -67,8 +67,8 @@ pub use process::{ProcessCpu, RaisedThread, ThreadCpu, ThreadPriority, ThreadRol
 pub use surface::VideoSurface;
 pub use vcam::{VcamFormat, VcamSink};
 pub use video_device::{
-    CaptureDecoder, CaptureEncoding, CompressedFrame, VideoDeviceFormat, VideoDeviceInfo,
-    VideoDevices,
+    CameraControlId, CameraControlInfo, CameraControlValue, CaptureDecoder, CaptureEncoding,
+    CompressedFrame, VideoDeviceFormat, VideoDeviceInfo, VideoDevices,
 };
 
 /// The media types the traits are written in, re-exported so backends and the engine can

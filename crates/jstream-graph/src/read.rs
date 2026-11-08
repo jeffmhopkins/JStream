@@ -12,8 +12,8 @@ use crate::model::{
 };
 use jstream_protocol::{
     Binding, BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo,
-    HotkeyBinding, ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError,
-    Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
+    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
+    SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
@@ -22,7 +22,7 @@ impl Graph {
     /// doesn't know.
     ///
     /// Fails only with `not_found`, for an `item.list` of a missing scene or a
-    /// `delete.plan` of a missing target, and with `invalid_argument` on `kind_id`, for a
+    /// `delete.plan` of a missing target or a `label.members` of a missing label, and with `invalid_argument` on `kind_id`, for a
     /// `kind.describe` of a kind it doesn't have.
     pub fn query(&self, query: &Query) -> Option<Result<QueryResult, ProtocolError>> {
         Some(match query {
@@ -37,6 +37,7 @@ impl Graph {
             Query::VideoMixList => Ok(self.video_mix_list()),
             Query::BusList => Ok(self.bus_list()),
             Query::DeletePlan { target } => self.delete_plan(target),
+            Query::LabelMembers { label_id } => self.label_members(label_id),
             _ => return None,
         })
     }
@@ -166,6 +167,7 @@ impl Graph {
             rev: self.rev,
             canvas: self.state.canvas(),
             base_fps: self.state.base_fps(),
+            blending: self.state.blending(),
             sources: self
                 .state
                 .sources()
@@ -181,11 +183,7 @@ impl Graph {
             master: Box::new(MasterInfo {
                 filters: self.state.master().to_info(),
             }),
-            hotkeys: self
-                .state
-                .hotkeys()
-                .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
-                .collect(),
+            hotkeys: self.state.hotkey_bindings(),
             bindings: self
                 .state
                 .bindings()
@@ -444,6 +442,7 @@ mod tests {
                 rev: Rev(0),
                 canvas: jstream_protocol::Canvas::DEFAULT,
                 base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+                blending: jstream_protocol::Blending::Srgb,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],

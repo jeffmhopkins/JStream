@@ -13,13 +13,14 @@ fn main() {
     println!("cargo:rerun-if-changed=media_foundation.rs");
     #[cfg(windows)]
     {
-        // Declares `pick_path` so tauri-build writes `allow-pick-path` (the `browse`
-        // capability grants that permission and no other). Without this the Windows
-        // build rejects the capability as an unknown permission.
-        let built = tauri_build::try_build(
-            tauri_build::Attributes::new()
-                .app_manifest(tauri_build::AppManifest::new().commands(&["pick_path"])),
-        );
+        // Declares `pick_path` and `set_network` so tauri-build writes
+        // `allow-pick-path` and `allow-set-network` (the `browse` and `network`
+        // capabilities grant those and no other). Without this the Windows build rejects
+        // the capabilities as unknown permissions.
+        let built =
+            tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+                tauri_build::AppManifest::new().commands(&["pick_path", "set_network"]),
+            ));
         if let Err(error) = built {
             panic!("could not build the Tauri context: {error:#}");
         }

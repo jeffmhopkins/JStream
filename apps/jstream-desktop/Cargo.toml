@@ -44,7 +44,8 @@ jstream-crash.workspace = true
 jstream-platform.workspace = true
 # On Windows, the output kinds the publish opener reads.
 jstream-protocol.workspace = true
-jstream-server.workspace = true
+# `tls` for the network listener, "Allow devices on my network" (ADR-0104).
+jstream-server = { workspace = true, features = ["tls"] }
 # The update check's one GET of GitHub's releases list (R-DEP-006: rustls with ring).
 rustls.workspace = true
 rustls-native-certs.workspace = true

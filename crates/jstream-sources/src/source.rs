@@ -20,7 +20,9 @@ use std::sync::Arc;
 /// updated; a `media` file decodes them ahead on a thread of its own and hands each
 /// over under a short lock; a source whose frames follow something live (the
 /// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
-/// instead, and `frame` hands out the one painted last.
+/// instead, and `frame` hands out the one painted last. An animated image, a media file
+/// and a page that paints on the CPU have a painter that draws nothing, so a host can
+/// take their new frames from it without the source.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
@@ -184,9 +186,20 @@ pub struct ShownModel {
 /// paint it once under its lock, to catch it up before it is shown again. The `waveform` and `spectrum` painters allocate only while their
 /// pool of frames grows, or when every frame in it is still held; `chat_message`'s
 /// allocates when it redraws for a newly featured message.
+///
+/// A host can also take the painted frame from the painter itself ([`frame`](Self::frame)),
+/// and ask it when to paint next ([`next_change`](Self::next_change)), without the
+/// source: so a new frame reaches the compositor without a re-plan (ADR-0117 §3).
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
+
+    /// The frame painted last, as [`Source::frame`] hands it out. Never draws.
+    fn frame(&self) -> Arc<VideoFrame>;
+
+    /// When the frame shown at `at` is next replaced, as [`Source::next_change`] says
+    /// for its source.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime>;
 }
 
 /// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer
@@ -252,6 +265,9 @@ pub struct Context {
     pub browser: Option<Arc<dyn BrowserBackend>>,
     /// The featured chat message `chat_message` sources draw. Clones share it.
     pub chat: crate::ChatFeature,
+    /// The MIDI the `midi_*` kinds draw (ADR-0137): every input's state, by name.
+    /// `None` draws no notes.
+    pub midi: Option<Arc<crate::MidiInputs>>,
 }
 
 impl std::fmt::Debug for Context {
@@ -263,6 +279,7 @@ impl std::fmt::Debug for Context {
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .field("chat", &self.chat)
+            .field("midi", &self.midi)
             .finish()
     }
 }

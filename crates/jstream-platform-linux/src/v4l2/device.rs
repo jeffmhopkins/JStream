@@ -18,11 +18,12 @@ use jstream_platform::media::Timebase;
 
 use super::abi::{
     BUF_TYPE_VIDEO_CAPTURE, BUF_TYPE_VIDEO_CAPTURE_MPLANE, Buffer, CAP_TIMEPERFRAME, Capability,
-    ExportBuffer, FIELD_NONE, FMT_FLAG_EMULATED, FRMIVAL_TYPE_DISCRETE, FRMSIZE_TYPE_DISCRETE,
-    FmtDesc, Format, FormatMplane, Fract, FrmIvalEnum, FrmSizeEnum, MAX_PLANES, MEMORY_MMAP,
-    PixFormat, PixFormatMplane, Plane, RequestBuffers, StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT,
-    VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES, VIDIOC_EXPBUF, VIDIOC_G_FMT, VIDIOC_G_PARM,
-    VIDIOC_QBUF, VIDIOC_QUERYBUF, VIDIOC_QUERYCAP, VIDIOC_REQBUFS, VIDIOC_S_FMT, VIDIOC_S_PARM,
+    Control, ExportBuffer, FIELD_NONE, FMT_FLAG_EMULATED, FRMIVAL_TYPE_DISCRETE,
+    FRMSIZE_TYPE_DISCRETE, FmtDesc, Format, FormatMplane, Fract, FrmIvalEnum, FrmSizeEnum,
+    MAX_PLANES, MEMORY_MMAP, PixFormat, PixFormatMplane, Plane, QueryCtrl, RequestBuffers,
+    StreamParm, VIDIOC_DQBUF, VIDIOC_ENUM_FMT, VIDIOC_ENUM_FRAMEINTERVALS, VIDIOC_ENUM_FRAMESIZES,
+    VIDIOC_EXPBUF, VIDIOC_G_CTRL, VIDIOC_G_FMT, VIDIOC_G_PARM, VIDIOC_QBUF, VIDIOC_QUERYBUF,
+    VIDIOC_QUERYCAP, VIDIOC_QUERYCTRL, VIDIOC_REQBUFS, VIDIOC_S_CTRL, VIDIOC_S_FMT, VIDIOC_S_PARM,
     VIDIOC_STREAMOFF, VIDIOC_STREAMON,
 };
 use super::format::{Enumerated, encoding, stepwise_sizes};
@@ -187,6 +188,34 @@ impl Device {
         unsafe { self.ioctl(VIDIOC_QUERYCAP, &mut cap) }
             .map_err(|e| os_error("VIDIOC_QUERYCAP", &self.what, &e))?;
         Ok(cap)
+    }
+
+    /// `VIDIOC_QUERYCTRL` for control `id`: `None` when the driver has no such control.
+    pub(crate) fn query_control(&self, id: u32) -> Option<QueryCtrl> {
+        // SAFETY: all-zero is a valid `v4l2_queryctrl`.
+        let mut q: QueryCtrl = unsafe { std::mem::zeroed() };
+        q.id = id;
+        // SAFETY: `VIDIOC_QUERYCTRL` takes a `v4l2_queryctrl`.
+        unsafe { self.ioctl(VIDIOC_QUERYCTRL, &mut q) }.ok()?;
+        (q.id == id).then_some(q)
+    }
+
+    /// `VIDIOC_G_CTRL`: control `id`'s value.
+    pub(crate) fn control(&self, id: u32) -> Result<i32, PlatformError> {
+        let mut c = Control { id, value: 0 };
+        // SAFETY: `VIDIOC_G_CTRL` takes a `v4l2_control`.
+        unsafe { self.ioctl(VIDIOC_G_CTRL, &mut c) }
+            .map_err(|e| os_error("VIDIOC_G_CTRL", &self.what, &e))?;
+        Ok(c.value)
+    }
+
+    /// `VIDIOC_S_CTRL`: sets control `id` to `value`. Controls are the device's, not
+    /// the open file's, so this applies to a stream another descriptor runs.
+    pub(crate) fn set_control(&self, id: u32, value: i32) -> Result<(), PlatformError> {
+        let mut c = Control { id, value };
+        // SAFETY: `VIDIOC_S_CTRL` takes a `v4l2_control`.
+        unsafe { self.ioctl(VIDIOC_S_CTRL, &mut c) }
+            .map_err(|e| os_error("VIDIOC_S_CTRL", &self.what, &e))
     }
 
     /// The capture pixel formats the driver itself offers (not libv4l's emulated ones),

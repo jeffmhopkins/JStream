@@ -12,12 +12,23 @@
 //!   pairs: while it is open the panel re-reads `device.list` every few seconds, and a
 //!   device that wasn't there when the code was drawn means the code was used. The code
 //!   is never logged or stored by the page (R-SEC-001).
+//! - **Allow devices on my network** (ADR-0104), in the desktop app only: a switch above
+//!   the panel that asks the app to save the setting (`host::allow_network`, the app's own
+//!   command, which no engine client reaches). It applies when the app next starts, and
+//!   says so while the saved choice differs from the one the app started with. When the
+//!   setting is on but the listener didn't open (its port taken), it says devices can't
+//!   connect.
+//! - **The network listener** (ADR-0130). When the server also listens on the local
+//!   network, `pairing.start` names its addresses and its certificate's fingerprint, and
+//!   the panel shows both, with when to continue past the browser's certificate warning:
+//!   only if the fingerprint matches.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0047-browser-pairing-page-and-device-cookie.md
 
 use crate::app::SessionContext;
 use jstream_control::protocol::{
-    Action, ActionResult, Call, CallResult, DeviceId, DeviceInfo, ProtocolError, Query, QueryResult,
+    Action, ActionResult, Call, CallResult, DeviceId, DeviceInfo, NetworkAccess, ProtocolError,
+    Query, QueryResult,
 };
 use jstream_control::{Control, ControlError};
 use leptos::prelude::*;
@@ -35,6 +46,9 @@ pub struct OpenCode {
     pub code: String,
     /// How long it stays open, in seconds.
     pub expires_in_secs: u32,
+    /// The network listener's addresses and certificate fingerprint, when the server
+    /// listens on the local network (ADR-0130).
+    pub network: Option<NetworkAccess>,
 }
 
 impl std::fmt::Debug for OpenCode {
@@ -42,6 +56,7 @@ impl std::fmt::Debug for OpenCode {
         f.debug_struct("OpenCode")
             .field("code", &"***")
             .field("expires_in_secs", &self.expires_in_secs)
+            .field("network", &self.network)
             .finish()
     }
 }
@@ -82,10 +97,12 @@ pub async fn start(control: &dyn Control) -> Result<Option<OpenCode>, String> {
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => Ok(Some(OpenCode {
                 code: code.expose().to_owned(),
                 expires_in_secs,
+                network,
             })),
             _ => Err("the engine answered `pairing.start` without a code".into()),
         },
@@ -278,6 +295,77 @@ impl Panel {
     }
 }
 
+/// Where a device on the local network opens the pairing page, and the fingerprint
+/// that tells it the certificate warning is this host's (ADR-0130).
+fn network_view(network: NetworkAccess) -> impl IntoView {
+    view! {
+        <div class="pairing-network">
+            <p class="pairing-help">"On another device on this network, open the pairing page:"</p>
+            <ul class="pairing-urls">
+                {network
+                    .urls
+                    .into_iter()
+                    .map(|url| {
+                        // The pairing page, not the root: an unpaired browser starts there.
+                        let page = format!("{}/pair", url.trim_end_matches('/'));
+                        view! { <li><code>{page}</code></li> }
+                    })
+                    .collect::<Vec<_>>()}
+            </ul>
+            <p class="pairing-help">
+                "The browser warns about the certificate. Continue only if it shows this fingerprint:"
+            </p>
+            <p class="pairing-fingerprint"><code>{network.fingerprint}</code></p>
+        </div>
+    }
+}
+
+/// "Allow devices on my network", in the desktop app only (ADR-0104 decision 1).
+#[component]
+pub fn NetworkAccessSetting() -> impl IntoView {
+    let Some(started) = crate::host::desktop_network() else {
+        return ().into_any();
+    };
+    let open = crate::host::desktop_network_open();
+    let on = RwSignal::new(started);
+    let problem = RwSignal::new(None::<&'static str>);
+    let save = move |allow: bool| {
+        on.set(allow);
+        spawn_local(async move {
+            if crate::host::allow_network(allow).await {
+                problem.try_set(None);
+            } else {
+                on.try_set(!allow);
+                problem.try_set(Some("The setting could not be saved."));
+            }
+        });
+    };
+    view! {
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Allow devices on my network"
+                prop:checked=move || on.get()
+                on:change=move |event| save(event_target_checked(&event))
+            />
+            <span>
+                <span class="settings-check-label">"Allow devices on my network"</span>
+                <span class="settings-check-note">
+                    "When on, a phone, tablet or other computer on this network can pair with a code and control JStream, over HTTPS on port 4456. Only paired devices get in. Windows may ask to allow JStream through its firewall, and on a network marked Public it blocks other devices. Off until you turn it on."
+                </span>
+                {(started && !open).then(|| view! {
+                    <span class="problem" role="alert">"Port 4456 could not be opened (another program, such as the JStream daemon, may use it), so devices can't connect. The log says why."</span>
+                })}
+                {move || (on.get() != started).then(|| view! {
+                    <span class="settings-check-note" role="status">"Restart JStream to apply this."</span>
+                })}
+                {move || problem.get().map(|problem| view! { <span class="problem" role="alert">{problem}</span> })}
+            </span>
+        </label>
+    }
+    .into_any()
+}
+
 /// The pairing panel. Shows nothing until `device.list` answers, and nothing at all on
 /// a session that doesn't serve the pairing calls.
 #[component]
@@ -309,6 +397,7 @@ pub fn Pairing() -> impl IntoView {
                         "Open for " {countdown(left)} ". In a browser, open "
                         <code>"/pair"</code> " on this host's HTTPS address and type the code."
                     </p>
+                    {code.network.map(network_view)}
                 </div>
             }
         })
@@ -436,6 +525,7 @@ mod tests {
                     result: Some(ActionResult::PairingStart {
                         code: SecretString::new("7K3M-9QXA"),
                         expires_in_secs: 120,
+                        network: None,
                     }),
                 }),
                 Call::Query {
@@ -500,7 +590,8 @@ mod tests {
             code,
             Some(OpenCode {
                 code: "7K3M-9QXA".into(),
-                expires_in_secs: 120
+                expires_in_secs: 120,
+                network: None,
             })
         );
         assert!(!format!("{code:?}").contains("7K3M"), "never in Debug");

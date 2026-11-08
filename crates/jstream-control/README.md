@@ -176,8 +176,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   - hotkeys: `hotkey.set`'s chord spelling, an already-bound chord, an action
     `Action::bind_problem` refuses and a missing named scene, output or preset (only `cut`
     exists), in that order, and
-    `hotkey.clear` of an unbound chord. Deleting a scene, source, output or encoder
-    profile removes the bindings naming it and lists them in the batch result's `removed_hotkeys`.
+    `hotkey.clear` of an unbound chord; `hotkey.set_labels` of an unbound chord, then a
+    missing or repeated label (ADR-0133). Deleting a scene, source, output or encoder
+    profile removes the bindings naming it, with their labels, and lists them in the
+    batch result's `removed_hotkeys`; undo restores both.
   - controller bindings (ADR-0122): `binding.set`'s `Trigger::problem`, an
     already-bound trigger, then the hotkeys' action checks (`check_bindable`, shared),
     and `binding.clear` of an unbound trigger. The same deletes remove the controller
@@ -199,15 +201,18 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `SceneMeta::problem` and `SceneOptions::problem` (and refuse a keyframe scene's own
   background): a missing parent, folder or label, a folder inside itself, a
   label listed twice, and no deleting a folder that holds a scene or folder or a label a
-  source or scene carries (with the graph's `blockers`; scenes carry labels since
-  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md)). Reads report the folders, labels and
+  source, scene or hotkey binding carries (with the graph's `blockers`; scenes carry labels since
+  [ADR-0078](../../docs/adr/0078-scenes-carry-labels.md), bindings since
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)). `label.members`
+  lists a label's scenes, sources and bindings as the graph does; the mock has no
+  timelines, so it lists none. Reads report the folders, labels and
   each scene's and source's metadata, `source.duplicate` copies a source's, and undoing
   a scene's or source's delete restores its folder and metadata;
 - scene cameras (`scene.set_camera`, in `mock/organise.rs`,
   [ADR-0094](../../docs/adr/0094-scene-cameras.md)): `SceneCamera::validate` with the
-  graph's fields, an override on a keyframe scene refused while its parent has no
-  camera, and removing a parent's camera dropping its keyframes' overrides, which the
-  inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
+  graph's fields, an override on a keyframe scene whether or not its parent has a
+  camera (ADR-0128), and removing a parent's camera dropping its keyframes' overrides
+  (only when it had one), which the inverse restores; `SceneInfo.camera` reports each scene's own. A camera's motion and
   follow camera ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md):
   `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
   `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a
@@ -237,7 +242,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   keyframe follows them, with the graph's inverses, and an item's motion
   ([ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)), through
   `item.set_motion` addressed to it (the whole list, checked with the protocol's
-  `check_motion` as the item's own is);
+  `check_motion` as the item's own is), and its timing in switches into the keyframe
+  ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)), through
+  `item.set_timing` (checked with `KeyframeTiming::problem`, an empty timing clearing
+  it);
 - every collection query, answered from that state with the results
   `jstream-graph`'s `Graph::query` gives for the same edits: `state.get`, `scene.list`,
   `source.list` (ordered by ID), `item.list` (bottom first; `not_found` for a missing
@@ -248,8 +256,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   transform view of it), crop, visibility, opacity, blend and motion, each scene's role and
   each item's scene after an `item.move`, each output's kind, target, encoder profile
   and video mix, each profile, each mix, each source's audio, the buses and sends, and
-  the hotkey bindings (in `state.get`, ordered by chord), and the controller bindings
-  (ordered by trigger, omitted while there are none).
+  the hotkey bindings with their labels (in `state.get`, ordered by chord), and the
+  controller bindings (ordered by trigger, omitted while there are none).
   `video.snapshot` is not one of those reads, nor are the frame sheets (`video.frames`,
   `scene.switch_and_watch`): the mock has no compositor and answers them with
   `internal`, as it does for any protocol variant it does not implement;
@@ -319,7 +327,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   back with its encoder profile, video mix and filters and the hotkeys its delete
   removed, hotkey and controller binding edits undo to the binding as it was, encoder profile and video mix
   edits undo to the profile or mix as it was,
-  and `canvas.set_size` undoes to the previous size, and `canvas.set_frame_rate` to the previous rate. The checks run in the engine's order (the key, then `expected_rev`, then
+  and `canvas.set_size` undoes to the previous size, `canvas.set_frame_rate` to the previous rate, and `canvas.set_blending` to the previous
+  space. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
   the graph's `invalid_argument` and keeps the step, the history is bounded
@@ -367,7 +376,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md)): `scene.set_keyframe` answers
   `internal`, and `studio.get` lists no placed keyframe;
 - `capture.targets`, answered with one made-up 1920×1080 primary display whose ID is
-  `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`;
+  `MOCK_DISPLAY`, then one 1280×720 window, "Mock window", whose ID is `MOCK_WINDOW`,
+  then one webcam, "Mock webcam", whose ID is `MOCK_DEVICE`, with a 1080p30 MJPEG and a
+  720p60 NV12 format;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
   Bold and Regular) whose files don't exist;
 - `source.sizes`, answered with every source and no size, since the mock makes no

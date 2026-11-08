@@ -121,6 +121,12 @@ impl SourceMeters {
         lock(&self.sources).clone()
     }
 
+    /// How many plans were counted, for tests.
+    #[cfg(test)]
+    pub(crate) fn plans(&self) -> u64 {
+        lock(&self.plan).plans
+    }
+
     /// How many paints of `source` were counted, for tests.
     #[cfg(test)]
     pub(crate) fn paints(&self, source: &SourceId) -> u64 {

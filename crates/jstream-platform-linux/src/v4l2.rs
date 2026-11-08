@@ -20,6 +20,8 @@
 
 #[cfg(any(target_os = "linux", test))]
 mod abi;
+#[cfg(any(target_os = "linux", test))]
+mod controls;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod device;
 #[cfg(any(target_os = "linux", test))]
@@ -40,10 +42,12 @@ mod backend {
     use std::sync::atomic::Ordering;
 
     use jstream_platform::{
-        CaptureDecoder, CaptureEncoding, CaptureStream, DeviceId, GpuContext, PlatformError,
-        VideoDeviceFormat, VideoDeviceInfo, VideoDevices,
+        CameraControlId, CameraControlInfo, CameraControlValue, CaptureDecoder, CaptureEncoding,
+        CaptureStream, DeviceId, GpuContext, PlatformError, VideoDeviceFormat, VideoDeviceInfo,
+        VideoDevices,
     };
 
+    use super::controls::{MAPPINGS, info, mapping, usable};
     use super::device::Device;
     use super::format::{
         c_name, capture_type, color, formats, fourcc_for, gpu_layout, is_device_path, node_number,
@@ -185,6 +189,84 @@ mod backend {
 
         fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
             Ok(formats(&open_capture(device)?.enumerate()))
+        }
+
+        /// Read on a descriptor of its own: V4L2 controls belong to the device, so this
+        /// works while another descriptor streams.
+        fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+            let node = open_capture(device)?;
+            let mut out = Vec::new();
+            for m in MAPPINGS {
+                let Some(q) = node.query_control(m.cid).filter(usable) else {
+                    continue;
+                };
+                let Ok(value) = node.control(m.cid) else {
+                    continue;
+                };
+                let auto = m
+                    .auto
+                    .filter(|a| node.query_control(a.cid).is_some_and(|q| usable(&q)))
+                    .and_then(|a| node.control(a.cid).ok());
+                out.push(info(&m, &q, value, auto));
+            }
+            Ok(out)
+        }
+
+        /// Set on a descriptor of its own, as [`controls`](Self::controls) reads: the
+        /// running stream picks it up with no restart. A manual value first turns the
+        /// control's automatic mode off, since a driver refuses the value while it is on.
+        fn set_control(
+            &self,
+            device: &DeviceId,
+            control: CameraControlId,
+            value: CameraControlValue,
+        ) -> Result<(), PlatformError> {
+            let unsupported = |what: &str| PlatformError::Unsupported {
+                what: format!(
+                    "{what} {} on video capture device {:?}",
+                    control.name(),
+                    device.as_str()
+                ),
+            };
+            let node = open_capture(device)?;
+            let m = mapping(control).ok_or_else(|| unsupported("the control"))?;
+            let q = node
+                .query_control(m.cid)
+                .filter(usable)
+                .ok_or_else(|| unsupported("the control"))?;
+            let auto = m
+                .auto
+                .filter(|a| node.query_control(a.cid).is_some_and(|q| usable(&q)));
+            match value {
+                CameraControlValue::Manual(v) => {
+                    // The automatic mode as it was, put back if the value is refused, so a
+                    // failed set doesn't leave the control stuck at its old manual value.
+                    let was = auto.and_then(|a| Some((a, node.control(a.cid).ok()?)));
+                    if let Some(a) = auto {
+                        node.set_control(a.cid, a.off)?;
+                    }
+                    let snapped = info(&m, &q, v, None).snap(v);
+                    let set = node.set_control(m.cid, snapped);
+                    if set.is_err()
+                        && let Some((a, value)) = was
+                    {
+                        let _ = node.set_control(a.cid, value);
+                    }
+                    set
+                }
+                CameraControlValue::Auto => {
+                    let a = auto.ok_or_else(|| unsupported("automatic"))?;
+                    // The first value the driver takes; the menu varies by camera.
+                    let mut last = None;
+                    for &on in a.on {
+                        match node.set_control(a.cid, on) {
+                            Ok(()) => return Ok(()),
+                            Err(e) => last = Some(e),
+                        }
+                    }
+                    Err(last.unwrap_or_else(|| unsupported("automatic")))
+                }
+            }
         }
 
         fn open(
@@ -440,6 +522,35 @@ mod device_tests {
             }
         }
         panic!("no device with an uncompressed format");
+    }
+
+    /// Lists the first device's camera controls and sets each to its value, or its
+    /// automatic mode where that is on, with the device closed and while it streams
+    /// (#1196).
+    #[test]
+    #[ignore = "needs a V4L2 webcam"]
+    fn reads_and_sets_camera_controls_closed_and_streaming() {
+        use jstream_platform::CameraControlValue;
+        let devices = V4l2Devices::new();
+        let (id, format) = first_raw();
+        assert!(
+            !devices.controls(&id).expect("controls").is_empty(),
+            "the webcam lists no camera control"
+        );
+        let set_all = || {
+            for c in devices.controls(&id).expect("controls") {
+                assert!(c.min <= c.max && c.step >= 1, "{c:?}");
+                let value = if c.auto == Some(true) {
+                    CameraControlValue::Auto
+                } else {
+                    CameraControlValue::Manual(c.value)
+                };
+                devices.set_control(&id, c.id, value).expect("set_control");
+            }
+        };
+        set_all();
+        let _stream = devices.open(&id, &format, None).expect("open");
+        set_all();
     }
 
     #[test]

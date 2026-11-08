@@ -1,7 +1,7 @@
 // The Stream stats panel (ST-01): one output's pill, uptime, bitrate, dropped frames,
 // health and bitrate chart with its hover readout, from `stats.tick`'s `outputs` (protocol 0.57). The mock
 // engine runs no pipeline, so the test sends the ticks (`statsTicks`).
-import { test, expect, connect, showPanel, statsTicks } from '../fixtures.js';
+import { test, expect, connect, showPanel, statsTicks, addOutput, outputRow } from '../fixtures.js';
 
 /** Adds the Stream stats panel from the View menu and returns it. */
 async function openStats(page) {
@@ -19,20 +19,17 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
 
   // A recording, which needs no stream key, started from the Outputs panel.
   await showPanel(page, 'Outputs');
-  const form = page.locator('form.new-output');
-  await form.getByRole('combobox').selectOption('record');
-  await form.getByRole('textbox').fill('/tmp/stats.mp4');
-  await form.getByRole('button', { name: 'Add' }).click();
-  const card = page.locator('li.output').filter({ has: page.getByText('output-1', { exact: true }) });
-  await expect(card.locator('.badge')).toHaveText('Stopped');
+  await addOutput(page, 'record', '/tmp/stats.mp4');
+  const row = outputRow(page, 'output-1');
+  await expect(row.locator('.badge')).toHaveText('Stopped');
 
   await expect(stats.locator('.stats-pill')).toHaveText('READY');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
   await expect(stats).toContainText('Record to /tmp/stats.mp4');
   await expect(stats).toContainText('H.264 · 8000 kbps CBR');
 
-  await card.getByRole('button', { name: 'Start' }).click();
-  await expect(card.locator('.badge')).toHaveText('Live');
+  await row.getByRole('button', { name: 'Start' }).click();
+  await expect(row.locator('.badge')).toHaveText('Live');
   await expect(stats.locator('.stats-pill')).toHaveText('LIVE');
   await expect(stats.locator('.stats-nodata')).toBeVisible();
 
@@ -73,7 +70,7 @@ test('the panel follows a running output from its ticks', async ({ page, daemon 
   await page.mouse.move(box.x + box.width / 2, box.y + box.height + 60);
   await expect(tip).toHaveCount(0);
 
-  await card.getByRole('button', { name: 'Stop' }).click();
+  await row.getByRole('button', { name: 'Stop' }).click();
   await expect(stats.locator('.stats-pill')).toHaveText('READY');
   await expect(stats.locator('.stats-uptime')).toHaveText('--:--:--');
   await expect(stats.locator('.stats-health')).toContainText('Stream health: Waiting');

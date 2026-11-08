@@ -287,6 +287,29 @@ pub(crate) struct ExportBuffer {
     pub(crate) reserved: [u32; 11],
 }
 
+/// `struct v4l2_queryctrl`: one control's type, range and default.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct QueryCtrl {
+    pub(crate) id: u32,
+    pub(crate) type_: u32,
+    pub(crate) name: [u8; 32],
+    pub(crate) minimum: i32,
+    pub(crate) maximum: i32,
+    pub(crate) step: i32,
+    pub(crate) default_value: i32,
+    pub(crate) flags: u32,
+    pub(crate) reserved: [u32; 2],
+}
+
+/// `struct v4l2_control`: one control's value.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Control {
+    pub(crate) id: u32,
+    pub(crate) value: i32,
+}
+
 // The 64-bit layouts. A 32-bit target would need its own (`timeval` and the unions
 // shrink, and with them the ioctl numbers), so the backend isn't built there.
 #[cfg(target_pointer_width = "64")]
@@ -304,6 +327,8 @@ const _: () = {
     assert!(size_of::<RequestBuffers>() == 20);
     assert!(size_of::<Buffer>() == 88);
     assert!(size_of::<ExportBuffer>() == 64);
+    assert!(size_of::<QueryCtrl>() == 68);
+    assert!(size_of::<Control>() == 8);
 };
 
 /// `_IOC(dir, 'V', nr, size)`.
@@ -329,6 +354,46 @@ pub(crate) const VIDIOC_S_PARM: c_ulong = ioc(READ | WRITE, 22, size_of::<Stream
 pub(crate) const VIDIOC_ENUM_FRAMESIZES: c_ulong = ioc(READ | WRITE, 74, size_of::<FrmSizeEnum>());
 pub(crate) const VIDIOC_ENUM_FRAMEINTERVALS: c_ulong =
     ioc(READ | WRITE, 75, size_of::<FrmIvalEnum>());
+pub(crate) const VIDIOC_G_CTRL: c_ulong = ioc(READ | WRITE, 27, size_of::<Control>());
+pub(crate) const VIDIOC_S_CTRL: c_ulong = ioc(READ | WRITE, 28, size_of::<Control>());
+pub(crate) const VIDIOC_QUERYCTRL: c_ulong = ioc(READ | WRITE, 36, size_of::<QueryCtrl>());
+
+/// `V4L2_CTRL_TYPE_INTEGER`.
+pub(crate) const CTRL_TYPE_INTEGER: u32 = 1;
+/// `V4L2_CTRL_TYPE_BOOLEAN`.
+pub(crate) const CTRL_TYPE_BOOLEAN: u32 = 2;
+/// `V4L2_CTRL_TYPE_MENU`.
+pub(crate) const CTRL_TYPE_MENU: u32 = 3;
+/// `V4L2_CTRL_FLAG_DISABLED`: the driver doesn't implement the control.
+pub(crate) const CTRL_FLAG_DISABLED: u32 = 0x1;
+/// `V4L2_CTRL_FLAG_READ_ONLY`.
+pub(crate) const CTRL_FLAG_READ_ONLY: u32 = 0x4;
+
+/// `V4L2_CID_BRIGHTNESS`, the first of the user class (`V4L2_CID_BASE`).
+pub(crate) const CID_BRIGHTNESS: u32 = 0x0098_0900;
+pub(crate) const CID_CONTRAST: u32 = 0x0098_0901;
+pub(crate) const CID_SATURATION: u32 = 0x0098_0902;
+pub(crate) const CID_HUE: u32 = 0x0098_0903;
+pub(crate) const CID_AUTO_WHITE_BALANCE: u32 = 0x0098_090c;
+pub(crate) const CID_GAMMA: u32 = 0x0098_0910;
+pub(crate) const CID_AUTOGAIN: u32 = 0x0098_0912;
+pub(crate) const CID_GAIN: u32 = 0x0098_0913;
+pub(crate) const CID_POWER_LINE_FREQUENCY: u32 = 0x0098_0918;
+pub(crate) const CID_HUE_AUTO: u32 = 0x0098_0919;
+pub(crate) const CID_WHITE_BALANCE_TEMPERATURE: u32 = 0x0098_091a;
+pub(crate) const CID_SHARPNESS: u32 = 0x0098_091b;
+pub(crate) const CID_BACKLIGHT_COMPENSATION: u32 = 0x0098_091c;
+/// `V4L2_CID_EXPOSURE_AUTO`, a menu: 0 auto, 1 manual, 2 shutter priority, 3 aperture
+/// priority (the camera class, `V4L2_CID_CAMERA_CLASS_BASE`).
+pub(crate) const CID_EXPOSURE_AUTO: u32 = 0x009a_0901;
+/// `V4L2_CID_EXPOSURE_ABSOLUTE`, in 100 µs units.
+pub(crate) const CID_EXPOSURE_ABSOLUTE: u32 = 0x009a_0902;
+pub(crate) const CID_PAN_ABSOLUTE: u32 = 0x009a_0908;
+pub(crate) const CID_TILT_ABSOLUTE: u32 = 0x009a_0909;
+pub(crate) const CID_FOCUS_ABSOLUTE: u32 = 0x009a_090a;
+pub(crate) const CID_FOCUS_AUTO: u32 = 0x009a_090c;
+pub(crate) const CID_ZOOM_ABSOLUTE: u32 = 0x009a_090d;
+pub(crate) const CID_IRIS_ABSOLUTE: u32 = 0x009a_0911;
 
 /// `V4L2_CAP_VIDEO_CAPTURE`: single-planar capture.
 pub(crate) const CAP_VIDEO_CAPTURE: u32 = 0x1;
@@ -464,6 +529,12 @@ mod tests {
         assert_eq!(offset_of!(ExportBuffer, fd), 16);
         assert_eq!(VIDIOC_STREAMON, 0x4004_5612);
         assert_eq!(VIDIOC_STREAMOFF, 0x4004_5613);
+        assert_eq!(VIDIOC_G_CTRL, 0xc008_561b);
+        assert_eq!(VIDIOC_S_CTRL, 0xc008_561c);
+        assert_eq!(VIDIOC_QUERYCTRL, 0xc044_5624);
+        assert_eq!(offset_of!(QueryCtrl, minimum), 40);
+        assert_eq!(offset_of!(QueryCtrl, flags), 56);
+        assert_eq!(offset_of!(Control, value), 4);
     }
 
     /// The flag and type values `<linux/videodev2.h>` gives.

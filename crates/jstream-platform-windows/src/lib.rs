@@ -15,6 +15,75 @@
 //! The backends exist only on Windows. On other platforms the crate builds empty except
 //! for its platform-independent helpers, which are tested everywhere.
 //!
+//! # Tests
+//!
+//! The file-dialog filter (which extensions a row keeps, All files beside them, which
+//! paths may start the dialog, and the suggested file name), the clock conversion, the
+//! stream helpers (format choice, sample copies, packet flags, positions across a
+//! device move), the capture helpers (target IDs; the BGRA and RGBA to NV12 converter
+//! and the mailbox are `jstream-platform`'s, tested there), the AAC helpers
+//! (configuration check, PCM conversion, packet timing and padding), the video encoder
+//! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
+//! the first-frame fallback with fake encoders (`codec::fallback`: a refused first
+//! frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
+//! failed software open, and when it applies), the GPU capture ring's slot choice
+//! (reuse, drop when full, release on resize), the credential helpers (target names of
+//! both kinds, blob limits, zeroing), the virtual camera's format and frame checks and
+//! the Media Foundation check's decision (edition kinds and the advice for each) and
+//! the video-device helpers (subtypes and frame rates to formats, repeats left out,
+//! colour fallbacks, strides, short buffers reported against the buffer lock, audio
+//! pairing by container; the NV12 and I420 copies and YUY2 to NV12 are `jstream-
+//! platform`'s, tested there) and the media-file helpers (RGB32 rows to RGBA and BGRA,
+//! top-down and bottom-up, cropping to an aperture, short buffers, packed sizes and
+//! rates, 100 ns times, the verbatim path prefix, the gapless cut of audio priming and
+//! padding, and reading an MP3's LAME tag) run on every platform. The QPC clock test,
+//! the start-race test (a destroyed message-only window maps to `NotFound`), the
+//! credential limits check, the credential round trip (a uniquely named credential
+//! written, replaced, read and deleted in the real store, a non-UTF-8 one refused on
+//! read, deleted again on failure), the same through `StreamKeyStore`, a refresh token
+//! through `OAuthTokenStore` beside a stream key of the same ID, and the Media
+//! Foundation probe and edition read run on Windows. Tests against real devices, the OS
+//! encoder, the GPU and a display are platform tests: behind the `hw-tests` feature and
+//! `#[ignore]`d, because CI machines may have no audio devices, no Media Foundation, no
+//! GPU and no display (R-TEST-004). The GPU test renders into an encode target, stages
+//! it and checks that the shared fence passes the staged value. The GPU encode tests
+//! open the H.264, HEVC and AV1 encoders on the context, write a ring of three 720p
+//! encode targets with wgpu for 60 frames, checking that the encoder has let go of each
+//! target before it is written again, encode them, refuse a CPU frame, and check the
+//! packets as the CPU encode tests do: each codec's framing, and the parameter sets (or
+//! AV1 sequence header) in the first keyframe. HEVC and AV1 run only on a GPU that
+//! encodes them (AV1 needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer). The
+//! capture tests list the displays, capture the primary display for a second, checking
+//! the frames' format and `pts`, start a capture of a destroyed window, which must be
+//! `NotFound`, and capture three times in a row in one process. The audio tests list
+//! the devices (one default each way), record the default input for a second on the
+//! media clock, play a quiet tone and record its loopback, check that `input_format`
+//! matches the opened stream for the default input and the default output's loopback,
+//! and find this process in the process list, record its process loopback and get
+//! `NotFound` for a process that isn't running. The GPU capture tests read back twenty
+//! staged frames (each opaque, so a read before the copy finished would show), refuse
+//! another device's queue, outlive the context, and hold every frame until the ring
+//! drops new ones, then release them. They need screen activity, so move the mouse
+//! while they run. The virtual-camera test starts `WindowsVcam`, opens the camera's own
+//! media source through a source reader (video processing on, RGB32 out), and publishes
+//! grey until Frame Server serves it back; it also checks that a second producer is
+//! refused and that the block is stopped after `stop`. The video-device tests list
+//! devices, formats and paired audio, capture an uncompressed format and the largest
+//! MJPEG format for two seconds each (checking size, format and `pts`), open a device
+//! twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
+//! runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds in
+//! software from NV12 and from RGBA (the engine's input), and in hardware from RGBA;
+//! the HEVC and AV1 tests encode two seconds in hardware from RGBA. The media-file
+//! tests play the video file `JSTREAM_TEST_MEDIA` names (over two seconds long): thirty
+//! frames in order, opaque and of the stream's size, a seek to the middle landing at or
+//! before it, a seek past the end ending the stream, a second of its audio as
+//! contiguous `f32` blocks and a seek of it, no audio when none is asked for, and the
+//! errors for a missing file, a file that isn't media and an unsupported pixel format.
+//! Run them on a Windows machine with a microphone, speakers, a display, a webcam and a
+//! DX12 GPU with hardware H.264, HEVC and AV1 encoders: `cargo test -p jstream-
+//! platform-windows --features hw-tests -- --ignored`. The virtual-camera test also
+//! needs the `jstream-vcam-windows` DLL registered (its Hardware check).
+//!
 //! Docs: crates/jstream-platform-windows/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md, docs/security/threat-model.md#vcam
 
 mod audio;

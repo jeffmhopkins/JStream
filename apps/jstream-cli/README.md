@@ -87,7 +87,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
-| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
@@ -102,7 +102,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `collection info` | query `collection.info` (the project file the engine saves to, and the recent ones, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)) |
 | `collection open <path>`, `collection new <path>` | action `collection.open`, `collection.new` (an absolute path on the engine's machine; outputs stop and undo is cleared) |
 | `collection save-as <path>` | action `collection.save_as`; never replaces a file |
-| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device, and, when the server listens on the network, its addresses and certificate fingerprint |
 | `device list` | query `device.list` |
 | `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
@@ -134,7 +134,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
   the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas, and
-  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119). Groups
+  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119), and
+  `canvas.set_blending <srgb|linear>` the space every blend mode mixes in (ADR-0126). Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
@@ -154,8 +155,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
   item's opacity (above 1 a gain on its light, protocol 0.83) and blend mode; the engine
-  draws every mode (protocol 0.47), and `normal_srgb` and `additive_srgb` (0.75) blend
-  as a browser does.
+  draws every mode (protocol 0.47), in the collection's blending space.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
@@ -232,7 +232,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
   prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
   device, which posts it to the server's `/api/v1/pair` for a device token of its own
-  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). When the
+  server also listens on the local network, `pair` then prints the pairing page on each
+  of its addresses (`open on the device: <url>/pair`), the certificate's fingerprint, and that the
+  certificate warning is to be passed only if the fingerprint matches
+  ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). The code is
   printed because it is the answer, and is never logged. `device list` prints a table
   of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
   devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server

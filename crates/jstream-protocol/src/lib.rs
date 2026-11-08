@@ -57,16 +57,16 @@ pub use camera_motion::{
     FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
 };
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, Edit, EffectsSpace,
+    ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
-    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,
-    Response, ServerMessage, Welcome,
+    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello,
+    NetworkAccess, Request, Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{
@@ -93,8 +93,9 @@ pub use id::{
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
-    EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
-    VisibleIf, check_asset_path, not_a_reference,
+    CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary, MAX_CAPTURE_FPS,
+    MAX_CAPTURE_SIDE, Media, PIXEL_FORMATS, ParamDescriptor, ParamType, VisibleIf,
+    check_asset_path, not_a_reference, parse_resolution,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
@@ -108,7 +109,8 @@ pub use motion::{
     MotionModifier, MotionProblem, MotionProperty, MotionShape, check_motion, check_motion_id,
 };
 pub use organise::{
-    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon, parse_rgba,
+    FolderInfo, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, MAX_ICON_LEN, SceneMeta,
+    SourceMeta, check_color, check_icon, parse_rgba,
 };
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
@@ -133,8 +135,9 @@ pub use profile::{
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
 pub use query::{
-    CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo, ItemInfo, MasterInfo,
-    PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary, SourceInfo, SourceSize,
+    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo,
+    ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary,
+    SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
@@ -144,10 +147,10 @@ pub use timeline::{
     check_timeline_id,
 };
 pub use transition::{
-    CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
-    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
-    TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
-    check_preset_timing, initial_preset,
+    Bezier, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, KeyframeTiming,
+    MAX_BEZIER_OVERSHOOT, MAX_DELAY_MS, MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER,
+    TransitionEffect, TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+    builtin_kinds as builtin_transition_kinds, check_preset_timing, initial_preset,
 };
 pub use values::{
     MAX_VALUE_BYTES, MAX_VALUE_NAME_BYTES, MAX_VALUES, SharedValue, check_value_name,

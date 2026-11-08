@@ -1,6 +1,6 @@
 //! Filters (spec-panels.md 5, spec-workspace.md 6.2.6 to 6.4): the selected item's
 //! source's video and audio chains (ADR-0026) in the Filters panel and the Properties
-//! dialog, a scene's chain and the selected item's own effects (ADR-0065) in the Filters
+//! dialog (whose list and pane are [`PropertiesAndFilters`]), a scene's chain and the selected item's own effects (ADR-0065) in the Filters
 //! panel, the program output's and each output's chains (ADR-0080) in the Filters panel
 //! once an FX button picks them, and the Add filter dialog and the Filters window over them. A row turns its
 //! filter on or off, shows a summary of its settings, opens its settings, drags to
@@ -78,7 +78,7 @@ const AUDIO_GROUPS: [&str; 7] = [
 /// The kinds the prototype's catalogue has, by the engine's kind ID, in its order. The
 /// engine's kinds the prototype lacks (pixelate, aspect ratio, image mask) join the
 /// group they fit, and its wishes the engine lacks are left out.
-const KNOWN: [(&str, Known); 25] = {
+const KNOWN: [(&str, Known); 26] = {
     use FilterChain::{Audio, Video};
     const fn k(
         chain: FilterChain,
@@ -146,6 +146,15 @@ const KNOWN: [(&str, Known); 25] = {
                 "Style",
                 "Rounded corners",
                 "Round the corners, optional border",
+            ),
+        ),
+        (
+            "border",
+            k(
+                Video,
+                "Style",
+                "Border",
+                "Rounded, dashed, gradient or double edges",
             ),
         ),
         (
@@ -1076,6 +1085,46 @@ fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo
     })
 }
 
+/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to `kind`: it
+/// goes, and a filter `new_id` of that kind takes its place, on or off as it was, with
+/// its settings carried through `renames` (each old ID's value moves to its new ID,
+/// unless that ID has one) and fitted to `kind` ([`fit_settings`]). The engine refuses
+/// a key the new kind doesn't declare, and doesn't apply an effect's renames itself
+/// yet. Save as pack… sends them for a custom shader (#1295).
+pub fn move_to_kind(
+    owner: &FilterOwner,
+    chain: FilterChain,
+    index: usize,
+    filter: &FilterInfo,
+    new_id: FilterId,
+    kind: &KindDescriptor,
+    renames: &[(String, String)],
+) -> Vec<Edit> {
+    let mut carried = filter.settings.clone();
+    for (old, new) in renames {
+        if !carried.0.contains_key(new)
+            && let Some(value) = carried.0.remove(old)
+        {
+            carried.0.insert(new.clone(), value);
+        }
+    }
+    vec![
+        Edit::FilterRemove {
+            owner: owner.clone(),
+            filter_id: filter.filter_id.clone(),
+        },
+        Edit::FilterAdd {
+            owner: owner.clone(),
+            chain,
+            filter_id: new_id,
+            kind: kind.kind_id.clone(),
+            settings: fit_settings(kind, &carried),
+            enabled: (!filter.enabled).then_some(false),
+            index: u32::try_from(index).ok(),
+        },
+    ]
+}
+
 /// Reads the descriptor of each kind in `kinds` not yet read, once each: the mock
 /// engine and an engine without a kind describe none, and a refusal isn't news.
 fn describe_all(
@@ -1785,7 +1834,23 @@ fn Row(
                 >
                     <Icon name=if enabled { "eye" } else { "eye-off" } size=14 />
                 </button>
-                <span class="filter-name">{name.clone()}</span>
+                {if pick.is_some() {
+                    let chosen = chosen.clone();
+                    // Picked from the keyboard too: Enter or Space presses the name, whose
+                    // click reaches the row's.
+                    view! {
+                        <button
+                            type="button"
+                            class="filter-name filter-pick"
+                            aria-pressed=move || chosen().to_string()
+                        >
+                            {name.clone()}
+                        </button>
+                    }
+                    .into_any()
+                } else {
+                    view! { <span class="filter-name">{name.clone()}</span> }.into_any()
+                }}
                 {held_view}
                 {summary_view}
                 {move || caret().map(|c| view! { <span class="filter-caret" aria-hidden="true">{c}</span> })}
@@ -1984,6 +2049,133 @@ pub fn adopt_following(following: &mut Vec<FilterOwner>, now: &Collection, owner
     }
 }
 
+/// What a dialog that edits filters opened with (the Filters window, the Properties
+/// dialogs): each owner's chains and the keyframes among them that followed their item's
+/// own effects (ADR-0088), and from then on every filter edit it sends (its rows, its
+/// pane and the Add filter dialog over it), so its Cancel can put each back
+/// (`window_restore`). The log ends when the dialog's view is dropped.
+#[derive(Clone, Copy)]
+pub struct FilterUndo {
+    opened: StoredValue<Vec<(FilterOwner, FilterChains)>>,
+    following: StoredValue<Vec<FilterOwner>>,
+}
+
+impl FilterUndo {
+    /// Starts logging, with `owners`' chains as they are now.
+    pub fn begin(owners: &[FilterOwner]) -> FilterUndo {
+        let studio = expect_context::<Studio>();
+        let dialogs = expect_context::<FilterDialogs>();
+        let opened: Vec<(FilterOwner, FilterChains)> = studio.collection.with_untracked(|c| {
+            owners
+                .iter()
+                .filter_map(|o| {
+                    let chains = c.as_ref()?.chains(o)?.into_owned();
+                    Some((o.clone(), chains))
+                })
+                .collect()
+        });
+        let following: Vec<FilterOwner> = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| following_keyframes(c, opened.iter().map(|(o, _)| o)))
+                .unwrap_or_default()
+        });
+        let window = WINDOWS.fetch_add(1, Ordering::Relaxed);
+        dialogs.log.set_value(Some((window, Vec::new())));
+        on_cleanup(move || {
+            dialogs.log.update_value(|log| {
+                if log.as_ref().is_some_and(|(n, _)| *n == window) {
+                    *log = None;
+                }
+            });
+        });
+        FilterUndo {
+            opened: StoredValue::new(opened),
+            following: StoredValue::new(following),
+        }
+    }
+
+    /// Adds `target`, a filter the batch that made revision `at` just added and the
+    /// collection may not hold yet, to what the dialog opened with once it arrives, so
+    /// Cancel puts it back as added.
+    pub fn adopt_added(self, target: Target, at: Rev) {
+        let studio = expect_context::<Studio>();
+        let FilterUndo { opened, following } = self;
+        let adopted = StoredValue::new(false);
+        Effect::new(move |_| {
+            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+            if adopted.get_value() || rev < Some(at) {
+                return;
+            }
+            adopted.set_value(true);
+            let Some(chains) = untrack(|| {
+                studio
+                    .collection
+                    .with(|c| c.as_ref()?.chains(&target.owner).map(Cow::into_owned))
+            }) else {
+                return;
+            };
+            opened.update_value(|opened| adopt(opened, &target, &chains));
+            // An add to a keyframe that followed the item gave it its own effects
+            // before the dialog did, which Cancel keeps, as it keeps the filter.
+            untrack(|| {
+                studio.collection.with(|c| {
+                    if let Some(c) = c.as_ref() {
+                        following.update_value(|f| adopt_following(f, c, &target.owner));
+                    }
+                })
+            });
+        });
+    }
+
+    /// The edits that put back every filter edit the dialog sent.
+    pub fn restore(self) -> Vec<Edit> {
+        let studio = expect_context::<Studio>();
+        let dialogs = expect_context::<FilterDialogs>();
+        let log = dialogs
+            .log
+            .with_value(|log| log.as_ref().map(|(_, l)| l.clone()).unwrap_or_default());
+        let edits = self.opened.with_value(|opened| {
+            self.following.with_value(|following| {
+                window_restore(opened, &log, following, |owner, filter_id| {
+                    untrack(|| {
+                        filter_of(
+                            studio,
+                            &Target {
+                                owner: owner.clone(),
+                                filter_id: filter_id.clone(),
+                            },
+                        )
+                    })
+                    .map(|(_, f)| f)
+                })
+            })
+        });
+        // A custom shader's settings may have changed while the dialog was open.
+        untrack(|| {
+            fit_restore(
+                edits,
+                |kind| studio.descriptors.with(|d| d.get(kind).cloned()),
+                |owner, filter_id| {
+                    filter_of(
+                        studio,
+                        &Target {
+                            owner: owner.clone(),
+                            filter_id: filter_id.clone(),
+                        },
+                    )
+                    .map(|(_, f)| f.kind)
+                },
+            )
+        })
+    }
+
+    /// Whether a filter-editing dialog is open, so the Add filter dialog over it hands
+    /// it the new filter.
+    fn open(dialogs: &FilterDialogs) -> bool {
+        dialogs.log.with_value(Option::is_some)
+    }
+}
+
 /// Numbers each Filters window, so one closing never forgets a later one's log.
 static WINDOWS: AtomicU64 = AtomicU64::new(0);
 
@@ -2081,6 +2273,10 @@ pub fn fit_restore(
 /// put back in its first order; then each setting it sent goes back
 /// ([`restore_patch`]), and each switch it pressed.
 ///
+/// A filter `now` doesn't find, which another client removed while the window was open,
+/// is left out of the order and switch it puts back, so the rest still goes back (#1344);
+/// its settings were already skipped.
+///
 /// `following` lists the keyframe owners whose keyframe followed the item's own effects
 /// as the window opened (ADR-0088). The window's first edit there gave the keyframe its
 /// own effects, so for such an owner it sent edits to, Cancel sends one
@@ -2159,9 +2355,13 @@ pub fn window_restore(
                 index: u32::try_from(*i).ok(),
             });
         }
+        // A filter another client removed meanwhile is left out, or the engine would
+        // refuse the whole batch over it (#1344): it is gone either way.
+        let here = |id: &FilterId| removed.contains(id) || now(owner, id).is_some();
         if log.iter().any(|e| matches!(e, Edit::FilterReorder { .. })) {
             for which in [FilterChain::Video, FilterChain::Audio] {
-                for (i, f) in chains.chain(which).iter().enumerate() {
+                let kept = chains.chain(which).iter().filter(|f| here(&f.filter_id));
+                for (i, f) in kept.enumerate() {
                     edits.push(Edit::FilterReorder {
                         owner: owner.clone(),
                         filter_id: f.filter_id.clone(),
@@ -2202,7 +2402,7 @@ pub fn window_restore(
                 let switched = log.iter().any(|e| {
                     matches!(e, Edit::FilterSetEnabled { filter_id, .. } if *filter_id == f.filter_id)
                 });
-                if switched {
+                if switched && here(&f.filter_id) {
                     edits.push(Edit::FilterSetEnabled {
                         owner: owner.clone(),
                         filter_id: f.filter_id.clone(),
@@ -2251,70 +2451,23 @@ fn WindowBody(
     };
     // Each scope's chains as the window opened, and from now on every filter edit it
     // sends, which Cancel puts back.
-    let opened: Vec<(FilterOwner, FilterChains)> = studio.collection.with_untracked(|c| {
-        scopes
-            .iter()
-            .filter_map(|(_, o)| {
-                let chains = c.as_ref()?.chains(o)?.into_owned();
-                Some((o.clone(), chains))
-            })
-            .collect()
-    });
-    // The keyframes among them that follow the item's own effects (ADR-0088): Cancel
-    // makes them follow it again if the window gave them their own.
-    let following: Vec<FilterOwner> = studio.collection.with_untracked(|c| {
-        c.as_ref()
-            .map(|c| following_keyframes(c, opened.iter().map(|(o, _)| o)))
-            .unwrap_or_default()
-    });
-    let window = WINDOWS.fetch_add(1, Ordering::Relaxed);
-    dialogs.log.set_value(Some((window, Vec::new())));
-    on_cleanup(move || {
-        dialogs.log.update_value(|log| {
-            if log.as_ref().is_some_and(|(n, _)| *n == window) {
-                *log = None;
-            }
-        });
-    });
+    let owners: Vec<FilterOwner> = scopes.iter().map(|(_, o)| o.clone()).collect();
+    let undo = FilterUndo::begin(&owners);
     let scope = RwSignal::new(owner.clone());
     let selected = RwSignal::new(first);
     // A just-added filter may not be in the collection yet: the window waits for it
     // until a state at or after the batch's revision lacks it.
     let added_at = RwSignal::new(dialogs.added_at.get_untracked());
-    let opened = StoredValue::new(opened);
-    let following = StoredValue::new(following);
     // Opened on a filter just added, which the collection may not hold yet: it joins
     // what the window opened with once it arrives, so Cancel puts it back as added.
     if let (Some(at), Some(filter_id)) = (added_at.get_untracked(), selected.get_untracked()) {
-        let target = Target {
-            owner: owner.clone(),
-            filter_id,
-        };
-        let adopted = StoredValue::new(false);
-        Effect::new(move |_| {
-            let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
-            if adopted.get_value() || rev < Some(at) {
-                return;
-            }
-            adopted.set_value(true);
-            let Some(chains) = untrack(|| {
-                studio
-                    .collection
-                    .with(|c| c.as_ref()?.chains(&target.owner).map(Cow::into_owned))
-            }) else {
-                return;
-            };
-            opened.update_value(|opened| adopt(opened, &target, &chains));
-            // An add to a keyframe that followed the item gave it its own effects
-            // before the window did, which Cancel keeps, as it keeps the filter.
-            untrack(|| {
-                studio.collection.with(|c| {
-                    if let Some(c) = c.as_ref() {
-                        following.update_value(|f| adopt_following(f, c, &target.owner));
-                    }
-                })
-            });
-        });
+        undo.adopt_added(
+            Target {
+                owner: owner.clone(),
+                filter_id,
+            },
+            at,
+        );
     }
     // A filter the Add filter dialog over the window just added: the window shows it.
     Effect::new(move |_| {
@@ -2353,42 +2506,7 @@ fn WindowBody(
         }
     });
     let cancel = move || {
-        let log = dialogs
-            .log
-            .with_value(|log| log.as_ref().map(|(_, l)| l.clone()).unwrap_or_default());
-        let edits = opened.with_value(|opened| {
-            following.with_value(|following| {
-                window_restore(opened, &log, following, |owner, filter_id| {
-                    untrack(|| {
-                        filter_of(
-                            studio,
-                            &Target {
-                                owner: owner.clone(),
-                                filter_id: filter_id.clone(),
-                            },
-                        )
-                    })
-                    .map(|(_, f)| f)
-                })
-            })
-        });
-        // A custom shader's settings may have changed while the window was open.
-        let edits = untrack(|| {
-            fit_restore(
-                edits,
-                |kind| studio.descriptors.with(|d| d.get(kind).cloned()),
-                |owner, filter_id| {
-                    filter_of(
-                        studio,
-                        &Target {
-                            owner: owner.clone(),
-                            filter_id: filter_id.clone(),
-                        },
-                    )
-                    .map(|(_, f)| f.kind)
-                },
-            )
-        });
+        let edits = undo.restore();
         if let (false, Some(s)) = (edits.is_empty(), session.get()) {
             studio.apply(&s, edits);
         }
@@ -2499,6 +2617,120 @@ fn WindowBody(
     }
 }
 
+/// The body of a Properties dialog (DL-02, DL-03, #1219): on the left a "Properties"
+/// entry, then the owner's chains, whose rows pick a filter, and Add filter; on the right
+/// `properties` (the dialog's own settings, kept mounted, so a draft keeps what is typed)
+/// while that entry is selected, or the picked filter's settings, as the Filters window
+/// shows them. Filter changes apply at once; the dialog's [`FilterUndo`] puts them back
+/// on Cancel. A filter added from here, or one picked and then removed, moves the
+/// selection, as in the window.
+#[component]
+pub fn PropertiesAndFilters(
+    /// The chains' owner: the source, or the scene.
+    owner: FilterOwner,
+    /// Whether it has a video chain.
+    video: bool,
+    /// Whether it has an audio chain.
+    audio: bool,
+    /// The picked filter; `None` is the Properties entry.
+    selected: RwSignal<Option<FilterId>>,
+    /// The note beside the filters' heading.
+    #[prop(into)]
+    note: String,
+    /// The Properties entry's pane.
+    children: Children,
+) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let dialogs = expect_context::<FilterDialogs>();
+    // A filter the Add filter dialog just added: the dialog shows it once it arrives.
+    let added_at = RwSignal::new(None::<Rev>);
+    Effect::new(move |_| {
+        if let Some((filter_id, rev)) = dialogs.landed.get() {
+            dialogs.landed.set(None);
+            added_at.set(Some(rev));
+            selected.set(Some(filter_id));
+        }
+    });
+    let chain_ids = {
+        let owner = owner.clone();
+        Memo::new(move |_| {
+            studio.collection.with(|c| {
+                c.as_ref()
+                    .and_then(|c| c.chains(&owner))
+                    .map(|ch| {
+                        ch.video
+                            .iter()
+                            .chain(&ch.audio)
+                            .map(|f| f.filter_id.clone())
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default()
+            })
+        })
+    };
+    // A picked filter that is removed (here, or by another client) gives the pane back
+    // to Properties; one just added is waited for.
+    Effect::new(move |_| {
+        let ids = chain_ids.get();
+        let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
+        let waiting = added_at.get().is_some_and(|at| rev < Some(at));
+        let gone = selected.with(|s| s.as_ref().is_some_and(|id| !ids.contains(id)));
+        if gone && !waiting {
+            selected.set(None);
+        }
+    });
+    let shown = Memo::new(move |_| {
+        selected
+            .get()
+            .filter(|id| chain_ids.with(|ids| ids.contains(id)))
+    });
+    let on_props = move || selected.with(Option::is_none);
+    let add = {
+        let owner = owner.clone();
+        move |_| dialogs.add(owner.clone())
+    };
+    let pane = {
+        let owner = owner.clone();
+        move || {
+            shown.get().map(|filter_id| {
+                view! { <FilterPane target=Target { owner: owner.clone(), filter_id } /> }
+            })
+        }
+    };
+    let waiting = move || selected.with(Option::is_some) && shown.with(Option::is_none);
+    view! {
+        <div class="props-body filters-window-body">
+            <div class="filters-window-list props-list">
+                <button
+                    type="button"
+                    class="props-entry"
+                    class:on=on_props
+                    aria-pressed=move || on_props().to_string()
+                    on:click=move |_| selected.set(None)
+                >
+                    <Icon name="sliders" size=14 />
+                    "Properties"
+                </button>
+                <div class="props-side-head">
+                    <span class="props-side-title">"Filters"</span>
+                    <span class="props-side-note">{note}</span>
+                </div>
+                <Chains owner=owner video=video audio=audio pick=selected />
+                {(video || audio).then(|| view! {
+                    <button type="button" class="filters-add props-add-filter" on:click=add>
+                        "+ Add filter…"
+                    </button>
+                })}
+            </div>
+            <div class="filters-window-pane props-pane">
+                <div class="props-settings" hidden=move || !on_props()>{children()}</div>
+                {pane}
+                {move || waiting().then(|| view! { <p class="placeholder">"Loading…"</p> })}
+            </div>
+        </div>
+    }
+}
+
 /// The Filters window's right pane: the selected filter's name, switch, hint and
 /// settings, with Remove and Defaults.
 #[component]
@@ -2600,10 +2832,71 @@ fn FilterPane(target: Target) -> impl IntoView {
             </button>
         }
     });
+    // Save as pack… wrote pack `new`: this filter moves to its kind, as a new filter in
+    // its place, which the window then shows with the editor open on it.
+    let save_as = {
+        let target = target.clone();
+        move |new: String, renames: Vec<(String, String)>| {
+            let Some(s) = session.get() else {
+                return;
+            };
+            let found = studio.collection.with_untracked(|c| {
+                let chains = c.as_ref()?.chains(&target.owner)?;
+                let filters = chains.chain(chain);
+                let index = filters
+                    .iter()
+                    .position(|f| f.filter_id == target.filter_id)?;
+                Some((index, filters[index].clone()))
+            });
+            let Some((index, filter)) = found else {
+                return;
+            };
+            let owner = target.owner.clone();
+            spawn_local(async move {
+                let kind = match studio.descriptor(&s, &custom_shader::kind_of(&new)).await {
+                    Ok(kind) => kind,
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                        return;
+                    }
+                };
+                let new_id = FilterId::new(studio.fresh_id(&s, "filter"));
+                let edits = move_to_kind(
+                    &owner,
+                    chain,
+                    index,
+                    &filter,
+                    new_id.clone(),
+                    &kind,
+                    &renames,
+                );
+                dialogs.sent(&edits);
+                match apply(&s, edits, None).await {
+                    Ok(rev) => {
+                        dialogs.shader.set(Some(new_id.clone()));
+                        dialogs.landed.set(Some((new_id, rev)));
+                    }
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                    }
+                }
+            });
+        }
+    };
+    let save_as = StoredValue::new(save_as);
+    let save_as = move |new: String, renames: Vec<(String, String)>| {
+        save_as.with_value(|f| f(new, renames));
+    };
     let shader_editor = move || {
         let opened = shader.get()?;
         let pack = shader_pack.get_value()?;
-        Some(view! { <ShaderEditor pack=pack opened=opened close=move || shader.set(None) /> })
+        Some(view! {
+            <ShaderEditor pack=pack opened=opened close=move || shader.set(None) save_as=save_as />
+        })
     };
     let target = StoredValue::new(target);
     let switch = move |_| {
@@ -2992,9 +3285,9 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                         if custom {
                             dialogs.shader.set(Some(filter_id.clone()));
                         }
-                        if dialogs.edit.with_untracked(Option::is_some) {
-                            // Over the Filters window: it shows the new filter, keeping
-                            // what it changed before for Cancel.
+                        if FilterUndo::open(&dialogs) {
+                            // Over the Filters window or a Properties dialog: it shows
+                            // the new filter, keeping what it changed before for Cancel.
                             dialogs.sent(&[added]);
                             dialogs.landed.set(Some((filter_id, rev)));
                         } else if many {
@@ -3215,6 +3508,68 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
 
 #[cfg(test)]
 mod tests {
+
+    /// Save as pack… moves a filter to the new kind in its place, with its settings
+    /// and off when it was off (#1295).
+    #[test]
+    fn a_filter_moves_to_a_kind_in_its_place() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("cam"),
+        };
+        let mut settings = Settings::new();
+        settings.insert("amount", json!(0.25));
+        settings.insert("tint", json!("#ff0000ff"));
+        settings.insert("gone", json!(3));
+        let filter = FilterInfo {
+            filter_id: FilterId::new("f1"),
+            kind: "custom-1/shader".into(),
+            enabled: false,
+            settings,
+        };
+        // The new kind renamed `amount` and retyped `tint`, and has no `gone`.
+        let mut kind = descriptor(vec![
+            param(
+                "mix_amount",
+                "Amount",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param("tint", "Tint", float(0.0, 1.0, None, None), json!(0.5)),
+        ]);
+        kind.kind_id = "warm/shader".into();
+        let renames = [("amount".to_owned(), "mix_amount".to_owned())];
+        let edits = move_to_kind(
+            &owner,
+            FilterChain::Video,
+            2,
+            &filter,
+            FilterId::new("f9"),
+            &kind,
+            &renames,
+        );
+        let mut fitted = Settings::new();
+        fitted.insert("mix_amount", json!(0.25));
+        fitted.insert("tint", Value::Null);
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f1"),
+                },
+                Edit::FilterAdd {
+                    owner,
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("f9"),
+                    kind: "warm/shader".into(),
+                    settings: fitted,
+                    enabled: Some(false),
+                    index: Some(2),
+                },
+            ]
+        );
+    }
+
     use super::*;
     use jstream_control::protocol::{ParamDescriptor, SceneInfo};
     use serde_json::json;
@@ -3958,6 +4313,7 @@ mod tests {
         };
         let own = |effects: Option<Vec<FilterInfo>>| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: "i-cam".into(),
             geometry: None,
             transform: None,
@@ -4383,7 +4739,11 @@ mod tests {
             },
         ];
         // The store hasn't caught up with the setting yet; another client turned `a` off.
-        let now = |_: &FilterOwner, f: &FilterId| (*f == id("a")).then(|| filter("a", false, 0.1));
+        let now = |_: &FilterOwner, f: &FilterId| match f.as_str() {
+            "a" => Some(filter("a", false, 0.1)),
+            "c" => Some(filter("c", true, 0.3)),
+            _ => None,
+        };
         let edits = window_restore(&opened, &log, &[], now);
         let mut back = Settings::new();
         back.insert("amount", json!(0.1));
@@ -4440,6 +4800,31 @@ mod tests {
             },
         ];
         assert!(window_restore(&opened, &log, &[], |_, _| None).is_empty());
+
+        // Another client removed `c`, whose switch the window pressed, and `a`, which it
+        // reordered: the rest still goes back, in an order without them (#1344).
+        let log = vec![
+            Edit::FilterSetEnabled {
+                owner: source.clone(),
+                filter_id: id("c"),
+                enabled: true,
+            },
+            Edit::FilterReorder {
+                owner: source.clone(),
+                filter_id: id("a"),
+                index: 2,
+            },
+            Edit::FilterSetSettings {
+                owner: source.clone(),
+                filter_id: id("a"),
+                patch: [("amount", json!(0.9))].into_iter().collect(),
+            },
+        ];
+        let now = |_: &FilterOwner, f: &FilterId| (*f == id("b")).then(|| filter("b", true, 0.2));
+        assert_eq!(
+            window_restore(&opened, &log, &[], now),
+            vec![reorder("b", 0)]
+        );
     }
 
     /// Cancel after the shader editor renamed or retyped a setting the window had sent

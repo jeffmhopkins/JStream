@@ -8,6 +8,7 @@
 //! hotkey can do nothing an agent can't (R-ARCH-001).
 
 use crate::command::Action;
+use crate::id::LabelId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -225,6 +226,10 @@ pub struct HotkeyBinding {
     /// run it. [`HotkeyBinding::action`] parses it.
     #[schemars(with = "Action")]
     pub action: serde_json::Value,
+    /// The labels it carries (ADR-0133, since 0.100), ordered by ID, as
+    /// `hotkey.set_labels` sets them. Omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<LabelId>,
 }
 
 impl HotkeyBinding {
@@ -235,7 +240,13 @@ impl HotkeyBinding {
             // An action is plain data: IDs, strings and a secret string, which always
             // serialize. A stream key is never bound, so none is copied here.
             action: serde_json::to_value(action).expect("invariant: an Action serializes to JSON"),
+            labels: Vec::new(),
         }
+    }
+
+    /// This binding carrying `labels`.
+    pub fn with_labels(self, labels: Vec<LabelId>) -> Self {
+        HotkeyBinding { labels, ..self }
     }
 
     /// The bound action, or `None` when it is one this version doesn't know.

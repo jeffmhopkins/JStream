@@ -6,7 +6,7 @@ use crate::color::frame_size;
 use crate::describe::{asset, kind, param, size};
 use crate::page_api::{Feed, Grant, MAX_VALUES_GRANT_BYTES, PageView};
 use crate::source::{changed_non_live, setting};
-use crate::{Context, Source, SourceAudio, SourceError, SourceKind};
+use crate::{Context, Painter, Source, SourceAudio, SourceError, SourceKind};
 use jstream_browser::{
     BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageAudio, PageData,
     PageLocation, PageSpec,
@@ -15,7 +15,7 @@ use jstream_media::{AudioFormat, MediaTime, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings, VisibleIf};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// The kind's ID.
 const BROWSER: &str = "browser";
@@ -305,10 +305,13 @@ pub(crate) fn open(
     Ok(Box::new(BrowserSource {
         descriptor: descriptor.clone(),
         settings: settings.clone(),
-        page,
-        blank,
+        page: Arc::new(Page {
+            on_cpu: page.paints_on_cpu(),
+            page: Mutex::new(page),
+            blank,
+            every_ms: i64::from(1000_u32.div_ceil(fps)),
+        }),
         audio,
-        every_ms: i64::from(1000_u32.div_ceil(fps)),
         feed: grant.map(|grant| {
             let scope = grant
                 .bus
@@ -368,17 +371,58 @@ fn css(settings: &Settings) -> Result<&str, SourceError> {
 struct BrowserSource {
     descriptor: KindDescriptor,
     settings: Settings,
-    page: Box<dyn BrowserPage>,
-    /// A transparent frame of the page's size.
-    blank: Arc<VideoFrame>,
+    page: Arc<Page>,
     audio: Arc<dyn SourceAudio>,
-    /// How often a page that paints on the CPU is looked at again, in milliseconds: one
-    /// frame at its frame rate.
-    every_ms: i64,
     /// What a page granted the page API was sent (ADR-0102); `None` without a grant.
     feed: Option<Feed>,
     /// Whether the page was told nothing draws it.
     hidden: bool,
+}
+
+/// An open page, shared by the source and, for a page that paints on the CPU, its
+/// [`Painter`], through which the host takes each new paint without a plan
+/// (ADR-0117 §3).
+struct Page {
+    page: Mutex<Box<dyn BrowserPage>>,
+    /// Whether it paints on the CPU (CEF on Linux, ADR-0095).
+    on_cpu: bool,
+    /// A transparent frame of the page's size.
+    blank: Arc<VideoFrame>,
+    /// How often a page that paints on the CPU is looked at again, in milliseconds: one
+    /// frame at its frame rate.
+    every_ms: i64,
+}
+
+impl Page {
+    fn lock(&self) -> MutexGuard<'_, Box<dyn BrowserPage>> {
+        self.page.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl Painter for Page {
+    /// Nothing to draw: the page paints itself.
+    fn paint(&self, _: MediaTime) {}
+
+    /// The page's latest paint where its backend paints on the CPU, else a transparent
+    /// frame of the page's size: see [`Source::frame`].
+    fn frame(&self) -> Arc<VideoFrame> {
+        self.lock()
+            .cpu_frame()
+            .unwrap_or_else(|| Arc::clone(&self.blank))
+    }
+
+    /// A page that paints on the CPU is looked at again every frame of its frame rate;
+    /// one on the GPU has a frame of its own, and its stand-in never changes.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.on_cpu {
+            return None;
+        }
+        let ms = i64::try_from(crate::source::millis(at)).unwrap_or(i64::MAX);
+        Some(MediaTime::new(
+            ms.saturating_add(self.every_ms),
+            Timebase::MILLIS,
+        ))
+    }
 }
 
 impl Source for BrowserSource {
@@ -387,23 +431,18 @@ impl Source for BrowserSource {
     /// only on the GPU ([`gpu_frame`](Source::gpu_frame)), and is never copied to the
     /// CPU (ADR-0021). Before its first paint it is the transparent frame either way.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(self
-            .page
-            .cpu_frame()
-            .unwrap_or_else(|| Arc::clone(&self.blank)))
+        Ok(Painter::frame(&*self.page))
     }
 
-    /// A page that paints on the CPU is looked at again every frame of its frame rate;
-    /// one on the GPU has a frame of its own, and its stand-in never changes.
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        if !self.page.paints_on_cpu() {
-            return None;
-        }
-        let ms = i64::try_from(crate::source::millis(at)).unwrap_or(i64::MAX);
-        Some(MediaTime::new(
-            ms.saturating_add(self.every_ms),
-            Timebase::MILLIS,
-        ))
+        Painter::next_change(&*self.page, at)
+    }
+
+    /// A page that paints on the CPU's: the host takes each new paint on its own
+    /// thread, without a plan. One that paints on the GPU has none.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        let painter: Arc<dyn Painter> = self.page.clone();
+        self.page.on_cpu.then_some(painter)
     }
 
     /// Reloads the page when `restart_on_show` is set (a kind built on `browser` without
@@ -415,13 +454,13 @@ impl Source for BrowserSource {
             .and_then(Value::as_bool)
             .unwrap_or(false)
         {
-            self.page.reload();
+            self.page.lock().reload();
         }
     }
 
     /// Loads the page again (`source.restart`).
     fn restart(&mut self, _: MediaTime) {
-        self.page.reload();
+        self.page.lock().reload();
     }
 
     /// Hides the page while nothing draws it, so it stops painting (#1071), and shows it
@@ -429,7 +468,7 @@ impl Source for BrowserSource {
     fn set_drawn(&mut self, drawn: bool) {
         if self.hidden == drawn {
             self.hidden = !drawn;
-            self.page.set_hidden(!drawn);
+            self.page.lock().set_hidden(!drawn);
         }
     }
 
@@ -441,14 +480,14 @@ impl Source for BrowserSource {
         }
         let css = css(settings)?;
         if Some(css) != self.settings.get("css").and_then(Value::as_str) {
-            self.page.set_css(css);
+            self.page.lock().set_css(css);
         }
         self.settings = settings.clone();
         Ok(())
     }
 
     fn gpu_frame(&mut self) -> Option<GpuFrame> {
-        self.page.frame()
+        self.page.lock().frame()
     }
 
     fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
@@ -464,7 +503,7 @@ impl Source for BrowserSource {
         let data = feed.view(view);
         feed.post(data);
         if let Some(data) = feed.flush(view.now) {
-            self.page.send_data(data);
+            self.page.lock().send_data(data);
         }
         feed.due()
     }
@@ -476,11 +515,12 @@ impl Source for BrowserSource {
         let Some(feed) = &mut self.feed else {
             return;
         };
-        let pts = self
-            .page
+        let page = self.page.lock();
+        let pts = page
             .frame()
             .map(|frame| frame.info().pts)
-            .or_else(|| self.page.cpu_frame().map(|frame| frame.info().pts));
+            .or_else(|| page.cpu_frame().map(|frame| frame.info().pts));
+        drop(page);
         let age = pts.map(|pts| now.as_secs_f64() - pts.as_secs_f64());
         if let Some(clock) = feed.clock(now, age) {
             feed.post(PageData {
@@ -489,7 +529,7 @@ impl Source for BrowserSource {
             });
         }
         if let Some(data) = feed.flush(now) {
-            self.page.send_data(data);
+            self.page.lock().send_data(data);
         }
     }
 }
