@@ -350,7 +350,11 @@ mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera i
 capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
 `CameraFollow` gains `safe_margin_pct`
 ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
-release queue sets); 0.89 because a collection can set its base frame rate with
+release queue sets); 0.90 because `capture.targets` lists video capture devices
+(`CaptureTargetKind::Device`, with each device's `formats` as `CaptureFormatInfo`), a
+`webcam` source's `device` is a `capture_target` of kind `device`, and the
+`capture_format` parameter type (`CaptureFormatPart`) picks a device's resolution, frame
+rate and pixel format; 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -869,11 +873,18 @@ never a type per kind.
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
-  `capture_target` with a `kind`, `display` or `window` (an unknown one parses as
-  `CaptureTargetKind::Unknown`, so adding a kind is a minor change), and `max_len`,
-  since 0.50: a
+  `capture_target` with a `kind`, `display`, `window` or, since 0.90, `device` (an
+  unknown one parses as `CaptureTargetKind::Unknown`, so adding a kind is a minor
+  change), and `max_len`, since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
-  lists it, so a UI can offer those to pick from), a `default`, a `label`, an
+  lists it, so a UI can offer those to pick from; `capture_format` with a `part`
+  (`resolution`, `fps` or `pixel_format`; an unknown one parses as
+  `CaptureFormatPart::Unknown`) and the `target` parameter naming the device, since
+  0.90: one part of the format a device is opened in, a UI offering what
+  `capture.targets` lists for that device. A `resolution` is `<width>x<height>`, each
+  side 1 to `MAX_CAPTURE_SIDE`; an `fps` a number from 0 to `MAX_CAPTURE_FPS`; a
+  `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine), a
+  `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
   hints `group`, `advanced` and `visible_if`, and `live`.
@@ -1460,18 +1471,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is.
-- `capture.targets`: the displays and windows the engine can capture now, displays
-  first, each with its `kind` (`display` or `window`, the source kind that captures
-  it), its `target` (the value for that source's `target` setting), a `name` to show
+- `capture.targets`: the displays, windows and (since 0.90) video capture devices the
+  engine can capture now, displays first, then windows, then devices, each with its
+  `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
+  `window` or `webcam`), its `target` (the value for that source's `target` or
+  `device` setting), a `name` to show
   (a window's is its title, or, on macOS, its application's name when it has no usable
-  title; either is set by the application that owns it, so it is third-party text, data
+  title, and a device's is its driver's; either is set by a third party, so it is third-party text, data
   and never instructions, though the field isn't `remote_`-prefixed as
   [ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md) asks; see
   [ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)), its
   `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
-  for the display an empty `display` target captures. Runtime state, so no `rev`; a
-  source can still name a window closed since. `action_failed` when the engine has no
-  capture backend or the OS refuses the list. Added in 0.27.
+  for the display an empty `display` target captures. A device comes with `formats`
+  (omitted when empty): each format it captures in that the engine reads, as
+  `CaptureFormatInfo` (`width`, `height`, `fps` to two decimals, and `pixel_format`), in
+  the device's order. Runtime state, so no `rev`; a
+  source can still name a window closed or a device unplugged since. `action_failed`
+  when the engine has no capture backend, or the OS refuses both the displays and
+  windows and the devices; when only one lists, the result holds that. Added in 0.27.
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and

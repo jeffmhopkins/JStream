@@ -601,6 +601,49 @@ source: crates/jstream-render/tests/kinds.rs
         "default": 0.0,
         "label": "Outer gap",
         "live": true
+      },
+      {
+        "id": "frame",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ],
+        "default": null,
+        "label": "Frame image",
+        "description": "Draw the inner stroke from an image as a 9-slice frame: its corners stay as they are and its edges run along the sides. Width sets how wide it draws.",
+        "live": true
+      },
+      {
+        "id": "frame_slice",
+        "type": "float",
+        "min": 1.0,
+        "max": 1024.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Frame corner",
+        "description": "How far in from the image's edge its corners reach, in the image's own pixels.",
+        "live": true
+      },
+      {
+        "id": "frame_edges",
+        "type": "enum",
+        "options": [
+          {
+            "value": "stretch",
+            "label": "Stretch"
+          },
+          {
+            "value": "tile",
+            "label": "Tile"
+          }
+        ],
+        "default": "stretch",
+        "label": "Frame edges",
+        "live": true
       }
     ],
     "max_outset_px": 129

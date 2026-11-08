@@ -39,7 +39,10 @@ use crate::{
 use crate::{Bezier, DroppedOverride, ItemOverride, KeyframeTiming, OverrideField};
 use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
 use crate::{Canvas as CameraCanvas, SceneCamera};
-use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
+use crate::{
+    CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind, FontInfo,
+    PixelSize, SourceSize,
+};
 use crate::{
     Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
@@ -2154,6 +2157,38 @@ fn color_kind() -> KindDescriptor {
                 },
                 json!(""),
             ),
+            param(
+                "camera",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::Device,
+                    max_len: 1024,
+                },
+                json!(""),
+            ),
+            param(
+                "resolution",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::Resolution,
+                    target: "camera".into(),
+                },
+                json!(""),
+            ),
+            param(
+                "fps",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::Fps,
+                    target: "camera".into(),
+                },
+                json!(0),
+            ),
+            param(
+                "pixel_format",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::PixelFormat,
+                    target: "camera".into(),
+                },
+                json!(""),
+            ),
         ],
     }
 }
@@ -2598,6 +2633,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         height: 1440,
                     }),
                     primary: true,
+                    formats: Vec::new(),
                 },
                 CaptureTargetInfo {
                     kind: CaptureTargetKind::Window,
@@ -2605,6 +2641,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Untitled - Notepad".into(),
                     size: None,
                     primary: false,
+                    formats: Vec::new(),
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Device,
+                    target: r"\\?\usb#vid_046d&pid_085e#0001#{e5323777}\global".into(),
+                    name: "USB webcam".into(),
+                    size: None,
+                    primary: false,
+                    formats: vec![CaptureFormatInfo {
+                        width: 1920,
+                        height: 1080,
+                        fps: 29.97,
+                        pixel_format: "mjpeg".into(),
+                    }],
                 },
             ],
         },

@@ -34,6 +34,15 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
     ]
 }
 
+/// How far one of this group's kinds draws past its input at `settings`, px, or `None`
+/// for a kind it doesn't measure (ADR-0136).
+pub(crate) fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    match kind_id {
+        border::KIND => Some(border::outset(settings)),
+        _ => None,
+    }
+}
+
 /// The pass for one of this group's kinds, or `None` for any other kind.
 pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
     let single = |shader: Shader, uniforms: fn(&Settings) -> Vec<u8>| -> Box<dyn Pass> {

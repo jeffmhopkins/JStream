@@ -10,8 +10,8 @@
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
-//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
-//! [`MOCK_WINDOW`]),
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], one window,
+//! [`MOCK_WINDOW`], and one webcam with two formats, [`MOCK_DEVICE`]),
 //! `font.list` (two made-up fonts of one family, [`MOCK_FONTS`], whose files don't exist),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
@@ -42,10 +42,10 @@ use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
 use jstream_protocol::LabelId;
 use jstream_protocol::{
-    Action, Batch, Binding, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
-    CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
-    GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
+    Action, Batch, Binding, BlendMode, BusId, Call, CallResult, Canvas, CaptureFormatInfo,
+    CaptureTargetInfo, CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile,
+    EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError,
+    GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
     IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome,
     MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo, OutputKind,
     OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult,
@@ -383,6 +383,10 @@ pub const MOCK_DISPLAY: &str = "mock:display";
 /// The capture target ID of the one window the mock's `capture.targets` lists, titled
 /// "Mock window".
 pub const MOCK_WINDOW: &str = "mock:window";
+
+/// The ID of the one video capture device the mock's `capture.targets` lists, named
+/// "Mock webcam", with two formats (since protocol 0.90).
+pub const MOCK_DEVICE: &str = "mock:webcam";
 
 /// The fonts the mock's `font.list` lists, as (family, style, path): made up, so a
 /// UI's font picker has something to offer. The files don't exist.
@@ -1405,6 +1409,7 @@ impl State {
                             height: 1080,
                         }),
                         primary: true,
+                        formats: Vec::new(),
                     },
                     CaptureTargetInfo {
                         kind: CaptureTargetKind::Window,
@@ -1415,6 +1420,28 @@ impl State {
                             height: 720,
                         }),
                         primary: false,
+                        formats: Vec::new(),
+                    },
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Device,
+                        target: MOCK_DEVICE.into(),
+                        name: "Mock webcam".into(),
+                        size: None,
+                        primary: false,
+                        formats: vec![
+                            CaptureFormatInfo {
+                                width: 1920,
+                                height: 1080,
+                                fps: 30.0,
+                                pixel_format: "mjpeg".into(),
+                            },
+                            CaptureFormatInfo {
+                                width: 1280,
+                                height: 720,
+                                fps: 60.0,
+                                pixel_format: "nv12".into(),
+                            },
+                        ],
                     },
                 ],
             },
@@ -3902,19 +3929,22 @@ mod tests {
     }
 
     #[test]
-    fn capture_targets_lists_one_primary_display_and_one_window() {
+    fn capture_targets_lists_one_primary_display_one_window_and_one_device() {
         let engine = MockEngine::new();
         let control = connected(&engine);
         let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
         else {
             panic!("a capture.targets result");
         };
-        assert_eq!(targets.len(), 2);
+        assert_eq!(targets.len(), 3);
         assert_eq!(targets[0].target, super::MOCK_DISPLAY);
         assert!(targets[0].primary);
         assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
         assert_eq!(targets[1].target, super::MOCK_WINDOW);
         assert!(!targets[1].primary);
+        assert_eq!(targets[2].kind, crate::protocol::CaptureTargetKind::Device);
+        assert_eq!(targets[2].target, super::MOCK_DEVICE);
+        assert_eq!(targets[2].formats.len(), 2);
     }
 
     #[test]

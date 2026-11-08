@@ -143,7 +143,7 @@ title = "A UI scrub of every panel, dialog and window, with a decluttered Inspec
 priority = 5
 status = "planned"
 issues = [1219, 1198, 1202, 1204, 1206]
-prs = [1279, 1373]
+prs = [1279, 1373, 1389]
 note = "#1279 and #1373 redesign the Outputs panel (#1206); #1219, #1198, #1202 and #1204 remain"
 
 [[target]]
@@ -178,8 +178,8 @@ release = "alpha.5"
 title = "Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter"
 status = "planned"
 issues = [1226, 1227, 1232, 1295]
-prs = [1281, 1289, 1296, 1331, 1351]
-note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor and #1351 adds Save as pack and setting renames (#1295)"
+prs = [1281, 1289, 1296, 1331, 1351, 1352]
+note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227) and #1352 its 9-slice image frame (#1294); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor and #1351 adds Save as pack and setting renames (#1295)"
 
 [[target]]
 release = "alpha.5"

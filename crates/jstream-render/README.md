@@ -668,9 +668,10 @@ stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
-drop shadow, outline, glow or bloom draws past its input at its settings, never more
-than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. It doesn't
-measure a `border` yet, which takes its declared 129 px.
+drop shadow, outline, glow, bloom or border draws past its input at its settings, never
+more than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. A border
+draws past it only with an outer stroke: its gap, its width and an antialiased pixel
+(#1376).
 
 **The harness.**
 
@@ -839,6 +840,15 @@ premultiplied linear light on the way out.
   dashes along the edge and the gradient round it once per perimeter; the distance is
   worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
   stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
+  image as a 9-slice frame instead of in its style and fill: the image's corners,
+  `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
+  the band's corners, `width` px square, and its middle runs along each side between
+  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale; each
+  slice samples only its own texels, held half a texel inside it (#1377). The
+  band is `width` px in from the rectangle's sides, cut to the rounded shape. The image
+  is the pass's aux image, handed over as an image mask's is (`Pass::set_reference`,
+  the shared `assets::Reference`); until it is there, the stroke draws in its style.
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
@@ -924,8 +934,10 @@ most it can draw past its input at any settings: drop shadow 300 (the largest of
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
 and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
 widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
-picture show around its box (#1226). That room costs layer memory and fill: a
-1920×1080 box with a drop shadow is a 2520×1680 layer.
+picture show around its box (#1226). That room costs layer memory and fill, so an
+item's layer grows only by what its effects draw at their settings (ADR-0136): a
+1920×1080 box with a drop shadow at its largest is a 2520×1680 layer, and at its
+defaults a 1952×1112 one.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
