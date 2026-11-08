@@ -5868,7 +5868,7 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "connect.
 stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "Only crop.spec.js changed (a field read is now polled); the harness (mock daemon, fixtures, setup, browser) is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/custom-shader.spec.js"]
-stamp = { hash = "b3:2ab9975cc323fcbe", by = "agent:claude", note = "#1351 round 1: the fake that refuses undeclared settings lives in custom-shader.spec.js, not in the shared harness; the harness section holds | kept from the merged side: Re-read: the new custom-shader spec routes the socket itself like plugins.spec.js does; the harness (mock daemon, fixtures) is unchanged" }
+stamp = { hash = "b3:ef44efd099f20b09", by = "agent:claude", note = "Re-read the harness against the new shader-source test: it adds no fixture and starts no daemon differently; custom-shader.spec.js still routes the page's socket itself, so the harness text holds." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:87af7d629578dbff", by = "agent:claude-settings", note = "showPanel now finds the panel's tab in the dock strip and its dock-panel tabpanel, since the Inspector has a Transform tab of its own; the line naming showPanel says so; the mock daemon and seed are unchanged" }
@@ -5961,7 +5961,7 @@ stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #
 stamp = { hash = "b3:063a37f95f399bff" }
 
 ["CRATE-jstream-ui-e2e#tests"."body"]
-stamp = { hash = "b3:f86ad9fc56051905", by = "agent:claude", note = "The outputs.spec.js entry now names Stop all beside Start all and a recording's copy writing to 'a (2).mp4'; checked against the spec's test names and assertions." }
+stamp = { hash = "b3:54f90a95c66e825c", by = "agent:claude", note = "Added the Add source › Shader click-through to the Custom shader bullet and checked it against the spec: template manifest, placed source, Properties with the editor and no Save as pack, @name/@size/@feedback in the manifest, a refused width setting, Edit shader reopening, and the written shader listed in Add source." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/browse.spec.js"]
 stamp = { hash = "b3:2abb836b407c9ce7", by = "agent:outputs-1206", note = "Rewrote the Outputs entry for the compact rows and the settings, add-output, delete and Encoders & mixes dialogs; Browse, Codec downloads and Program-and-output-chains entries now name the dialogs and the program row's tooltip; Stream stats only changed how it adds the recording, which its entry doesn't describe. | merge: #1275 moved pairing and plugins from the Inspector into one Settings dialog (settings.rs); the Plugins entry now names the Settings dialog, and the Outputs, Browse and Codec downloads entries still hold. | kept from the merged side: Plugins entry says the spec opens the Settings dialog's Plugins page via File › Plugins…, and adds the new test: no plugins or pairing in the Inspector, page switching by click and arrows, the install dialog centred over a moved Settings dialog and closing alone on Escape; Browse's Install plugin text still holds" }
@@ -5985,7 +5985,7 @@ stamp = { hash = "b3:ca6c5e8ea0b9bbaa", by = "agent:ui-polish", note = "The Conn
 stamp = { hash = "b3:7b4736b2ebacfe64", by = "agent:flaky-tests", note = "crop.spec.js's handle-drag test now polls the Right field instead of reading it once; it covers the same behaviour, so the Crop bullet still holds." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/custom-shader.spec.js"]
-stamp = { hash = "b3:2ab9975cc323fcbe", by = "agent:claude", note = "#1351 round 1: the Custom shader entry now says the Filters window sets amount to 0.25, the move's add carries exactly mix_amount 0.25, and the fake kinds follow the shader's @param lines and refuse an undeclared setting, as the spec does | kept from the merged side: Added the Custom shader bullet, which matches custom-shader.spec.js step by step" }
+stamp = { hash = "b3:ef44efd099f20b09", by = "agent:claude", note = "Added the Add source › Shader click-through to the Custom shader bullet and checked it against the spec: template manifest, placed source, Properties with the editor and no Save as pack, @name/@size/@feedback in the manifest, a refused width setting, Edit shader reopening, and the written shader listed in Add source." }
 
 ["CRATE-jstream-ui-e2e#tests"."file:crates/jstream-ui/tests/e2e/specs/docking.spec.js"]
 stamp = { hash = "b3:87af7d629578dbff", by = "agent:claude-settings", note = "inspector.spec.js gains the tabs test (switching hides the other panels, arrow keys with focus, tab kept across a reload, Properties & filters… opens the dialog); transitions.spec.js opens the Behaviour tab first; docking.spec.js's tab helper only scopes to the dock strip, so its entry holds" }
