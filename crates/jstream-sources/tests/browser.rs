@@ -430,8 +430,9 @@ fn bad_settings_and_a_missing_backend_are_errors() {
         )),
         "url"
     );
+    // 0 is the program's rate (#1405), not an error; a fraction is.
     assert_eq!(
-        param_of(create(&ctx, &settings(&[("fps", json!(0))]))),
+        param_of(create(&ctx, &settings(&[("fps", json!(29.97))]))),
         "fps"
     );
     assert_eq!(

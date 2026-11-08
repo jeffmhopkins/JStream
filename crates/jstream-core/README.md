@@ -183,7 +183,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
-  dropped when it is deleted, on the engine's `jstream-sources` thread. The program
+  dropped when it is deleted, on the engine's `jstream-sources` thread. Sources are
+  built with the program's base rate (`Context.frame_rate`), and a `browser` page with
+  an `fps` of 0, which follows it, is built again when `canvas.set_frame_rate` changes
+  it (#1405). The program
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again. `media` sources play through the injected
   backends' media files. A frame stored
@@ -629,7 +632,10 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   the client's earlier batch then fails to undo with `undo_conflict`
   (`a_reload_moves_live_filters_through_the_renames`); a filter loaded from the file
   before its changed pack follows the renames from the version the file recorded once
-  the pack loads (`a_loaded_filter_follows_the_renames_once_its_pack_loads`). The parity
+  the pack loads (`a_loaded_filter_follows_the_renames_once_its_pack_loads`); and a
+  collection holding a shader source opens before its pack loads, keeps the source as
+  saved, then moves its settings through the renames once the pack loads and again on a
+  reload (`a_shader_source_loads_before_its_pack_and_follows_its_renames`, #1412). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 <a id="design"></a>
@@ -1390,18 +1396,19 @@ fails a reload keeps its last good version. A filter of a kind no loaded pack ha
 in the collection and is bypassed, as before its pack loaded. The daemon watches
 `--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
 desktop app the data folder's `effects`. When a load or reload describes a kind, every
-filter of it, on any chain or keyframe override, is upgraded to it (#1353,
-`Graph::upgrade_filters`, ADR-0025 › Versioning a kind): settings stored by an older
-version (the one the filter records, loaded before its pack or kept while its pack was
-gone, else the one the engine described before a reload) move through the effect's
-renames (`Effect::migrate`), and a setting they lack takes its default. Every other
-value stays, one the kind doesn't declare included, and settings of the kind's own
-version aren't touched at all, so a `pack.write` that drops a setting and puts it back
-loses nothing. Settings from a newer version than the pack's stay as they are, and keep
-that version through a save. The upgrade is a revision of its own, sent as `state.changed` from the
+filter of it, on any chain or keyframe override, and every shader source of it, is
+upgraded to it (#1353, #1412, `Graph::upgrade_kinds`, ADR-0025 › Versioning a kind):
+settings stored by an older version (the one the filter or source records, loaded
+before its pack or kept while its pack was gone, else the one the engine described
+before a reload) move through the effect's or shader source's renames (`Migration`,
+`Effect::migrate`, `ShaderSource::migrate`), and a setting they lack takes its default.
+Every other value stays, one the kind doesn't declare included, and settings of the
+kind's own version aren't touched at all, so a `pack.write` that drops a setting and
+puts it back loses nothing. Settings from a newer version than the pack's stay as they
+are, and keep that version through a save. The upgrade is a revision of its own, sent as `state.changed` from the
 client `engine` and saved, but no undo step: it is logged in the undo history, so a
-client's earlier step on those filters fails with `undo_conflict` instead of writing the
-old IDs back.
+client's earlier step on those settings fails with `undo_conflict` instead of writing
+the old IDs back. A changed shader source's live source is synced, as after a batch.
 A GPU device loss on the program stage (#349, [Runtime](#runtime),
 [ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
 kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
@@ -1492,6 +1499,9 @@ each layer is handed in once it is remade, the old one retired into the cache
 mix shows the source again, or `source.restart` names it, its stand-in makes a new frame,
 and a new frame restarts the program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
 or the kind is quarantined, no program runs and the source draws nothing at its size.
+The collection file loads before the packs, so a shader source loads with its kind
+missing: it is kept as the file has it, with its recorded kind version, and follows the
+kind's renames once the pack loads (#1412, above).
 A shader source that hears audio (`audio = true`) hears the scope its `audio` and
 `audio_source` settings name, as a `spectrum` does: the live sources find it on each
 sync (`FilterAssets::heard`), the source it names is fed like a scope source's
@@ -3332,8 +3342,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- An event when the kinds change (clients re-read `kind.list`), and moving a pack
-  shader source's stored settings through its renames (only filters follow them).
+- An event when the kinds change (clients re-read `kind.list`).
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
