@@ -373,8 +373,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
-   change count only, so any later write forgets them, and `apply_filter_into` forgets
-   them on its output, which it does not count. A scene placing the layer as a 2D item
+   change count only, so any later write forgets them. `apply_filter_into` sets its
+   output's, which it does not count: a bounded filter's reach past its input's, or
+   unknown ([Filters](#filters)). A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent
@@ -730,6 +731,22 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   aren't a multiple of 16 (at least 16) are refused the same way.
 - A multi-pass filter draws into `Ctx::scratch` layers first. A draw either replaces
   its target or blends premultiplied src-over it.
+- **Bounded filters** (#1070). Some kinds draw transparent wherever they are far from
+  their input's non-transparent texels, keep their input's size, and draw every pass
+  over the whole frame at that pass's scale. Such a kind gives `Pass::reach`, how far
+  past that content it can draw, in input pixels. A blur gives its span plus a working
+  texel each for its downsample and read back. `image_mask` and `scene_mask` multiply
+  by coverage, so they give 0. If the input's content is known (`Image::content`: a
+  transparent scene's layer, or a bounded filter's output), `apply_filter_into` grows it by
+  the padding, the reach and a pixel into a `Bound` on the output. Each `Ctx` draw
+  still clears its whole target, but shades only that bound scaled to the target and
+  grown by two texels: one for a scratch size rounded up and one for a filtered read.
+  The output then keeps the bound as its content, so the next filter of the chain and
+  the scene that places the result are bounded too. An empty input draws nothing.
+  Outside the bound, the result differs from a whole-frame draw only by a gaussian
+  tail under half a code of alpha. Every other kind can draw anywhere: a held frame,
+  a scroll, a program, a reshaped frame, a pack effect. Its output's content is
+  unknown.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
   A multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
