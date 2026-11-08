@@ -2190,9 +2190,9 @@ otherwise, as it does when more than 30 draws in a row fail, or after a panic on
 frame finds the queue full, the stream's frames are dropped up to the next keyframe,
 which the hub then forces (`KeyframeGate`).
 
-**Program streams on the program stage**
+**Program and scene streams on the program stage**
 ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §6). An H.264 stream of
-the program isn't drawn by the hub: once the engine has backends, the hub takes the
+the program or of a scene isn't drawn by the hub: once the engine has backends, the hub takes the
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
@@ -2208,9 +2208,22 @@ changes, passes keyframe requests on, and lets go of it when the stream closes. 
 preview shows what goes out, and costs no second composite, no second device and no
 second capture of the program's displays. Outputs that start while the preview holds the
 stage share it, as they share each other's. A stage only the hub holds is let go of
-once the canvas differs from the size it opened at, and reopened at the new one. JPEG
-and PNG streams, scene, source and draft streams, an engine without backends, and a
-stage that can't be had yet still draw on the hub's compositor as described above.
+once the canvas differs from the size it opened at, and reopened at the new one.
+
+A scene stream's session is handed over the same way, with its scene: a **monitored
+scene**. The engine publishes the scenes it plans for streams (`RenderHub::publish_scenes`,
+after the program's plan) and the render thread adopts them with the program's snapshot,
+handing the replaced ones to the collector. It draws each monitored scene from the
+scene's own snapshot, before any output stage (`View::monitored`), at the stream's
+picture size of the scene's canvas, once per due tick for every stream of that scene at
+that size, and with the scene's captures as well as the program's. Monitored scenes
+draw after every mix, so the program never waits for one: one not begun within the
+tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
+counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
+deleted ends its stream as before. JPEG and PNG streams, source and draft streams, an
+engine without backends, and a stage that can't be had yet still draw on the hub's
+compositor as described above, and the hub captures a scene's displays only while it
+draws a stream of that scene itself.
 
 The hub captures the displays, windows, webcams and capture cards the program mix and
 each streamed scene show itself, so they show with no output running: once the engine has backends, it
@@ -3398,7 +3411,9 @@ repeats the last frame at the tick, and no push goes back in time
 behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
 ticks, frames collected in the same tick as a newer one, and frames that land behind
-a repeat are all counted in `render_ticks`. The first tick is drawn at once; later ones fall
+a repeat are all counted in `render_ticks`, and so is a monitored scene a preview stream
+shows (*Preview*), drawn after every mix, when the tick's period ran out before it
+began. The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
 (`on_frame_grid`), where the live sources' thread plans for them (*Live sources*). Between ticks the render thread sleeps until
 the next is due, at most 4 ms at a time, rather than waking every millisecond; it and
