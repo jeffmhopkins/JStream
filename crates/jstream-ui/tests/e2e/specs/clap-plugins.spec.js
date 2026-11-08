@@ -84,9 +84,10 @@ test('Add filter says where CLAP plugins go, and a rescan offers one installed s
   const sent = await fakeClap(page, state);
   await connect(page, daemon);
 
-  // No CLAP plugin yet: the audio chain still shows Plugins, with a link to the page.
+  // No CLAP plugin yet: the audio chain still shows Plugins, with a link to the page. The
+  // program output's video chain adds Custom shader under Effect packs.
   const add = await addProgramFilter(page);
-  await expect(add.locator('.add-filter-group')).toHaveText(['Levels and dynamics', 'Plugins']);
+  await expect(add.locator('.add-filter-group')).toHaveText(['Effect packs', 'Levels and dynamics', 'Plugins']);
   await expect(add.locator('.add-filter-clap')).toContainText('No CLAP audio plugins found.');
   // A search hides it.
   await add.getByRole('textbox', { name: 'Search filters' }).fill('gain');
@@ -110,7 +111,7 @@ test('Add filter says where CLAP plugins go, and a rescan offers one installed s
   await expect(settings).toHaveCount(0);
 
   // The rescan re-read the kinds: Add filter offers the plugin under Plugins now.
-  await expect(add.locator('.add-filter-group')).toHaveText(['Levels and dynamics', 'Plugins']);
+  await expect(add.locator('.add-filter-group')).toHaveText(['Effect packs', 'Levels and dynamics', 'Plugins']);
   await expect(add.getByRole('option', { name: 'Room Verb' })).toBeVisible();
   await expect(add.locator('.add-filter-clap')).toHaveCount(0);
 });
