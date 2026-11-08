@@ -582,8 +582,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   device reports, and `"auto"` stored for a control with no automatic mode shows as
   manual, so the slider takes it back. Until the list arrives it says it is listing the
   controls, a device with none says so, and a failed listing says so and asks again when
-  clicked; focusing a control asks again too. The rows are redrawn only when the list or
-  the device changes, so a slider keeps its focus as it steps. A font setting (an `asset` that takes
+  clicked; focusing a control asks again too. The rows are keyed on each control's identity
+  (`control_identity`: everything but the value and auto state the device reports, which
+  each row reads from the latest list), so a re-list after a set redraws none and a
+  slider keeps its focus; only another device or another set of controls does. A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the

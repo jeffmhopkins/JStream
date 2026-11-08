@@ -725,6 +725,16 @@ pub fn device_controls<'t>(
     found.map_or(&[], |t| t.controls.as_slice())
 }
 
+/// A control as its row is built from: everything but what the device reports now
+/// (`value`, and whether `auto` is on), which the row reads from the latest list.
+pub fn control_identity(control: &CameraControlInfo) -> CameraControlInfo {
+    CameraControlInfo {
+        value: control.default,
+        auto: control.auto.map(|_| false),
+        ..control.clone()
+    }
+}
+
 /// The label a camera control's name shows as: `white_balance` is "White balance".
 pub fn control_label(name: &str) -> String {
     let words = name.replace('_', " ");
@@ -982,13 +992,19 @@ fn camera_controls_input(
     let listing = CaptureListing::shared();
     let listed = listing.listed;
     listing.first();
-    // A memo, so a change to the setting (or to any other field) redraws no row: only
-    // a new list, or another device, does, and a slider keeps its focus as it steps.
+    // A memo of each control's identity, without the value the device reports, so a
+    // change to the setting, a re-list after a set or a change to any other field
+    // redraws no row: only another device or another set of controls does, and a slider
+    // keeps its focus as it steps. Each row reads the reported value itself.
+    let target_now = target.clone();
     let controls = Memo::new(move |_| {
         listed.with(|l| match l {
             Some(Ok(targets)) => settings.with(|s| {
                 let device = s.get(&target).map(display).unwrap_or_default();
-                Some(Ok(device_controls(targets, &device).to_vec()))
+                Some(Ok(device_controls(targets, &device)
+                    .iter()
+                    .map(control_identity)
+                    .collect::<Vec<_>>()))
             }),
             Some(Err(e)) => Some(Err(e.clone())),
             None => None,
@@ -1006,7 +1022,24 @@ fn camera_controls_input(
         }
         Some(Ok(list)) => list
             .into_iter()
-            .map(|control| camera_control_row(control, value.clone(), send.clone()))
+            .map(|control| {
+                let name = control.name.clone();
+                let target = target_now.clone();
+                // What the device reports for this control now, from the latest list.
+                let reported = move || {
+                    listed.with(|l| match l {
+                        Some(Ok(targets)) => settings.with(|s| {
+                            let device = s.get(&target).map(display).unwrap_or_default();
+                            device_controls(targets, &device)
+                                .iter()
+                                .find(|c| c.name == name)
+                                .cloned()
+                        }),
+                        _ => None,
+                    })
+                };
+                camera_control_row(control, reported, value.clone(), send.clone())
+            })
             .collect_view()
             .into_any(),
     }
@@ -1029,12 +1062,13 @@ fn camera_controls_input(
 /// One control's row in [`camera_controls_input`].
 fn camera_control_row(
     control: CameraControlInfo,
+    reported: impl Fn() -> Option<CameraControlInfo> + Clone + Send + Sync + 'static,
     value: impl Fn() -> Value + Clone + Send + Sync + 'static,
     send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
 ) -> AnyView {
     let shown = {
         let (value, control) = (value.clone(), control.clone());
-        move || control_shown(&value(), &control)
+        move || control_shown(&value(), &reported().unwrap_or_else(|| control.clone()))
     };
     let number = {
         let shown = shown.clone();
@@ -1413,10 +1447,10 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        BUNDLED_FONT, OTHER_FONT, asset_value, control_label, control_shown, device_controls,
-        device_formats, display, draft_patch, font_choices, format_choices, fps_text, is_visible,
-        offers, parse, rgb_part, sections, takes_fonts, target_choices, value_of, with_control,
-        with_rgb,
+        BUNDLED_FONT, OTHER_FONT, asset_value, control_identity, control_label, control_shown,
+        device_controls, device_formats, display, draft_patch, font_choices, format_choices,
+        fps_text, is_visible, offers, parse, rgb_part, sections, takes_fonts, target_choices,
+        value_of, with_control, with_rgb,
     };
     use jstream_control::protocol::{
         AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
@@ -1800,9 +1834,16 @@ mod tests {
         // disable its slider with no box to untick.
         let manual_only = CameraControlInfo {
             auto: None,
-            ..exposure
+            ..exposure.clone()
         };
         assert_eq!(control_shown(&auto, &manual_only), (false, -5));
+        // A row is keyed on what doesn't change as the device reports new values.
+        let moved = CameraControlInfo {
+            value: -9,
+            auto: Some(false),
+            ..exposure.clone()
+        };
+        assert_eq!(control_identity(&exposure), control_identity(&moved));
     }
 
     #[test]
