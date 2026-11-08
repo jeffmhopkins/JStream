@@ -3,7 +3,7 @@
 //! sources drive decoders, whatever platform provides them.
 //!
 //! Every implementation wraps an OS or GPU-vendor codec, never a bundled C codec library
-//! (docs/adr/0061-source-types-and-decoding-scope-v2.md). The call pattern is the one spike S1 drives
+//! (docs/adr/0140-source-types-and-decoding-scope-v3.md). The call pattern is the one spike S1 drives
 //! a Media Foundation encoder MFT with: check [`can_accept`](VideoEncoder::can_accept),
 //! submit, then [`poll`](VideoEncoder::poll) without blocking for whatever output is
 //! ready, and [`finish`](VideoEncoder::finish) to drain at the end of the stream. A
@@ -40,7 +40,7 @@ pub struct CodecInfo {
     pub hardware: bool,
 }
 
-/// Whether to use a hardware codec. ADR-0061: hardware first, with the OS software codec
+/// Whether to use a hardware codec. ADR-0140: hardware first, with the OS software codec
 /// as the fallback.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum HardwarePreference {
@@ -115,7 +115,7 @@ pub struct VideoDecoderConfig {
 
 /// A codec library the platform downloads on a person's request, from its maker's own
 /// server, because its patent licence covers only the maker's copy delivered that way:
-/// Cisco's OpenH264 on Linux (docs/adr/0061-source-types-and-decoding-scope-v2.md).
+/// Cisco's OpenH264 on Linux (docs/adr/0140-source-types-and-decoding-scope-v3.md).
 /// The engine lists these, and downloads or deletes one only when a person asks.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CodecDownload {

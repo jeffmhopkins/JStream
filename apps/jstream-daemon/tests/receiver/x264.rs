@@ -2,7 +2,7 @@
 //! encoding with libx264, behind the same `VideoEncoder` trait OpenH264 implements.
 //!
 //! It exists because Cisco's OpenH264, the product's software encoder, can't be loaded
-//! on a machine that hasn't downloaded it (ADR-0061), and the harness has to run in a
+//! on a machine that hasn't downloaded it (ADR-0140), and the harness has to run in a
 //! sandbox with no route to Cisco. Nothing in JStream encodes through FFmpeg
 //! (R-DEP-002); this file is test code that drives the `ffmpeg` program in a child
 //! process, the way the harness drives `ffprobe`, and is never linked into a product.

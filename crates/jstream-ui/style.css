@@ -975,7 +975,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 }
 .modal.confirm-dialog { width: 360px; }
 .confirm-body { margin: 0; padding: 16px; color: var(--text-soft); }
-/* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0061). */
+/* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0140). */
 .codec-downloads { display: grid; gap: 0.4rem; }
 .codec-downloads:empty { display: none; }
 .codec-offer {

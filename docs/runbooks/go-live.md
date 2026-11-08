@@ -155,7 +155,7 @@ On Linux the daemon goes live too, so the run is the same as on Windows. The key
 to the Secret Service, else to the `0600` file `~/.config/jstream/secrets`
 ([ADR-0071](../adr/0071-linux-secret-store.md)), and is cleared at the end. Streaming
 needs an H.264 encoder: VA-API, or Cisco's OpenH264 once it has been downloaded
-([ADR-0061](../adr/0061-source-types-and-decoding-scope-v2.md)). Without one the daemon
+([ADR-0140](../adr/0140-source-types-and-decoding-scope-v3.md)). Without one the daemon
 refuses `output.start` with a reason naming both, and the output goes `starting`, then
 `failed`. The run then records the start, the live steps, the events (with those two
 states), `stats.tick` and the sink as `SKIP` with that reason, still takes the snapshot

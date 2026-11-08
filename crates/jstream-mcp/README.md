@@ -18,7 +18,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
 features, which are for people, through the UI (ADR-0058 §3), installing and
-granting plugins (ADR-0069 G1), and downloading codecs (ADR-0061). It is written against
+granting plugins (ADR-0069 G1), and downloading codecs (ADR-0140). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -78,7 +78,7 @@ pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
 `gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). So are the
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). So are the
 `agent.*` ops and events (`agent.approve`, `agent.forget`, `agent.approved`): the person,
 not another agent, lets a new agent in
 ([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). While the person

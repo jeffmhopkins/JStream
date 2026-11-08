@@ -1,5 +1,5 @@
 //! A bzip2 decompressor in safe Rust, for the one file JStream unpacks: Cisco's
-//! `libopenh264-*.so.bz2` (ADR-0061).
+//! `libopenh264-*.so.bz2` (ADR-0140).
 //!
 //! The `bzip2` crate's pure-Rust backend (`libbz2-rs-sys`) is licensed `bzip2-1.0.6`,
 //! which `deny.toml` allows only at build time, for CEF's download. Linking it into the

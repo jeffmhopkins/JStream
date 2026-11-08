@@ -4,13 +4,14 @@
 //! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
 //! a GPU context (`Codecs::on_context`). On the CPU path with hardware `Prefer`, a
 //! hardware encoder that refuses its first frame falls back to software (`fallback`). HEVC and AV1 run where the GPU (or an installed
-//! software MFT) offers them. Video decoders follow; until then they report
-//! `Unsupported`.
+//! software MFT) offers them. The H.264 decoder (`decoder`) decodes the engine's own
+//! streams, such as the quality probe's packets (ADR-0140); other codecs' decoders
+//! report `Unsupported`.
 //!
 //! # Behaviour
 //!
 //! **`MfCodecs`** (`Codecs`), Media Foundation codecs
-//! (ADR-0061): the **AAC encoder** and
+//! (ADR-0140): the **AAC encoder** and
 //! the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
 //! the GPU. AAC:
 //! - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
@@ -103,11 +104,20 @@
 //!     configured frame size, frame rate, bit rate and profile are re-applied to the type
 //!     it offers. If it refuses them, the offered type is taken as is. The output buffer
 //!     size is then read again.
-//! - **Not yet:** video decoders, which report `Unsupported` until then.
+//! - **H.264 decoder:** the first synchronous, in-process H.264 decoder MFT Media
+//!   Foundation ranks (Microsoft's software decoder), NV12 out in system memory, cropped
+//!   to the display aperture and handed out as I420 or NV12 CPU frames with each
+//!   packet's exact `pts` (`codec/decoder.rs`). It is for the engine's own streams
+//!   (ADR-0140); media files decode through `MfMediaDecoders`. `Require` is
+//!   `Unsupported`, and so is a machine with no H.264 decoder MFT (an N edition without
+//!   the Media Feature Pack).
+//! - **Not yet:** HEVC and AV1 decoders, which report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
+#[cfg(any(windows, test))]
+mod decoder;
 #[cfg(any(windows, test))]
 mod fallback;
 #[cfg(windows)]
@@ -136,12 +146,13 @@ mod backend {
     };
 
     use super::aac::MfAacEncoder;
+    use super::decoder::MfH264Decoder;
     use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0140 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a
@@ -237,9 +248,7 @@ mod backend {
             &self,
             config: &VideoDecoderConfig,
         ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
-            Err(PlatformError::Unsupported {
-                what: format!("{:?} video decoding (not implemented yet)", config.codec),
-            })
+            Ok(Box::new(MfH264Decoder::open(config)?))
         }
 
         /// MJPEG through Media Foundation's MJPEG decoder ([`MfMjpegDecoder`]), into
@@ -409,7 +418,7 @@ mod device_tests {
         codec: Codec,
         hardware: jstream_platform::HardwarePreference,
         format: jstream_platform::media::PixelFormat,
-    ) {
+    ) -> Vec<jstream_platform::media::Packet> {
         use jstream_platform::media::{
             ColorInfo, FrameSize, PixelFormat, VideoFrame, VideoFrameInfo,
         };
@@ -486,6 +495,45 @@ mod device_tests {
             out.iter().filter(|p| p.is_keyframe()).count() >= 2,
             "keyframe every 30"
         );
+        out
+    }
+
+    /// ADR-0140: the H.264 decoder gives back every picture of a stream the software
+    /// encoder made, at the stream's size (cropped from the decoder's 1280x736 buffer
+    /// where it pads), in presentation order with each packet's `pts`.
+    #[test]
+    #[ignore = "needs Media Foundation's software H.264 encoder and decoder"]
+    fn decodes_the_engines_own_h264() {
+        use jstream_platform::media::{FrameSize, PixelFormat};
+        use jstream_platform::{HardwarePreference, VideoDecoderConfig, VideoSurface};
+
+        let packets = encode_two_seconds(Codec::H264, HardwarePreference::Avoid, PixelFormat::Nv12);
+        for format in [PixelFormat::I420, PixelFormat::Nv12] {
+            let mut dec = MfCodecs::new()
+                .video_decoder(&VideoDecoderConfig {
+                    codec: Codec::H264,
+                    output_format: format,
+                    hardware: HardwarePreference::Prefer,
+                })
+                .expect("open the H.264 decoder");
+            let mut pictures = Vec::new();
+            for p in &packets {
+                dec.decode(p).expect("decode");
+                dec.poll(&mut pictures).expect("poll");
+            }
+            dec.finish(&mut pictures).expect("drain");
+            assert_eq!(pictures.len(), packets.len(), "a picture a packet");
+            for (picture, packet) in pictures.iter().zip(&packets) {
+                let VideoSurface::Cpu(frame) = picture else {
+                    panic!("CPU pictures");
+                };
+                let info = frame.info();
+                assert_eq!(info.size, FrameSize::new(1280, 720).expect("size"));
+                assert_eq!(info.format, format);
+                assert_eq!(info.pts, packet.pts());
+            }
+            assert!(dec.decode(&packets[0]).is_err(), "finished");
+        }
     }
 
     #[test]
