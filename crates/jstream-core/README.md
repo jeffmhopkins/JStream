@@ -1395,12 +1395,14 @@ in the collection and is bypassed, as before its pack loaded. The daemon watches
 desktop app the data folder's `effects`. When a load or reload describes a kind, every
 filter of it, on any chain or keyframe override, and every shader source of it, is
 upgraded to it (#1353, #1412, `Graph::upgrade_kinds`, ADR-0025 › Versioning a kind):
-settings stored by an older version, the one the collection file recorded for a filter
-or source loaded before its pack or the one the engine described before a reload, move
-through the effect's or shader source's renames (`Migration`, `Effect::migrate`,
-`ShaderSource::migrate`), then are fitted to the kind (a value it no longer declares dropped,
-a missing or invalid one at its default). Settings from a newer version than the pack's
-stay as they are. The upgrade is a revision of its own, sent as `state.changed` from the
+settings stored by an older version (the one the filter or source records, loaded
+before its pack or kept while its pack was gone, else the one the engine described
+before a reload) move through the effect's or shader source's renames (`Migration`,
+`Effect::migrate`, `ShaderSource::migrate`), and a setting they lack takes its default.
+Every other value stays, one the kind doesn't declare included, and settings of the
+kind's own version aren't touched at all, so a `pack.write` that drops a setting and
+puts it back loses nothing. Settings from a newer version than the pack's stay as they
+are, and keep that version through a save. The upgrade is a revision of its own, sent as `state.changed` from the
 client `engine` and saved, but no undo step: it is logged in the undo history, so a
 client's earlier step on those settings fails with `undo_conflict` instead of writing
 the old IDs back. A changed shader source's live source is synced, as after a batch.

@@ -1464,6 +1464,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   verbatim and is saved back as it was; the engine bypasses it until its kind appears.
   When an effect pack's kind appears or changes, its sources' and filters' settings
   move through the pack's renames from the version they were saved by (#1353, #1412).
+  A source or filter keeps the version its settings were stored by, and that is what a
+  save writes: one of a removed kind, or one a downgraded pack can't read, keeps the
+  older or newer version until a pack of that version moves it.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1
