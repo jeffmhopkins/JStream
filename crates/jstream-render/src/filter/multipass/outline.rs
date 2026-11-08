@@ -93,6 +93,17 @@ fn read(settings: &Settings) -> Stroke {
     }
 }
 
+/// The width and the pixel the antialiased edge takes, for a stroke outside the shape;
+/// none for one inside it.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    let stroke = read(settings);
+    if stroke.inside {
+        0.0
+    } else {
+        stroke.width + 1.0
+    }
+}
+
 /// The jump flood's step sizes for a stroke of `width` px, largest first.
 fn steps(width: f32) -> impl Iterator<Item = u32> {
     let reach = width.max(0.0).ceil() as u32 + 1;
