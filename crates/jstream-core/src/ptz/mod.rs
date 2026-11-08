@@ -26,12 +26,12 @@ use std::time::{Duration, Instant};
 
 use jstream_graph::State;
 use jstream_protocol::{
-    Action, MAX_PTZ_PAN_SPEED, MAX_PTZ_TILT_SPEED, ProtocolError, PtzCameraInfo, PtzFocus, PtzPose,
-    PtzShot, PtzTransport, SceneId, ptz_action_check, ptz_camera_name_problem,
+    Action, ClientId, MAX_PTZ_PAN_SPEED, MAX_PTZ_TILT_SPEED, ProtocolError, PtzCameraInfo,
+    PtzFocus, PtzPose, PtzShot, PtzTransport, SceneId, ptz_action_check, ptz_camera_name_problem,
 };
 use jstream_visca::{
-    Address, Command, Drive, FocusMode, Inquiry, InquiryValue, Pan, PositionWidth, PresetOp, Reply,
-    Tilt, ip,
+    Address, Command, Drive, ErrorKind, FocusMode, Inquiry, InquiryValue, Pan, PositionWidth,
+    PresetOp, Reply, Tilt, ip,
 };
 
 use crate::lan::is_lan;
@@ -48,6 +48,16 @@ const POLL_EVERY: Duration = Duration::from_millis(500);
 const REACHABLE_FOR: Duration = Duration::from_secs(3);
 /// How long a TCP connection may take, and the wait before trying again.
 const CONNECT_WAIT: Duration = Duration::from_secs(1);
+/// How long a command that found the head's buffers full waits for one to complete.
+const BUSY_WAIT: Duration = Duration::from_secs(2);
+/// The most commands a head's thread holds unsent.
+const MAX_QUEUE: usize = 16;
+/// A drive that stops pan, tilt and zoom.
+const STOP: Cmd = Cmd::Drive {
+    pan: 0,
+    tilt: 0,
+    zoom: 0,
+};
 
 /// One camera on this machine's list: its name, LAN address, transport and VISCA
 /// address (ADR-0146 §1).
@@ -78,7 +88,7 @@ impl PtzCamera {
         if !is_lan(addr.ip()) {
             return Err(format!(
                 "{} is not a LAN address: loopback, 10/8, 172.16/12, 192.168/16, \
-                 169.254/16, fc00::/7 or fe80::/10 (ADR-0123)",
+                 169.254/16 or ::1 (ADR-0123 §2)",
                 addr.ip()
             ));
         }
@@ -127,7 +137,7 @@ impl PtzCamera {
 
 /// `name@address:port`, then optionally `/visca_ip`, `/udp` or `/tcp` (`visca_ip` by
 /// default), then optionally `#n` for the VISCA address (1 by default): the daemon's
-/// `--ptz-camera`. An IPv6 address goes in brackets: `cam@[fe80::1]:52381`.
+/// `--ptz-camera`. An IPv6 address goes in brackets: `cam@[::1]:52381`.
 impl FromStr for PtzCamera {
     type Err = String;
 
@@ -265,6 +275,9 @@ pub(crate) struct Ptz {
     heads: Vec<Head>,
     program: Option<SceneId>,
     preview: Option<SceneId>,
+    /// The client whose drive last set each camera moving, by camera name: its session
+    /// ending stops the camera (ADR-0146 §3).
+    drivers: Vec<(String, ClientId)>,
 }
 
 impl Ptz {
@@ -294,6 +307,7 @@ impl Ptz {
             heads,
             program: None,
             preview: None,
+            drivers: Vec::new(),
         })
     }
 
@@ -301,9 +315,14 @@ impl Ptz {
         self.heads.iter().find(|h| h.camera.name == name)
     }
 
-    /// Runs a `ptz.*` action: checks it, then queues it for its head. `None` for any
-    /// other action.
-    pub(crate) fn act(&self, action: &Action) -> Option<Result<(), ProtocolError>> {
+    /// Runs a `ptz.*` action `client_id` sent: checks it, then queues it for its head.
+    /// `None` for any other action. A drive that moves remembers its client, so the
+    /// client's session ending stops it ([`Ptz::forget_client`]).
+    pub(crate) fn act(
+        &mut self,
+        client_id: &ClientId,
+        action: &Action,
+    ) -> Option<Result<(), ProtocolError>> {
         let (camera, problem) = ptz_action_check(action)?;
         if let Some((field, reason)) = problem {
             return Some(Err(ProtocolError::invalid_argument(field, reason)));
@@ -335,7 +354,29 @@ impl Ptz {
         };
         // A thread that is gone (it panicked) shows in `ptz.list` as unreachable.
         let _ = head.tx.send(cmd);
+        if let Cmd::Drive { pan, tilt, zoom } = cmd {
+            let name = head.camera.name.clone();
+            self.drivers.retain(|(camera, _)| *camera != name);
+            if (pan, tilt, zoom) != (0, 0, 0) {
+                self.drivers.push((name, client_id.clone()));
+            }
+        }
         Some(Ok(()))
+    }
+
+    /// `client_id`'s session ended: stops every camera its drive left moving, so a client
+    /// that disconnects or crashes mid-drive doesn't leave a head running to its end
+    /// stop (ADR-0146 §3).
+    pub(crate) fn forget_client(&mut self, client_id: &ClientId) {
+        let (stop, keep): (Vec<_>, Vec<_>) = std::mem::take(&mut self.drivers)
+            .into_iter()
+            .partition(|(_, driver)| driver == client_id);
+        self.drivers = keep;
+        for (camera, _) in stop {
+            if let Some(head) = self.head(&camera) {
+                let _ = head.tx.send(STOP);
+            }
+        }
     }
 
     /// `ptz.list`.
@@ -470,6 +511,8 @@ enum Got {
     Ack,
     Done,
     Data(InquiryValue),
+    /// The head's command buffers are full.
+    Full,
     Error(String),
 }
 
@@ -505,7 +548,7 @@ impl Worker {
                         self.poll();
                         continue;
                     }
-                    Err(RecvTimeoutError::Disconnected) => return,
+                    Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
             for cmd in rx.try_iter() {
@@ -517,6 +560,10 @@ impl Worker {
                 self.last_poll = Some(Instant::now() - POLL_EVERY + REPLY_WAIT);
             }
         }
+        // Stopped or replaced: whatever a drive or a focus move started stops with it,
+        // best effort, so a head never keeps moving to its end stop (ADR-0146 §3).
+        self.execute(STOP);
+        self.execute(Cmd::Focus(PtzFocus::Stop, None));
     }
 
     /// Asks where the head is: pan-tilt, zoom and focus.
@@ -549,13 +596,44 @@ impl Worker {
         let commands = self.commands(cmd);
         let mut error = None;
         for command in commands {
-            match self.command(command) {
+            let mut got = self.command(command);
+            // The head's command buffers are full (an aim's pan-tilt and zoom still
+            // moving): wait for one to complete, then send it once more.
+            if matches!(got, Some(Got::Full)) {
+                self.await_completion();
+                got = self.command(command);
+            }
+            match got {
                 Some(Got::Error(why)) => error = Some(why),
+                Some(Got::Full) => error = Some("the head's command buffers are full".into()),
                 None => error = Some("no reply".to_owned()),
                 Some(_) => {}
             }
         }
         self.status().error = error;
+    }
+
+    /// Reads replies until a completion arrives, for at most [`BUSY_WAIT`].
+    fn await_completion(&mut self) {
+        let deadline = Instant::now() + BUSY_WAIT;
+        while let Some(left) = deadline.checked_duration_since(Instant::now()) {
+            if let Some((_, payload)) = self.receive(left)
+                && let Ok((from, Reply::Completion { .. })) = Reply::parse(&payload)
+                && from == self.camera.visca()
+            {
+                return;
+            }
+        }
+    }
+
+    /// Reads and drops any replies already waiting, so a late answer to an earlier
+    /// message is never read as the next one's (raw VISCA has no sequence numbers).
+    fn drain(&mut self) {
+        for _ in 0..16 {
+            if self.receive(Duration::ZERO).is_none() {
+                return;
+            }
+        }
     }
 
     /// The VISCA commands `cmd` takes.
@@ -649,6 +727,9 @@ impl Worker {
         asked: Option<Inquiry>,
     ) -> Option<Got> {
         let inquiry = asked.is_some();
+        if self.camera.transport != PtzTransport::ViscaIp {
+            self.drain();
+        }
         let seq = self.seq.take();
         if self.send(kind, seq, message).is_err() {
             return None;
@@ -676,6 +757,10 @@ impl Worker {
                 status.last_reply = Some(Instant::now());
             }
             match reply {
+                Reply::Error {
+                    kind: ErrorKind::BufferFull,
+                    ..
+                } => return Some(Got::Full),
                 Reply::Error { kind, .. } => return Some(Got::Error(format!("{kind:?}"))),
                 Reply::Ack { .. } if !inquiry => return Some(Got::Ack),
                 Reply::Completion { .. } if !inquiry => return Some(Got::Done),
@@ -703,7 +788,9 @@ impl Worker {
         let sent = match &mut self.link {
             Link::Udp(socket) => socket.send_to(bytes, addr).map(|_| ()),
             Link::Tcp {
-                stream, retry_at, ..
+                stream,
+                retry_at,
+                buf,
             } => {
                 if stream.is_none() && retry_at.is_none_or(|at| Instant::now() >= at) {
                     match TcpStream::connect_timeout(&addr, CONNECT_WAIT) {
@@ -719,7 +806,10 @@ impl Worker {
                     }
                 }
                 match stream {
-                    Some(s) => s.write_all(bytes).inspect_err(|_| *stream = None),
+                    Some(s) => s.write_all(bytes).inspect_err(|_| {
+                        *stream = None;
+                        buf.clear();
+                    }),
                     None => Err(io::ErrorKind::NotConnected.into()),
                 }
             }
@@ -754,9 +844,9 @@ impl Worker {
                 match parsed.kind {
                     ip::PayloadType::Reply => Some((Some(parsed.seq), parsed.payload.to_vec())),
                     ip::PayloadType::ControlReply => {
-                        // A sequence or message error: start numbering again.
+                        // A sequence error: reset the head's numbering and ours.
                         if parsed.payload == ip::CONTROL_ERROR_SEQUENCE {
-                            self.seq.reset();
+                            self.reset_sequence();
                         }
                         None
                     }
@@ -781,6 +871,7 @@ impl Worker {
                 match s.read(&mut chunk) {
                     Ok(0) => {
                         *stream = None;
+                        buf.clear();
                         None
                     }
                     Ok(n) => {
@@ -799,6 +890,7 @@ impl Worker {
                     }
                     Err(_) => {
                         *stream = None;
+                        buf.clear();
                         None
                     }
                 }
@@ -824,14 +916,28 @@ impl Worker {
     }
 }
 
-/// Adds `cmd` to the queue: a drive replaces an unsent drive just before it, so a
-/// joystick never builds a backlog (ADR-0146 §3), and nothing is reordered.
+/// Adds `cmd` to the queue, which never builds a backlog (ADR-0146 §3): a drive
+/// replaces an unsent drive in its place, and a stop also goes first; an aim replaces an
+/// unsent aim; and past [`MAX_QUEUE`] the oldest unsent command is dropped.
 fn enqueue(queue: &mut VecDeque<Cmd>, cmd: Cmd) {
-    if matches!(cmd, Cmd::Drive { .. })
-        && let Some(slot @ Cmd::Drive { .. }) = queue.back_mut()
-    {
-        *slot = cmd;
-        return;
+    match cmd {
+        STOP => {
+            queue.retain(|queued| !matches!(queued, Cmd::Drive { .. }));
+            queue.push_front(cmd);
+            return;
+        }
+        Cmd::Drive { .. } | Cmd::Aim { .. } => {
+            let same =
+                |queued: &Cmd| std::mem::discriminant(queued) == std::mem::discriminant(&cmd);
+            if let Some(slot) = queue.iter_mut().find(|queued| same(queued)) {
+                *slot = cmd;
+                return;
+            }
+        }
+        _ => {}
+    }
+    if queue.len() >= MAX_QUEUE {
+        queue.pop_front();
     }
     queue.push_back(cmd);
 }

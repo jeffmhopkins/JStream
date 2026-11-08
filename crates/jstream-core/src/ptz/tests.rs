@@ -235,6 +235,10 @@ fn setup(cameras: Vec<PtzCamera>) -> PtzSetup {
     PtzSetup::new(cameras).expect("setup")
 }
 
+fn client() -> ClientId {
+    ClientId::new("client")
+}
+
 fn drive(camera: &str, pan: i8, tilt: i8, zoom: i8) -> Action {
     Action::PtzDrive {
         camera: camera.into(),
@@ -250,7 +254,7 @@ fn drive(camera: &str, pan: i8, tilt: i8, zoom: i8) -> Action {
 fn each_transport_aims_the_head_and_reads_its_pose() {
     for transport in [PtzTransport::ViscaIp, PtzTransport::Udp, PtzTransport::Tcp] {
         let head = FakeHead::start(transport);
-        let ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
+        let mut ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
         let aim = Action::PtzAim {
             camera: "cam".into(),
             pose: PtzPose {
@@ -261,7 +265,7 @@ fn each_transport_aims_the_head_and_reads_its_pose() {
             },
             speed: Some(10),
         };
-        assert!(matches!(ptz.act(&aim), Some(Ok(()))));
+        assert!(matches!(ptz.act(&client(), &aim), Some(Ok(()))));
         assert!(
             head.wait(|h| (h.pan, h.tilt, h.zoom, h.focus) == (-1200, 300, 0x2000, 0x0400)),
             "{transport:?}: {:?}",
@@ -279,11 +283,21 @@ fn each_transport_aims_the_head_and_reads_its_pose() {
             "{commands:?}"
         );
         assert!(commands.contains(&Command::FocusMode(FocusMode::Manual)));
-        // The pose the head reports comes back through `ptz.list`.
-        let until = Instant::now() + Duration::from_secs(3);
+        // The pose the head reports comes back through `ptz.list`, once a poll has read
+        // all of it (a busy machine can make one exchange time out first).
+        let want = PtzPose {
+            pan: Some(-1200),
+            tilt: Some(300),
+            zoom: Some(0x2000),
+            focus: Some(0x0400),
+        };
+        let until = Instant::now() + Duration::from_secs(5);
         let listed = loop {
             let listed = ptz.list();
-            if listed[0].pose.and_then(|p| p.zoom) == Some(0x2000) || Instant::now() > until {
+            let info = &listed[0];
+            if (info.pose == Some(want) && info.error.is_none() && info.reachable)
+                || Instant::now() > until
+            {
                 break listed;
             }
             thread::sleep(Duration::from_millis(20));
@@ -310,33 +324,57 @@ fn each_transport_aims_the_head_and_reads_its_pose() {
 #[test]
 fn actions_become_visca_commands() {
     let head = FakeHead::start(PtzTransport::ViscaIp);
-    let ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
-    for action in [
-        drive("cam", -24, 5, 8),
-        Action::PtzStore {
-            camera: "cam".into(),
-            preset: 3,
-        },
-        drive("cam", 0, 0, 0),
-        Action::PtzHome {
-            camera: "cam".into(),
-        },
-        Action::PtzRecall {
-            camera: "cam".into(),
-            preset: 3,
-        },
-        Action::PtzFocus {
-            camera: "cam".into(),
-            focus: PtzFocus::OnePush,
-            speed: None,
-        },
-        Action::PtzFocus {
-            camera: "cam".into(),
-            focus: PtzFocus::Near,
-            speed: Some(2),
-        },
+    let mut ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
+    // Each waits for the one before, so a stop doesn't overtake what it follows.
+    for (action, sent) in [
+        (drive("cam", -24, 5, 8), 2),
+        (
+            Action::PtzStore {
+                camera: "cam".into(),
+                preset: 3,
+            },
+            3,
+        ),
+        (drive("cam", 0, 0, 0), 5),
+        (
+            Action::PtzHome {
+                camera: "cam".into(),
+            },
+            6,
+        ),
+        (
+            Action::PtzRecall {
+                camera: "cam".into(),
+                preset: 3,
+            },
+            7,
+        ),
+        (
+            Action::PtzFocus {
+                camera: "cam".into(),
+                focus: PtzFocus::OnePush,
+                speed: None,
+            },
+            8,
+        ),
+        (
+            Action::PtzFocus {
+                camera: "cam".into(),
+                focus: PtzFocus::Near,
+                speed: Some(2),
+            },
+            9,
+        ),
     ] {
-        assert!(matches!(ptz.act(&action), Some(Ok(()))), "{action:?}");
+        assert!(
+            matches!(ptz.act(&client(), &action), Some(Ok(()))),
+            "{action:?}"
+        );
+        assert!(
+            head.wait(|h| h.commands.len() >= sent),
+            "{:?}",
+            head.state()
+        );
     }
     assert!(head.wait(|h| h.commands.len() >= 9), "{:?}", head.state());
     assert_eq!(
@@ -365,52 +403,112 @@ fn actions_become_visca_commands() {
     );
 }
 
-/// A drive queued behind another replaces it, so a joystick never builds a backlog.
+/// The queue never builds a backlog (ADR-0146 §3): a drive or an aim replaces an unsent
+/// one in its place, a stop drops the unsent drives and goes first, and past
+/// `MAX_QUEUE` the oldest unsent command goes.
 #[test]
-fn a_queued_drive_replaces_an_unsent_one() {
+fn the_queue_merges_drives_and_aims_and_a_stop_goes_first() {
+    let drive = |pan| Cmd::Drive {
+        pan,
+        tilt: 0,
+        zoom: 0,
+    };
+    let aim = |pan| Cmd::Aim {
+        pose: PtzPose {
+            pan: Some(pan),
+            tilt: Some(0),
+            ..PtzPose::default()
+        },
+        speed: 24,
+    };
     let mut queue = VecDeque::new();
-    enqueue(&mut queue, Cmd::Home);
-    enqueue(
-        &mut queue,
-        Cmd::Drive {
-            pan: 1,
-            tilt: 0,
-            zoom: 0,
-        },
-    );
-    enqueue(
-        &mut queue,
-        Cmd::Drive {
-            pan: 5,
-            tilt: 0,
-            zoom: 0,
-        },
-    );
-    enqueue(&mut queue, Cmd::Recall(2));
-    enqueue(
-        &mut queue,
-        Cmd::Drive {
-            pan: 9,
-            tilt: 0,
-            zoom: 0,
-        },
-    );
+    for cmd in [
+        Cmd::Home,
+        drive(1),
+        aim(100),
+        drive(5),
+        Cmd::Recall(2),
+        aim(200),
+        drive(9),
+    ] {
+        enqueue(&mut queue, cmd);
+    }
     assert_eq!(
-        Vec::from(queue),
-        [
-            Cmd::Home,
-            Cmd::Drive {
-                pan: 5,
-                tilt: 0,
-                zoom: 0
-            },
-            Cmd::Recall(2),
-            Cmd::Drive {
-                pan: 9,
-                tilt: 0,
-                zoom: 0
-            },
-        ]
+        Vec::from(queue.clone()),
+        [Cmd::Home, drive(9), aim(200), Cmd::Recall(2)]
+    );
+    enqueue(&mut queue, STOP);
+    assert_eq!(
+        Vec::from(queue.clone()),
+        [STOP, Cmd::Home, aim(200), Cmd::Recall(2)]
+    );
+    for preset in 0..40 {
+        enqueue(&mut queue, Cmd::Recall(preset));
+    }
+    assert_eq!(queue.len(), MAX_QUEUE);
+    assert_eq!(queue.back(), Some(&Cmd::Recall(39)));
+}
+
+/// A head stops when its setup is dropped mid-drive, and when the session of the client
+/// whose drive set it moving ends (ADR-0146 §3).
+#[test]
+fn a_drive_stops_when_its_client_leaves_or_the_head_is_dropped() {
+    let stops = |h: &HeadState| {
+        h.commands
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c,
+                    Command::PanTiltDrive {
+                        pan: Pan::Stop,
+                        tilt: Tilt::Stop,
+                        ..
+                    }
+                )
+            })
+            .count()
+    };
+    let head = FakeHead::start(PtzTransport::ViscaIp);
+    let mut ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
+    let other = ClientId::new("other");
+    assert!(matches!(
+        ptz.act(&client(), &drive("cam", 10, 0, 0)),
+        Some(Ok(()))
+    ));
+    assert!(head.wait(|h| h.commands.len() >= 2), "{:?}", head.state());
+    // Another client's session ending leaves the drive alone.
+    ptz.forget_client(&other);
+    ptz.forget_client(&client());
+    assert!(head.wait(|h| stops(h) == 1), "{:?}", head.state());
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(stops(&head.state()), 1);
+    // A drive at 0 forgets its driver, so the session ending sends nothing more.
+    assert!(matches!(
+        ptz.act(&client(), &drive("cam", 0, 0, 3)),
+        Some(Ok(()))
+    ));
+    assert!(matches!(
+        ptz.act(&client(), &drive("cam", 0, 0, 0)),
+        Some(Ok(()))
+    ));
+    assert!(head.wait(|h| stops(h) == 2), "{:?}", head.state());
+    ptz.forget_client(&client());
+    // Dropping the setup mid-drive stops the head, and its focus.
+    assert!(matches!(
+        ptz.act(&other, &drive("cam", -3, 2, 0)),
+        Some(Ok(()))
+    ));
+    assert!(head.wait(|h| {
+        h.commands
+            .iter()
+            .any(|c| matches!(c, Command::PanTiltDrive { pan: Pan::Left, .. }))
+    }));
+    drop(ptz);
+    assert!(head.wait(|h| stops(h) == 3), "{:?}", head.state());
+    assert!(
+        head.wait(|h| h.commands.last() == Some(&Command::Focus(Drive::Stop))),
+        "{:?}",
+        head.state()
     );
 }
 
@@ -418,42 +516,51 @@ fn a_queued_drive_replaces_an_unsent_one() {
 /// doesn't list.
 #[test]
 fn actions_are_checked_and_refused_for_unknown_cameras() {
-    let none = Ptz::default();
+    let mut none = Ptz::default();
     assert!(
-        none.act(&Action::SceneSwitch {
-            scene_id: SceneId::new("a"),
-            preset_id: None,
-        })
+        none.act(
+            &client(),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("a"),
+                preset_id: None,
+            }
+        )
         .is_none()
     );
     let code = |r: Option<Result<(), ProtocolError>>| r.and_then(Result::err).map(|e| e.code());
     assert_eq!(
-        code(none.act(&drive("cam", 1, 0, 0))),
+        code(none.act(&client(), &drive("cam", 1, 0, 0))),
         Some("action_failed")
     );
     assert_eq!(
-        code(none.act(&drive("cam", 25, 0, 0))),
+        code(none.act(&client(), &drive("cam", 25, 0, 0))),
         Some("invalid_argument")
     );
     let head = FakeHead::start(PtzTransport::Udp);
-    let ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
+    let mut ptz = Ptz::start(&setup(vec![head.camera("cam")])).expect("start");
     assert_eq!(
-        code(ptz.act(&drive("other", 1, 0, 0))),
+        code(ptz.act(&client(), &drive("other", 1, 0, 0))),
         Some("invalid_argument")
     );
     assert_eq!(
-        code(ptz.act(&Action::PtzRecall {
-            camera: "cam".into(),
-            preset: 200,
-        })),
+        code(ptz.act(
+            &client(),
+            &Action::PtzRecall {
+                camera: "cam".into(),
+                preset: 200,
+            }
+        )),
         Some("invalid_argument")
     );
     assert_eq!(
-        code(ptz.act(&Action::PtzAim {
-            camera: "cam".into(),
-            pose: PtzPose::default(),
-            speed: None,
-        })),
+        code(ptz.act(
+            &client(),
+            &Action::PtzAim {
+                camera: "cam".into(),
+                pose: PtzPose::default(),
+                speed: None,
+            }
+        )),
         Some("invalid_argument")
     );
 }
@@ -470,11 +577,14 @@ fn foreign_replies_are_dropped_and_silence_is_reported() {
         1,
     )
     .expect("camera");
-    let ptz = Ptz::start(&setup(vec![camera])).expect("start");
+    let mut ptz = Ptz::start(&setup(vec![camera])).expect("start");
     assert!(matches!(
-        ptz.act(&Action::PtzHome {
-            camera: "mute".into()
-        }),
+        ptz.act(
+            &client(),
+            &Action::PtzHome {
+                camera: "mute".into()
+            }
+        ),
         Some(Ok(()))
     ));
     // Find the engine's socket from what it sent, then answer from another one.
@@ -512,9 +622,12 @@ fn cameras_parse_and_are_checked() {
         (PtzTransport::Tcp, 2)
     );
     assert_eq!(cam.to_string(), "bridge@10.0.0.9:5678/tcp#2");
-    let cam: PtzCamera = "v6@[fe80::1]:1259/udp".parse().expect("parse");
+    let cam: PtzCamera = "v6@[::1]:1259/udp".parse().expect("parse");
     assert!(cam.addr().is_ipv6());
     for bad in [
+        // ADR-0123 §2's ranges: IPv6 beyond loopback isn't on them.
+        "v6@[fe80::1]:1259/udp",
+        "v6@[fd00::1]:1259/udp",
         "wide@8.8.8.8:52381",
         "wide@192.168.1.40:0",
         "@192.168.1.40:52381",

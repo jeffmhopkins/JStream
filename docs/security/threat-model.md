@@ -678,6 +678,9 @@ somewhere it shouldn't.
   `network_audio` source that names it.
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
+  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
+  for what they may send and receive.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it (ADR-0123 §6), as with JTunnel anywhere.

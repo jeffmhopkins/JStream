@@ -1736,13 +1736,15 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera its drive left moving stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
             state.history.forget(client_id);
+            // A camera its drive left moving stops (ADR-0146 §3).
+            state.ptz.forget_client(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -5030,7 +5032,7 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
-        if let Some(done) = self.ptz.act(&action) {
+        if let Some(done) = self.ptz.act(client_id, &action) {
             done?;
             return Ok(CallResult::action());
         }

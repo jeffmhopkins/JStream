@@ -2333,6 +2333,11 @@ impl Action {
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
             )),
+            Action::PtzDrive { .. } => Some((
+                "type",
+                "`ptz.drive` can't be bound: a binding fires only on press, so nothing would \
+                 stop the move; bind `ptz.aim`, `ptz.recall` or `ptz.home` (ADR-0146 §3)",
+            )),
             Action::PluginClapRescan => Some((
                 "type",
                 "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
@@ -2378,7 +2383,6 @@ impl Action {
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
-            | Action::PtzDrive { .. }
             | Action::PtzAim { .. }
             | Action::PtzHome { .. }
             | Action::PtzRecall { .. }

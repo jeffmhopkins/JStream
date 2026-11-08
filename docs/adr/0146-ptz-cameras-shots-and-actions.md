@@ -56,10 +56,17 @@ agent tier ([ADR-0043](0043-narrow-maintainer-tier.md)).
    stop). Nothing is stored in the collection or undone; `ptz.store` writes the head's
    own memory. An action is refused for a camera this machine doesn't list, and when it
    lists none. Otherwise it returns once the command is queued for the head, which may
-   be unreachable: `ptz.list` says so. A queued drive replaces an unsent one, so a
-   joystick never builds a backlog. Every `ptz.*` action can be bound to a trigger, since
-   each one only moves a head. They name no collection object, so deleting nothing
-   removes such a binding.
+   be unreachable: `ptz.list` says so. A head's queue never builds a backlog: a drive
+   replaces an unsent drive and an aim an unsent aim, a stop (a drive at 0) drops the
+   unsent drives and goes first, and past 16 unsent commands the oldest goes.
+   **A drive always ends.** A drive that moves belongs to the client that sent it: when
+   that client's session ends (it disconnects or crashes), the engine stops the camera,
+   as a live gesture expires with its session (ADR-0032). When the host stops or replaces
+   PTZ control, or the engine shuts down, each head's thread sends a pan-tilt, zoom and
+   focus stop before it closes. A binding fires only on press, with no release, so
+   `ptz.drive` can't be bound; every other `ptz.*` action can, since each moves a head to
+   a place or runs a step that ends by itself. They name no collection object, so
+   deleting nothing removes such a binding.
 4. **`ptz.list` reports each head.** Its name, address, transport, whether it answered
    lately, its last pose and its last error. While a head is idle the engine asks its
    pan-tilt, zoom and focus positions about twice a second, so the pose shown follows
@@ -84,14 +91,17 @@ agent tier ([ADR-0043](0043-narrow-maintainer-tier.md)).
      below the slowest step. The curve is fixed until calibration (5) lets the engine
      measure the distance.
    - A scene going on preview sends only the shots for cameras that the program scene's
-     effective shots don't name, so a preview never moves a camera that frames what is
-     live (a tally guard).
+     effective shots don't name, so a preview never moves a camera that the program's
+     shots frame (a tally guard). The guard knows only shots: a camera live on program
+     without a shot (an item showing its feed, say) can still be moved by a preview's
+     shot. Tying a head to the sources that show it is a later step.
    - An edit to a scene's shots doesn't move a head, even on program: framing changes
      only when a scene is put on program or preview again, or by a `ptz.*` action.
-8. **Network, per ADR-0123.** Each camera's address is checked against the LAN ranges
-   (loopback, 10/8, 172.16/12, 192.168/16, 169.254/16, and their IPv6 counterparts:
-   `::1`, `fc00::/7` and `fe80::/10`) when the host starts PTZ control, and refused
-   otherwise. A datagram from any other address or port, or one that isn't a VISCA reply,
+8. **Network, per ADR-0123.** Each camera's address is checked against ADR-0123 §2's
+   LAN ranges (loopback, 10/8, 172.16/12, 192.168/16 and 169.254/16; for IPv6 only
+   `::1`) when the host starts PTZ control, and refused otherwise. It is the same check
+   JTunnel's senders pass, one predicate in the engine. IPv6 LAN ranges would widen
+   ADR-0123, so they are the maintainer's to decide. A datagram from any other address or port, or one that isn't a VISCA reply,
    is dropped and counted.
 9. **The shape #1181 reuses.** The virtual-camera side keeps these names and units on
    the wire: a drive with signed speeds and an aim with an absolute pose. #1181 adds them

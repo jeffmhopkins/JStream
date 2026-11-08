@@ -1248,8 +1248,9 @@ are the head's own counts and speeds VISCA's steps.
   `ptz_action_check` gives the order every implementation checks in: the fields
   (`invalid_argument`), then whether the machine lists any camera (`action_failed`),
   then whether it lists this one (`invalid_argument` on `camera`). An action returns
-  once its command is queued. Each can be bound to a trigger, and names no collection
-  object. A plugin can't send them, or read `ptz.list`.
+  once its command is queued. Each but `ptz.drive` can be bound to a trigger (a binding
+  fires only on press, so nothing would stop a bound drive), and none names a collection
+  object. A drive that moves stops when the session that sent it ends. A plugin can't send them, or read `ptz.list`.
 - **`ptz.list`** gives each camera (`PtzCameraInfo`): its name, `address`, `transport`
   (`visca_ip`, `udp` or `tcp`), `visca_address`, whether it answered in the last three
   seconds, its last `pose` and `error`, and its `sent`, `replies` and `dropped` counts.

@@ -373,16 +373,25 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 - **PTZ cameras** (`ptz/`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)):
   the physical heads this machine drives over VISCA, off until the host calls
   `Engine::start_ptz` with its camera list (ADR-0123 §1). Each camera, checked against
-  the LAN ranges of `lan.rs` and with its address, port and VISCA address unique, gets
+  ADR-0123's LAN ranges (`lan.rs`'s `is_lan`, the one predicate JTunnel's senders pass
+  too) and with its address, port and VISCA address unique, gets
   a `jstream-ptz` thread and its own socket: Sony-style VISCA over IP on UDP (with a
   sequence reset at start), raw VISCA over UDP, or raw VISCA over TCP, reconnecting
   after a second. The thread sends what the control side queues, waits up to 300 ms
-  for each command's ACK, completion or error, and while idle asks the head's pan-tilt,
-  zoom and focus positions every 500 ms; a drive replaces an unsent drive just before
-  it. It reads only replies from the camera's address and port and VISCA address, and
-  drops and counts the rest. `ptz.list` reports each head's last pose, last error,
+  for each command's ACK, completion or error (on "buffer full" it waits up to two
+  seconds for a completion and sends once more), and while idle asks the head's
+  pan-tilt, zoom and focus positions every 500 ms. Its queue holds at most 16 unsent
+  commands: a drive replaces an unsent drive and an aim an unsent aim, and a stop drops
+  the unsent drives and goes first. On raw VISCA, which has no sequence numbers, it
+  drops any waiting replies before each message, and a TCP reconnect starts with an
+  empty buffer; on VISCA over IP a sequence error resets the head's numbering too. When
+  it stops (the host replaced or emptied the list, or the engine shut down) it sends a
+  pan-tilt, zoom and focus stop. It reads only replies from the camera's address and
+  port and VISCA address, and drops and counts the rest. `ptz.list` reports each head's last pose, last error,
   counters, and whether it answered in the last three seconds. The control side (`Ptz`)
-  sits under the engine lock and only sends on channels: the `ptz.*` actions, and the
+  sits under the engine lock and only sends on channels: the `ptz.*` actions (it keeps
+  the client whose drive set each camera moving, and `forget_client` stops the camera
+  when that session ends), and the
   shots of the scenes the studio shows, fired from `emit_studio` when the program or
   preview scene changes (the program's paced to the switch's duration by
   `matched_speed`; the preview's only for cameras the program's shots don't name).

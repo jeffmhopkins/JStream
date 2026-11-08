@@ -276,7 +276,9 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   name or an address and VISCA address, and replies from anywhere else are dropped
   ([jstream-core › PTZ cameras](../../crates/jstream-core/README.md#contents-media)).
   The cameras are listed per machine, on the command line, never from the collection,
-  which names them only by name.
+  which names them only by name. A camera a drive left moving is sent a stop when its
+  client disconnects and, best effort, when the engine shuts down; a daemon that is
+  killed outright sends none.
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
