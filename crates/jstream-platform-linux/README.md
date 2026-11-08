@@ -50,7 +50,7 @@ platform-independent helpers, which are tested on every platform.
 | `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
 | `NoMediaDecoders` | `MediaDecoders` | `unbuilt.rs` | refuses every file, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) |
-| `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
+| `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
 | `LinuxProcessCpu`, `LinuxThreadCpu` | `ProcessCpu`, `ThreadCpu` | `process.rs` | the process's and each thread's CPU time |
 | `VaapiCodecs` | `Codecs` | `vaapi/`, `codec.rs` | VA-API H.264 and HEVC encoders, on CPU frames or the context's encode targets |
 | `OpenH264Store`, `OpenH264Encoder` | `VideoEncoder` | `openh264/` | Cisco's OpenH264, the software H.264 encoder, downloaded only on the user's request and checked against its pin ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)) |

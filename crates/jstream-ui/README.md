@@ -126,12 +126,21 @@ Contents ([Design](#design) explains the choices):
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
   `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
   (`Ctrl+WheelUp`, ADR-0112 §3) runs once per notch while the page has the focus:
-  `WheelNotches` turns `WheelEvent` deltas into notches (100 pixels, 3 lines or a page
-  each, carrying the rest; whether other webviews report 100 pixels a notch is #1346),
+  `WheelNotches` turns `WheelEvent` deltas into notches (120 pixels, 3 lines or a page
+  each): an event of half a notch or more counts on its own, rounded, so Chromium's
+  notch is one step whether it reports 120 pixels (Linux, at every devicePixelRatio,
+  measured under Xvfb) or 100 (Windows), and smaller events, from a touchpad, add up
+  (#1346 tracks the webviews not measured yet; `wheel-chords.spec.js` drives it in
+  Chromium at a devicePixelRatio of 1 and 2),
   with Shift held reading the sideways delta browsers report then (`wheel_delta`). The
   window's non-passive wheel listener prevents the browser's own use of a bound chord,
-  such as Ctrl+wheel zooming the page, only when the direction turned is bound. The desktop
-  app doesn't register wheel chords with the OS yet. In the desktop app,
+  such as Ctrl+wheel zooming the page, only when the direction turned is bound. A hotkey
+  row's Set key, for an action that takes steps, also binds the next turn of the wheel
+  over it with a modifier held (`wheel_chord`; a bare turn still scrolls), and a Follow pointer filter's pane offers
+  the default `Ctrl+WheelUp`/`Ctrl+WheelDown` zoom bindings while neither chord is bound
+  (`default_zoom_edits`, ADR-0112 §4). The desktop
+  app also hears wheel chords on X11 while a follow camera is live
+  ([jstream-desktop › Design](../../apps/jstream-desktop/README.md#design)). In the desktop app,
   the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
   the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
   `false`), which the desktop app reads to register the bound chords with the OS

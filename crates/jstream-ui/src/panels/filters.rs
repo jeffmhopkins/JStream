@@ -3056,6 +3056,21 @@ fn FilterPane(target: Target) -> impl IntoView {
                 c.as_ref()
                     .and_then(|c| c.item(&item_id).map(|(scene, _)| scene.scene_id.clone()))
             })?;
+            // ADR-0112 §4: while neither default chord is bound, offer to bind both.
+            let offer = {
+                let scene_id = scene_id.clone();
+                Memo::new(move |_| {
+                    studio.collection.with(|c| {
+                        c.as_ref()
+                            .and_then(|c| crate::hotkeys::default_zoom_edits(c, &scene_id))
+                    })
+                })
+            };
+            let bind_defaults = move |_| {
+                if let (Some(edits), Some(s)) = (offer.get_untracked(), session.get()) {
+                    studio.apply(&s, edits);
+                }
+            };
             let zoom = move |steps: i32| Action::SceneZoomCamera {
                 scene_id: scene_id.clone(),
                 steps,
@@ -3064,6 +3079,14 @@ fn FilterPane(target: Target) -> impl IntoView {
                 <div class="filter-keys">
                     <crate::panels::inspector::HotkeyRow label="Zoom in" action=zoom(1) />
                     <crate::panels::inspector::HotkeyRow label="Zoom out" action=zoom(-1) />
+                    {move || offer.with(Option::is_some).then(|| view! {
+                        <p class="note zoom-offer">
+                            "Zoom with Ctrl and the mouse wheel? "
+                            <button type="button" on:click=bind_defaults>
+                                "Bind Ctrl+WheelUp and Ctrl+WheelDown"
+                            </button>
+                        </p>
+                    })}
                 </div>
             })
         })
