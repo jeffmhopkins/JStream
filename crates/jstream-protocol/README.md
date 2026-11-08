@@ -81,7 +81,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`), with
-  `Action::named_objects` and `Action::bind_problem`,
+  `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
+  wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
   and say what state it sets ([Timelines](#timelines)); `Batch`, whose
@@ -110,7 +111,8 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   mock compare to remove a key that would otherwise follow its output elsewhere (#343).
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
-  every implementation), and `HotkeyBinding`, a chord, its action and its labels
+  every implementation), which may end in the wheel (`Chord::WHEEL`, `Chord::is_wheel`,
+  0.104, [Hotkeys](#hotkeys)), and `HotkeyBinding`, a chord, its action and its labels
   ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) as reads report it.
 - **Controller bindings** (`binding.rs`, since 0.96,
   [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
@@ -319,7 +321,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.103 because a client's views report back: the action
+`PROTOCOL_VERSION` is 0.104 because a chord may end in the wheel, `WheelUp` or
+`WheelDown`, bound only to an action that takes steps (`Chord::WHEEL`,
+`Action::takes_steps`, [ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md)
+§3, a number the release queue set); 0.103 because a client's views report back: the action
 `preview.report` (`ViewCounts`) and `profile.get`'s `views` (`ViewProfile`)
 ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md), a number the
 release queue set); 0.102 because the engine quarantines an effect-pack kind that runs
@@ -1148,6 +1153,14 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   which is what browsers and Tauri's global-shortcut API report. A chord has exactly
   one spelling, so two bindings are on the same keys exactly when their strings are
   equal. Anything else is `invalid_argument` on `chord`, with `Chord::problem`'s reason.
+- **Wheel chords** (0.104, [ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md)
+  §3). A chord may end in the wheel instead of a key, `Chord::WHEEL`: `WheelUp` (away
+  from the person) or `WheelDown`, with modifiers like any key, such as
+  `Ctrl+WheelUp` (`Chord::is_wheel`). A listener runs a wheel chord once per notch, or
+  per 120 units of high-resolution wheel delta, so it can only be bound to an action
+  that takes steps (`Action::takes_steps`: today `scene.zoom_camera`, whose `steps` is
+  what one notch zooms). Bound to any other action, `hotkey.set` is `invalid_argument`
+  on `action.type`.
 - **`hotkey.set {chord, action}`** binds a chord; its inverse is `hotkey.clear`. It is
   refused with `already_exists` (entity `hotkey`, the chord as `id`) for a chord that
   is bound: rebinding is a batch of `hotkey.clear` then `hotkey.set`. `action` is an

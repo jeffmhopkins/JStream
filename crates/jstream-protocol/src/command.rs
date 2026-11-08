@@ -2281,6 +2281,58 @@ impl Action {
             }
         }
     }
+
+    /// Whether the action takes a step, so a wheel chord can run it once per notch
+    /// (ADR-0112 §3, 0.104): `scene.zoom_camera`, whose `steps` is what one notch zooms.
+    /// Every action is listed, so a new one has to be classified here.
+    pub fn takes_steps(&self) -> bool {
+        match self {
+            Action::SceneZoomCamera { .. } => true,
+            Action::OutputStart { .. }
+            | Action::PreviewReport { .. }
+            | Action::OutputStop { .. }
+            | Action::OutputSetKey { .. }
+            | Action::OutputClearKey { .. }
+            | Action::LiveSet { .. }
+            | Action::LiveCancel { .. }
+            | Action::YoutubeSignIn
+            | Action::YoutubeSignOut
+            | Action::YoutubeCreateBroadcast { .. }
+            | Action::YoutubeBindBroadcast { .. }
+            | Action::YoutubeTransitionBroadcast { .. }
+            | Action::AudioResetLoudness {}
+            | Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::SceneSwitch { .. }
+            | Action::SceneSwitchAndWatch { .. }
+            | Action::StudioSetPreview { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
+            | Action::ItemTriggerMotion { .. }
+            | Action::SceneSetKeyframe { .. }
+            | Action::TimelinePlay { .. }
+            | Action::TimelineStop { .. }
+            | Action::TimelineSeek { .. }
+            | Action::SourceRestart { .. }
+            | Action::PairingStart
+            | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
+            | Action::PluginInstall { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }
+            | Action::EffectEnable { .. }
+            | Action::CodecDownload { .. }
+            | Action::CodecDelete { .. }
+            | Action::PackWrite { .. }
+            | Action::PackDelete { .. }
+            | Action::ValuesSet { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. }
+            | Action::PrivacySet { .. } => false,
+        }
+    }
 }
 
 impl Action {
