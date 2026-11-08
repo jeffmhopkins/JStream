@@ -461,6 +461,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -6064,6 +6087,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -6485,6 +6563,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -12088,6 +12189,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -14291,6 +14447,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -19894,6 +20073,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -22316,6 +22550,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -27909,6 +28166,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -28644,7 +28956,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action), `preview.report` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "PreviewCodec": {
@@ -28696,6 +29008,61 @@ source: crates/jstream-mcp/src/tests.rs
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -28807,6 +29174,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "channel"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
                 ],
                 "type": "object"
               }
@@ -31032,6 +31422,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -36635,6 +37048,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,

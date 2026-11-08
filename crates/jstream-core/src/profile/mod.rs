@@ -13,6 +13,7 @@
 
 pub(crate) mod meter;
 pub(crate) mod streams;
+pub(crate) mod views;
 
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -37,6 +38,7 @@ pub(crate) use streams::{
 use streams::{
     MixerReading, MixerSlot, StreamMeters, StreamReading, mixer_profile, stream_profiles,
 };
+use views::{ViewKey, ViewMeters, ViewReading, view_profiles};
 
 /// Samples closer together than this replace each other, so a client that asks often
 /// doesn't fill the history.
@@ -160,6 +162,8 @@ struct Sample {
     streams: BTreeMap<u64, StreamReading>,
     /// The mixer, whose longest mix is the one since the sample before.
     mixer: MixerReading,
+    /// The clients' views, as last reported.
+    views: BTreeMap<ViewKey, ViewReading>,
 }
 
 /// The engine's profiler (ADR-0103). Lives in the engine's shared state; every lock in it
@@ -174,6 +178,7 @@ pub(crate) struct Profiler {
     history: Mutex<VecDeque<Sample>>,
     streams: Arc<Mutex<StreamMeters>>,
     mixer: Arc<Mutex<MixerSlot>>,
+    views: ViewMeters,
     /// The program's frame period, in nanoseconds. The control thread sets it when a
     /// stage opens; the stats thread reads it.
     budget_ns: std::sync::atomic::AtomicU64,
@@ -196,6 +201,7 @@ impl Profiler {
             history: Mutex::new(VecDeque::new()),
             streams: Arc::default(),
             mixer: Arc::default(),
+            views: ViewMeters::default(),
             budget_ns: std::sync::atomic::AtomicU64::new(budget_nanos(budget)),
         }
     }
@@ -233,6 +239,25 @@ impl Profiler {
     /// Meters the running stage's mixer until the guard drops.
     pub(crate) fn add_mixer(&self, source: MixerSource) -> MixerGuard {
         streams::add_mixer(&self.mixer, source)
+    }
+
+    /// Records a session's `preview.report` (ADR-0132).
+    ///
+    /// # Errors
+    /// `invalid_argument` on `view` for a session's 17th view.
+    pub(crate) fn report_view(
+        &self,
+        client_id: &jstream_protocol::ClientId,
+        client: &str,
+        view: &str,
+        counts: jstream_protocol::ViewCounts,
+    ) -> Result<(), jstream_protocol::ProtocolError> {
+        self.views.report(client_id, client, view, counts)
+    }
+
+    /// The session has ended: its views stay only in the windows that reach them.
+    pub(crate) fn end_views(&self, client_id: &jstream_protocol::ClientId) {
+        self.views.end_session(client_id);
     }
 
     /// Reads each thread's CPU time from `threads` from now on.
@@ -322,6 +347,7 @@ impl Profiler {
             cpu,
             streams: lock(&self.streams).read(),
             mixer: lock(&self.mixer).read(inputs),
+            views: self.views.read(),
         }
     }
 
@@ -409,6 +435,7 @@ fn window(
             base.map(|base| &base.mixer),
             now.mixer.max_nanos,
         ),
+        views: view_profiles(&now.views, base.map(|base| &base.views), since, span),
     }
 }
 

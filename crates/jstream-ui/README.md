@@ -78,6 +78,9 @@ Contents ([Design](#design) explains the choices):
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
+- **Views** (`views.rs`): `ViewTally`, a view's running counts, `label`, and
+  `report_every_second`, which sends them as `preview.report`
+  ([Views report back](#views)). Tested natively.
 - **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
   program, one scene, one source alone or a multiview, filling the window), `Request`
   (what a projector page's query asks for, and its window name), `open`, `pop_out` (a
@@ -474,7 +477,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   with `scene_id` for a scene and `source_id` for a source alone, 0.56) on the session's one binary channel, which `Channels`
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
-  stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
+  stream ends (a deleted scene), and unsubscribes when it goes. Each picture reports what
+  it did with its pictures as its own view ([Views report back](#views)). One picture asks for the
   screen's size in device pixels, at most 1920×1080, at the collection's base rate
   (`canvas::preview::live_fps`, 30 until the collection is read), and opens again when
   that rate changes. The multiview shows
@@ -1229,7 +1233,9 @@ browser, and `mod.rs` is the component.
   program, so for that moment the canvas wants the new scene on its own; settling keeps
   the program stream, with its transition, through the switch (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
-  shown no picture yet, or whose stream had ended, says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  shown no picture yet, or whose stream had ended, says the preview is starting. The
+  canvas reports what it did with its pictures as the view `canvas`
+  ([Views report back](#views)). WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
@@ -1335,6 +1341,37 @@ browser, and `mod.rs` is the component.
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
   `style:` binding, which sets it through the CSSOM. A test fails on any `style`
   attribute in the crate's sources outside test modules, or in `index.html`.
+
+<a id="views"></a>
+## Views report back
+<!-- @section
+covers = ["crates/jstream-ui/src/views.rs", "crates/jstream-ui/src/canvas/screen.rs"]
+depends_on = ["docs/adr/0132-bench-gates-views-and-quality-probe.md"]
+-->
+
+The canvas and each projector picture are *views* of preview streams, and each tells the
+engine what it did with its pictures, so `profile.get`'s `views` and `jstream bench` see
+what a person saw ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
+`views.rs` holds a view's `ViewTally`, its running `ViewCounts`, and sends them as
+`preview.report` every second (`REPORT_EVERY`) while they change; a refused report only
+leaves the view unreported. The canvas reports as `canvas`; a projector picture as
+`projector#<channel>:<scene>`, `projector#<channel>:program` or
+`projector#<channel>:source:<source>`, cut to 64 characters: the channel keeps two
+pictures of one scene apart. The Properties dialog's device picture keeps a tally it never reports: it
+is not a view of the show.
+
+- `received` and `shown`: `Screen::show` counts every frame of the view's channel, and
+  its painter every picture it draws.
+- `skipped`: an H.264 frame the feed drops (before the first keyframe, or past the
+  decoder's backlog), and a JPEG that a newer one replaced while it waited.
+- `decode_errors`: the decoder's error callback, a `configure` the browser refused, and
+  a JPEG `createImageBitmap` rejected.
+- `placeholders` and `blanks`: an effect on the view's state counts each change to
+  "Starting…" (the view's first included) and each change to why it has no picture.
+  A scene switch that keeps the last picture until the new stream draws (#1205) counts
+  no placeholder.
+- `reopens`: every `preview.subscribe` for the view after its first, on a scene switch or
+  the JPEG fallback.
 
 <a id="build"></a>
 ## Build

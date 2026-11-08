@@ -1582,6 +1582,22 @@ pub enum Action {
         /// The channel the stream was opened on.
         channel: u32,
     },
+    /// Reports what one of this session's views of preview streams has done since it
+    /// opened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a
+    /// projector) sends it about once a second while its counts change, so
+    /// `profile.get`'s `views` shows what a person saw. `view` is the client's own label
+    /// for it, 1 to 64 characters; `counts` are running totals over every stream the view
+    /// has shown, and a report whose counts fall below the view's last one starts it
+    /// again. Serves only the session that sends it, like `preview.subscribe`, and can't
+    /// be bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or
+    /// for a 17th view of one session.
+    #[serde(rename = "preview.report")]
+    PreviewReport {
+        /// The view's label, the client's own.
+        view: String,
+        /// Its running totals.
+        counts: crate::preview::ViewCounts,
+    },
     /// Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`
     /// names, else the scene's `transition_in`, else the current program scene's
     /// `transition_out`, else the default preset. A `cut`, a zero duration, or a preset
@@ -2028,6 +2044,7 @@ impl Action {
             Action::AudioResetLoudness {} => "audio.reset_loudness",
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
+            Action::PreviewReport { .. } => "preview.report",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
@@ -2132,6 +2149,7 @@ impl Action {
             | Action::YoutubeTransitionBroadcast { .. }
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
@@ -2164,7 +2182,9 @@ impl Action {
                 "`output.set_key` can't be bound: a stream key is never stored in the \
                  collection (R-SEC-001)",
             )),
-            Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
+            Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
             )),

@@ -1418,6 +1418,16 @@ pub(crate) fn actions() -> Vec<Action> {
             source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
+        Action::PreviewReport {
+            view: "projector:program".into(),
+            counts: crate::ViewCounts {
+                received: 300,
+                shown: 299,
+                skipped: 1,
+                placeholders: 1,
+                ..crate::ViewCounts::default()
+            },
+        },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
             preset_id: None,
@@ -1982,6 +1992,21 @@ fn profile_info() -> ProfileInfo {
             underrun_frames: 480,
             dropped_frames: 0,
         }),
+        views: vec![crate::ViewProfile {
+            client: "jstream-ui".into(),
+            view: "canvas".into(),
+            counts: crate::ViewCounts {
+                received: 150,
+                shown: 148,
+                skipped: 2,
+                decode_errors: 0,
+                placeholders: 1,
+                blanks: 0,
+                reopens: 1,
+            },
+            received_fps: ms(30.0),
+            shown_fps: ms(29.6),
+        }],
     }
 }
 
