@@ -137,11 +137,18 @@ impl Graph {
 
     /// Removes the kind descriptors with these IDs: an effect pack that's gone. What the
     /// collection holds of those kinds stays, as a collection file loaded without them
-    /// keeps it.
+    /// keeps it, and each filter of them records the version it was stored by, so the
+    /// kind coming back newer moves it through its renames (ADR-0025 › Versioning a kind).
     #[must_use]
     pub fn without_kinds<'a>(mut self, ids: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut removed = std::collections::BTreeMap::new();
         for id in ids {
-            self.kinds.remove(id);
+            if let Some(kind) = self.kinds.remove(id) {
+                removed.insert(id, kind.version);
+            }
+        }
+        if !removed.is_empty() {
+            crate::filter::stamp_removed(&mut self.state, &removed);
         }
         self
     }
@@ -570,6 +577,10 @@ pub struct Source {
     pub(crate) audio: Option<SourceAudio>,
     pub(crate) labels: BTreeSet<LabelId>,
     pub(crate) favourite: bool,
+    /// For a source loaded while its kind was missing (a shader source whose pack isn't
+    /// loaded yet), the kind version the file recorded, which a save keeps while the
+    /// kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Source {

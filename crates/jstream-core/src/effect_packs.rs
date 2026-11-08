@@ -117,6 +117,9 @@ pub(crate) struct Update {
     pub(crate) removed: Vec<String>,
     /// Kinds added or changed, with their new descriptors.
     pub(crate) described: Vec<KindDescriptor>,
+    /// The effect or shader source of each `described` kind, whose renames move stored
+    /// settings to the new version (#1353, #1412, ADR-0025 › Versioning a kind).
+    pub(crate) migrations: BTreeMap<String, Migration>,
     /// Every loaded effect that draws from now on: the quarantined ones left out.
     pub(crate) effects: PackEffects,
     /// Every loaded shader source that draws from now on, as `effects` holds effects.
@@ -127,6 +130,27 @@ pub(crate) struct Update {
     /// packs' lock, so in order, and ignores one older than the last it installed: a
     /// stale update can't put a blamed effect back (#976 round 2).
     pub(crate) seq: u64,
+}
+
+/// What moves a kind's stored settings through its renames: its effect, or its shader
+/// source.
+#[derive(Debug)]
+pub(crate) enum Migration {
+    /// A video filter kind.
+    Effect(Effect),
+    /// A shader source kind (ADR-0093).
+    Source(ShaderSource),
+}
+
+impl Migration {
+    /// `stored`, written by version `from`, at the kind's version: `None` when `from` is
+    /// newer ([`Effect::migrate`], [`ShaderSource::migrate`]).
+    pub(crate) fn migrate(&self, stored: &Settings, from: u32) -> Option<Settings> {
+        match self {
+            Migration::Effect(effect) => effect.migrate(stored, from),
+            Migration::Source(source) => source.migrate(stored, from),
+        }
+    }
 }
 
 /// A device loss blamed on pack effects ([`Packs::blame`]).
@@ -345,7 +369,19 @@ impl Packs {
         for change in &changes.kinds {
             tracing::info!(?change, "effect pack kind");
         }
-        Some(self.update(removed, described))
+        let migrations = changed
+            .iter()
+            .filter_map(|id| {
+                let migration = match self.watcher.effect(id) {
+                    Some(effect) => Migration::Effect(effect.clone()),
+                    None => Migration::Source(self.watcher.source(id)?.clone()),
+                };
+                Some(((*id).to_owned(), migration))
+            })
+            .collect();
+        let mut update = self.update(removed, described);
+        update.migrations = migrations;
+        Some(update)
     }
 
     /// Blames a GPU device loss on the pack kinds in `drawn`, the ones drawn in the
@@ -580,6 +616,7 @@ impl Packs {
         Update {
             removed,
             described,
+            migrations: BTreeMap::new(),
             effects: Arc::new(effects),
             sources: Arc::new(sources),
             quarantined,
