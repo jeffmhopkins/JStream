@@ -22,7 +22,7 @@ use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_midi::Message;
 use jstream_protocol::{KindDescriptor, Settings};
 use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// MIDI's channels.
@@ -101,6 +101,9 @@ pub struct MidiState {
     pushed: AtomicU64,
     /// When the last message arrived, in milliseconds, plus one; 0 before any.
     last_ms: AtomicU64,
+    /// Messages pushed, of every kind: what a settled source compares to see whether
+    /// anything changed.
+    changes: AtomicU64,
 }
 
 impl Default for MidiState {
@@ -126,13 +129,15 @@ impl MidiState {
                 .collect(),
             pushed: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
+            changes: AtomicU64::new(0),
         }
     }
 
     /// Records `message`, which arrived at `at_ms` on the media clock. Messages that
     /// change nothing drawn (clock, SysEx, time code) only count as activity.
     pub fn push(&self, at_ms: u64, message: &Message) {
-        self.last_ms.fetch_max(at_ms + 1, Ordering::Relaxed);
+        self.last_ms
+            .fetch_max(at_ms.saturating_add(1), Ordering::Relaxed);
         match *message {
             Message::NoteOn {
                 channel,
@@ -164,6 +169,8 @@ impl MidiState {
             }
             _ => {}
         }
+        // After every store above, so a reader that sees the count sees what it counts.
+        self.changes.fetch_add(1, Ordering::Release);
     }
 
     fn note(&self, at_ms: u64, channel: u8, key: u8, velocity: u8) {
@@ -171,7 +178,10 @@ impl MidiState {
         self.keys[index(channel, key)].store(velocity, Ordering::Relaxed);
         let n = self.pushed.fetch_add(1, Ordering::Relaxed);
         let slot = &self.log[(n % LOG as u64) as usize];
-        slot.seq.store(0, Ordering::Release);
+        slot.seq.store(0, Ordering::Relaxed);
+        // Keeps the event store below from being seen before the slot is marked as
+        // being written.
+        fence(Ordering::Release);
         let event = NoteEvent {
             at_ms,
             channel,
@@ -207,6 +217,11 @@ impl MidiState {
         self.last_ms.load(Ordering::Relaxed).checked_sub(1)
     }
 
+    /// Messages pushed so far, of every kind, whether or not they changed anything.
+    pub fn changes(&self) -> u64 {
+        self.changes.load(Ordering::Acquire)
+    }
+
     /// Note events pushed so far.
     pub fn pushed(&self) -> u64 {
         self.pushed.load(Ordering::Acquire)
@@ -225,8 +240,10 @@ impl MidiState {
                 continue;
             }
             let word = slot.event.load(Ordering::Relaxed);
+            // Keeps the second `seq` load from being seen before the event load.
+            fence(Ordering::Acquire);
             // Overwritten while it was read: skip it rather than show a mix.
-            if slot.seq.load(Ordering::Acquire) == n + 1 {
+            if slot.seq.load(Ordering::Relaxed) == n + 1 {
                 out.push(NoteEvent::unpack(word));
             }
         }
@@ -379,7 +396,7 @@ impl<D: Draw> Source for MidiSource<D> {
             return None;
         }
         if lock(&self.painter.ready).settled {
-            return Some(at_millis(millis(at) + STILL_MS));
+            return Some(at_millis(millis(at).saturating_add(STILL_MS)));
         }
         Some(next_tick(at))
     }
@@ -450,8 +467,8 @@ struct Drawing<D> {
     frames: Frames,
     /// The frame tick drawn last.
     drawn: Option<u64>,
-    /// The input's activity (`last_ms`, note events) when it was drawn last.
-    seen: Option<(Option<u64>, u64)>,
+    /// The input's [`changes`](MidiState::changes) when it was drawn last.
+    seen: Option<u64>,
     /// Whether the last frame had something still moving.
     moving: bool,
 }
@@ -464,7 +481,7 @@ impl<D: Draw> Drawing<D> {
         if self.drawn == Some(now) {
             return false;
         }
-        let activity = (self.state.last_ms(), self.state.pushed());
+        let activity = self.state.changes();
         if self.drawn.is_some() && !self.moving && self.seen == Some(activity) {
             return true;
         }
@@ -483,17 +500,17 @@ impl<D: Draw> Drawing<D> {
 
 /// The frame tick `at` falls in, at [`FPS`].
 fn tick(at: MediaTime) -> u64 {
-    millis(at) * FPS / 1000
+    millis(at).saturating_mul(FPS) / 1000
 }
 
 /// When frame tick `tick` starts.
 fn tick_start(tick: u64) -> MediaTime {
-    at_millis((tick * 1000).div_ceil(FPS))
+    at_millis(tick.saturating_mul(1000).div_ceil(FPS))
 }
 
 /// The next frame tick's start after `at`.
 fn next_tick(at: MediaTime) -> MediaTime {
-    tick_start(tick(at) + 1)
+    tick_start(tick(at).saturating_add(1))
 }
 
 /// A frame being drawn: straight sRGB RGBA, rows top first.

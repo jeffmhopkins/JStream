@@ -73,5 +73,13 @@ The forces:
   log is drawn from the left edge.
 - A name past the 64-input cap, or too long, gets an empty state: such a source draws
   nothing, though its messages still reach the shared every-input state.
+- Sustain (CC 64) is stored like any controller but doesn't hold keys: a key lifts on
+  its note-off even while the pedal is down. A keyboard shows the fingers, not the sound.
+- The every-input state keeps one slot per channel and key, so when two inputs hold the
+  same key on the same channel and one releases it, it shows as up there. A source that
+  names its input doesn't share that slot.
+- A settled source compares a count of every message pushed, not the clock or the note
+  log, so a controller change in the same millisecond as the last one, or from an input
+  whose clock lags, still redraws it.
 - Until the host feeds `MidiInputs`, the kinds draw only in tests, and their defaults are
   idle frames. The host wiring is the next step of #1224.

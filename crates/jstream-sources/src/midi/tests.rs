@@ -465,3 +465,51 @@ fn the_piano_roll_draws_a_held_key_the_log_has_lost() {
     assert_eq!(pixel(&frame, 0, 5), RED, "held from the left edge");
     assert_eq!(pixel(&frame, 99, 5), RED);
 }
+
+/// Review #1374 B1: a settled source redraws for any message, even one that moves no
+/// clock and logs no note, such as a second controller change in the same millisecond.
+#[test]
+fn a_settled_source_redraws_for_a_controller_change_in_the_same_millisecond() {
+    let inputs = Arc::new(MidiInputs::new());
+    let mut cc = source(
+        "midi_cc",
+        &inputs,
+        json!({"width": 10, "height": 10, "controllers": "7",
+               "color": "#ff0000", "track": "#000000"}),
+    );
+    inputs.push("", 100, &msg(&[0xB0, 7, 127]));
+    assert_eq!(pixel(&draw(&mut cc, ms(100)), 5, 0), RED);
+    // Settled on that frame...
+    draw(&mut cc, ms(134));
+    // ...a second change at the same millisecond, and one from an input whose clock
+    // lags, both still show.
+    inputs.push("", 100, &msg(&[0xB0, 7, 0]));
+    assert_eq!(pixel(&draw(&mut cc, ms(167)), 5, 0), BLACK);
+    draw(&mut cc, ms(200));
+    inputs.push("Late", 50, &msg(&[0xB0, 7, 127]));
+    assert_eq!(pixel(&draw(&mut cc, ms(234)), 5, 0), RED);
+}
+
+/// Review #1374 N6: a live channel change drops the old channel's fading hits.
+#[test]
+fn a_live_channel_change_drops_the_old_channels_hits() {
+    let inputs = Arc::new(MidiInputs::new());
+    let overrides = json!({"width": 20, "height": 10, "rows": 1, "columns": 2,
+                           "decay_ms": 1000, "color": "#ff0000", "pad": "#000000"});
+    let mut pads = source("midi_pads", &inputs, overrides.clone());
+    inputs.push("", 40, &msg(&[0x99, 36, 127]));
+    inputs.push("", 40, &msg(&[0x89, 36, 0]));
+    assert_eq!(pixel(&draw(&mut pads, ms(40)), 5, 5), RED);
+    let mut changed = settings("midi_pads", overrides);
+    changed.insert("channel", json!(1));
+    pads.update(&changed).expect("a live update");
+    assert_eq!(pixel(&draw(&mut pads, ms(100)), 5, 5), BLACK);
+}
+
+#[test]
+fn times_at_the_end_of_the_clock_saturate() {
+    let state = MidiState::new();
+    state.push(u64::MAX, &on(60, 1));
+    assert_eq!(state.last_ms(), Some(u64::MAX - 1));
+    assert!(tick(at_millis(u64::MAX / 2)) > 0);
+}

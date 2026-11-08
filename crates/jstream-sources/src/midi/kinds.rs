@@ -329,6 +329,10 @@ impl Draw for Pads {
     }
 
     fn restyle(&mut self, style: PadsStyle) {
+        // Another channel's hits are not this one's.
+        if style.channel != self.style.channel {
+            self.hits = [None; KEYS];
+        }
         self.style = style;
     }
 
