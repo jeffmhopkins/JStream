@@ -755,7 +755,11 @@ pub fn with_control(value: &Value, name: &str, setting: Option<Value>) -> Value 
 /// the device reports it.
 pub fn control_shown(value: &Value, control: &CameraControlInfo) -> (bool, i32) {
     match value.get(&control.name) {
-        Some(Value::String(s)) if s == CAMERA_CONTROL_AUTO => (true, control.value),
+        // `"auto"` on a control with no automatic mode (stored for another camera, or
+        // through the API) shows as manual, so moving the slider takes it back.
+        Some(Value::String(s)) if s == CAMERA_CONTROL_AUTO => {
+            (control.auto.is_some(), control.value)
+        }
         Some(v) => match v.as_i64().and_then(|n| i32::try_from(n).ok()) {
             Some(n) => (false, n),
             None => (control.auto == Some(true), control.value),
@@ -978,28 +982,48 @@ fn camera_controls_input(
     let listing = CaptureListing::shared();
     let listed = listing.listed;
     listing.first();
-    let controls = move || {
+    // A memo, so a change to the setting (or to any other field) redraws no row: only
+    // a new list, or another device, does, and a slider keeps its focus as it steps.
+    let controls = Memo::new(move |_| {
         listed.with(|l| match l {
             Some(Ok(targets)) => settings.with(|s| {
                 let device = s.get(&target).map(display).unwrap_or_default();
-                Some(device_controls(targets, &device).to_vec())
+                Some(Ok(device_controls(targets, &device).to_vec()))
             }),
-            Some(Err(_)) => Some(Vec::new()),
+            Some(Err(e)) => Some(Err(e.clone())),
             None => None,
         })
-    };
-    let body = move || match controls() {
+    });
+    let body = move || {
+        match controls.get() {
         None => view! { <span class="hint">"Listing the camera's controls…"</span> }.into_any(),
-        Some(list) if list.is_empty() => {
+        Some(Err(_)) => view! {
+            <span class="hint">"Couldn't list the camera's controls. Click here to try again."</span>
+        }
+        .into_any(),
+        Some(Ok(list)) if list.is_empty() => {
             view! { <span class="hint">"This camera lists no controls."</span> }.into_any()
         }
-        Some(list) => list
+        Some(Ok(list)) => list
             .into_iter()
             .map(|control| camera_control_row(control, value.clone(), send.clone()))
             .collect_view()
             .into_any(),
+    }
     };
-    view! { <div class="camera-controls">{body}</div> }.into_any()
+    // Focusing a control, or clicking the hint, asks for the list again, as a capture
+    // list does, so a failed or stale listing is read again.
+    view! {
+        <div class="camera-controls" tabindex="-1"
+            on:focusin=move |_| listing.refresh() on:click=move |_| {
+                if controls.with_untracked(|c| matches!(c, Some(Err(_)))) {
+                    listing.refresh();
+                }
+            }>
+            {body}
+        </div>
+    }
+    .into_any()
 }
 
 /// One control's row in [`camera_controls_input`].
@@ -1772,6 +1796,13 @@ mod tests {
         let auto = with_control(&set, "exposure", Some(json!(CAMERA_CONTROL_AUTO)));
         assert_eq!(control_shown(&auto, &exposure), (true, -5));
         assert_eq!(with_control(&auto, "exposure", None), json!({"gain": 3}));
+        // A control with no auto mode never shows a stored "auto" as auto, which would
+        // disable its slider with no box to untick.
+        let manual_only = CameraControlInfo {
+            auto: None,
+            ..exposure
+        };
+        assert_eq!(control_shown(&auto, &manual_only), (false, -5));
     }
 
     #[test]

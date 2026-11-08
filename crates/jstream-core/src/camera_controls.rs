@@ -1,8 +1,8 @@
 //! Camera controls (#1196): each `webcam` source's `camera_controls` setting, set on its
 //! device as it changes.
 //!
-//! The control side diffs what the drawn collection asks (live values included, so a
-//! slider being dragged applies as it moves) against what it last sent, and hands the
+//! The control side diffs what the drawn collection asks (live values included) against
+//! what it last sent, and hands the
 //! changes to the `jstream-camera-controls` thread, which calls the backend's
 //! [`VideoDevices::set_control`]. A set can take a while (on Windows, a device that
 //! isn't open is activated for it), so it never runs under the engine lock; the thread
@@ -11,7 +11,8 @@
 //! change never restarts a capture.
 //!
 //! Two sources of one device that set the same control differently: the one listed
-//! later wins. A control left out of the setting keeps what the device has. A device
+//! later wins when both name the device the same way; when one names it and the other
+//! leaves `device` empty for the first device listed, the one that changed last wins. A control left out of the setting keeps what the device has. A device
 //! plugged in again gets the settings when they next change, or when the engine starts.
 
 use std::collections::BTreeMap;

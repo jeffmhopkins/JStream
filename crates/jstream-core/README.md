@@ -332,7 +332,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `VideoDevices::set_control` with the latest value of each control and drops the ones
   a newer change replaced, so a slow set never runs under the engine lock. An empty
   `device` is the first device listed; when two sources of one device set a control
-  differently, the one listed later wins. `capture.targets` lists each device's
+  differently, the one listed later wins when both name the device the same way (an
+  empty `device` and the first device's ID are told apart: then the last changed wins). `capture.targets` lists each device's
   `controls` from `VideoDevices::controls`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
