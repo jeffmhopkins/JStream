@@ -31,9 +31,9 @@ use jstream_media::model::Lighting;
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    BlendMode, Blending, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
-    ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
-    SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
+    BlendMode, Blending, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain,
+    Glide, ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult,
+    Rev, SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{

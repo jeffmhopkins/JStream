@@ -16,9 +16,9 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, Blending, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
-    Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
+    Action, BlendMode, Blending, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas,
+    Chord, Crop, Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain,
+    FilterId, FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
     ItemTransform, ItemTransition, KeyframeTiming, LabelId, MotionModifier, OutputId, OutputKind,
     ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
     SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, Trigger,
