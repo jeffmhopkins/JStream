@@ -479,12 +479,17 @@ impl Draw for Beat {
         let style = self.0;
         canvas.clear(style.background);
         let per_bar = i64::from(style.beats_per_bar);
-        // While the clock runs: the beat it is on, and how far through it.
-        let at = state.tempo().filter(|t| t.clock(now_ms)).map(|t| {
-            let beat = t.beat_at(now_ms).max(0.0);
-            let in_bar = beat % f64::from(style.beats_per_bar);
-            (in_bar.floor() as i64, in_bar.fract(), t.playing)
-        });
+        // Playing while the clock runs, or stopped: the beat the song is on, and how far
+        // through it. A sender may stop its clock with its transport, so a stopped song
+        // keeps showing where it is; a playing one whose clock went quiet shows nothing.
+        let at = state
+            .tempo()
+            .filter(|t| !t.playing || t.clock(now_ms))
+            .map(|t| {
+                let beat = t.beat_at(now_ms).max(0.0);
+                let in_bar = beat % f64::from(style.beats_per_bar);
+                (in_bar.floor() as i64, in_bar.fract(), t.playing)
+            });
         let (w, h) = (i64::from(canvas.width()), i64::from(canvas.height()));
         let gap = (w.min(h) / 20).max(1);
         for beat in 0..per_bar {
@@ -505,8 +510,9 @@ impl Draw for Beat {
             let (x0, x1) = (beat * w / per_bar, (beat + 1) * w / per_bar);
             canvas.fill(x0 + gap, gap, x1 - gap, h - gap, fill);
         }
-        // A running clock moves on, or stops; either way the next tick may differ.
-        at.is_some()
+        // A playing song moves on, or its clock goes quiet; either way the next tick may
+        // differ. A stopped one waits for its next message.
+        at.is_some_and(|(_, _, playing)| playing)
     }
 }
 
