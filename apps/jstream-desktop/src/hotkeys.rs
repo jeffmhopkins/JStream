@@ -3,7 +3,8 @@
 //!
 //! The host opens its own session on the engine, reads the collection's bindings, and
 //! has the OS listen for exactly those chords ([`Registrar`]; on Windows
-//! `jstream_platform_windows::GlobalHotkeys`, which uses `RegisterHotKey`). After each
+//! `jstream_platform_windows::GlobalHotkeys`, which uses `RegisterHotKey`, and on macOS
+//! `jstream_platform_macos::GlobalHotkeys`, which uses Carbon's `RegisterEventHotKey`). After each
 //! `state.changed` it reads them again, so a chord bound, rebound or cleared from any
 //! client is heard or let go at once. A press runs the binding's action as an `action`
 //! call from that session, as a press in the page would: the host keeps nothing it hears
@@ -16,7 +17,8 @@
 //!
 //! Wheel chords (ADR-0112 §3) are registered only with a registrar that
 //! [hears the wheel](Registrar::hears_wheel) (on Windows, a `WH_MOUSE_LL` hook; on X11,
-//! `XGrabButton`), and only while a
+//! `XGrabButton`; on macOS, a Quartz event tap, behind the Accessibility permission), and
+//! only while a
 //! follow camera is live: while the scene on program or on preview, or the scene it is a
 //! keyframe scene of, has one (§5). A registered wheel chord is consumed, so the
 //! application under the pointer doesn't zoom too; the rest of the time it isn't

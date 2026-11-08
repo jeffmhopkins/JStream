@@ -22,8 +22,9 @@ The release version is `[workspace.package] version` in the root `Cargo.toml`, f
 with `version.workspace = true`: `jstream-desktop`, `jstream-daemon`, `jstream-cli`,
 `jstream-vcam-windows`, `jstream-browser-helper` and `jstream-ui`, whose About dialog
 shows it. So it is what the daemon's and the
-CLI's `--version` print and what the logs and crash reports name. Libraries, unpublished,
-stay at `0.0.0`.
+CLI's `--version` print and what the logs and crash reports name. The macOS app's bundle
+version is its numbers without the pre-release part, as Apple's keys allow
+(`scripts/mac/bundle-app.sh`). Libraries, unpublished, stay at `0.0.0`.
 
 Until the first stable release the version is `0.y.z`, and a build cut for testing has a
 pre-release part: `0.1.0-alpha.1`, `0.1.0-alpha.2`, then `0.1.0-beta.1`. Bump it in its
