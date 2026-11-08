@@ -21,15 +21,18 @@ The desktop app ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): a
 over `jstream-server`'s authenticated WebSocket API on `127.0.0.1`, the same one a
 browser or the CLI uses, so the UI has one code path
 ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It ships as `jstream.exe` in the
-portable folder ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)).
+portable folder ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)), and
+on macOS as `JStream.app` in an unsigned disk image
+([ADR-0141](../../docs/adr/0141-the-desktop-app-on-macos.md)).
 Layer 6, an app that links core and server
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
-Contents (a first cut; Windows first, because the window needs WebView2):
+Contents (the window is on Windows, through WebView2, and on macOS, through WKWebView;
+`build.rs` sets `cfg(desktop_window)` for those targets):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
-- **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
-  is, plus the virtual camera) and its server on a free port, with a token made fresh
+- **Engine host** (`host.rs`): the engine (on Windows and macOS a live one, wired as the
+  daemon's is, plus the virtual camera on Windows) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on, and with `Network` the TLS network listener and pairing); `vcam_status`, whether
   the camera is registered and current.
@@ -37,7 +40,7 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
   the command that saves it.
-- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows and on an X11 session): hears the bound
+- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS and an X11 session): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
@@ -51,11 +54,12 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
-- **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
+- **Window** (`shell.rs`, Windows and macOS): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
   tested everywhere), shutdown, and the two commands the page may call: a native file,
-  save or folder dialog (`pick.rs`), and saving the network setting (`network.rs`).
+  save or folder dialog (`pick.rs`: the common item dialog on Windows, AppKit's panels on
+  macOS), and saving the network setting (`network.rs`).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -69,12 +73,15 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
   setting (off until saved on, user-only, off when malformed), the network listener and
-  pairing it turns on, and the control token registered for redaction; the crash hook's own
+  pairing it turns on, the UI folder inside a macOS app, and the control token registered
+  for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
 
-Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
+Not here yet: a window on Linux (the binary says to use the daemon there), signing and
+notarising the macOS app (ADR-0063's question 1; `scripts/mac/bundle-app.sh` takes an
+identity when there is one), browser sources on macOS, the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
 dumps (only a panic writes a report, as in the daemon), renewing the network
@@ -88,12 +95,32 @@ certificate from the app (the daemon's `--lan-renew` renews the same file), and 
 covers = ["apps/jstream-desktop/src/main.rs", "apps/jstream-desktop/src/app.rs", "apps/jstream-desktop/src/logs.rs", "apps/jstream-desktop/Cargo.toml"]
 -->
 
-On Windows, with the UI built first:
+On Windows or macOS, with the UI built first:
 
 ```sh
 cd crates/jstream-ui && trunk build --release && cd ../..
 cargo run -p jstream-desktop -- --ui-dir crates/jstream-ui/dist
 ```
+
+On macOS, `scripts/mac/bundle-app.sh` then makes `JStream.app` and its disk image from
+a release build: the UI goes in the app's `Contents/Resources/ui`, where the app looks
+for it, and the bundle is ad-hoc signed
+([ADR-0141](../../docs/adr/0141-the-desktop-app-on-macos.md)). `--sign <identity>` signs
+it with a Developer ID and the hardened runtime (`entitlements.plist`) instead, and
+`--notarize <profile>` also notarises the image, once there is an Apple Developer account
+(ADR-0063's question 1). The after-review `macos-app` job builds the image and starts the
+app from it.
+
+```sh
+cargo build --release -p jstream-desktop
+scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir crates/jstream-ui/dist
+open dist/JStream.app
+```
+
+A downloaded image is blocked by Gatekeeper the first time: allow it in System Settings ›
+Privacy & Security. Each new build asks again for the camera, microphone, screen
+recording and Accessibility, and for the Keychain, because it isn't signed with a stable
+identity (ADR-0063's consequences).
 
 The binary is `jstream` (`jstream.exe`). It opens a window on the UI and connects it to
 its engine at once, with no connect form: `jstream-server` takes the token from the
@@ -103,8 +130,8 @@ Closing the window stops the engine.
 
 | Option | Meaning |
 |---|---|
-| `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe. |
-| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. |
+| `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe, or in a macOS app the one in `Contents/Resources`. |
+| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. macOS has no virtual camera, so it changes nothing there. |
 | `--mcp` | Let agents in: listen on `127.0.0.1:4455` with the data folder's `token` file, and serve MCP at `/mcp` (see **Agents** below). Off by default. |
 | `--port <port>` | With `--mcp`, the port instead of 4455. Without `--mcp` it is refused. |
 
@@ -121,7 +148,8 @@ backend; the portable zip turns it on and ships the helper
 source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
 
-- **Data folder.** `%APPDATA%\JStream`, the daemon's too. When a file named `portable`
+- **Data folder.** `%APPDATA%\JStream` (`~/Library/Application Support/JStream` on
+  macOS), the daemon's too. On Windows, when a file named `portable`
   sits beside the exe, a `data` folder beside the exe instead, so the app can run from
   a USB stick ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)). Both
   hosts find it through `jstream-platform`'s `paths` module
@@ -182,19 +210,24 @@ folder, and its log `logs\cef.log`.
   applies at the next start and keeps the paired devices, which work again if it is
   turned back on: revoke them on the same page to end their access for good.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
-  (kept in Windows Credential Manager) and start it.
+  (kept in Windows Credential Manager, or the login keychain on macOS) and start it.
 - **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
   it: other apps then see the program as the webcam *JStream Virtual Camera*. The
   camera must be registered once, with `jstream-daemon --register-vcam` from the same
   folder (one administrator prompt); the panel says whether it is, as the app read it
   at start, so restart the app after registering. `--no-vcam` turns the camera off.
-- **Elsewhere** the binary prints that the app runs on Windows only for now and exits 1.
+- **Global hotkeys on macOS.** Keys need no permission. A wheel chord, bound while a
+  follow camera is live, asks for the Accessibility permission the first time; until it
+  is granted in System Settings › Privacy & Security › Accessibility, wheel chords are
+  heard only while JStream has the focus, and the log says so.
+- **Elsewhere** the binary prints that the app runs on Windows and macOS only for now and
+  exits 1.
 
 <a id="design"></a>
 ## Design
 <!-- @section
-covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json"]
-depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
+covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json", "apps/jstream-desktop/Info.plist", "apps/jstream-desktop/entitlements.plist", "scripts/mac/bundle-app.sh"]
+depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0141-the-desktop-app-on-macos.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -213,13 +246,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)). The
   server still answers `ui_settings.get` and `ui_settings.set`, keeping them in the data
   folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
-  [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
-  keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
+  [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows and macOS the engine is live with the same wiring as the daemon (OS backends,
+  keys in Credential Manager or the Keychain behind `Redacting`, an RTMP(S) publish
+  opener; `host::live` takes the key store and anything the platform adds, such as
+  Windows' browser backend); elsewhere it has no backends. On macOS the backends are
+  the daemon's `macos_backends`: no virtual camera, and the engine's own GPU device
+  until the Metal interop.
   Everywhere it watches the data folder's `effects` for effect packs
   (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the
   engine's load while nothing is live, and on Windows it hands the engine
   `WindowsProcessCpu` for that readout's CPU share, `WindowsThreadCpu` for
-  `profile.get`'s threads and `WindowsThreadPriority` for the render and mixer threads'
+  `profile.get`'s threads (on macOS `MacosProcessCpu` and `MacosThreadCpu`) and
+  `WindowsThreadPriority` for the render and mixer threads'
   MMCSS tasks ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
   When the app exits, the server closes its connections and the engine stops.
 - **Network access** (`network.rs`, [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
@@ -241,7 +279,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   that isn't the listener's fails the retry too, with its own error. The page is told
   whether the listener opened (`networkOpen`), so Settings › Devices says when the
   setting is on but devices can't connect.
-- **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
+- **Hotkeys while another app has the focus.** On Windows, macOS and Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
   `hotkeys.rs` opens its own session on the engine (`jstream-desktop hotkeys` in the
@@ -251,7 +289,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `RegisterHotKey` on its own thread (a wheel chord with a low-level mouse hook,
   `WH_MOUSE_LL`, installed on that thread only while one is set), and on Linux `jstream_platform_linux::GlobalHotkeys`
   grabs them on the X root window with `xcb_grab_key` (a wheel chord with
-  `xcb_grab_button` on button 4 or 5), so the app never sees any other key; a press
+  `xcb_grab_button` on button 4 or 5). On macOS `jstream_platform_macos::GlobalHotkeys`
+  registers keys with Carbon's `RegisterEventHotKey` on the main thread (it needs no
+  permission; `set` waits for the main thread, so it runs off it, as `hotkeys.rs` calls
+  it) and hears a wheel chord with a Quartz event tap on scroll events, on a thread of
+  its own, installed only while one is set. The tap needs the Accessibility permission,
+  asked for the first time a wheel chord is set; without it `set` returns the wheel
+  chords with that reason, which is logged, and they are heard only while JStream has
+  the focus. So the app never sees any other key; a press
   runs the binding's action as an `action` call from that session, and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
@@ -259,20 +304,22 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   UI setting `hotkeys.global` turns it off (`false`; on otherwise), read through
   `Server::ui_settings`; the UI's Settings dialog shows it in the app. Every chord is
   let go when it is turned off and when the app stops. Wheel chords (ADR-0112 §3) are
-  registered only with a listener that hears the wheel, which today is Windows' and
-  X11's, and only
+  registered only with a listener that hears the wheel, which today is Windows', macOS'
+  and X11's, and only
   while a follow camera is live: while the scene on program or on preview, or the scene
   it is a keyframe scene of, has one, as `state.get` and `studio.get` say, kept up from
   `state.changed` and `studio.changed` (§5). A grabbed wheel chord is consumed, so the
   application under the pointer doesn't zoom too; the rest of the time it isn't grabbed
-  and the wheel passes through untouched. On Windows the hook swallows a turn only when
-  its modifiers are exactly a registered chord's, in its direction, and counts one press
-  per notch of 120 (`WHEEL_DELTA`), adding up a high-resolution wheel's parts; any other
-  turn passes on. On
+  and the wheel passes through untouched. On Windows the hook, and on macOS the tap,
+  swallows a turn only when its modifiers are exactly a registered chord's, in its
+  direction, and counts one press per notch of 120 (`WHEEL_DELTA`; a Mac mouse's line is
+  a notch, a trackpad's points count 120 a notch), adding up a high-resolution wheel's
+  parts; any other turn passes on. On
   a Wayland session the Linux listener doesn't start (Wayland has no grab; its
   GlobalShortcuts portal isn't wired yet), and the app has no Linux window yet
-  ([Purpose](#purpose)), so the X11 listener runs once one lands. The Wayland portal and the macOS listener
-  aren't built yet.
+  ([Purpose](#purpose)), so the X11 listener runs once one lands. The Wayland portal
+  isn't built yet, and the Hotkeys list doesn't yet say when wheel chords are heard only
+  with the focus (the log does).
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin
@@ -337,8 +384,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   and `network` grant those permissions to the main window only, and do not grant
   `core:default`. A projector has no path fields or settings, so it is granted neither.
   The command opens a
-  common-item dialog owned by the calling window and returns the path the person
-  picked. It does not read the file. The UI calls it only through `browse` on the
+  common-item dialog owned by the calling window (on macOS an app-modal `NSOpenPanel` or
+  `NSSavePanel`; a synchronous command runs on the main thread, where AppKit needs it)
+  and returns the path the person picked. It does not read the file. The UI calls it only through `browse` on the
   global. A browser of the daemon has no global, so it has no button and no command.
   The engine is still reached only over the WebSocket API. The one other request the
   scheme answers is the update check, which ignores whatever the page sends and always
@@ -356,14 +404,32 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   test job fails when `/DELAYLOAD` stops applying, or when a listed DLL is no longer
   imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
   Foundation import listed nowhere still gets past it.
-- **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
+- **Windows and macOS, for now.** Tauri is a dependency only there, and `build.rs` sets
+  `cfg(desktop_window)` for those targets (the one list to extend), so Linux CI builds
   and tests everything but the window (`shell.rs`, `pick.rs`) and `tests/delay_load.rs` without
-  GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
+  GTK or WebKitGTK. `tauri-build` is a build dependency there too, and runs on a native
+  build: a check of the app for macOS or Windows from another OS stops at
+  `generate_context!`. Tauri's other platforms still appear in `cargo metadata`, so
   `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
   each marked as never built for Windows where that holds. `tauri.conf.json` names the
-  app and its icon; the bundler is off (the portable folder is ADR-0066's), and so are
-  Tauri's CSP injection and global API. `tauri-build` writes ACL schemas to `gen/`,
-  which is not committed.
+  app and its icon; the bundler is off (the portable folder is ADR-0066's, and the macOS
+  app is `scripts/mac/bundle-app.sh`'s), and so are Tauri's CSP injection and global
+  API. `tauri-build` writes ACL schemas to `gen/`, which is not committed.
+- **The macOS app** ([ADR-0141](../../docs/adr/0141-the-desktop-app-on-macos.md)).
+  `Info.plist` holds the camera, microphone and system audio recording usage strings
+  macOS requires before its prompts; Tauri's context macro embeds it, with the product
+  name, in the binary's `__TEXT,__info_plist` section, so a bare `jstream` from
+  `cargo run` has them as the daemon's binary does. `scripts/mac/bundle-app.sh` builds
+  `JStream.app`: the binary in `Contents/MacOS`, the UI in `Contents/Resources/ui`
+  (`app::bundled_ui_dir`, so nothing but code sits beside the binary and the bundle can
+  be signed whole), an icon made from `icons/icon.png`, and `Info.plist` with the bundle
+  keys added (macOS 14 as the floor, ADR-0063). It signs the bundle ad hoc, or with
+  `--sign` a Developer ID with the hardened runtime and `entitlements.plist` (camera and
+  microphone; not sandboxed), and packs it in a UDZO disk image with a link to
+  `/Applications`; `--notarize` submits that image and staples it. The after-review
+  `macos-app` job lints the app natively, bundles it, and starts it from the bundle with
+  a fresh home folder until the log shows a WebSocket handshake, which only the window's
+  page makes.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
   clock the mixer runs on. Its pages paint onto a device of the media adapter the app
@@ -387,7 +453,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   name, the panic's location and message (cut at 16 KiB) and a backtrace; never the
   environment, the command line or settings. The control token (registered by
   `Host::start`) and every stream key the live engine stores or reads (its Credential
-  Manager store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
+  Manager or Keychain store is behind `jstream_crash::Redacting`) are replaced by `***` in the report and
   in its stderr line (R-SEC-001). Only their length and BLAKE3 digest are kept. The
   hook replaces the default one, whose stderr line would quote the message
   unredacted; `main.rs`'s `crash_line` prints the hook's redacted line instead. Each report is user-only: mode `0600` on Unix, and on Windows a protected DACL for

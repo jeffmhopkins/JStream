@@ -12,7 +12,7 @@
 use std::process::ExitCode;
 
 /// Starts the engine and shows the window until it closes.
-#[cfg(windows)]
+#[cfg(desktop_window)]
 fn main() -> ExitCode {
     use jstream_desktop::app::{self, Startup};
     use std::ffi::OsString;
@@ -74,19 +74,19 @@ fn main() -> ExitCode {
 
 /// Prints the crash hook's redacted line naming the report. Best effort: a release
 /// build has no console, and the report is what matters.
-#[cfg(windows)]
+#[cfg(desktop_window)]
 fn crash_line(line: &str) {
     use std::io::Write;
     let _ = writeln!(std::io::stderr().lock(), "{line}");
 }
 
 /// No window here yet: says so and fails.
-#[cfg(not(windows))]
+#[cfg(not(desktop_window))]
 fn main() -> ExitCode {
     use std::io::Write;
     let _ = writeln!(
         std::io::stderr().lock(),
-        "error: the desktop app runs on Windows only for now; run `jstream-daemon` and open \
+        "error: the desktop app runs on Windows and macOS only for now; run `jstream-daemon` and open \
          the web UI in a browser instead"
     );
     ExitCode::FAILURE

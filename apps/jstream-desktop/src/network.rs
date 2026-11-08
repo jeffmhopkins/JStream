@@ -110,7 +110,7 @@ pub fn config(token_file: &Path) -> anyhow::Result<jstream_server::NetworkConfig
 
 /// `set_network`: saves the setting from the app's own window. Answers whether it was
 /// saved.
-#[cfg(windows)]
+#[cfg(desktop_window)]
 #[tauri::command]
 pub(crate) fn set_network(setting: tauri::State<'_, Setting>, allow: bool) -> bool {
     match set_allowed(&setting.0, allow) {

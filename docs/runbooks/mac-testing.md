@@ -11,10 +11,11 @@ review_every = "180d"
 How a tester gets JStream on a Mac before there is a packaged download: one command
 builds it from source on their own Mac and installs a launcher that runs it from
 Terminal. A build made on the Mac it runs on is never quarantined, so Gatekeeper doesn't
-block it, and nothing needs signing beyond what the linker does. This stays inside
-[ADR-0063](../adr/0063-macos-platform-support.md): there is no app bundle (packaging and
-signing are later decisions, §13), and JStream runs from Terminal, so macOS attributes
-its permission prompts to Terminal (§11). The hardware run that checks what CI can't is
+block it, and nothing needs signing beyond what the linker does. The installer stays
+inside [ADR-0063](../adr/0063-macos-platform-support.md): it installs no app bundle, and
+JStream runs from Terminal, so macOS attributes its permission prompts to Terminal
+(§11). The desktop app, `JStream.app` in an unsigned disk image, is built separately
+([ADR-0141](../adr/0141-the-desktop-app-on-macos.md); [The script](#script) says how). The hardware run that checks what CI can't is
 #1099.
 
 <a id="tester"></a>
@@ -57,8 +58,9 @@ update.
 - **Scenes, token and logs:** `~/Library/Application Support/JStream`. Attach
   `logs/` to a bug report.
 
-What isn't on the Mac yet: browser sources, the virtual camera, and a desktop window
-(JStream runs in your browser instead).
+What isn't on the Mac yet: browser sources and the virtual camera. The installer runs
+JStream in your browser; the desktop window comes as `JStream.app`, built apart from it
+(see [The script](#script)).
 
 <a id="script"></a>
 ## The script
@@ -93,6 +95,16 @@ updates what changed:
    `JStream-build/install`, swapped in whole, refusing while JStream runs; and
    `~/Applications/JStream.command`, which Finder opens in Terminal and which runs
    `jstream.sh`. Then it opens that, unless `--no-open`.
+
+**The desktop app** isn't the installer's: `scripts/mac/bundle-app.sh` makes
+`JStream.app` and `JStream-<version>-macos-<arch>.dmg` from a release build of
+`jstream-desktop` and the built UI, ad-hoc signed, and the after-review `macos-app` job
+uploads that image for each PR it runs on
+([jstream-desktop › Usage](../../apps/jstream-desktop/README.md#usage)). It is unsigned,
+so a downloaded copy needs Allow in System Settings › Privacy & Security the first time,
+and macOS asks again for each permission after every new build. Its prompts name
+JStream, not Terminal. The `pins` job checks it with `bash -n` and shellcheck, as it
+does the installer.
 
 `jstream.sh` starts the daemon with the data folder's token file and
 `collection.json`, and the built UI, waits for its `listening on` line, and opens the

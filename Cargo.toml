@@ -142,15 +142,20 @@ mach2 = { version = "0.6", default-features = false }
 # The 0.3 line wgpu's Metal backend already uses; no build script. No default features:
 # only `std` and the classes the macOS crate calls.
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSDictionary", "NSEnumerator", "NSError", "NSObject", "NSProcessInfo", "NSString", "NSURL", "NSUUID", "NSValue"] }
+# AppKit's open and save panels through the objc2 framework crates (ADR-0063 §12), for
+# the desktop app's Browse dialogs on macOS. Already in the tree under Tauri's window
+# (`tao`, `wry`); only the panels' headers.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSOpenPanel", "NSPanel", "NSResponder", "NSSavePanel", "NSWindow"] }
 # Core Foundation, Core Media, Core Video and VideoToolbox through the objc2 framework
 # crates (ADR-0063 §6, §12), for the VideoToolbox H.264 and HEVC encoder: CF dictionaries
 # and numbers for the session's properties, `CMSampleBuffer` and `CMTime` for its output,
 # `CVPixelBuffer` for its input; the decoder's `VTDecompressionSession`, fed
 # `CMSampleBuffer`s made from `CMBlockBuffer`s and H.264 or HEVC format descriptions;
-# and CF data for the Keychain store's secrets (§9). The
+# CF data for the Keychain store's secrets (§9); and the run loop and Mach port the global
+# hotkeys' wheel tap runs on (ADR-0112 §5). The
 # 0.3 line, as `objc2-foundation`; plain C APIs, so no `objc2` feature and no build
 # script. Only the headers the macOS crate calls.
-objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFNumber", "CFString"] }
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFArray", "CFBase", "CFData", "CFDictionary", "CFMachPort", "CFNumber", "CFRunLoop", "CFString"] }
 objc2-core-media = { version = "0.3", default-features = false, features = ["std", "CMBase", "CMBlockBuffer", "CMFormatDescription", "CMSampleBuffer", "CMTime", "CMTimeRange", "objc2-core-audio-types", "objc2-core-video"] }
 objc2-core-video = { version = "0.3", default-features = false, features = ["std", "CVBase", "CVBuffer", "CVImageBuffer", "CVPixelBuffer", "CVPixelBufferPool", "CVReturn"] }
 objc2-video-toolbox = { version = "0.3", default-features = false, features = ["std", "VTBase", "VTCompressionProperties", "VTCompressionSession", "VTDecompressionProperties", "VTDecompressionSession", "VTErrors", "VTSession", "VTVideoEncoderList", "objc2-core-media", "objc2-core-video"] }

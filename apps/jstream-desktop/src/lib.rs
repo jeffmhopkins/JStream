@@ -17,9 +17,9 @@ pub mod hotkeys;
 pub mod links;
 pub mod logs;
 pub mod network;
-#[cfg(windows)]
+#[cfg(desktop_window)]
 pub mod pick;
-#[cfg(windows)]
+#[cfg(desktop_window)]
 pub mod shell;
 pub mod ui;
 pub mod updates;

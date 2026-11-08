@@ -15,8 +15,11 @@
 //! VideoToolbox H.264 and HEVC decoder on CPU frames, its packets split by
 //! `split_access_unit` and its frames put in presentation order by `Reorder`, and
 //! local media files through AVFoundation's asset reader (`AvMediaDecoders`), with a
-//! stand-in for the GPU interop not built yet (`NoGpuInterop`), and the process's CPU
-//! time (`MacosProcessCpu`) and its threads' (`MacosThreadCpu`). Layer 2, and one of the
+//! stand-in for the GPU interop not built yet (`NoGpuInterop`), the process's CPU
+//! time (`MacosProcessCpu`) and its threads' (`MacosThreadCpu`), and for the desktop app
+//! its global hotkeys (`GlobalHotkeys`: Carbon hotkeys, and a Quartz event tap for wheel
+//! chords behind the Accessibility permission) and its Browse dialogs (`pick_path`,
+//! AppKit's open and save panels). Layer 2, and one of the
 //! crates allowed `unsafe` (R-UNSAFE-001): every
 //! system call is wrapped here behind safe APIs.
 //!
@@ -25,7 +28,7 @@
 //! exist only on macOS. On other platforms the crate builds its platform-independent
 //! helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
+//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0141-the-desktop-app-on-macos.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
 
 mod aac;
 mod annexb;
@@ -38,7 +41,9 @@ mod capture;
 mod clock;
 mod codec;
 mod decode;
+mod dialog;
 mod fourcc;
+mod hotkeys;
 mod keychain;
 mod media_file;
 #[cfg(target_os = "macos")]
@@ -73,9 +78,19 @@ pub use codec::{
     vt_encoder_settings, vt_no_decoder,
 };
 pub use decode::{Reorder, SplitAccessUnit, annexb_units, sets_complete, split_access_unit};
+#[cfg(target_os = "macos")]
+pub use dialog::pick_path;
+pub use dialog::{Pick, PickKind, panel_extensions, panel_folder, panel_name};
 pub use fourcc::{
     CV_420V, CV_BGRA, CV_RGBA, CV_X420, CV_Y420, cv_pixel_format, fourcc, fourcc_str, os_status,
     pixel_format_from_cv,
+};
+#[cfg(target_os = "macos")]
+pub use hotkeys::GlobalHotkeys;
+pub use hotkeys::Held as HotkeyHeld;
+pub use hotkeys::{
+    HotkeyChord, NEEDS_ACCESSIBILITY, WHEEL_DELTA, WheelChord, WheelChords, key_code, parse_chord,
+    parse_wheel_chord, scroll_delta,
 };
 pub use keychain::KeychainItem;
 #[cfg(target_os = "macos")]
