@@ -5568,7 +5568,7 @@ stamp = { hash = "b3:ead01b6e2c4a7074", by = "agent:release-thread", note = "Mot
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: the Mixer bullet now describes the vertical strips (MixerOrientation following the dock's side columns until MixerFlip sets it for the session; master strip with loudness filling to the target line, LUFS and dBTP, then per-source strips with short name, upward meter, stacked dB field scrubbed vertically, mute), matching mixer.rs, number.rs's vertical prop, app.rs's context and workspace.rs's title-bar button; the fader text's true minus, the announced-only-when-over true peak and the 'mixer's channels' tooltip don't contradict any sentence; style.css adds only the strip and flip rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:76f656eb2a542f4e", by = "agent:claude", note = "Rewrote the Outputs bullet, which still described cards: the compact list, Start all (all_outputs), the stats line (live_line), Duplicate (duplicate_edits, one batch, no key), the settings dialog (draft_edits, send_settings, OutputDraft::reseed), Edit encoder…/New…/Edit mix… opening the list-and-editor Encoders & mixes dialog (LibraryPick, encoder_short, mix_short) and where the codec offer now shows; checked against outputs.rs, encoders.rs and style.css's .library rules" }
+stamp = { hash = "b3:1963283bbb2f6d8e", by = "agent:claude", note = "outputs.rs only re-reads once more when an output.state_changed arrived during a read, so a stale read can't leave a started output showing Stopped; no behaviour these docs describe changed" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read connecting, the properties form, outputs and plugins: Browse sits on asset paths except app assets, on recording paths as a save dialog, and on the plugin folder, and is absent in a browser. place_asset is tested natively. The other design bullets do not describe these fields." }
@@ -5763,7 +5763,7 @@ stamp = { hash = "b3:ead01b6e2c4a7074", by = "agent:release-thread", note = "The
 stamp = { hash = "b3:4d043e3a6192c96f", by = "agent:ui-parity", note = "Whole PR against wave/m1-4: the Workspace entry now names the mixer's meter flip the dock draws in the mixer's title bar (workspace.rs shows MixerFlip when the active tab is the mixer); the mixer.rs entry adds the vertical strips; number.rs gains the stacked vertical layout under the same 'number field the panels share' entry; app.rs only provides MixerOrientation, which the App entry's 'shared state' covers." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:76f656eb2a542f4e", by = "agent:claude", note = "#1206 follow-up: the outputs.rs entry now names Start all, the running row's stats line, Duplicate and the dialog following another client's changes to untouched fields, tested natively (all_outputs, live_line, duplicate_edits, reseed); encoders.rs is a list and editor, its summaries tested" }
+stamp = { hash = "b3:1963283bbb2f6d8e", by = "agent:claude", note = "outputs.rs only re-reads once more when an output.state_changed arrived during a read, so a stale read can't leave a started output showing Stopped; no behaviour these docs describe changed" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/properties.rs"]
 stamp = { hash = "b3:4e2510c3596e1d7f", by = "agent:cursor", note = "Re-read the host and Browse bullets against host.rs and browse.rs: the button is absent without the desktop shell, disabled for another engine, and place_asset stores a collection path under the data folder. The other module entries still name the same modules." }
@@ -7140,7 +7140,7 @@ stamp = { hash = "b3:33caa45ba2cbbc33", by = "agent:claude-settings", note = "HD
 stamp = { hash = "b3:c1f54150f8929221", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; HD-10's File › Settings… launch check still holds (General page) | merge: main added HD-11 and video_settings.rs to covers; HD-01 now names Video settings… (HD-11) in the File menu alongside Settings… and Plugins…, and covers keeps both files | kept from the merged side: Added HD-11 Video settings (presets, typed sides 1 to 8192, 30/60 fps per ADR-0119, one batch, applies at next stage open) and video_settings.rs to covers; HD-01's File menu text still holds" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:76f656eb2a542f4e", by = "agent:claude", note = "outputs.rs added Start all to the panel's own header; the app header's Go Live, End stream and Record logic (go_live_targets, live_outputs, start_or_stop_all) is unchanged" }
+stamp = { hash = "b3:1963283bbb2f6d8e", by = "agent:claude", note = "outputs.rs only re-reads once more when an output.state_changed arrived during a read, so a stale read can't leave a started output showing Stopped; no behaviour these docs describe changed" }
 
 ["UI-FEATURES#header"."file:crates/jstream-ui/src/settings.rs"]
 stamp = { hash = "b3:2b131eff86f2385f", by = "agent:claude-settings", note = "HD-01 now names Settings…, Plugins… and the Settings dialog's General, Plugins and Devices pages with Up/Down between them; covers gains settings.rs, which it describes; HD-10's File › Settings… launch check still holds (General page)" }
@@ -7206,7 +7206,7 @@ stamp = { hash = "b3:b3b79d0264c7e211", by = "agent:claude-1232", note = "store.
 stamp = { hash = "b3:43942712b8873f84", by = "agent:claude", note = "Added Start all/Stop all, the running row's stats line, Duplicate (one batch, no key, opens the copy), Edit mix…, Edit encoder… and New…, the dialog following another client's changes to untouched fields, and the list-and-editor Encoders & mixes dialog; checked against outputs.rs and encoders.rs" }
 
 ["UI-FEATURES#outputs"."file:crates/jstream-ui/src/panels/outputs.rs"]
-stamp = { hash = "b3:76f656eb2a542f4e", by = "agent:claude", note = "Added Start all/Stop all, the running row's stats line, Duplicate (one batch, no key, opens the copy), Edit mix…, Edit encoder… and New…, the dialog following another client's changes to untouched fields, and the list-and-editor Encoders & mixes dialog; checked against outputs.rs and encoders.rs" }
+stamp = { hash = "b3:1963283bbb2f6d8e", by = "agent:claude", note = "outputs.rs only re-reads once more when an output.state_changed arrived during a read, so a stale read can't leave a started output showing Stopped; no behaviour these docs describe changed" }
 
 ["UI-FEATURES#scenes"."body"]
 stamp = { hash = "b3:b707dc391261c445", by = "agent:obs-ui-thread", note = "SC-11 now says Add scene uses a keyframe's parent's folder, and Scene properties and Scene filters are both off for a keyframe, as scenes.rs does; SC-08 and SC-09 say Sources panel instead of Scene objects panel." }

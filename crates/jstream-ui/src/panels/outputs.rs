@@ -984,6 +984,9 @@ struct Panel {
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
     loads: StoredValue<u64>,
+    /// Bumped by each `output.state_changed`, so a reload that read the outputs before
+    /// one arrived knows its states may be older than the rows'.
+    state_events: StoredValue<u64>,
     /// What the host says about the virtual camera.
     vcam: Vcam,
     /// Bumped after a stream key changed, for the header ([`Studio::keys_changed`]).
@@ -1054,9 +1057,16 @@ impl Panel {
             return;
         };
         {
+            let heard = self.state_events.try_get_value();
             let loaded = load(&*session.control).await;
             if self.loads.try_get_value() != Some(mine) {
                 return;
+            }
+            // A state change heard while this read was out may be newer than what it
+            // read (an output started just after its status was read): the rows take
+            // what was read, and a fresh read, sent after the change, settles them.
+            if self.state_events.try_get_value() != heard {
+                self.reload();
             }
             match loaded {
                 Ok(snapshot) => {
@@ -1212,6 +1222,7 @@ pub fn Outputs() -> impl IntoView {
         scenes: RwSignal::new(Vec::new()),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
+        state_events: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
         keys_changed: use_context::<crate::store::Studio>().map(|studio| studio.keys_changed),
         studio: use_context(),
@@ -1237,6 +1248,7 @@ pub fn Outputs() -> impl IntoView {
                 match event {
                     Event::StateChanged { .. } | Event::EventsDropped { .. } => panel.reload(),
                     Event::OutputStateChanged { output_id, state } => {
+                        panel.state_events.try_update_value(|n| *n += 1);
                         let known = panel
                             .rows
                             .try_update(|rows| match rows.get_mut(&output_id) {
