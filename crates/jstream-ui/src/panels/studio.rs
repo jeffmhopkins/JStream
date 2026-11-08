@@ -14,6 +14,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#transitions
 
 use crate::app::SessionContext;
+use crate::panels::curve::CurveEditor;
 use crate::panels::number::NumberField;
 use crate::panels::outputs::{action, edit};
 use crate::session::Session;
@@ -315,8 +316,8 @@ pub fn next_preset_id<'a>(
 }
 
 /// Every easing, in the order the form offers them, a custom curve last (ADR-0129).
-/// Picking the curve starts from [`Bezier::BACK_OUT`]; its points are edited through
-/// the API.
+/// Picking the curve starts from [`Bezier::BACK_OUT`]; the form then shows its points
+/// ([`CurveEditor`]).
 pub const EASINGS: [Easing; 7] = [
     Easing::EaseInOut,
     Easing::EaseOut,
@@ -1405,6 +1406,18 @@ fn PresetEditor(
             save();
         }
     };
+    // A custom curve's points, edited in place (ADR-0129).
+    let custom_curve = Signal::derive(move || {
+        draft.with(|d| match d.easing {
+            Easing::CubicBezier(curve) => Some(curve),
+            _ => None,
+        })
+    });
+    let send_curve = move |curve: Bezier| {
+        draft.update(|d| d.easing = Easing::CubicBezier(curve));
+        save();
+        true
+    };
     let kind_radio = move |kind: KindDescriptor| {
         let kind_id = kind.kind_id.clone();
         let checked = {
@@ -1472,6 +1485,9 @@ fn PresetEditor(
                         </select>
                     </label>
                 </div>
+                <Show when=move || draft.with(|d| matches!(d.easing, Easing::CubicBezier(_)))>
+                    <CurveEditor curve=custom_curve send=send_curve />
+                </Show>
             </Show>
             {move || field_problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
             <p class="note">{note}</p>
@@ -2032,6 +2048,24 @@ mod tests {
         assert_eq!(draft.settings.get("unmatched"), Some(&json!("fade")));
         assert!(parse_duration("abc").is_err());
         assert_eq!(parse_duration(" 0 "), Ok(0));
+    }
+
+    /// A custom curve's moved point is sent as the preset's easing, whole (ADR-0129).
+    #[test]
+    fn a_curve_point_is_sent_as_the_easing() {
+        use crate::panels::curve::{Point, with_point};
+        use jstream_control::protocol::Bezier;
+        let kinds = builtin_transition_kinds();
+        let mut before = fade("f");
+        before.easing = Easing::CubicBezier(Bezier::BACK_OUT);
+        let mut draft = Draft::from_preset(&before);
+        let curve = with_point(&Bezier::BACK_OUT, Point::Y1, 2.0).expect("a change");
+        draft.easing = Easing::CubicBezier(curve);
+        let Ok(Some(Edit::TransitionUpdate { easing, .. })) = update_edit(&before, &draft, &kinds)
+        else {
+            panic!("an update");
+        };
+        assert_eq!(easing, Some(Easing::CubicBezier(curve)));
     }
 
     /// An update names only what changed; a kind change patches against the new kind's

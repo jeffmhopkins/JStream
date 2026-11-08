@@ -428,6 +428,7 @@ dependencies = [
  "jstream-mux",
  "jstream-protocol",
  "jstream-sources",
+ "jstream-visca",
  "libfuzzer-sys",
  "serde_json",
 ]
@@ -516,6 +517,10 @@ dependencies = [
  "zune-core",
  "zune-jpeg",
 ]
+
+[[package]]
+name = "jstream-visca"
+version = "0.0.0"
 
 [[package]]
 name = "libc"

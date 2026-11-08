@@ -50,6 +50,17 @@ pub fn descriptors() -> Vec<KindDescriptor> {
     kinds
 }
 
+/// How far a built-in filter of `kind_id` draws past each edge of its input at
+/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
+/// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
+/// outside its width. `None` for a kind that declares no outset, or one this crate
+/// doesn't draw; a caller then takes the declared `max_outset_px`.
+///
+/// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
+pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    multipass::outset(kind_id, settings)
+}
+
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.
 fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
     pack::build(kind_id, settings)
@@ -152,6 +163,7 @@ impl VideoFilter {
     /// ones before it frame the item's box itself (ADR-0065 §5).
     pub fn set_pad(&mut self, pad: u32) {
         self.pad = pad;
+        self.pass.set_pad(pad);
     }
 
     /// The padding [`Self::set_pad`] set.

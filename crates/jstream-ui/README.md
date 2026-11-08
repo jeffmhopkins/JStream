@@ -151,9 +151,10 @@ Contents ([Design](#design) explains the choices):
   label's Actions view (ADR-0133: its keyframes with a one-batch preset change, and every
   hotkey and timeline with a check for the label),
   with the edits they send to a scene, a source, a hotkey or a timeline tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
-  blending, scene switches and settings, or the selected scene's objects, uses and transitions, in
+  blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
+  arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
-  properties form inside it (`properties.rs`), the Add source dialog (`add_source.rs`:
+  properties form the Properties dialog and a filter's settings draw (`properties.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -173,14 +174,20 @@ Contents ([Design](#design) explains the choices):
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
-  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  field the panels share (`number.rs`), the custom curve editor the Inspector and the
+  preset form share (`curve.rs`, a point's range, the drawing's path and its frame, which grows to take in
+  an overshoot, tested natively),
+  the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
+  natively), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the program output and each output with its FX button, creating, editing and
-  deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, whose drafts, edits and summaries are tested natively;
+  (the pipeline's health in its header, then a compact row for the program output and
+  for each output with its state, Start or Stop, FX button and ⋯ menu; each output's
+  settings dialog, which creates or edits a stream, recording or virtual camera and its
+  stream key and applies nothing until OK or Apply, whose drafts and edits are tested
+  natively; and the delete confirmation); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, in the panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
   form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
   About dialog's list of the installed ones; and the calls and
@@ -476,9 +483,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its type icon (the scene's icon for a scene), name, kind, "+N" for the other selected
   items, the item's source's or the scene's label chips and tag button, whose popover
   opens under the header, and a favourite star (`source.set_meta` or `scene.set_meta`). An item's name is in italics when its source
-  is placed in another scene too. Its sections fold, and each stays as it was last left,
+  is placed in another scene too, and its header has a Properties & filters… button,
+  which opens its source's Properties dialog (a nested scene's: the scene's), where the
+  source's settings and filters are; the Inspector doesn't show them. Under an item's
+  header, a tab strip (Transform, Motion with the modifier count, Behaviour; Left,
+  Right, Home and End move along it) shows one tab's sections at a time, and the tab
+  last picked is kept in the browser's storage as `jstream.inspector.tab` (#1219). The
+  header and the strip stay pinned while the tab scrolls, and every tab stays mounted
+  while hidden, so a field keeps what is typed in it. Its sections fold, and each stays as it was last left,
   by title, across items and reloads (`Folds`, kept in the browser's storage as
-  `jstream.folds`): Parameters (X and Y of the
+  `jstream.folds`). Transform holds Parameters (X and Y of the
   unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
   while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
   on by default, keeps the aspect ratio when either side changes), 3D (folded
@@ -488,11 +502,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Depth has no effect), Crop
   (`item.set_crop`, in source pixels), Blending (the nine modes, `item.set_blend`, each drawn by
   the engine since 0.47 in the project's blending space, which File › Video settings…
-  sets, and Opacity, `item.set_opacity`) and
-  Scene switches (folded: the item's delay, easing, glide and appear and disappear
+  sets, and Opacity, `item.set_opacity`).
+  Behaviour holds Scene switches (the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
-  while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's), Motion (folded, with the modifier count as its hint: a row per motion
+  while they differ from the defaults, and for a custom curve its drawing and four
+  points, kept to x 0 to 1 and y −2 to 3; not shown in a keyframe, whose items switch as
+  the parent's), in a keyframe scene Timing into this keyframe in its place (the
+  keyframe's own delay, easing and duration of the item in moves into it, each blank
+  while it follows the item's or the preset's, with a reset per field and Clear timing,
+  sent as `item.set_timing` or `item.clear_override`, ADR-0129), and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
+  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
+  scene, as a scene's Hotkey row is,
+  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
   one-shot impulse with its length and decay, or audio: what it hears, the program mix or
   a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
@@ -501,11 +522,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099), Hotkeys (folded: Toggle, Show and Hide rows, each the chords bound to
-  the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
-  scene, as a scene's Hotkey row is,
-  [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) and Properties, the
-  source's settings form. A scene shows its object
+  in a keyframe its override, ADR-0099). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -709,8 +726,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The Filters window's Cancel fits each settings patch to the kind as described now
   (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
-  the disk: a written pack stays. The manifest is always `version = 1` with no
-  `renames`, so a renamed setting starts from its default.
+  the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
+  manifest's version by one and adds the pair to `renames` (`Declared::version`,
+  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
+  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
+  new one at its default; the template says so, and asks that no `@renamed` line be
+  deleted, since each is a version.
+  Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
+  checks it against `pack.list`) and moves only the filter being edited to the new
+  kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
+  carried through the renames and fitted to the new kind's descriptor, since the engine
+  refuses a key the kind doesn't declare); the old pack
+  stays for any other filter of it, and the window opens the editor on the new one.
+  The coloured copy is sized to the textarea's box inside its scrollbars, through
+  CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
@@ -742,9 +771,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette and bloom
+  belongs to the item in every scene. The Add filter dialog lists the vignette, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
-  and Spotlight) has a Preset select above its form in the Filters window, which sets the
+  and Spotlight, the border's Card, Neon and Broadcast frame) has a Preset select above its form in the Filters window, which sets the
   preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
@@ -995,7 +1024,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The editor sends each change at once, as a `transition.update` naming only what
   changed (after a kind change, the patch is against the new kind's defaults, as the
   engine applies it): Name, the kind as a Cut / Fade / Move / Stinger segmented control, and for
-  every kind but a cut the duration, the kind's parameters and the easing. Under them a
+  every kind but a cut the duration, the kind's parameters and the easing (a custom
+  curve with its drawing and four points, `curve.rs`). Under them a
   note counts the scenes that override with it ("Overrides: N in, M out."), and Make
   default and Delete show for every preset but the default. The engine's preset wins:
   each change it reports resets the fields to it. The kind's parameters come from

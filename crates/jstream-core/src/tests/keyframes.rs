@@ -1031,6 +1031,56 @@ fn a_move_blends_effect_settings_that_differ() {
     assert!((number(&ended[0].1[0], "radius") - 10.0).abs() < 1e-4);
 }
 
+/// While a Move blends an effect's settings (ADR-0127), the item's layer holds what it
+/// draws at either look: a glow whose radius shrinks from 80 to 4 is padded for 80 for
+/// the whole Move, though its own settings need 16 (ADR-0136).
+#[test]
+fn a_move_pads_the_layer_for_the_look_it_leaves() {
+    use jstream_protocol::{FilterChain, FilterId, FilterInfo, FilterOwner};
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::FilterAdd {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("halo"),
+                kind: "glow".into(),
+                settings: serde_json::from_value(serde_json::json!({"radius": 80.0}))
+                    .expect("settings"),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffects {
+                scene_id: SceneId::new("k"),
+                item_id: ItemId::new("a1"),
+                effects: vec![FilterInfo {
+                    filter_id: FilterId::new("halo"),
+                    kind: "glow".into(),
+                    enabled: true,
+                    settings: serde_json::from_value(serde_json::json!({"radius": 4.0}))
+                        .expect("settings"),
+                }],
+            },
+        ],
+    );
+    switch(&control, "k", None);
+    let pad = |engine: &Engine| {
+        let hub = engine.render_hub().load();
+        hub.shot()
+            .item_chain(&SceneId::new("k"), &ItemId::new("a1"))
+            .and_then(|chain| chain.pad)
+    };
+    assert_eq!(pad(&engine), Some((0, 16)), "the glow alone, at radius 4");
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    assert_eq!(pad(&engine), Some((0, 80)), "the Move leaves radius 80");
+}
+
 /// An undo of one client's step on a keyframe's effects is refused once another client
 /// has changed those effects since (ADR-0032, ADR-0088 §4): the copy's undo would clear
 /// the override, and the other client's effect with it.

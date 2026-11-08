@@ -7,6 +7,54 @@
 //! the same single-slot mailbox display capture uses. Raw frames are copied or converted
 //! to NV12 there (`convert`); MJPEG frames go to the engine's decoder. The paired audio
 //! endpoint is found by container ID (`pairing`).
+//!
+//! # Behaviour
+//!
+//! **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
+//! Foundation's source reader (ADR-0061):
+//! - **Devices:** the video capture devices Media Foundation enumerates. A device's
+//!   `DeviceId` is its symbolic link (its device interface path), which stays the same
+//!   across reboots and replugging into the same port; its name is the friendly name.
+//! - **Paired audio:** the first active WASAPI capture endpoint in the same device
+//!   container (the configuration manager's container ID), so it is an ID `WasapiAudio`
+//!   opens. Devices built into the computer share one container, which pairs nothing: a
+//!   laptop's camera is not paired with its microphone array.
+//! - **Formats:** the first video stream's native media types that the backend can
+//!   deliver, in the device's order: NV12 and I420 as they are, YUY2 (converted to NV12),
+//!   and MJPEG (decoded by the engine's `CaptureDecoder`). RGB, 10-bit and H.264 types are
+//!   left out. A type that repeats an earlier one's size, frame rate and encoding is
+//!   listed once, and the first is the one opened. Frame rates become frame periods
+//!   (`30000/1001` fps is `1001/30000`).
+//! - **Streams:** `open` selects the native type with converters disabled, so the reader
+//!   delivers exactly that type, and reads it synchronously on its own capture thread.
+//!   `open` waits up to 5 s for the first read, so a device another application holds is
+//!   `Busy` there. A denied camera privacy setting is an `Os` error that says so. Raw
+//!   frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
+//!   averaging the two rows of its block) on that thread by `jstream_platform::yuv`, the
+//!   converter Linux's V4L2 backend uses too, into the same single-slot
+//!   mailbox as display capture. Their colour is what the type declares, else BT.601
+//!   below 720 lines and BT.709 from there, in limited range.
+//! - **Threads:** `devices`, `formats` and `open` join the calling thread to the
+//!   multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread
+//!   joins it for its lifetime. Each also starts Media Foundation; the thread releases the
+//!   reader, source and decoder before shutting it down.
+//! - **Times:** a sample's `MFSampleExtension_DeviceReferenceSystemTime` (QPC in 100 ns,
+//!   `QpcClock`'s time line) when it has one; otherwise the reader's timestamp, anchored
+//!   to `QpcClock` at the first frame.
+//! - **End of a stream:** a removed device, a reader error or end of stream ends the stream
+//!   with `DeviceLost`, as does a change of the device's format, so the engine reopens it.
+//!   A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
+//!   Dropping the stream doesn't wait: the thread stops after its current read and then
+//!   releases the device and drops the decoder.
+//! - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+//!   `MfCodecs::capture_decoder` makes for the engine: the first synchronous
+//!   MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
+//!   capture thread at the first frame and again if the size changes. It takes NV12
+//!   output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
+//!   range, as JFIF defines, unless the decoder's type says otherwise. A frame it can't
+//!   decode is dropped and counted in `CaptureStats::frames_undecodable`.
+//! - **Not yet:** every MJPEG frame is decoded, including ones the mailbox then replaces
+//!   before render takes them.
 
 // Platform-independent, so they are tested on every platform.
 #[cfg(any(windows, test))]

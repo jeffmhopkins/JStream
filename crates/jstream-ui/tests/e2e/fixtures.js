@@ -77,9 +77,46 @@ export async function disconnect(page) {
  * tab of its group is shown. A click on a shown lone panel would collapse it, so a shown
  * one is left alone. */
 export async function showPanel(page, name) {
-  const tab = page.getByRole('tab', { name, exact: true });
+  // The dock's own tabs: the Inspector has a Transform tab of its own.
+  const tab = page.locator('.dock-strip').getByRole('tab', { name, exact: true });
   if ((await tab.getAttribute('aria-selected')) !== 'true') await tab.click();
-  await expect(page.getByRole('tabpanel', { name, exact: true })).toBeVisible();
+  await expect(page.locator('.dock-panel').and(page.getByRole('tabpanel', { name, exact: true }))).toBeVisible();
+}
+
+/** The Outputs panel's row of output `id`. */
+export function outputRow(page, id) {
+  return page.locator(`li.output-row[data-output="${id}"]`);
+}
+
+/** Adds an output through the Outputs panel's "+ Add output" dialog: `kind` is `rtmp`,
+ * `record` or `virtual_cam`, and `target` its server URL or file path. It gets the first
+ * free `output-N`. */
+export async function addOutput(page, kind, target) {
+  await page.getByRole('button', { name: '+ Add output' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Output settings' });
+  await dialog.getByLabel('Kind').selectOption(kind);
+  if (target !== undefined) {
+    await dialog.getByLabel(kind === 'record' ? 'File path' : 'Server URL').fill(target);
+  }
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+}
+
+/** Opens output `id`'s settings dialog from its row's ⋯ menu, and returns it. */
+export async function openOutputSettings(page, id) {
+  await outputRow(page, id).getByRole('button', { name: `More for ${id}` }).click();
+  await page.getByRole('menuitem', { name: 'Settings…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Output settings' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/** Opens the Outputs panel's Encoders & mixes dialog, and returns it. */
+export async function openEncoders(page) {
+  await page.locator('.outputs-foot').getByRole('button', { name: 'Encoders & mixes…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Encoders & mixes' });
+  await expect(dialog).toBeVisible();
+  return dialog;
 }
 
 /** The revision the header last heard of, as a number. */

@@ -344,8 +344,6 @@ struct MidiSource<D: Draw> {
     descriptor: KindDescriptor,
     settings: Settings,
     painter: Arc<MidiPainter<D>>,
-    /// Whether there is MIDI to read: without it, the first frame never changes.
-    fed: bool,
 }
 
 /// Builds a MIDI source of `draw` and paints its first frame.
@@ -378,8 +376,8 @@ fn create<D: Draw>(
     Ok(Box::new(MidiSource {
         descriptor: descriptor.clone(),
         settings: settings.clone(),
-        fed: ctx.midi.is_some(),
         painter: Arc::new(MidiPainter {
+            fed: ctx.midi.is_some(),
             drawing: Mutex::new(drawing),
             ready: Mutex::new(ready),
         }),
@@ -388,17 +386,11 @@ fn create<D: Draw>(
 
 impl<D: Draw> Source for MidiSource<D> {
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(Arc::clone(&lock(&self.painter.ready).frame))
+        Ok(self.painter.frame())
     }
 
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        if !self.fed {
-            return None;
-        }
-        if lock(&self.painter.ready).settled {
-            return Some(at_millis(millis(at).saturating_add(STILL_MS)));
-        }
-        Some(next_tick(at))
+        self.painter.next_change(at)
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -424,6 +416,8 @@ impl<D: Draw> Source for MidiSource<D> {
 
 /// A MIDI source's drawing, shared between the source and whoever paints it.
 struct MidiPainter<D: Draw> {
+    /// Whether there is a MIDI input to read: without one, the first frame never changes.
+    fed: bool,
     /// Held while a frame is drawn. Only [`Painter::paint`] takes it.
     drawing: Mutex<Drawing<D>>,
     /// The frame painted last, and new settings for the next paint.
@@ -451,6 +445,20 @@ impl<D: Draw> Painter for MidiPainter<D> {
         let mut ready = lock(&self.ready);
         ready.frame = frame;
         ready.settled = settled && ready.restyle.is_none();
+    }
+
+    fn frame(&self) -> Arc<VideoFrame> {
+        Arc::clone(&lock(&self.ready).frame)
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.fed {
+            return None;
+        }
+        if lock(&self.ready).settled {
+            return Some(at_millis(millis(at).saturating_add(STILL_MS)));
+        }
+        Some(next_tick(at))
     }
 }
 
