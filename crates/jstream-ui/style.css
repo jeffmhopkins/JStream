@@ -587,6 +587,23 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   border-radius: 5px;
   background: var(--menu);
 }
+/* The item's header and tab strip stay pinned while its tab scrolls (#1219); the
+   negative top covers the panel body's padding. */
+.inspector-top {
+  position: sticky;
+  top: -8px;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  margin-top: -8px;
+  padding-top: 8px;
+  background: var(--panel);
+}
+.inspector-tabs { margin-bottom: 0; border-bottom: 1px solid var(--line); }
+.inspector-tabs button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; font-size: 11px; }
+.tab-badge { min-width: 15px; padding: 0 4px; border-radius: 7px; background: var(--selected); color: #b5ceff; font-size: 10px; line-height: 15px; text-align: center; }
+.tab-panel { display: grid; gap: 14px; }
+.tab-panel[hidden] { display: none; }
 .inspector-head .source-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inspector-head .kind-tag { flex: 1 1 auto; color: var(--dim); font-size: 11px; white-space: nowrap; }
 .inspector-head .more-tag { color: #b5ceff; font-size: 11px; }

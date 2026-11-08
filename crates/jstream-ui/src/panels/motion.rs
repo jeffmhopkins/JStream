@@ -847,7 +847,7 @@ pub fn MotionSection(
     };
 
     view! {
-        <Fold title="Motion" open=false hint=hint_text>
+        <Fold title="Motion" open=true hint=hint_text>
             <p class="note">
                 "Motion the engine draws each frame, on top of the item's values: continuous, or a shake each time it is fired."
             </p>

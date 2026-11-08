@@ -1,17 +1,20 @@
 //! The Inspector: what is selected, and how it is placed. For a selected item, a header
-//! (name, kind, how many more are selected, favourite) over foldable sections: its box
-//! (X, Y, W, H, the size as a % of its source's and rotation, with a W/H link), its
-//! crop, its blending (mode and
-//! opacity) and its source's settings ([`Properties`]). With no item selected, the
+//! (name, kind, how many more are selected, labels, Properties & filters, favourite) and
+//! a tab strip, both pinned while the rest scrolls, over three tabs of foldable sections
+//! ([`Tab`]): Transform holds its box (X, Y, W, H, the size as a % of its source's and
+//! rotation, with a W/H link), 3D, crop and blending (mode and opacity); Motion its
+//! motion modifiers; Behaviour its scene switches and hotkeys. Its source's settings and
+//! filters are in the Properties dialog the header's button opens. With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
 //! canvas and the Inspector show the same committed numbers.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
-use super::Properties;
 use super::motion::MotionSection;
 use super::number::NumberField;
+use super::scene_properties::SceneDialog;
+use super::source_properties::{self, PropertiesDialog};
 use super::studio;
 use crate::app::SessionContext;
 use crate::hotkeys;
@@ -529,6 +532,8 @@ pub fn Inspector() -> impl IntoView {
     // Whether a new width or height keeps the aspect ratio. On by default, as in the
     // prototype, and kept while the Inspector is shown.
     let linked = RwSignal::new(true);
+    // The tab shown: the one last picked, here or in an earlier session.
+    let tab = RwSignal::new(Tab::restore());
 
     view! {
         <h2>"Inspector"</h2>
@@ -536,12 +541,15 @@ pub fn Inspector() -> impl IntoView {
             Shown::Nothing => view! { <p class="placeholder">"Nothing to inspect."</p> }.into_any(),
             Shown::Item(scene, item) => view! {
                 <div class="inspector">
-                    <ItemHeader item=item.clone() />
-                    <Placement scene=scene.clone() item=item.clone() linked=linked />
-                    <MotionSection scene=scene item=item />
-                    <Fold title="Properties" open=true>
-                        <Properties />
-                    </Fold>
+                    <div class="inspector-top">
+                        <ItemHeader item=item.clone() />
+                        <TabStrip tab=tab scene=scene.clone() item=item.clone() />
+                    </div>
+                    <Placement scene=scene.clone() item=item.clone() linked=linked tab=tab />
+                    <div class="tab-panel" role="tabpanel" aria-label="Motion"
+                        hidden=move || tab.get() != Tab::Motion>
+                        <MotionSection scene=scene item=item />
+                    </div>
                 </div>
             }
             .into_any(),
@@ -552,6 +560,152 @@ pub fn Inspector() -> impl IntoView {
             }
             .into_any(),
         }}
+    }
+}
+
+/// The browser storage key of the Inspector's last tab.
+const TAB_KEY: &str = "jstream.inspector.tab";
+
+/// The tabs of a selected item's Inspector (#1219), each a few folds, so the panel shows
+/// one short list at a time instead of one long scroll.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tab {
+    /// Parameters, 3D, Crop and Blending.
+    Transform,
+    /// The motion modifiers.
+    Motion,
+    /// Scene switches and hotkeys.
+    Behaviour,
+}
+
+impl Tab {
+    /// Every tab, in the strip's order.
+    pub const ALL: [Tab; 3] = [Tab::Transform, Tab::Motion, Tab::Behaviour];
+
+    /// The tab's name in the strip.
+    pub fn label(self) -> &'static str {
+        match self {
+            Tab::Transform => "Transform",
+            Tab::Motion => "Motion",
+            Tab::Behaviour => "Behaviour",
+        }
+    }
+
+    /// The tab as stored.
+    pub fn key(self) -> &'static str {
+        match self {
+            Tab::Transform => "transform",
+            Tab::Motion => "motion",
+            Tab::Behaviour => "behaviour",
+        }
+    }
+
+    /// A stored tab read back; anything else is Transform.
+    pub fn from_key(key: &str) -> Tab {
+        Tab::ALL
+            .into_iter()
+            .find(|t| t.key() == key)
+            .unwrap_or(Tab::Transform)
+    }
+
+    /// The tab `by` places along the strip, wrapping at either end.
+    pub fn step(self, by: isize) -> Tab {
+        let at = Tab::ALL.iter().position(|t| *t == self).unwrap_or(0);
+        let n = Tab::ALL.len().cast_signed();
+        Tab::ALL[(at.cast_signed() + by).rem_euclid(n).cast_unsigned()]
+    }
+
+    /// The tab the browser kept, or Transform.
+    fn restore() -> Tab {
+        window()
+            .local_storage()
+            .ok()
+            .flatten()
+            .and_then(|storage| storage.get_item(TAB_KEY).ok().flatten())
+            .map_or(Tab::Transform, |key| Tab::from_key(&key))
+    }
+
+    /// Keeps this tab for the next Inspector and the next session.
+    fn keep(self) {
+        if let Ok(Some(storage)) = window().local_storage() {
+            let _ = storage.set_item(TAB_KEY, self.key());
+        }
+    }
+}
+
+/// The badge after a tab's name: how many motion modifiers the item has, if any.
+pub fn tab_badge(tab: Tab, modifiers: usize) -> Option<String> {
+    (tab == Tab::Motion && modifiers > 0).then(|| modifiers.to_string())
+}
+
+/// The Inspector's tab strip. Left and Right (and Home and End) move between the tabs.
+#[component]
+fn TabStrip(tab: RwSignal<Tab>, scene: SceneId, item: ItemId) -> impl IntoView {
+    let studio = expect_context::<Studio>();
+    let modifiers = Memo::new(move |_| {
+        studio.collection.with(|c| {
+            c.as_ref()
+                .and_then(|c| c.item_in(Some(&scene), &item))
+                .map_or(0, |(_, i)| i.motion.len())
+        })
+    });
+    let pick = move |next: Tab| {
+        tab.set(next);
+        next.keep();
+    };
+    let on_key = move |event: leptos::ev::KeyboardEvent| {
+        use leptos::wasm_bindgen::JsCast;
+        use leptos::web_sys;
+        let now = tab.get_untracked();
+        let next = match event.key().as_str() {
+            "ArrowRight" => now.step(1),
+            "ArrowLeft" => now.step(-1),
+            "Home" => Tab::Transform,
+            "End" => Tab::Behaviour,
+            _ => return,
+        };
+        event.prevent_default();
+        pick(next);
+        // The focus follows the picked tab.
+        if let Some(button) = event
+            .current_target()
+            .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            .and_then(|strip| {
+                strip
+                    .query_selector(&format!("[data-tab=\"{}\"]", next.key()))
+                    .ok()
+                    .flatten()
+            })
+            .and_then(|b| b.dyn_into::<web_sys::HtmlElement>().ok())
+        {
+            let _ = button.focus();
+        }
+    };
+    let tabs = Tab::ALL
+        .into_iter()
+        .map(|t| {
+            let on = move || tab.get() == t;
+            view! {
+                <button
+                    type="button"
+                    role="tab"
+                    data-tab=t.key()
+                    aria-selected=move || on().to_string()
+                    tabindex=move || if on() { "0" } else { "-1" }
+                    on:click=move |_| pick(t)
+                >
+                    {t.label()}
+                    {move || tab_badge(t, modifiers.get()).map(|n| view! {
+                        <span class="tab-badge">{n}</span>
+                    })}
+                </button>
+            }
+        })
+        .collect_view();
+    view! {
+        <div class="tabs inspector-tabs" role="tablist" aria-label="Inspector" on:keydown=on_key>
+            {tabs}
+        </div>
     }
 }
 
@@ -751,6 +905,32 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
         }
     };
     let icon = move || head.with(|h| icon_of(h.kind.as_ref()));
+    // The Properties dialog of the item's source: a nested scene's is the scene's
+    // (DL-03). A source with no dialog has no button.
+    let props = use_context::<PropertiesDialog>();
+    let scenes = use_context::<SceneDialog>();
+    let opens = move || {
+        head.with(|h| match &h.kind {
+            Some(SourceKind::Scene { .. }) => scenes.is_some(),
+            Some(kind) => props.is_some() && source_properties::shows(kind),
+            None => false,
+        })
+    };
+    let open = move |_| {
+        head.with_untracked(|h| match (&h.kind, &h.source_id) {
+            (Some(SourceKind::Scene { scene_id }), _) => {
+                if let Some(scenes) = scenes {
+                    scenes.open(scene_id.clone());
+                }
+            }
+            (Some(_), Some(source_id)) => {
+                if let Some(props) = props {
+                    props.open(source_id.clone());
+                }
+            }
+            _ => {}
+        });
+    };
     let labels = Signal::derive(move || head.with(|h| h.labels.clone()));
     // Only a new source or name rebuilds the tag button, so putting a label on keeps
     // its popover open.
@@ -778,15 +958,28 @@ fn ItemHeader(item: ItemId) -> impl IntoView {
             {move || (more() > 0).then(|| view! { <span class="more-tag">"+" {more()}</span> })}
             <LabelChips labels=labels />
             {picker}
+            <Show when=opens>
+                <button type="button" class="icon-button" title="Properties & filters…"
+                    aria-label="Properties & filters…" on:click=open>
+                    <Icon name="sliders" size=15 />
+                </button>
+            </Show>
             {favourite_button(move || head.with(|h| h.favourite), toggle)}
         </div>
         {pop}
     }
 }
 
-/// The item's box, crop and blending.
+/// The item's Transform tab (its box, 3D, crop and blending) and Behaviour tab (its
+/// scene switches and hotkeys). Both stay mounted while another tab shows, so a field
+/// keeps what is typed in it.
 #[component]
-fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoView {
+fn Placement(
+    scene: SceneId,
+    item: ItemId,
+    linked: RwSignal<bool>,
+    tab: RwSignal<Tab>,
+) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
     // The item as the collection has it now, as the scene shows it: in a keyframe
@@ -1129,6 +1322,8 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
     });
 
     view! {
+        <div class="tab-panel" role="tabpanel" aria-label="Transform"
+            hidden=move || tab.get() != Tab::Transform>
         <Fold title="Parameters" open=true extra=link_button>
             <Show when=move || geometry.get().is_none()>
                 <p class="note">
@@ -1192,11 +1387,14 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
                     min=0.0 max=400.0 send=send_opacity />
             </div>
         </Fold>
+        </div>
+        <div class="tab-panel" role="tabpanel" aria-label="Behaviour"
+            hidden=move || tab.get() != Tab::Behaviour>
         // A keyframe changes only placement, visibility, opacity and motion (ADR-0049,
         // ADR-0099), so its
         // items' switches are the parent's and aren't shown here.
         <Show when=move || keyframe_of.with(Option::is_none)>
-            <Fold title="Scene switches" open=false hint=switch_hint>
+            <Fold title="Scene switches" open=true hint=switch_hint>
                 <div class="field-grid">
                     <NumberField label="Delay" unit="ms" value=delay step=10.0 decimals=0 min=0.0
                         max=f64::from(SWITCH_DELAY_MAX) send=send_delay />
@@ -1222,13 +1420,14 @@ fn Placement(scene: SceneId, item: ItemId, linked: RwSignal<bool>) -> impl IntoV
             };
             let hide = jstream_control::protocol::Action::ItemHide { item_id, scene_id };
             view! {
-                <Fold title="Hotkeys" open=false>
+                <Fold title="Hotkeys" open=true>
                     <HotkeyRow label="Toggle" action=toggle />
                     <HotkeyRow label="Show" action=show />
                     <HotkeyRow label="Hide" action=hide />
                 </Fold>
             }
         }}
+        </div>
     }
 }
 
@@ -1633,6 +1832,32 @@ mod tests {
         folds.insert("Crop".to_owned(), true);
         assert_eq!(parse_folds(&folds_json(&folds)), folds);
         assert!(parse_folds("not json").is_empty());
+    }
+
+    #[test]
+    fn a_stored_tab_reads_back_and_anything_else_is_transform() {
+        for tab in Tab::ALL {
+            assert_eq!(Tab::from_key(tab.key()), tab);
+        }
+        assert_eq!(Tab::from_key("properties"), Tab::Transform);
+        assert_eq!(Tab::from_key(""), Tab::Transform);
+    }
+
+    #[test]
+    fn the_arrow_keys_step_along_the_tabs_and_wrap() {
+        assert_eq!(Tab::Transform.step(1), Tab::Motion);
+        assert_eq!(Tab::Motion.step(1), Tab::Behaviour);
+        assert_eq!(Tab::Behaviour.step(1), Tab::Transform);
+        assert_eq!(Tab::Transform.step(-1), Tab::Behaviour);
+        assert_eq!(Tab::Behaviour.step(-1), Tab::Motion);
+    }
+
+    #[test]
+    fn only_the_motion_tab_counts_and_only_when_there_is_one() {
+        assert_eq!(tab_badge(Tab::Motion, 0), None);
+        assert_eq!(tab_badge(Tab::Motion, 2).as_deref(), Some("2"));
+        assert_eq!(tab_badge(Tab::Transform, 2), None);
+        assert_eq!(tab_badge(Tab::Behaviour, 2), None);
     }
 
     #[test]
