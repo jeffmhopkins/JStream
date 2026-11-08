@@ -1540,7 +1540,7 @@ model into it with `Compositor::draw_model`: posed by the item's geometry with i
 values and motion applied, seen through its scene's camera with the camera's live value,
 motion and follow applied as the scene's pass resolves them, and lit as the source says.
 It passes no scene lights (`ModelDraw::lights` is `None`) until the `light` kind lands
-([ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md)).
+([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
 input, as for canvas space, so they run over the canvas. The item is placed as

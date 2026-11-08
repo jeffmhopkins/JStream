@@ -1,4 +1,4 @@
-//! `depth_fog` and the view depth it reads (ADR-0137 decisions 4 to 6): its settings, its
+//! `depth_fog` and the view depth it reads (ADR-0143 decisions 4 to 6): its settings, its
 //! fog against a depth image of known distances, and end to end over a 3D scene's view
 //! depth from `Compositor::render_view_depth` and `draw_model_depth`.
 
@@ -73,7 +73,7 @@ fn grey(linear: f32) -> [u8; 4] {
     [v, v, v, 255]
 }
 
-/// ADR-0137 decision 5: with no view depth (a 2D scene, a chain that isn't a scene's),
+/// ADR-0143 decision 5: with no view depth (a 2D scene, a chain that isn't a scene's),
 /// the fog changes nothing.
 #[test]
 fn without_a_depth_it_passes_through() {
@@ -99,7 +99,7 @@ fn known_depth(opened: &Opened) -> ViewDepth {
     }
 }
 
-/// ADR-0137 decision 6: linear fog from 1000 to 3000 is half at 2000 and full at 4000;
+/// ADR-0143 decision 6: linear fog from 1000 to 3000 is half at 2000 and full at 4000;
 /// nothing nearer than its start is fogged; the background takes the most fog, or none.
 #[test]
 fn linear_fog_follows_the_distance() {
@@ -131,7 +131,7 @@ fn linear_fog_follows_the_distance() {
     near(&shot, 0, 0, BLACK, 1);
 }
 
-/// ADR-0137 decision 6: exponential fog is 1 - exp(-density (D - start) / 1000).
+/// ADR-0143 decision 6: exponential fog is 1 - exp(-density (D - start) / 1000).
 #[test]
 fn exponential_fog_thickens_with_distance() {
     let Some(mut opened) = open() else {
@@ -146,7 +146,7 @@ fn exponential_fog_thickens_with_distance() {
     near(&shot, 3, 0, grey(1.0 - (-0.5f32).exp()), 2);
 }
 
-/// ADR-0137 decision 6: fog is a layer over what is there, premultiplied: over a
+/// ADR-0143 decision 6: fog is a layer over what is there, premultiplied: over a
 /// transparent pixel it is the fog's own colour at the fog's opacity.
 #[test]
 fn fog_covers_a_transparent_pixel_with_its_own_opacity() {
@@ -248,7 +248,7 @@ fn fogged(opened: &mut Opened, items: &[Item<'_>], models: &[ModelDraw<'_>]) -> 
     apply(opened, &mut fog, &black)
 }
 
-/// ADR-0137 decision 4: each card writes its own distance, the nearest wins whatever
+/// ADR-0143 decision 4: each card writes its own distance, the nearest wins whatever
 /// order the cards draw in, and nothing is written where no card is.
 #[test]
 fn golden_view_depth_holds_the_nearest_card() {
@@ -279,7 +279,7 @@ fn golden_view_depth_holds_the_nearest_card() {
     near(&shot, 80, 95, BLACK, 1);
 }
 
-/// ADR-0137 decision 4: a card whose alpha with its opacity is under one half writes no
+/// ADR-0143 decision 4: a card whose alpha with its opacity is under one half writes no
 /// depth, so what is behind it keeps its own; a hidden card writes none either.
 #[test]
 fn golden_view_depth_skips_mostly_transparent_cards() {
@@ -302,7 +302,7 @@ fn golden_view_depth_skips_mostly_transparent_cards() {
     near(&shot, 80, 50, BLACK, 1);
 }
 
-/// ADR-0137 decision 4: a scene with no camera has no depth.
+/// ADR-0143 decision 4: a scene with no camera has no depth.
 #[test]
 fn golden_view_depth_is_empty_without_a_camera() {
     let Some(mut opened) = open() else {
@@ -329,7 +329,7 @@ fn golden_view_depth_is_empty_without_a_camera() {
     near(&shot, 80, 50, [0, 0, 0, 0], 0);
 }
 
-/// ADR-0137 decision 4: a model writes its own depth per fragment, nearer than a card
+/// ADR-0143 decision 4: a model writes its own depth per fragment, nearer than a card
 /// behind it, and its layer's placement writes none of its own.
 #[test]
 fn golden_view_depth_takes_a_models_own_depth() {
@@ -365,7 +365,7 @@ fn golden_view_depth_takes_a_models_own_depth() {
     near(&shot, 64, 50, WHITE, 1);
 }
 
-/// ADR-0137 decision 6: a translucent fog colour is laid over the picture, source-over,
+/// ADR-0143 decision 6: a translucent fog colour is laid over the picture, source-over,
 /// so an opaque picture stays opaque. Half-alpha white fog at full amount over black
 /// gives linear 0.5 grey, not a half-transparent picture; fog at alpha 0 changes nothing.
 #[test]

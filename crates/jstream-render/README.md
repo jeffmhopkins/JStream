@@ -45,11 +45,11 @@ and calls this crate.
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
-  scene's lights, [ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md))
+  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md))
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
-- A **view depth** (ADR-0137 decision 4): `Compositor::render_view_depth(scene, target)`
+- A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
   mips, drawing each visible card seen through a camera with `fs_depth`
@@ -609,7 +609,7 @@ adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
-**Scene lights** (ADR-0137 decision 3). With `ModelDraw::lights` set and a camera, the
+**Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
 rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
 (position and aim, `f64`), and the draw takes each into the viewing frame through
 `CameraView::in_view` and `direction_in_view`, so only light positions relative to the
@@ -955,7 +955,7 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   backwards.
 
 **Depth-aware kinds** (`src/filter/depth/`,
-[ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md) decisions
+[ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decisions
 5 and 6). A kind there reads a scene's view depth beside its input:
 `VideoFilter::set_depth(Some(ViewDepth { image, focal_px }))` hands it the image
 `Compositor::render_view_depth` drew and the camera's focal length, and
@@ -1065,7 +1065,7 @@ browser-page import through unchanged (read as premultiplied linear, it would br
 (`schema/kinds.snap`, an `insta` snapshot, as `jstream-sources` does for source kinds),
 so a change to a filter's settings is reviewed like an API diff (ADR-0025, #369).
 `INSTA_UPDATE=always cargo test -p jstream-render --test kinds` rewrites it.
-Depth fog (`filter/depth/fog/tests.rs`, ADR-0137) maps its settings, passes through
+Depth fog (`filter/depth/fog/tests.rs`, ADR-0143) maps its settings, passes through
 with no depth or one of another size, and over a 4x1 depth of known distances is half
 at the middle of a linear range, full past it and at an empty background, capped by
 `max`, exponential as `1 − exp(−density · distance / 1000)`, and over a transparent
@@ -1121,7 +1121,7 @@ the placement mirrors the model, and seen from behind (a double-sided plane turn
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
 front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
-refused with `RenderError::Invalid`. Scene lights (ADR-0137), each through the framing
+refused with `RenderError::Invalid`. Scene lights (ADR-0143), each through the framing
 camera: a point light to the right lights a sphere's right side and leaves its left
 black, and no light at all leaves it black; a red light tints it red; a point light past
 its range lights nothing and inside it is dimmer than one that never fades; a spot
@@ -1316,7 +1316,7 @@ through an off-axis camera, their mips rebuilt each frame as a live source's are
 (`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
 (`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
-ADR-0137), and
+ADR-0143), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
 items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with

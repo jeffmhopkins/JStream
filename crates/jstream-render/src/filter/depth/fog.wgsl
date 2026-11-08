@@ -1,4 +1,4 @@
-// Depth fog (ADR-0137 decision 6). `aux` is the scene's view depth, the input's size:
+// Depth fog (ADR-0143 decision 6). `aux` is the scene's view depth, the input's size:
 // red holds 1 / w = f / D, 0 where nothing was drawn. At distance D the fog amount is
 // (D - start) / (end - start) for linear, 1 - exp(-density (D - start) / 1000) for
 // exponential, clamped to 0..1 and then to `most`, and 0 nearer than `start`; where

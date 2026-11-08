@@ -1,4 +1,4 @@
-//! `depth_fog` (ADR-0137 decision 6): fog that thickens with distance from a scene's
+//! `depth_fog` (ADR-0143 decision 6): fog that thickens with distance from a scene's
 //! camera, read from the scene's view depth. Linear between `start_px` and `end_px`, or
 //! exponential past `start_px` by `density` per 1000 px, never above `max`, and filling
 //! where nothing was drawn when `background` is set. Without a view depth (a 2D scene,

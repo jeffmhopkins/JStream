@@ -26,7 +26,7 @@ pub(crate) struct BlendPipelines {
     /// Multiply's two draws, in order.
     multiply: [wgpu::RenderPipeline; 2],
     backdrop: [wgpu::RenderPipeline; BACKDROP_MODES.len()],
-    /// A scene's view depth (ADR-0137 decision 4): `fs_depth`, keeping the larger value.
+    /// A scene's view depth (ADR-0143 decision 4): `fs_depth`, keeping the larger value.
     depth: wgpu::RenderPipeline,
 }
 
@@ -118,7 +118,7 @@ impl BlendPipelines {
         }
     }
 
-    /// The pipeline that draws a scene's view depth (ADR-0137 decision 4).
+    /// The pipeline that draws a scene's view depth (ADR-0143 decision 4).
     pub(crate) fn depth(&self) -> &wgpu::RenderPipeline {
         &self.depth
     }

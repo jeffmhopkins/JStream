@@ -392,7 +392,7 @@ impl Compositor {
     }
 
     /// Draws `scene`'s view depth into `target`, a [`Self::layer`] of the canvas size,
-    /// replacing what it held (ADR-0137 decision 4): red holds `1 / w`, which is `f / D`
+    /// replacing what it held (ADR-0143 decision 4): red holds `1 / w`, which is `f / D`
     /// for the nearest thing at `D` along its camera's viewing axis, and every channel is
     /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
     /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
@@ -462,7 +462,7 @@ impl Compositor {
     }
 
     /// Adds a model's own depth to a view depth that [`Self::render_view_depth`] drew
-    /// into `target` (ADR-0137 decision 4): `1 / w` per fragment of the model where its
+    /// into `target` (ADR-0143 decision 4): `1 / w` per fragment of the model where its
     /// material's alpha is at least one half, the larger value winning. Only a model seen
     /// through a camera has depth there; without one this draws nothing. It doesn't know
     /// its item's visibility or opacity: the caller skips a hidden item, and one whose

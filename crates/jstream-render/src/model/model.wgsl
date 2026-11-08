@@ -11,7 +11,7 @@
 // and reflections. Back faces are discarded unless the material is double-sided, where
 // they are lit from their own side; `frame.mirrored` swaps which face is the front.
 //
-// With scene lights (ADR-0137 decision 3) the rig is replaced by the scene's point, spot
+// With scene lights (ADR-0143 decision 3) the rig is replaced by the scene's point, spot
 // and directional lights, placed in the same viewing frame on the CPU, and the
 // environment is scaled by the scene's ambient light.
 
@@ -131,7 +131,7 @@ fn light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, strength: f32, diffuse: vec3<
     return (kd + spec) * strength * n_dot_l;
 }
 
-// One scene light's reflected radiance at `seen` (ADR-0137 decision 3): a point or spot
+// One scene light's reflected radiance at `seen` (ADR-0143 decision 3): a point or spot
 // light fades as (1 - (d / range)^2)^2 to nothing at its range, a spot light also over
 // the outer part of its cone, and a directional light arrives along its aim unfaded.
 fn scene_light(source: Light, seen: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<f32>, f0: vec3<f32>, roughness: f32) -> vec3<f32> {
@@ -252,7 +252,7 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
     return vec4<f32>(color * base.a, base.a);
 }
 
-// The model's view depth (ADR-0137 decision 4): red holds 1 / w, the viewer's distance
+// The model's view depth (ADR-0143 decision 4): red holds 1 / w, the viewer's distance
 // over the fragment's along the viewing axis, where the material's alpha is at least one
 // half. The pipeline keeps the larger value, so the nearest thing wins. Only a model seen
 // with perspective (a camera) is drawn here.

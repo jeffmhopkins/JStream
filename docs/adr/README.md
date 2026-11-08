@@ -143,5 +143,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
 | [ADR-0135](0135-a-shader-source-from-add-source.md) | A shader source is written from Add source | accepted | agent |  |
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
-| [ADR-0137](0137-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
+| [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
 <!-- @generated end adr-index -->

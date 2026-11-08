@@ -58,7 +58,7 @@ pub(crate) trait Pass: Send {
         let _ = (slot, image);
     }
 
-    /// Hands a depth-aware filter its scene's view depth (ADR-0137 decision 5), or takes
+    /// Hands a depth-aware filter its scene's view depth (ADR-0143 decision 5), or takes
     /// it away with `None`. Other kinds ignore it.
     fn set_depth(&mut self, depth: Option<super::ViewDepth>) {
         let _ = depth;

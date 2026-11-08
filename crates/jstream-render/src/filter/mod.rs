@@ -184,14 +184,14 @@ impl VideoFilter {
     }
 
     /// Whether it reads a scene's view depth ([`reads_depth`] of its kind), so the engine
-    /// draws one for the scene chain that holds it (ADR-0137 decision 4).
+    /// draws one for the scene chain that holds it (ADR-0143 decision 4).
     pub fn reads_depth(&self) -> bool {
         reads_depth(&self.kind)
     }
 
     /// Hands a depth-aware filter its scene's view depth for the next frame, or `None`
     /// where there is none (a 2D scene, a chain that isn't a scene's): it then passes its
-    /// input through (ADR-0137 decision 5). The image must come from the compositor that
+    /// input through (ADR-0143 decision 5). The image must come from the compositor that
     /// draws the filter. Other kinds ignore it.
     pub fn set_depth(&mut self, depth: Option<ViewDepth>) {
         self.pass.set_depth(depth);

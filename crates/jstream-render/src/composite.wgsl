@@ -170,7 +170,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     return source(in);
 }
 
-// A scene's view depth (ADR-0137 decision 4): red holds 1 / w, which is f / D for a
+// A scene's view depth (ADR-0143 decision 4): red holds 1 / w, which is f / D for a
 // fragment D along the viewing axis, where the item's alpha with its opacity and its
 // sharp edge coverage is at least one half, and nothing elsewhere. The pipeline keeps the
 // larger value, so the nearest item wins in any order. Depth of field doesn't blur it.

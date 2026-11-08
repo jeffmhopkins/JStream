@@ -2346,7 +2346,7 @@ function in this crate so the compositor and the UI share one implementation.
   drags an item to. `CameraView::in_view` and `direction_in_view` take a point or a
   direction of the scene's space into the viewing frame a `Solid` seen through the
   camera uses, relative to the camera in `f64`: where the renderer places scene lights
-  ([ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md)).
+  ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such

@@ -25,7 +25,7 @@
 //!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
 //!   model; and the same with a cube, the cheapest closed shape.
 //! - `depth_fog_1080p_camera`: what a depth-aware scene filter adds to N of those
-//!   cards (ADR-0137): the scene's view depth, then `depth_fog` over its composite.
+//!   cards (ADR-0143): the scene's view depth, then `depth_fog` over its composite.
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (the bytes copied into a
 //!   buffer, then premultiplied in linear light on the GPU), as an image or media source
 //!   does on a new frame: `rewrite` with the GPU's work waited for, `rewrite_call` the
@@ -322,7 +322,7 @@ fn three_d(c: &mut Criterion) {
     }
     group.finish();
 
-    // A scene's view depth and depth fog over its composite (ADR-0137): the cost a
+    // A scene's view depth and depth fog over its composite (ADR-0143): the cost a
     // depth-aware scene filter adds on top of drawing the scene, which is drawn once
     // outside the loop.
     let kind = jstream_render::depth_filter_descriptors()
