@@ -78,7 +78,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   asks for frames under a lock paints before taking it, when `next_change` said a
   frame is due (the engine's `jstream-sources` thread does). A host that skipped a
   source nothing showed may paint it once under its lock, to catch it up before it is
-  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
+  shown again (the engine does, for a painter a plan reaches again). The painter also
+  hands out the frame it painted last (`frame`) and says when the next is due
+  (`next_change`), as its source does, so a host can take new frames from it without
+  the source or its lock (the engine stores them in a frame slot, ADR-0117 §3). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
@@ -235,8 +238,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
-  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
-  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
+  `Source::model` hands the engine the model, which an item draws in the stand-in's
+  place (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -438,7 +442,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
   it. The **Page API** group (ADR-0102, none of it live, all off by default):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;

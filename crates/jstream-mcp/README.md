@@ -181,7 +181,7 @@ title-safe area, alignment and spacing, a `backdrop` source rather than a flat c
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
 recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
 a countdown or clock (`timer`, one size whatever it shows), grouping a multi-part graphic as a nested scene whose item's
-effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
+effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, and a `// @renamed <old> <new>` line with a version bump and `renames` for a renamed setting, #1232, #1295),
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters

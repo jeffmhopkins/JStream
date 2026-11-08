@@ -30,7 +30,7 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
@@ -49,7 +49,7 @@ Contents ([Design](#design) explains the choices):
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
-  its release page. File › Settings… holds "Check for updates at launch", off until the
+  its release page. The Settings dialog's General page holds "Check for updates at launch", off until the
   user turns it on; the desktop app's main window then checks once as the workspace
   opens and shows a dismissable notice only when a newer release exists. A failure is
   quiet there and reported by the menu. A page that isn't the desktop app says the
@@ -121,7 +121,7 @@ Contents ([Design](#design) explains the choices):
   the request, the frame's outcome and the file's name are tested natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's
   place for the page) and `icons.rs` (`Icon`, the prototype's stroke icons, plus
-  the tool bars' own).
+  the tool bars' own and a cube for the 3D model type).
 - **Panels** (`panels/`): the scene list (`scenes.rs`, with its folders: the rows each
   level shows and the edits a drop or the tool bar's arrows send are tested natively),
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
@@ -147,15 +147,20 @@ Contents ([Design](#design) explains the choices):
   shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the number
+  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
+  custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
+  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
+  the line an error names and the WGSL colouring (`highlight`) tested natively), the number
   field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the program output and each output with its FX button, creating, editing and
-  deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, whose drafts, edits and summaries are tested natively;
+  (the pipeline's health in its header, then a compact row for the program output and
+  for each output with its state, Start or Stop, FX button and ⋯ menu; each output's
+  settings dialog, which creates or edits a stream, recording or virtual camera and its
+  stream key and applies nothing until OK or Apply, whose drafts and edits are tested
+  natively; and the delete confirmation); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, in the panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
   form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
   About dialog's list of the installed ones; and the calls and
@@ -173,12 +178,16 @@ Contents ([Design](#design) explains the choices):
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel under the properties in the
-  Inspector, shown only when the server pairs devices (start pairing and show the code, list and
+- **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Devices)
+  listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
+  Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
   revoke devices), and the calls behind it, tested natively against `MockEngine` and a
   stub that answers them as the server does.
-- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section under the
-  pairing panel in the Inspector, with its install and grant dialogs, the calls behind
+- **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
+  Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
+  page's top level), the calls behind
   them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
   and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
   texts, tested natively, the section's re-reads and grants against a fake engine that
@@ -392,7 +401,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   dialog (`panels/add_source.rs`, opened through `AddSourceDialog` context) lists the
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
-  platform's API), plus the kinds of placed sources it didn't report, which can be
+  platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
+  with a cube icon), plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -643,6 +653,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
   button that sends `effect.enable` (`Studio::enable_effect`); its badge goes once
   `kind.list` no longer marks it.
+  A custom shader (#1232) is an effect pack the UI writes itself: Add filter's Custom
+  shader, last under Effect packs for an owner with a video chain, writes the template
+  with `pack.write` as the first `custom-<n>` that `pack.list` doesn't have, adds a
+  filter of its kind `custom-<n>/shader`, and opens the Filters window with the shader
+  editor over it (`FilterDialogs::shader`). If the add fails, it deletes that pack
+  again. A custom shader's filter always opens the Filters window, where its pane has
+  Edit shader…, which reads the pack with `pack.read` and opens only a pack of
+  `effect.toml` and `shader.wgsl`. The shader file is the whole of it: its `// @name`
+  line and `// @param` lines make the manifest, so one file is edited, and an agent that
+  follows the MCP guidance writes a pack the editor opens. The text shows in colour
+  (#1295) without a code-editor dependency: `highlight`, a small WGSL tokenizer (not a
+  parser; the engine reports what doesn't compile), splits it into runs, which a
+  `<pre>` draws under the textarea in the same font, padding and box. The textarea's
+  own text is transparent, with a visible caret and selection, and its scroll moves the
+  copy. A change compiles 400 ms after
+  the last keystroke, with `pack.write`: an annotation's problem is reported with its
+  line before anything is sent, the engine's names its line in `shader.wgsl`, and the
+  engine keeps drawing the last version that loaded. A write that loads drops the
+  kind's cached descriptor and reads it and `kind.list` again (no event reports a
+  changed kind), so the form and the name follow the shader. Closing never drops a
+  change unsaid (`closing`): Done, × or Escape sends a change still waiting and closes
+  once it loads, and text that doesn't compile keeps the editor open with Close anyway.
+  It shows a quarantine (ADR-0087) with Re-enable, since a new version doesn't lift it.
+  The Filters window's Cancel fits each settings patch to the kind as described now
+  (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
+  window sent and the engine refuses a batch with one such key. Cancel doesn't reach
+  the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
+  manifest's version by one and adds the pair to `renames` (`Declared::version`,
+  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
+  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
+  new one at its default; the template says so, and asks that no `@renamed` line be
+  deleted, since each is a version.
+  Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
+  checks it against `pack.list`) and moves only the filter being edited to the new
+  kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
+  carried through the renames and fitted to the new kind's descriptor, since the engine
+  refuses a key the kind doesn't declare); the old pack
+  stays for any other filter of it, and the window opens the editor on the new one.
+  The coloured copy is sized to the textarea's box inside its scrollbars, through
+  CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
@@ -695,7 +745,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Sources (`Sources`), the Inspector (`Inspector`, with `Pairing` and `Plugins` under it), the
+  Sources (`Sources`), the Inspector (`Inspector`), the
   Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
@@ -770,9 +820,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   buttons. A failed call shows in the shell's problem bar. The menus close on Escape
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
-  system browser), then Check for updates and About JStream. Check for updates and
-  File › Settings… are [`updates.rs`](src/updates.rs), and File › Video settings… is
-  [`video_settings.rs`](src/video_settings.rs), both described under
+  system browser), then Check for updates and About JStream. Check for updates is
+  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
+  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
   CI built it with (`option_env!`, so a local build says "local build"), and its
@@ -846,8 +897,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
   over.
 - **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
-  calls `device.list` when it opens and shows only if that is served: a session with no
-  server in front answers `unsupported` and the panel stays hidden. "Pair a device"
+  calls `device.list` when it opens and shows its controls only if that is served: a
+  session with no server in front answers `unsupported`, and the Devices page then says
+  no device can pair with this session. "Pair a device"
   calls `pairing.start` and shows the code, large, with a countdown from its
   `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel

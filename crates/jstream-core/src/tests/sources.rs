@@ -735,9 +735,14 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     )
     .expect("created");
     assert_eq!(colour(&engine), (0, 0xff), "red first");
-    // The thread re-plans when each frame is due; no call touches the engine meanwhile.
-    clock.advance(100);
-    assert!(shows_by_itself(&engine, (1, 0xff)), "green at 100 ms");
+    // The thread re-plans when each frame is due, on the frame grid: green is due at
+    // 100 ms, a tick falls at 132 ms (33 ms frames), and its plan a quarter frame
+    // before (#1138). No call touches the engine meanwhile.
+    clock.advance(124);
+    assert!(
+        shows_by_itself(&engine, (1, 0xff)),
+        "green before the 132 ms tick"
+    );
     // Past both plays (2 x 600 ms), the last frame stays.
     clock.advance(2_000);
     assert!(shows_by_itself(&engine, (2, 128)), "blue at alpha 128");
@@ -780,6 +785,51 @@ fn a_waveform_source_is_painted_by_the_sources_thread() {
         Some([0xff, 0, 0, 0xff]),
         "full scale"
     );
+}
+
+/// A painted source's new frames reach the picture through its frame slot, with no
+/// re-plan (ADR-0117 §3, #1138): the waveform keeps changing while the plans stand.
+#[test]
+fn a_painted_frame_of_the_same_size_needs_no_plan() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(shown(&engine, "wave"), Some([0, 0, 0xff, 0xff]), "silence");
+    let plans = engine.plans();
+    let painted = engine.paints("wave");
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline
+        && (shown(&engine, "wave") != Some([0xff, 0, 0, 0xff])
+            || engine.paints("wave") < painted + 5)
+    {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        shown(&engine, "wave"),
+        Some([0xff, 0, 0, 0xff]),
+        "full scale"
+    );
+    assert!(engine.paints("wave") >= painted + 5, "painted on its own");
+    assert_eq!(engine.plans(), plans, "and never re-planned for it");
 }
 
 /// A scope no mix draws is not painted while the program re-plans for another source,

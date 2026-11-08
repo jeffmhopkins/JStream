@@ -22,14 +22,15 @@ use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
+use crate::panels::custom_shader::{self, ShaderEditor};
 use crate::panels::filter_presets::{preset_patch, presets};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Edit, EffectsSpace, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner, ItemId,
-    KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState,
+    Action, Edit, EffectsSpace, FilterChain, FilterChains, FilterId, FilterInfo, FilterOwner,
+    ItemId, KindCategory, KindDescriptor, KindSummary, MAX_CHAIN_FILTERS, OutputKind, OutputState,
     OverrideField, ParamType, Query, QueryResult, Reference, Rev, SceneId, Settings, SourceId,
     SourceInfo, SourceKind,
 };
@@ -364,6 +365,57 @@ pub fn catalogue(kinds: &[KindSummary], video: bool, audio: bool) -> Vec<FilterT
     types
 }
 
+/// The Add filter entry that writes a new custom shader (#1232): not a kind, so the
+/// dialog makes one first. No kind ID has a `+`.
+pub const NEW_SHADER: &str = "+custom-shader";
+
+/// The catalogue with the Custom shader entry for an owner with a video chain: last in
+/// the Effect packs group, before Other and the audio kinds. An engine that lists no
+/// kinds gets none, so the dialog still says it lists no filters.
+pub fn with_custom(mut types: Vec<FilterType>, video: bool) -> Vec<FilterType> {
+    if !video || types.is_empty() {
+        return types;
+    }
+    let at = types
+        .iter()
+        .position(|t| t.chain == FilterChain::Audio || t.group == "Other")
+        .unwrap_or(types.len());
+    types.insert(
+        at,
+        FilterType {
+            kind: NEW_SHADER.to_owned(),
+            chain: FilterChain::Video,
+            group: "Effect packs",
+            name: "Custom shader".to_owned(),
+            hint: "Write your own WGSL, with live compile. It becomes an effect pack any item can use.",
+        },
+    );
+    types
+}
+
+/// Writes a new custom shader from the template as the first free `custom-<n>` pack
+/// (`pack.list` names the taken ones), reads the kinds again, and returns its pack.
+async fn new_shader(studio: Studio, s: &crate::session::Session) -> Result<String, String> {
+    let packs = match query(s, Query::PackList).await {
+        Ok(QueryResult::PackList { packs }) => packs,
+        Ok(_) => Vec::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    let pack = custom_shader::fresh_pack(&packs);
+    let files = custom_shader::pack_files(&pack, custom_shader::TEMPLATE)
+        .map_err(|error| error.to_string())?;
+    let action = Action::PackWrite {
+        pack: pack.clone(),
+        files,
+    };
+    s.control
+        .call(jstream_control::protocol::Call::Action { action })
+        .await
+        .map_err(|error| error.to_string())?;
+    studio.relist_kinds(s).await;
+    Ok(pack)
+}
+
 /// Whether a type matches the dialog's search: its name, hint or group, in any case.
 pub fn type_matches(t: &FilterType, search: &str) -> bool {
     let search = search.trim().to_lowercase();
@@ -384,8 +436,12 @@ pub enum Opens {
     Dialog,
 }
 
-/// How the settings of a filter of this kind open.
+/// How the settings of a filter of this kind open. A custom shader's open the Filters
+/// window, whatever their number, since its shader editor opens from there.
 pub fn opens(kind: &KindDescriptor) -> Opens {
+    if custom_shader::pack_of(&kind.kind_id).is_some() {
+        return Opens::Dialog;
+    }
     match kind.params.len() {
         0 => Opens::Nothing,
         n if n <= EASY_PARAMS => Opens::InPlace,
@@ -858,6 +914,8 @@ pub struct FilterDialogs {
     /// A filter the Add filter dialog added while the window was open, and the revision
     /// of its batch: the window selects it, keeping what it changed before.
     landed: RwSignal<Option<(FilterId, Rev)>>,
+    /// A custom shader just added: its pane opens the shader editor when it shows.
+    shader: RwSignal<Option<FilterId>>,
 }
 
 /// How long after a row's first click a double-click still opens that row's settings:
@@ -884,6 +942,7 @@ impl FilterDialogs {
             clicked: StoredValue::new(None),
             log: StoredValue::new(None),
             landed: RwSignal::new(None),
+            shader: RwSignal::new(None),
         }
     }
 
@@ -1000,6 +1059,46 @@ fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo
                     .map(|f| (chain, f.clone()))
             })
     })
+}
+
+/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to `kind`: it
+/// goes, and a filter `new_id` of that kind takes its place, on or off as it was, with
+/// its settings carried through `renames` (each old ID's value moves to its new ID,
+/// unless that ID has one) and fitted to `kind` ([`fit_settings`]). The engine refuses
+/// a key the new kind doesn't declare, and doesn't apply an effect's renames itself
+/// yet. Save as pack… sends them for a custom shader (#1295).
+pub fn move_to_kind(
+    owner: &FilterOwner,
+    chain: FilterChain,
+    index: usize,
+    filter: &FilterInfo,
+    new_id: FilterId,
+    kind: &KindDescriptor,
+    renames: &[(String, String)],
+) -> Vec<Edit> {
+    let mut carried = filter.settings.clone();
+    for (old, new) in renames {
+        if !carried.0.contains_key(new)
+            && let Some(value) = carried.0.remove(old)
+        {
+            carried.0.insert(new.clone(), value);
+        }
+    }
+    vec![
+        Edit::FilterRemove {
+            owner: owner.clone(),
+            filter_id: filter.filter_id.clone(),
+        },
+        Edit::FilterAdd {
+            owner: owner.clone(),
+            chain,
+            filter_id: new_id,
+            kind: kind.kind_id.clone(),
+            settings: fit_settings(kind, &carried),
+            enabled: (!filter.enabled).then_some(false),
+            index: u32::try_from(index).ok(),
+        },
+    ]
 }
 
 /// Reads the descriptor of each kind in `kinds` not yet read, once each: the mock
@@ -1925,6 +2024,76 @@ fn is_filter_edit(edit: &Edit) -> bool {
     )
 }
 
+/// `settings` fitted to `kind` as it is described now: a key the kind no longer
+/// declares is dropped, and a value its parameter no longer takes goes back to `null`,
+/// the default. A custom shader's kind can lose or retype a setting while the Filters
+/// window is open (#1232), and the engine refuses the whole batch for one such key.
+pub fn fit_settings(kind: &KindDescriptor, settings: &Settings) -> Settings {
+    let mut out = Settings::new();
+    for (id, value) in settings.iter() {
+        let Some(param) = kind.param(id) else {
+            continue;
+        };
+        let fits = value.is_null() || param.check(value).is_ok();
+        out.insert(
+            id.to_owned(),
+            if fits { value.clone() } else { Value::Null },
+        );
+    }
+    out
+}
+
+/// [`window_restore`]'s edits with each filter's settings fitted to its kind as
+/// described now ([`fit_settings`]): `kind_of` gives the descriptor of a kind, when one
+/// is known; a filter whose kind isn't described keeps its settings as they are. A
+/// settings edit left empty is dropped.
+pub fn fit_restore(
+    edits: Vec<Edit>,
+    kind_of: impl Fn(&str) -> Option<KindDescriptor>,
+    filter_kind: impl Fn(&FilterOwner, &FilterId) -> Option<String>,
+) -> Vec<Edit> {
+    edits
+        .into_iter()
+        .filter_map(|edit| match edit {
+            Edit::FilterSetSettings {
+                owner,
+                filter_id,
+                patch,
+            } => {
+                let kind = filter_kind(&owner, &filter_id).and_then(|k| kind_of(&k));
+                let patch = kind.map_or(patch.clone(), |kind| fit_settings(&kind, &patch));
+                (!patch.is_empty()).then_some(Edit::FilterSetSettings {
+                    owner,
+                    filter_id,
+                    patch,
+                })
+            }
+            Edit::FilterAdd {
+                owner,
+                chain,
+                filter_id,
+                kind,
+                settings,
+                enabled,
+                index,
+            } => {
+                let settings =
+                    kind_of(&kind).map_or(settings.clone(), |d| fit_settings(&d, &settings));
+                Some(Edit::FilterAdd {
+                    owner,
+                    chain,
+                    filter_id,
+                    kind,
+                    settings,
+                    enabled,
+                    index,
+                })
+            }
+            other => Some(other),
+        })
+        .collect()
+}
+
 /// The edits, one batch, that put back what the Filters window did: `opened` holds each
 /// of its scopes' chains as the window opened, `log` the filter edits it sent in order,
 /// and `now` reads a filter as the store shows it now.
@@ -2228,6 +2397,23 @@ fn WindowBody(
                 })
             })
         });
+        // A custom shader's settings may have changed while the window was open.
+        let edits = untrack(|| {
+            fit_restore(
+                edits,
+                |kind| studio.descriptors.with(|d| d.get(kind).cloned()),
+                |owner, filter_id| {
+                    filter_of(
+                        studio,
+                        &Target {
+                            owner: owner.clone(),
+                            filter_id: filter_id.clone(),
+                        },
+                    )
+                    .map(|(_, f)| f.kind)
+                },
+            )
+        });
         if let (false, Some(s)) = (edits.is_empty(), session.get()) {
             studio.apply(&s, edits);
         }
@@ -2405,6 +2591,106 @@ fn FilterPane(target: Target) -> impl IntoView {
             }
         });
     };
+    // A custom shader's editor (#1232): its pack, read with `pack.read` when it opens.
+    let shader_pack = StoredValue::new(custom_shader::pack_of(&kind_id).map(str::to_owned));
+    let shader = RwSignal::new(None::<custom_shader::Opened>);
+    let open_shader = move || {
+        let (Some(pack), Some(s)) = (shader_pack.get_value(), session.get()) else {
+            return;
+        };
+        spawn_local(async move {
+            let read = Query::PackRead {
+                pack: pack.clone(),
+                path: None,
+            };
+            let opened = match query(&s, read).await {
+                Ok(QueryResult::PackRead { files }) => custom_shader::open(&pack, &files),
+                Ok(other) => Err(format!("The engine answered `{}`.", other.name())),
+                Err(error) => Err(error.to_string()),
+            };
+            match opened {
+                Ok(opened) => _ = shader.try_set(Some(opened)),
+                Err(error) => _ = problem.try_set(Some(error)),
+            }
+        });
+    };
+    if dialogs.shader.get_untracked().as_ref() == Some(&target.filter_id) {
+        dialogs.shader.set(None);
+        open_shader();
+    }
+    let shader_button = shader_pack.get_value().map(|_| {
+        view! {
+            <button type="button" class="secondary" on:click=move |_| open_shader()>
+                "Edit shader…"
+            </button>
+        }
+    });
+    // Save as pack… wrote pack `new`: this filter moves to its kind, as a new filter in
+    // its place, which the window then shows with the editor open on it.
+    let save_as = {
+        let target = target.clone();
+        move |new: String, renames: Vec<(String, String)>| {
+            let Some(s) = session.get() else {
+                return;
+            };
+            let found = studio.collection.with_untracked(|c| {
+                let chains = c.as_ref()?.chains(&target.owner)?;
+                let filters = chains.chain(chain);
+                let index = filters
+                    .iter()
+                    .position(|f| f.filter_id == target.filter_id)?;
+                Some((index, filters[index].clone()))
+            });
+            let Some((index, filter)) = found else {
+                return;
+            };
+            let owner = target.owner.clone();
+            spawn_local(async move {
+                let kind = match studio.descriptor(&s, &custom_shader::kind_of(&new)).await {
+                    Ok(kind) => kind,
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                        return;
+                    }
+                };
+                let new_id = FilterId::new(studio.fresh_id(&s, "filter"));
+                let edits = move_to_kind(
+                    &owner,
+                    chain,
+                    index,
+                    &filter,
+                    new_id.clone(),
+                    &kind,
+                    &renames,
+                );
+                dialogs.sent(&edits);
+                match apply(&s, edits, None).await {
+                    Ok(rev) => {
+                        dialogs.shader.set(Some(new_id.clone()));
+                        dialogs.landed.set(Some((new_id, rev)));
+                    }
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                    }
+                }
+            });
+        }
+    };
+    let save_as = StoredValue::new(save_as);
+    let save_as = move |new: String, renames: Vec<(String, String)>| {
+        save_as.with_value(|f| f(new, renames));
+    };
+    let shader_editor = move || {
+        let opened = shader.get()?;
+        let pack = shader_pack.get_value()?;
+        Some(view! {
+            <ShaderEditor pack=pack opened=opened close=move || shader.set(None) save_as=save_as />
+        })
+    };
     let target = StoredValue::new(target);
     let switch = move |_| {
         send(vec![Edit::FilterSetEnabled {
@@ -2556,7 +2842,9 @@ fn FilterPane(target: Target) -> impl IntoView {
             <div class="filter-pane-foot">
                 <button type="button" class="secondary danger" on:click=remove>"Remove"</button>
                 <button type="button" class="secondary" on:click=defaults>"Defaults"</button>
+                {shader_button}
             </div>
+            {shader_editor}
         </div>
     }
     .into_any()
@@ -2596,9 +2884,12 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         })
     });
     let types = Memo::new(move |_| {
-        studio
-            .kinds
-            .with(|k| catalogue(k.as_deref().unwrap_or_default(), video, audio))
+        studio.kinds.with(|k| {
+            with_custom(
+                catalogue(k.as_deref().unwrap_or_default(), video, audio),
+                video,
+            )
+        })
     });
     let search = RwSignal::new(String::new());
     let shown = Memo::new(move |_| {
@@ -2627,6 +2918,9 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
         let (Some(t), Some(s)) = (current.get(), session.get()) else {
             return;
         };
+        if t.kind == NEW_SHADER {
+            return;
+        }
         spawn_local(async move {
             let _ = studio.descriptor(&s, &t.kind).await;
         });
@@ -2721,23 +3015,40 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
             {
                 settings.insert(param, Reference::Scene { scene_id }.to_value());
             }
+            // A new custom shader opens the window and its editor.
+            let custom = t.kind == NEW_SHADER;
             // Not described yet: the dialog, which loads the form itself.
-            let many =
-                descriptor.with_untracked(|d| d.as_ref().is_none_or(|d| opens(d) == Opens::Dialog));
-            let edit = Edit::FilterAdd {
-                owner: owner.get_value(),
-                chain: t.chain,
-                filter_id: filter_id.clone(),
-                kind: t.kind,
-                settings,
-                enabled: None,
-                index: None,
-            };
-            let added = edit.clone();
+            let many = custom
+                || descriptor
+                    .with_untracked(|d| d.as_ref().is_none_or(|d| opens(d) == Opens::Dialog));
             spawn_local(async move {
+                let (kind, pack) = if custom {
+                    match new_shader(studio, &s).await {
+                        Ok(pack) => (custom_shader::kind_of(&pack), Some(pack)),
+                        Err(error) => {
+                            _ = problem.try_set(Some(error));
+                            return;
+                        }
+                    }
+                } else {
+                    (t.kind, None)
+                };
+                let edit = Edit::FilterAdd {
+                    owner: owner.get_value(),
+                    chain: t.chain,
+                    filter_id: filter_id.clone(),
+                    kind,
+                    settings,
+                    enabled: None,
+                    index: None,
+                };
+                let added = edit.clone();
                 match apply(&s, vec![edit], None).await {
                     Ok(rev) => {
                         close();
+                        if custom {
+                            dialogs.shader.set(Some(filter_id.clone()));
+                        }
                         if dialogs.edit.with_untracked(Option::is_some) {
                             // Over the Filters window: it shows the new filter, keeping
                             // what it changed before for Cancel.
@@ -2749,7 +3060,13 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                             dialogs.fresh.set(Some(filter_id));
                         }
                     }
-                    Err(error) => _ = problem.try_set(Some(error.to_string())),
+                    Err(error) => {
+                        // The new shader's pack would be left with no filter.
+                        if let Some(pack) = pack {
+                            studio.act(&s, Action::PackDelete { pack });
+                        }
+                        _ = problem.try_set(Some(error.to_string()));
+                    }
                 }
             });
         })
@@ -2955,6 +3272,68 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
 
 #[cfg(test)]
 mod tests {
+
+    /// Save as pack… moves a filter to the new kind in its place, with its settings
+    /// and off when it was off (#1295).
+    #[test]
+    fn a_filter_moves_to_a_kind_in_its_place() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("cam"),
+        };
+        let mut settings = Settings::new();
+        settings.insert("amount", json!(0.25));
+        settings.insert("tint", json!("#ff0000ff"));
+        settings.insert("gone", json!(3));
+        let filter = FilterInfo {
+            filter_id: FilterId::new("f1"),
+            kind: "custom-1/shader".into(),
+            enabled: false,
+            settings,
+        };
+        // The new kind renamed `amount` and retyped `tint`, and has no `gone`.
+        let mut kind = descriptor(vec![
+            param(
+                "mix_amount",
+                "Amount",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param("tint", "Tint", float(0.0, 1.0, None, None), json!(0.5)),
+        ]);
+        kind.kind_id = "warm/shader".into();
+        let renames = [("amount".to_owned(), "mix_amount".to_owned())];
+        let edits = move_to_kind(
+            &owner,
+            FilterChain::Video,
+            2,
+            &filter,
+            FilterId::new("f9"),
+            &kind,
+            &renames,
+        );
+        let mut fitted = Settings::new();
+        fitted.insert("mix_amount", json!(0.25));
+        fitted.insert("tint", Value::Null);
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f1"),
+                },
+                Edit::FilterAdd {
+                    owner,
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("f9"),
+                    kind: "warm/shader".into(),
+                    settings: fitted,
+                    enabled: Some(false),
+                    index: Some(2),
+                },
+            ]
+        );
+    }
+
     use super::*;
     use jstream_control::protocol::{ParamDescriptor, SceneInfo};
     use serde_json::json;
@@ -3019,6 +3398,47 @@ mod tests {
             max_outset_px: None,
             params,
         }
+    }
+
+    /// Add filter offers a new custom shader to any owner with a video chain, last in
+    /// Effect packs (#1232).
+    #[test]
+    fn a_custom_shader_is_offered_last_in_effect_packs() {
+        use KindCategory::{AudioFilter, VideoFilter};
+        let kinds = vec![
+            kind_summary("gain", "Gain", AudioFilter),
+            kind_summary("sharpen", "Sharpen", VideoFilter),
+            kind_summary("crt/scanlines", "Scanlines", VideoFilter),
+            kind_summary("odd", "Odd one", VideoFilter),
+        ];
+        let all = with_custom(catalogue(&kinds, true, true), true);
+        let shape: Vec<(&str, &str)> = all.iter().map(|t| (t.group, t.name.as_str())).collect();
+        assert_eq!(
+            shape,
+            vec![
+                ("Detail", "Sharpen"),
+                ("Effect packs", "Scanlines"),
+                ("Effect packs", "Custom shader"),
+                ("Other", "Odd one"),
+                ("Levels and dynamics", "Gain"),
+            ]
+        );
+        assert_eq!(all[2].kind, NEW_SHADER);
+        assert!(with_custom(Vec::new(), true).is_empty());
+        let only_video = with_custom(catalogue(&kinds[1..2], true, false), true);
+        assert_eq!(only_video.last().map(|t| t.kind.as_str()), Some(NEW_SHADER));
+        let audio = with_custom(catalogue(&kinds, false, true), false);
+        assert!(audio.iter().all(|t| t.kind != NEW_SHADER));
+        assert!(type_matches(&all[2], "wgsl"));
+    }
+
+    /// A custom shader opens the Filters window, where its editor is, whatever its
+    /// number of settings.
+    #[test]
+    fn a_custom_shader_opens_the_window() {
+        let mut kind = descriptor(vec![]);
+        kind.kind_id = "custom-1/shader".into();
+        assert_eq!(opens(&kind), Opens::Dialog);
     }
 
     #[test]
@@ -4138,6 +4558,96 @@ mod tests {
             },
         ];
         assert!(window_restore(&opened, &log, &[], |_, _| None).is_empty());
+    }
+
+    /// Cancel after the shader editor renamed or retyped a setting the window had sent
+    /// drops the setting the kind no longer has and resets one whose type changed, so
+    /// the engine takes the rest of the batch (#1289 review B1).
+    #[test]
+    fn cancel_fits_settings_to_a_kind_that_changed() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("src_bg"),
+        };
+        let mut kind = descriptor(vec![
+            param(
+                "strength",
+                "Strength",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param(
+                "steps",
+                "Steps",
+                ParamType::Int {
+                    min: Some(0),
+                    max: Some(8),
+                    step: None,
+                    unit: None,
+                },
+                json!(2),
+            ),
+        ]);
+        kind.kind_id = "custom-1/shader".into();
+        let patch: Settings = [
+            ("amount", json!(0.5)),
+            ("strength", json!(0.25)),
+            ("steps", json!(0.75)),
+        ]
+        .into_iter()
+        .collect();
+        let edits = vec![
+            Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("f"),
+                patch,
+            },
+            Edit::FilterSetSettings {
+                owner: owner.clone(),
+                filter_id: FilterId::new("g"),
+                patch: [("amount", json!(1.0))].into_iter().collect(),
+            },
+            Edit::FilterSetEnabled {
+                owner: owner.clone(),
+                filter_id: FilterId::new("f"),
+                enabled: true,
+            },
+        ];
+        let described = kind.clone();
+        let fitted = fit_restore(
+            edits,
+            |k| (k == "custom-1/shader").then(|| described.clone()),
+            |_, _| Some("custom-1/shader".into()),
+        );
+        let want: Settings = [("strength", json!(0.25)), ("steps", Value::Null)]
+            .into_iter()
+            .collect();
+        assert_eq!(
+            fitted,
+            vec![
+                Edit::FilterSetSettings {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f"),
+                    patch: want,
+                },
+                Edit::FilterSetEnabled {
+                    owner,
+                    filter_id: FilterId::new("f"),
+                    enabled: true,
+                },
+            ],
+            "`amount` is gone, `steps` is an int now, and g's patch is left empty"
+        );
+        // A kind that isn't described keeps its settings as sent.
+        let kept = fit_restore(
+            vec![Edit::FilterSetSettings {
+                owner: FilterOwner::Master,
+                filter_id: FilterId::new("h"),
+                patch: [("x", json!(1))].into_iter().collect(),
+            }],
+            |_| None,
+            |_, _| Some("other".into()),
+        );
+        assert_eq!(kept.len(), 1);
     }
 
     /// A filter added just before the window opened joins what it opened with, where the

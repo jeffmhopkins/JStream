@@ -1,0 +1,76 @@
+# Limits for `cargo xtask perf --check` (xtask/perf/README.md#thresholds).
+#
+# These are software-rendering bars: lavapipe on a 4-CPU GitHub-hosted runner (the
+# `perf-linux` job in bench.yml), recording with OpenH264, where a 1080p blur, glow or
+# shadow costs tens to hundreds of milliseconds (#1070). They catch a scene that stops
+# drawing, a several-fold regression and a leak. They are not the hardware bar:
+# `jstream bench` (#1220) holds that.
+#
+# Hosted runners vary: the same scene's mean frame time has moved by up to 3x between
+# runs (scene_chain 37 ms, then 106 ms). So the share of frames over the 33 ms budget,
+# which flips for any scene drawing near it, judges no scene; the frame rate and the
+# mean frame time do, with room for that spread.
+
+# Every scene's row, unless its own table below says otherwise.
+[default]
+min_fps = 10
+max_frame_ms = 100
+max_over_budget_pct = 100
+
+# The base scene (one colour) draws in about 9 ms: a tighter bar, so a regression in
+# the frame's fixed cost shows here first.
+[scene.baseline]
+max_frame_ms = 40
+
+[scene.baseline_after]
+max_frame_ms = 40
+
+# Growth allowed across a churn scene's cycles (from the first to the last), and, for
+# threads and handles, across the whole run (the base scene first and last). RSS isn't
+# judged run-wide: the allocator keeps what a heavy scene used.
+[leak]
+max_rss_growth_mb = 64
+max_thread_growth = 4
+max_handle_growth = 16
+
+# Scenes slow on software rendering: they must still draw.
+[scene.models_12]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_blur]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_chroma_key]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_drop_shadow]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_glow]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_outline]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_scroll]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.vf_sharpen]
+min_fps = 3
+max_frame_ms = 400
+
+[scene.effects_many]
+min_fps = 2
+max_frame_ms = 600
+
+# A chain of nested scenes: 37-106 ms a frame on hosted runners.
+[scene.scene_chain]
+min_fps = 5
+max_frame_ms = 250

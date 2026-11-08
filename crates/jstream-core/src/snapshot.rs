@@ -27,19 +27,20 @@ use jstream_graph::{
     Filter, Graph, Item as GraphItem, Output as GraphOutput, Placement as GraphPlacement,
     Scene as GraphScene, Source, State,
 };
+use jstream_media::model::Lighting;
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
     BlendMode, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain, Glide,
     ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult, Rev,
-    SceneCamera, SceneId, SceneRole, SourceId, SourceKind, VideoMixId,
+    SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, ShownModel};
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
@@ -107,6 +108,9 @@ pub(crate) struct Frame {
     /// counted per engine. Two frames with the same version are the same bytes, so a
     /// shot compares and a cache re-uploads by it.
     version: u64,
+    /// The 3D model its source shows (ADR-0107), whose layer an item draws in place of
+    /// this frame, the model's transparent stand-in.
+    model: Option<ShownModel>,
 }
 
 /// A frame's tightly packed bytes, shared with whoever made them.
@@ -123,6 +127,9 @@ enum Pixels {
         frame: GpuFrame,
         context: ContextKey,
     },
+    /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
+    /// by that frame's own version, so a new frame of the same size needs no plan.
+    Slot(Arc<crate::slot::FrameSlot>),
 }
 
 impl PartialEq for Frame {
@@ -131,7 +138,14 @@ impl PartialEq for Frame {
             && self.width == other.width
             && self.height == other.height
             && self.extent == other.extent
+            && model_key(self.model.as_ref()) == model_key(other.model.as_ref())
     }
+}
+
+/// What tells two shown models apart: a new version is a new model to upload, and the
+/// lighting is drawn with it. Cheaper than comparing the models.
+fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting)> {
+    model.map(|shown| (shown.model.version(), shown.lighting))
 }
 
 impl Frame {
@@ -156,6 +170,7 @@ impl Frame {
             extent: [width, height],
             pixels: Pixels::Copied(Arc::from(rgba)),
             version,
+            model: None,
         })
     }
 
@@ -186,7 +201,22 @@ impl Frame {
             extent: [width, height],
             pixels,
             version,
+            model: None,
         })
+    }
+
+    /// A live source's frame slot, at the size of the frame it holds now: each draw
+    /// shows the slot's latest frame ([`crate::slot`]).
+    pub(crate) fn from_slot(slot: Arc<crate::slot::FrameSlot>, version: u64) -> Self {
+        let size = slot.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Slot(slot),
+            version,
+            model: None,
+        }
     }
 
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
@@ -213,7 +243,14 @@ impl Frame {
             extent: [size.width(), size.height()],
             pixels: Pixels::Gpu { frame, context },
             version,
+            model: None,
         }
+    }
+
+    /// The same frame as the stand-in of `model`, the 3D model its source shows
+    /// (ADR-0107).
+    pub(crate) fn with_model(self, model: Option<ShownModel>) -> Self {
+        Self { model, ..self }
     }
 
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
@@ -231,7 +268,8 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            Pixels::Gpu { .. } => &[],
+            // Read through the slot at a draw ([`compose`]); none to borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) => &[],
         }
     }
 
@@ -244,13 +282,17 @@ impl Frame {
     /// Every pixel, tightly packed, for tests that compare what a source shows.
     #[cfg(test)]
     pub(crate) fn pixels(&self) -> Vec<u8> {
-        self.rgba().to_vec()
+        match &self.pixels {
+            // What a draw would upload now.
+            Pixels::Slot(slot) => slot.latest().rgba().to_vec(),
+            _ => self.rgba().to_vec(),
+        }
     }
 
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
-        self.rgba().get(..4)?.try_into().ok()
+        self.pixels().get(..4)?.try_into().ok()
     }
 }
 
@@ -342,6 +384,10 @@ pub(crate) struct Boxed {
     /// Whether the effects run over the canvas after the item is placed (ADR-0106): the
     /// layer is then the canvas, `size` is the canvas's and `outset` is 0.
     canvas: bool,
+    /// Whether the item shows a 3D model (ADR-0107 decision 6): its layer is the
+    /// canvas, which the model is drawn into through the scene's camera, and it is
+    /// placed flat as [`Placement::Layer`], sorting by the model's pose.
+    model: bool,
 }
 
 impl Boxed {
@@ -365,6 +411,7 @@ impl Boxed {
             scale,
             input,
             canvas: false,
+            model: false,
         })
     }
 
@@ -385,6 +432,7 @@ impl Boxed {
             scale,
             input,
             canvas: true,
+            model: false,
         })
     }
 
@@ -517,6 +565,9 @@ struct ItemBox {
     /// moves the box where it is placed, except over the canvas (ADR-0106), where they
     /// move the item inside its layer ([`Boxed::moved_inside`]).
     motion: motion::Motion,
+    /// For a model's layer (ADR-0107), the camera of the scene it is in, which the
+    /// model is drawn through, as a pass resolves its own; `None` in a 2D scene.
+    camera: Option<PassCamera>,
 }
 
 /// The program mix and every video mix, copied out of the collection so they can be
@@ -602,7 +653,85 @@ struct Transitioning {
     /// What moves the cameras of the scene it leaves and the one it shows (ADR-0113 §3):
     /// a Move into or out of a follow camera moves with it.
     moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
+    /// The item chains whose settings a Move blends between two looks (ADR-0127).
+    blends: Vec<EffectBlend>,
     end_ms: f32,
+}
+
+/// One item's effects as a Move blends their settings (ADR-0127): from the leaving
+/// side's to the arriving chain's, with the item's own progress.
+#[derive(Debug, PartialEq)]
+struct EffectBlend {
+    /// The arriving item's chain, which draws the pair.
+    owner: ChainOwner,
+    /// The settings it blends from, one per filter of the chain.
+    from: Arc<[Settings]>,
+    /// The settings it blends to: the chain's own, one per filter.
+    to: Vec<Settings>,
+    /// Each filter's `int` parameters, which stay whole.
+    whole: Vec<Vec<String>>,
+    /// The item's timing, whose eased progress the blend follows.
+    timing: Timing,
+}
+
+impl Transitioning {
+    /// Each blended chain's settings `at`, one per filter (ADR-0127).
+    fn blended(&self, at: MediaTime) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blended_ms(transition::elapsed_ms(self.start, at))
+    }
+
+    /// [`Self::blended`], `elapsed_ms` after its start.
+    fn blended_ms(&self, elapsed_ms: f32) -> Vec<(&ChainOwner, Vec<Settings>)> {
+        self.blends
+            .iter()
+            .map(|blend| {
+                let k = blend.timing.progress(elapsed_ms);
+                let settings = blend
+                    .from
+                    .iter()
+                    .zip(&blend.to)
+                    .zip(&blend.whole)
+                    .map(|((from, to), whole)| {
+                        jstream_render::transition::blend_settings(from, to, k, whole)
+                    })
+                    .collect();
+                (&blend.owner, settings)
+            })
+            .collect()
+    }
+}
+
+/// The blends of `tracks` and of the children moving inside each group among them
+/// (ADR-0127), for the chains `chains` holds.
+fn effect_blends(
+    tracks: &[(Visual, Track)],
+    chains: &BTreeMap<ChainOwner, Chain>,
+    blends: &mut Vec<EffectBlend>,
+) {
+    for (visual, track) in tracks {
+        if let Some(inside) = &visual.inside {
+            effect_blends(&inside.planned.tracks, chains, blends);
+        }
+        let (Some(from), SourceRef::Boxed(scene, item), Track::Pair { timing, .. }) =
+            (&visual.blend_from, &visual.image, track)
+        else {
+            continue;
+        };
+        let owner = ChainOwner::Item(scene.clone(), item.clone());
+        let Some(chain) = chains.get(&owner) else {
+            continue;
+        };
+        if chain.filters.len() != from.len() {
+            continue;
+        }
+        blends.push(EffectBlend {
+            to: chain.filters.iter().map(|f| f.settings.clone()).collect(),
+            whole: chain.whole_params(),
+            owner,
+            from: Arc::clone(from),
+            timing: *timing,
+        });
+    }
 }
 
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
@@ -768,12 +897,52 @@ impl Shot {
         self.transition.is_some()
     }
 
+    /// What the frame slots this shot draws hold now ([`crate::slot`]): it changes when
+    /// any of them takes a new frame, so a stream that skips an unchanged picture draws
+    /// one that changed only there. Zero with no slot.
+    pub(crate) fn slot_stamp(&self) -> u64 {
+        self.frames
+            .values()
+            .filter_map(|frame| match &frame.pixels {
+                Pixels::Slot(slot) => Some(slot.latest().version()),
+                _ => None,
+            })
+            .fold(0, u64::wrapping_add)
+    }
+
+    /// What each of its frame slots holds now (ADR-0117 §3): a frame sheet draws its
+    /// pictures later, and each must show the frames it was taken with.
+    pub(crate) fn pin(&self) -> Pinned {
+        Pinned(
+            self.frames
+                .iter()
+                .filter_map(|(source, frame)| match &frame.pixels {
+                    Pixels::Slot(slot) => Some((source.clone(), slot.latest())),
+                    _ => None,
+                })
+                .collect(),
+        )
+    }
+
     /// Whether what this shot draws may change with time alone: a transition runs, a
     /// source has a video chain, whose filters may move or hold frames (scroll, video
     /// delay), or an item it draws has motion (ADR-0099). Every chain counts, which
     /// redraws a still filtered picture too.
     pub(crate) fn changes_with_time(&self) -> bool {
         self.transitioning() || !self.chains.is_empty() || !self.stages.is_empty() || self.moves
+    }
+
+    /// Whether `image` is the layer of an item that shows a 3D model (ADR-0107): drawn
+    /// in the canvas's pixels, so placed flat as [`Placement::Layer`].
+    fn is_model_box(&self, image: &GpuKey) -> bool {
+        let owner = match image {
+            GpuKey::Filtered(owner @ ChainOwner::Item(..)) => owner.clone(),
+            GpuKey::ItemBox(scene, item) => ChainOwner::Item(scene.clone(), item.clone()),
+            _ => return false,
+        };
+        self.boxes
+            .get(&owner)
+            .is_some_and(|boxed| boxed.boxed.model)
     }
 
     /// Whether `image` is the layer of an item whose effects run over the canvas
@@ -998,6 +1167,23 @@ impl Shot {
                 .map(|(_, track, seen, _)| t.cameras.camera(track, *seen, elapsed_ms))
                 .collect()
         })
+    }
+
+    /// The settings each chain a running Move blends draws with `elapsed_ms` after its
+    /// start (ADR-0127), or `None` without a transition.
+    #[cfg(test)]
+    pub(crate) fn blended_effects(
+        &self,
+        elapsed_ms: f32,
+    ) -> Option<Vec<(ChainOwner, Vec<Settings>)>> {
+        let transition = self.transition.as_ref()?;
+        Some(
+            transition
+                .blended_ms(elapsed_ms)
+                .into_iter()
+                .map(|(owner, settings)| (owner.clone(), settings))
+                .collect(),
+        )
     }
 
     /// The depth run each of the running transition's tracks sorts in, in drawing order,
@@ -1372,6 +1558,8 @@ fn plan_inner(
             finished = false;
             end_ms = Some(planned.end_ms);
             planner.wake = earliest(planner.wake, end);
+            let mut blends = Vec::new();
+            effect_blends(&planned.tracks, &shot.chains, &mut blends);
             let tracks = planned
                 .tracks
                 .into_iter()
@@ -1401,6 +1589,7 @@ fn plan_inner(
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: planner.track_cameras(running),
                 moves,
+                blends,
                 end_ms: planned.end_ms,
             });
             shot.passes = schedule_tracks(&shot);
@@ -1641,7 +1830,13 @@ fn key(image: &SourceRef, shot: &Shot) -> GpuKey {
             GpuKey::Filtered(ChainOwner::Placed(id.clone(), scene.clone()))
         }
         SourceRef::Boxed(scene, item) => {
-            GpuKey::Filtered(ChainOwner::Item(scene.clone(), item.clone()))
+            let owner = ChainOwner::Item(scene.clone(), item.clone());
+            // A model's layer with no effects is shown as drawn (ADR-0107).
+            if shot.chains.contains_key(&owner) {
+                GpuKey::Filtered(owner)
+            } else {
+                GpuKey::ItemBox(scene.clone(), item.clone())
+            }
         }
     }
 }
@@ -2134,6 +2329,7 @@ impl<'a> Planner<'a, '_> {
                 ..ItemTransition::default()
             },
             effects: Vec::new(),
+            blend_from: None,
             inside: None,
             seen: Seen::AsPlanned,
             motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
@@ -2251,7 +2447,13 @@ impl<'a> Planner<'a, '_> {
             item.effects(),
             GpuKey::ItemBox(scene.clone(), item.id().clone()),
             self.assets,
-        )?;
+        );
+        // A model is drawn into a layer of its own, effects or not (ADR-0107).
+        let model = matches!(source, SourceRef::Frame(id)
+            if out.frames.get(id).is_some_and(|frame| frame.model.is_some()));
+        if chain.is_none() && !model {
+            return None;
+        }
         let canvas = self.state.canvas();
         let input = match source {
             SourceRef::Frame(id) => out.frames.get(id).map(|frame| frame.extent),
@@ -2276,11 +2478,25 @@ impl<'a> Planner<'a, '_> {
             }
             _ => return None,
         };
-        let boxed = match item.effects_space() {
-            jstream_protocol::EffectsSpace::Canvas => Boxed::over_canvas(canvas, input)?,
-            _ => Boxed::new(&geometry, chain.outset(), input)?,
+        let boxed = match (&chain, item.effects_space()) {
+            _ if model => Boxed {
+                model: true,
+                ..Boxed::over_canvas(canvas, input)?
+            },
+            (_, jstream_protocol::EffectsSpace::Canvas) => Boxed::over_canvas(canvas, input)?,
+            (Some(chain), _) => Boxed::new(&geometry, chain.outset(), input)?,
+            (None, _) => return None,
         };
-        chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        let camera = match model {
+            true => self.camera(scene).map(|mut camera| {
+                camera.moves = self.camera_moves(scene, out);
+                camera
+            }),
+            false => None,
+        };
+        if let Some(chain) = chain.as_mut() {
+            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        }
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -2293,11 +2509,14 @@ impl<'a> Planner<'a, '_> {
                 crop: crop(item.crop()),
                 boxed,
                 motion: motion::of(item),
+                camera,
             },
         );
         out.audio
             .record(item.id(), item.motion(), self.assets.motion_heard());
-        self.add_chain(owner, chain, out);
+        if let Some(chain) = chain {
+            self.add_chain(owner, chain, out);
+        }
         Some(boxed)
     }
 
@@ -2428,6 +2647,7 @@ impl<'a> Planner<'a, '_> {
                 size,
                 settings,
                 effects,
+                blend_from: None,
                 inside: None,
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
@@ -2631,6 +2851,10 @@ enum ChainStep {
     Run(ChainOwner),
 }
 
+/// What a shot's frame slots held at one moment, by source ([`Shot::pin`]).
+#[derive(Debug, Default)]
+pub(crate) struct Pinned(BTreeMap<SourceId, Arc<crate::slot::Latest>>);
+
 /// What [`compose`] draws: which mix, and whether as an output gets it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct View<'a> {
@@ -2643,6 +2867,9 @@ pub(crate) struct View<'a> {
     /// The output whose own video chain the frame runs through, for a frame drawn for
     /// that output alone.
     pub(crate) owner: Option<&'a OutputId>,
+    /// What the shot's frame slots held when a frame sheet's picture was taken, drawn in
+    /// place of what they hold now ([`Shot::pin`]). `None` draws what they hold now.
+    pub(crate) pinned: Option<&'a Pinned>,
 }
 
 impl<'a> View<'a> {
@@ -2652,6 +2879,7 @@ impl<'a> View<'a> {
             mix,
             stage: true,
             owner,
+            pinned: None,
         }
     }
 
@@ -2980,6 +3208,13 @@ impl Passes for Vec<Pass> {
 /// read its owner's output from the frame before.
 fn schedule_chains(shot: &Shot) -> Vec<ChainStep> {
     let mut order = ChainOrder::default();
+    // A model's layer without effects reads nothing a chain draws, so it is drawn
+    // first, before any pass that shows it (ADR-0107).
+    for owner in shot.boxes.keys() {
+        if !shot.chains.contains_key(owner) {
+            order.steps.push(ChainStep::Box(owner.clone()));
+        }
+    }
     let mut done = BTreeSet::new();
     for owner in shot.chains.keys() {
         order.chain(shot, owner, &mut done);
@@ -3083,6 +3318,25 @@ impl Passes for ChainOrder {
     }
 }
 
+/// What an item with a layer of its own shows (ADR-0065 §5): its effects' output, once
+/// they are scheduled, or for a model without effects (ADR-0107) the layer as drawn.
+fn boxed_key(
+    shot: &Shot,
+    owner: ChainOwner,
+    done: &mut BTreeSet<GpuKey>,
+    passes: &mut impl Passes,
+) -> GpuKey {
+    if shot.chains.contains_key(&owner) {
+        passes.filtered(shot, &owner, done);
+        GpuKey::Filtered(owner)
+    } else {
+        match owner {
+            ChainOwner::Item(scene, item) => GpuKey::ItemBox(scene, item),
+            other => GpuKey::Filtered(other),
+        }
+    }
+}
+
 /// Schedules scene `id` at `depth` into its [`GpuKey::Layer`], after what it reads.
 fn visit(
     shot: &Shot,
@@ -3114,17 +3368,20 @@ fn visit_into(
     for placed in shot.scenes.get(id).map(Vec::as_slice).unwrap_or(&[]) {
         let image = match &placed.source {
             // The item's effects' output, after what it shows (ADR-0065 §5).
-            _ if placed.effects.is_some() => {
-                let owner = ChainOwner::Item(id.clone(), placed.item.clone());
-                passes.filtered(shot, &owner, done);
-                GpuKey::Filtered(owner)
-            }
+            // A model's layer without effects is shown as drawn (ADR-0107).
+            _ if placed.effects.is_some() => boxed_key(
+                shot,
+                ChainOwner::Item(id.clone(), placed.item.clone()),
+                done,
+                passes,
+            ),
             // A moving child with effects shows their output, placed by its track.
-            SourceRef::Boxed(scene, item) if placed.moving.is_some() => {
-                let owner = ChainOwner::Item(scene.clone(), item.clone());
-                passes.filtered(shot, &owner, done);
-                GpuKey::Filtered(owner)
-            }
+            SourceRef::Boxed(scene, item) if placed.moving.is_some() => boxed_key(
+                shot,
+                ChainOwner::Item(scene.clone(), item.clone()),
+                done,
+                passes,
+            ),
             SourceRef::Boxed(..) => continue,
             SourceRef::Frame(source) => GpuKey::Frame(source.clone()),
             SourceRef::Capture(spec) => GpuKey::Capture(spec.clone()),
@@ -3426,10 +3683,16 @@ impl LiveParams {
     /// value, a removal included, decides whether a keyframe scene is 3D, and the
     /// keyframe's own live value replaces its override.
     fn camera(&self, pass: &Pass) -> Option<SceneCamera> {
+        self.camera_of(&pass.scene, pass.camera.as_ref())
+    }
+
+    /// The camera scene `scene`, planned with `camera`, draws through with its live
+    /// camera applied, before its camera motion.
+    fn camera_of(&self, scene: &SceneId, camera: Option<&PassCamera>) -> Option<SceneCamera> {
         let live = |scene: &SceneId| self.cameras.get(scene).copied();
-        match &pass.camera {
-            Some(camera) => camera.resolve(&pass.scene, live),
-            None => live(&pass.scene).flatten(),
+        match camera {
+            Some(camera) => camera.resolve(scene, live),
+            None => live(scene).flatten(),
         }
     }
 
@@ -3788,7 +4051,7 @@ fn draw(
     compositor: &mut Compositor,
     caches: (&mut ResourceCache<GpuKey>, &mut Chains),
 ) -> Result<QueryResult, ProtocolError> {
-    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches)?;
+    let (full_w, full_h, rgba) = render((shot, None), live, at, compositor, caches)?;
     let (width, height) = fit(full_w, full_h);
     let rgba = scale_down(full_w, full_h, &rgba, width, height);
     let png =
@@ -3812,7 +4075,7 @@ fn draw_sheet(
     let mut tiles = Vec::with_capacity(sheet.samples.len());
     for sample in &sheet.samples {
         let (width, height, rgba) = render(
-            sample.snapshot.shot(),
+            (sample.snapshot.shot(), Some(&sample.pinned)),
             &sample.live,
             sample.at,
             compositor,
@@ -3840,7 +4103,7 @@ fn draw_sheet(
 /// height and tightly packed RGBA8. The images and filters `cache` no longer needs are
 /// dropped here, on the snapshot thread.
 fn render(
-    shot: &Shot,
+    (shot, pinned): (&Shot, Option<&Pinned>),
     live: &LiveParams,
     at: MediaTime,
     compositor: &mut Compositor,
@@ -3851,7 +4114,10 @@ fn render(
         compositor,
         (&mut *cache, &mut *chains),
         (shot, at),
-        View::default(),
+        View {
+            pinned,
+            ..View::default()
+        },
         live,
         &NoCaptures,
         DrawAt::read(shot.canvas().map_err(from_render)?),
@@ -3898,7 +4164,10 @@ impl Shot {
     /// read from the chain phase's steps ([`schedule_chains`]), so it counts what each
     /// frame runs once, before any mix draws. A scene's chain is its canvas-sized
     /// composite and one layer and pass per filter; an item's effects are its box's
-    /// layer and pass and one per effect, at the sizes [`Chains`] makes them. A source's
+    /// layer and pass and one per effect, at the sizes [`Chains`] makes them, plus one
+    /// layer and pass for the copy into the grown layer where the chain is padded
+    /// (ADR-0125, [`Chain::pad_layer`]). A filter's own scratch layers (a blur's) are
+    /// not counted. A source's
     /// chain (a `scene` source's included), a scene a `scene_mask` or a `scene` source's
     /// chain reads, and the reference layer a nested scene
     /// without a chain is drawn into for an item's effects (in place of the layer it
@@ -3947,14 +4216,19 @@ impl Shot {
                 | ChainOwner::Output(_) => continue,
             };
             let sizes = chain.layer_sizes(input.0, input.1);
-            // The composite or the box, then one per filter.
+            // An item's chain padded where an effect first draws past the box copies
+            // that effect's input into a grown layer first (ADR-0125, #1285).
+            let pad = chain.pad_layer(input.0, input.1);
+            // The composite or the box, then one per filter, and the pad copy.
             let count = u32::try_from(sizes.len())
                 .unwrap_or(u32::MAX)
-                .saturating_add(1);
+                .saturating_add(1)
+                .saturating_add(u32::from(pad.is_some()));
             *layers = layers.saturating_add(count);
             *passes = passes.saturating_add(count);
             let bytes = sizes
                 .into_iter()
+                .chain(pad)
                 .map(layer_bytes)
                 .fold(layer_bytes(input), u64::saturating_add);
             cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
@@ -4193,6 +4467,30 @@ pub(crate) fn compose_metered(
             Pixels::Gpu { frame, context } => {
                 if compositor.context() == Some(context) {
                     cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            Pixels::Slot(slot) => {
+                // Read without a lock, and let go of here without freeing the frame:
+                // the slot's writers free what they replace (R-RT-003).
+                let latest = view
+                    .pinned
+                    .and_then(|pinned| pinned.0.get(source))
+                    .map_or_else(|| slot.latest(), Arc::clone);
+                let size = latest.frame().info().size;
+                // Only a frame of the planned size is placed as planned; one of another
+                // size waits for the plan its producer asked for.
+                if [size.width(), size.height()] == [frame.width, frame.height] {
+                    cache.upload(
+                        compositor,
+                        key,
+                        latest.version(),
+                        size.width(),
+                        size.height(),
+                        latest.rgba(),
+                    )?;
+                    if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                        cache.set_extent(key, extent);
+                    }
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
@@ -4522,7 +4820,14 @@ fn run_chains(
     (live, captures): (&LiveParams, &dyn Captures),
     at: MediaTime,
 ) -> Result<(), RenderError> {
-    if !chains.begin(compositor, cache, &shot.chains, &shot.stages) {
+    // A Move blending an item's effects gives its chain this frame's settings (ADR-0127).
+    let blended = shot
+        .transition
+        .as_ref()
+        .filter(|transition| !transition.blends.is_empty())
+        .map(|transition| transition.blended(at))
+        .unwrap_or_default();
+    if !chains.begin(compositor, cache, &shot.chains, &shot.stages, &blended) {
         return Ok(());
     }
     let canvas = shot.canvas()?;
@@ -4544,7 +4849,7 @@ fn run_chains(
                         (shot, at),
                         owner,
                         boxed,
-                        live,
+                        (live, captures),
                     ) {
                         Ok(()) => chains.drew_box(owner),
                         Err(error) => chains.fail_box(owner, &error),
@@ -4600,7 +4905,7 @@ fn draw_box(
     (shot, at): (&Shot, MediaTime),
     owner: &ChainOwner,
     boxed: &ItemBox,
-    live: &LiveParams,
+    (live, captures): (&LiveParams, &dyn Captures),
 ) -> Result<(), RenderError> {
     let ChainOwner::Item(scene_id, item_id) = owner else {
         return Ok(());
@@ -4608,6 +4913,16 @@ fn draw_box(
     let key = GpuKey::ItemBox(scene_id.clone(), item_id.clone());
     let [width, height] = boxed.boxed.layer;
     cache.layer(compositor, &key, width, height)?;
+    if boxed.boxed.model {
+        return draw_model(
+            compositor,
+            (cache, chains),
+            (shot, at),
+            (owner, &key),
+            boxed,
+            (live, captures),
+        );
+    }
     let input = box_input(shot, &boxed.source).filter(|input| !chains.failed(input));
     let (placement, crop) = live.apply_to(
         &boxed.item,
@@ -4645,6 +4960,71 @@ fn draw_box(
         detail: format!("an effects layer of {width}x{height}"),
     })?;
     compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer)
+}
+
+/// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
+/// decision 6): posed by its geometry with its live values and motion applied, seen
+/// through its scene's camera as it moves this frame, and lit as its source says. The
+/// model is uploaded once per version and kept ([`Chains::model`]). One that isn't
+/// there this frame, or can't be uploaded, fails its item, which then draws nothing.
+///
+/// # Errors
+/// What the compositor reports for drawing into the layer.
+fn draw_model(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (shot, at): (&Shot, MediaTime),
+    (owner, key): (&ChainOwner, &GpuKey),
+    boxed: &ItemBox,
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<(), RenderError> {
+    let ChainOwner::Item(scene_id, _) = owner else {
+        return Ok(());
+    };
+    let shown = match &boxed.source {
+        SourceRef::Frame(id) => shot
+            .frames
+            .get(id)
+            .and_then(|frame| frame.model.as_ref())
+            .map(|shown| (id, shown)),
+        _ => None,
+    };
+    let (placement, crop) = live.apply_to(
+        &boxed.item,
+        boxed.through.as_ref(),
+        boxed.placement,
+        boxed.crop,
+    );
+    let by = shot.motion_at(&boxed.item, &boxed.motion, at);
+    let (placement, _) = boxed.boxed.moved_inside(&by, placement, crop);
+    let (Some((source, shown)), Placement::Geometry(geometry)) = (shown, placement) else {
+        chains.fail(owner);
+        return Ok(());
+    };
+    let camera = moved_camera(
+        live.camera_of(scene_id, boxed.camera.as_ref()),
+        boxed.camera.as_ref(),
+        (shot, at, shot.shown_at(&boxed.item)),
+        (live, captures),
+        chains,
+    );
+    if let Err(error) = chains.upload_model(compositor, source, &shown.model) {
+        chains.fail_box(owner, &error);
+        return Ok(());
+    }
+    let (Some(model), Some(layer)) = (chains.model(source), cache.get(key)) else {
+        chains.fail(owner);
+        return Ok(());
+    };
+    compositor.draw_model(
+        &jstream_render::ModelDraw {
+            model,
+            geometry,
+            camera,
+            lighting: shown.lighting,
+        },
+        layer,
+    )
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -4732,23 +5112,13 @@ fn fill_items<'a>(
     (live, captures): (&LiveParams, &dyn Captures),
 ) {
     let size = [canvas.width() as f32, canvas.height() as f32];
-    let camera = live.camera(pass).map(|base| {
-        match pass
-            .camera
-            .as_ref()
-            .and_then(|camera| camera.moves.as_deref())
-        {
-            Some(moves) => moves.apply(
-                base,
-                (at, shot.pass_shown(pass)),
-                shot.canvas,
-                captures,
-                &mut chains.cameras(),
-                live.zooms(&moves.family),
-            ),
-            None => base,
-        }
-    });
+    let camera = moved_camera(
+        live.camera(pass),
+        pass.camera.as_ref(),
+        (shot, at, shot.pass_shown(pass)),
+        (live, captures),
+        chains,
+    );
     items.clear();
     items.extend(pass.layers.iter().filter_map(|layer| {
         if chains.failed(&layer.image) {
@@ -4766,7 +5136,7 @@ fn fill_items<'a>(
             );
             return Some(Item {
                 image: cache.get(&layer.image)?,
-                placement: Placement::Geometry(sampled.geometry),
+                placement: track_placement(shot, &layer.image, sampled.geometry),
                 crop: sampled.crop,
                 opacity: sampled.opacity,
                 blend: sampled.blend,
@@ -4781,6 +5151,11 @@ fn fill_items<'a>(
         let by = shot.motion_at(item, modifiers, at);
         let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
         let (placement, crop) = match &layer.boxed {
+            // A model's layer is in the canvas's pixels; it sorts by the model's pose.
+            Some(boxed) if boxed.model => match placement {
+                Placement::Geometry(geometry) => (Placement::Layer(geometry), Crop::NONE),
+                _ => return None,
+            },
             Some(boxed) => {
                 let geometry = boxed.geometry_of(placement, crop)?;
                 (Placement::Geometry(boxed.around(&geometry)?), Crop::NONE)
@@ -4798,6 +5173,39 @@ fn fill_items<'a>(
             depth_run: 0,
         })
     }));
+}
+
+/// `base`, a pass's camera with its live camera applied, moved by its family's camera
+/// motion and follow camera (ADR-0113) at `at`, for a pass first shown at `shown`.
+fn moved_camera(
+    base: Option<SceneCamera>,
+    planned: Option<&PassCamera>,
+    (shot, at, shown): (&Shot, MediaTime, Option<MediaTime>),
+    (live, captures): (&LiveParams, &dyn Captures),
+    chains: &Chains,
+) -> Option<SceneCamera> {
+    let base = base?;
+    Some(match planned.and_then(|camera| camera.moves.as_deref()) {
+        Some(moves) => moves.apply(
+            base,
+            (at, shown),
+            shot.canvas,
+            captures,
+            &mut chains.cameras(),
+            live.zooms(&moves.family),
+        ),
+        None => base,
+    })
+}
+
+/// Where a transition track of `image` is placed at `geometry`: a model's layer
+/// (ADR-0107), already in the canvas's pixels, flat, and anything else in its box.
+fn track_placement(shot: &Shot, image: &GpuKey, geometry: ItemGeometry) -> Placement {
+    if shot.is_model_box(image) {
+        Placement::Layer(geometry)
+    } else {
+        Placement::Geometry(geometry)
+    }
 }
 
 /// A track's sampled endpoint moved by `by`, its item's motion. A canvas-space layer
@@ -4859,7 +5267,7 @@ fn fill_tracks<'a>(
                     moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
                 Some(Item {
                     image: cache.get(key)?,
-                    placement: Placement::Geometry(sampled.geometry),
+                    placement: track_placement(shot, key, sampled.geometry),
                     crop: sampled.crop,
                     opacity: sampled.opacity,
                     blend: sampled.blend,
@@ -5765,6 +6173,7 @@ pub(crate) mod tests {
                 overlay_run: 1,
             },
             moves: (None, None),
+            blends: Vec::new(),
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));

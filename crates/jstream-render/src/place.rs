@@ -49,9 +49,10 @@ pub(crate) struct Shape {
     /// to it, so a fringe pixel samples the content's edge, not the crop or what `fill`
     /// clips away. [`NO_UV_BOUNDS`] for a 2D item.
     pub uv_bounds: [f32; 4],
-    /// The crop's texels, in whole source pixels: what a 3D item's mip chain is built
-    /// from. Carried as integers from the item's crop, never recovered from its texture
-    /// coordinates, which don't round-trip through `f32`. `None` for a 2D item.
+    /// The crop's texels, in whole source pixels: what a mip chain is built from, for a
+    /// 3D item or a strongly minified 2D one. Carried as integers from the item's crop,
+    /// never recovered from its texture coordinates, which don't round-trip through
+    /// `f32`. `None` for a layer, which is drawn at its own size.
     pub crop: Option<Region>,
     /// The camera's depth of field in the shader's terms (ADR-0108): the focus distance
     /// as a `w` (`focus / f`), the far blur in canvas pixels, and the largest blur any
@@ -89,6 +90,32 @@ impl Shape {
                 map(self.uv_bounds[3], onto[1], onto[3]),
             ];
         }
+    }
+
+    /// How many texels of a `texels`-sized texture a 2D item's canvas pixel spans along
+    /// its quad's two axes, the least and the most: its top and left edges against the
+    /// texels their texture coordinates cross. 1 or less is drawn at or above its size.
+    /// Only meaningful for a 2D shape, whose quad is affine.
+    pub(crate) fn minification(&self, texels: (u32, u32)) -> (f32, f32) {
+        let [a, b, _, d] = [0, 1, 2, 3].map(|i| self.vertices[i]);
+        let (tw, th) = (texels.0 as f32, texels.1 as f32);
+        let ratio = |from: Vertex, to: Vertex| {
+            let du = (to.uv[0] - from.uv[0]) * tw;
+            let dv = (to.uv[1] - from.uv[1]) * th;
+            let dx = to.canvas[0] - from.canvas[0];
+            let dy = to.canvas[1] - from.canvas[1];
+            let pixels = (dx * dx + dy * dy).sqrt();
+            if pixels > 0.0 {
+                (du * du + dv * dv).sqrt() / pixels
+            } else {
+                f32::INFINITY
+            }
+        };
+        let (across, down) = (ratio(a, b), ratio(a, d));
+        // A NaN (a degenerate quad of no texels) counts as drawn at its size.
+        let finite = |r: f32| if r.is_nan() { 1.0 } else { r };
+        let (across, down) = (finite(across), finite(down));
+        (across.min(down), across.max(down))
     }
 
     /// A 2D quad: `w = 1` and no edge coverage.
@@ -195,7 +222,10 @@ fn legacy(
         Err(GeometryError::NotFinite) => return Ok(None),
         Err(err) => return Err(placement_error(err)),
     };
-    Ok(placed.map(|quad| Shape::flat(quad.corners.map(|point| [point.x, point.y]), quad.uvs)))
+    Ok(placed.map(|quad| Shape {
+        crop: Some(crop_region(source_width, source_height, crop)),
+        ..Shape::flat(quad.corners.map(|point| [point.x, point.y]), quad.uvs)
+    }))
 }
 
 /// The content rectangle the shared formula fits into the box, clipped to the box (only
@@ -264,7 +294,10 @@ fn boxed(
         };
         uvs[i] = [u(x), v(y)];
     }
-    Ok(Some(Shape::flat(corners, uvs)))
+    Ok(Some(Shape {
+        crop: Some(crop_region(source_width, source_height, crop)),
+        ..Shape::flat(corners, uvs)
+    }))
 }
 
 /// The texels `crop` keeps of a `source_width` × `source_height` source, at least one
@@ -1078,9 +1111,10 @@ mod tests {
     /// A 3D item's mip region is its crop's texels exactly, at sizes where `k / W * W`
     /// isn't `k` in `f32`: 1920 × 1080 cropped to columns 63..241 and rows 7..69 is
     /// (63, 7, 178, 62), not a texel wider on each side (#687 round 1 B1). Every whole
-    /// left and top edge at 1920 × 1080 comes out as itself. A 2D item has no region.
+    /// left and top edge at 1920 × 1080 comes out as itself. A 2D item has the same
+    /// region, which its chain is built from when it is drawn small.
     #[test]
-    fn a_3d_items_region_is_its_crops_texels() {
+    fn an_items_region_is_its_crops_texels() {
         let geometry = Placement::Geometry(in_3d(30.0, 0.0, 0.0, None));
         let region = |crop: Crop| {
             shape(1920, 1080, geometry, crop)
@@ -1119,6 +1153,60 @@ mod tests {
         let flat = shape(1920, 1080, boxed(20.0, 20.0, FitMode::Fit, 0.0), crop)
             .expect("finite")
             .expect("draws");
-        assert_eq!(flat.crop, None);
+        assert_eq!(
+            flat.crop,
+            Some(Region {
+                x: 63,
+                y: 7,
+                width: 178,
+                height: 62
+            })
+        );
+        let legacy = Placement::Legacy(LegacyTransform {
+            position: [0.0, 0.0],
+            scale: [1.0, 1.0],
+            rotation_deg: 0.0,
+        });
+        let legacy = shape(1920, 1080, legacy, crop)
+            .expect("finite")
+            .expect("draws");
+        assert_eq!(legacy.crop, flat.crop);
+    }
+
+    /// A 2D item's minification is the texels a canvas pixel spans along its more
+    /// minified axis, whatever its rotation; one drawn at its size is 1.
+    #[test]
+    fn a_2d_items_minification_is_texels_per_pixel() {
+        let at = |w: f32, h: f32, rotation: f32| {
+            shape(
+                400,
+                200,
+                boxed(w, h, FitMode::Stretch, rotation),
+                Crop::NONE,
+            )
+            .expect("finite")
+            .expect("draws")
+            .minification((400, 200))
+        };
+        let close = |got: (f32, f32), want: (f32, f32)| {
+            assert!(
+                (got.0 - want.0).abs() < 1e-3 && (got.1 - want.1).abs() < 1e-3,
+                "{got:?} vs {want:?}"
+            );
+        };
+        close(at(400.0, 200.0, 0.0), (1.0, 1.0));
+        close(at(100.0, 100.0, 0.0), (2.0, 4.0));
+        close(at(100.0, 100.0, 33.0), (2.0, 4.0));
+        close(at(800.0, 50.0, 0.0), (0.5, 4.0));
+        // A density of 2 (ADR-0073): twice the texels for the same extent.
+        let dense = shape(
+            400,
+            200,
+            boxed(400.0, 200.0, FitMode::Stretch, 0.0),
+            Crop::NONE,
+        )
+        .expect("finite")
+        .expect("draws");
+        close(dense.minification((800, 400)), (2.0, 2.0));
     }
 }

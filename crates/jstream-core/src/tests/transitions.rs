@@ -293,61 +293,59 @@ fn preview_is_set_apart_from_program() {
     assert_eq!(studio(&control), (scene("a"), scene("a")));
 }
 
+/// A `color` source `id` of `hex` covering a 1920x1080 canvas.
+pub(super) fn fill(id: &str, hex: &str) -> Edit {
+    let settings = [
+        ("color", json!(hex)),
+        ("width", json!(1920)),
+        ("height", json!(1080)),
+    ];
+    Edit::SourceCreate {
+        source_id: SourceId::new(id),
+        name: id.into(),
+        kind: SourceKind::Builtin {
+            kind: "color".into(),
+        },
+        settings: Settings(
+            settings
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                .collect(),
+        ),
+        duplicated_from: None,
+    }
+}
+
+/// The centre pixel of the program mix, or `None` without an adapter.
+pub(super) fn centre(control: &dyn Control) -> Option<[u8; 4]> {
+    let result = match query(control, Query::VideoSnapshot) {
+        Ok(result) => result,
+        Err(error) if error.protocol().is_some_and(crate::snapshot::is_no_adapter) => {
+            if std::env::var_os("CI").is_some() {
+                panic!("CI has no wgpu adapter: {error}");
+            }
+            let _ = std::io::Write::write_fmt(
+                &mut std::io::stderr(),
+                format_args!("jstream-core: skipping transition GPU test, no adapter: {error}\n"),
+            );
+            return None;
+        }
+        Err(error) => panic!("video.snapshot failed: {error}"),
+    };
+    let QueryResult::VideoSnapshot { png, .. } = result else {
+        panic!("not a snapshot: {result:?}");
+    };
+    let bytes = crate::snapshot::decode_base64(&png).expect("png is base64");
+    let (width, height, rgba) = crate::snapshot::decode_png(&bytes).expect("png decodes");
+    let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+    Some([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
+}
+
 /// `video.snapshot` mid-fade shows both scenes mixed, and once the fade ends only the
 /// new one. A missing software adapter skips the test, and fails it when `CI` is set.
 #[test]
 fn a_snapshot_mid_fade_mixes_both_scenes() {
     let _gpu = super::one_gpu_test_at_a_time();
-    use crate::snapshot::{decode_base64, decode_png, is_no_adapter};
-    use std::io::Write;
-
-    fn fill(id: &str, hex: &str) -> Edit {
-        let settings = [
-            ("color", json!(hex)),
-            ("width", json!(1920)),
-            ("height", json!(1080)),
-        ];
-        Edit::SourceCreate {
-            source_id: SourceId::new(id),
-            name: id.into(),
-            kind: SourceKind::Builtin {
-                kind: "color".into(),
-            },
-            settings: Settings(
-                settings
-                    .iter()
-                    .map(|(k, v)| ((*k).to_owned(), v.clone()))
-                    .collect(),
-            ),
-            duplicated_from: None,
-        }
-    }
-
-    /// The centre pixel of the program mix, or `None` without an adapter.
-    fn centre(control: &dyn Control) -> Option<[u8; 4]> {
-        let result = match query(control, Query::VideoSnapshot) {
-            Ok(result) => result,
-            Err(error) if error.protocol().is_some_and(is_no_adapter) => {
-                if std::env::var_os("CI").is_some() {
-                    panic!("CI has no wgpu adapter: {error}");
-                }
-                let _ = writeln!(
-                    std::io::stderr(),
-                    "jstream-core: skipping transition GPU test, no adapter: {error}"
-                );
-                return None;
-            }
-            Err(error) => panic!("video.snapshot failed: {error}"),
-        };
-        let QueryResult::VideoSnapshot { png, .. } = result else {
-            panic!("not a snapshot: {result:?}");
-        };
-        let bytes = decode_base64(&png).expect("png is base64");
-        let (width, height, rgba) = decode_png(&bytes).expect("png decodes");
-        let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
-        Some([rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]])
-    }
-
     let clock = FakeClock::new(Timebase::MICROS);
     let engine = Engine::new();
     engine.set_source_clock(Arc::new(clock.clone()));
@@ -381,6 +379,72 @@ fn a_snapshot_mid_fade_mixes_both_scenes() {
 
     clock.advance(200_000);
     assert_eq!(centre(&control), Some([0, 0xff, 0, 0xff]), "the fade ended");
+}
+
+/// `video.snapshot` mid-Move between two keyframes whose item effect differs only in
+/// its settings draws the settings blended (ADR-0127): a `color_correction` multiplying
+/// red by white on one side and by black on the other is about half red halfway.
+#[test]
+fn a_snapshot_mid_move_draws_blended_effect_settings() {
+    use jstream_protocol::{FilterChain, FilterId, FilterInfo, FilterOwner, ItemId};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    let multiply = |hex: &str| -> Settings { [("multiply", json!(hex))].into_iter().collect() };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            fill("red", "#ff0000ff"),
+            add("a", "a1", "red"),
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k"),
+                variant_of: SceneId::new("a"),
+                name: "K".into(),
+            },
+            preset("move", "move", 400),
+            Edit::FilterAdd {
+                owner: FilterOwner::Item {
+                    item_id: ItemId::new("a1"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: multiply("#ffffff"),
+                enabled: None,
+                index: None,
+            },
+            Edit::ItemSetEffects {
+                scene_id: SceneId::new("k"),
+                item_id: ItemId::new("a1"),
+                effects: vec![FilterInfo {
+                    filter_id: FilterId::new("grade"),
+                    kind: "color_correction".into(),
+                    enabled: true,
+                    settings: multiply("#000000"),
+                }],
+            },
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    switch(&control, "a", None).expect("switch");
+    let Some(before) = centre(&control) else {
+        return;
+    };
+    assert_eq!(before[0], 0xff, "{before:?}");
+    switch(&control, "k", Some("move")).expect("switch");
+    clock.advance(200_000);
+    let [red, green, blue, alpha] = centre(&control).expect("an adapter");
+    assert!(
+        (32..224).contains(&red) && green == 0 && blue == 0 && alpha == 0xff,
+        "halfway, the multiply is about grey: {red} {green} {blue} {alpha}"
+    );
+    clock.advance(200_000);
+    let [red, ..] = centre(&control).expect("an adapter");
+    assert!(red < 8, "the Move ended on black: {red}");
 }
 
 /// A scene with a scene filter (ADR-0065 §6) is one picture in a transition: it arrives

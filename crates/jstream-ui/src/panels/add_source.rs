@@ -154,6 +154,13 @@ fn known(kind: &str) -> Option<Known> {
             MediaAndWeb,
             Some((400.0, 400.0)),
         ),
+        "model" => (
+            "3D model",
+            "A glTF or GLB model, or a built-in shape, lit and drawn in 3D.",
+            "cube",
+            MediaAndWeb,
+            Some((512.0, 512.0)),
+        ),
         "browser" => (
             "Browser",
             "A web page or widget.",
@@ -215,7 +222,7 @@ fn known(kind: &str) -> Option<Known> {
 }
 
 /// The prototype's order of the kinds it knows.
-const ORDER: [&str; 16] = [
+const ORDER: [&str; 17] = [
     "display",
     "window",
     "webcam",
@@ -224,6 +231,7 @@ const ORDER: [&str; 16] = [
     "app_audio",
     "media",
     "image",
+    "model",
     "browser",
     "text",
     "color",
