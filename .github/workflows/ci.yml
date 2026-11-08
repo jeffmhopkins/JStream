@@ -157,6 +157,70 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  # The desktop app's window on Linux (ADR-0141): Tauri on WebKitGTK 4.1, behind
+  # jstream-desktop's `webkitgtk` feature, so the other Linux jobs build without GTK. It
+  # lints and tests the app with the feature, builds the UI, then opens the window on Xvfb
+  # and checks that WebKitGTK loads the UI, connects it to the in-process engine and that
+  # the X11 global hotkeys start (`tests/webkitgtk.rs`). The screenshot is kept as an
+  # artifact. Runs on wave PRs too, as it is the only check of the Linux window. Not
+  # required: it reports, and a failure is looked into. The trunk and wasm-bindgen pins
+  # are the `wasm` job's: change them together.
+  desktop-linux:
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      TRUNK_VERSION: 0.21.14
+      TRUNK_SHA256: f2b4680cd239693a646a2795e4633c625328d7b2a044fbe749fa3a2fe9e7036b
+      WASM_BINDGEN_VERSION: 0.2.129
+      WASM_BINDGEN_SHA256: 82d12bb940e2d4e72e0d5605387fc1b8ca179044e012b620f0ce4e7440e8320e
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: WebKitGTK, Xvfb, ImageMagick and software Vulkan (lavapipe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev xvfb imagemagick \
+            mesa-vulkan-drivers libvulkan1
+          icd=$(find /usr/share/vulkan/icd.d -name 'lvp_icd*.json' -print -quit)
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+      - name: Clippy (webkitgtk)
+        run: cargo clippy -p jstream-desktop --all-targets --features webkitgtk --locked -- -D warnings
+      - name: Test (webkitgtk)
+        run: cargo test -p jstream-desktop --features webkitgtk --locked
+      - name: Install trunk and the wasm-bindgen CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          cd "$RUNNER_TEMP"
+          curl -sSLf -o trunk.tar.gz "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz"
+          echo "${TRUNK_SHA256}  trunk.tar.gz" | sha256sum -c -
+          tar xzf trunk.tar.gz -C bin trunk
+          wb="wasm-bindgen-${WASM_BINDGEN_VERSION}-x86_64-unknown-linux-musl"
+          curl -sSLf -o wasm-bindgen.tar.gz "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/${WASM_BINDGEN_VERSION}/${wb}.tar.gz"
+          echo "${WASM_BINDGEN_SHA256}  wasm-bindgen.tar.gz" | sha256sum -c -
+          tar xzf wasm-bindgen.tar.gz --strip-components=1 -C bin "${wb}/wasm-bindgen"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Build the UI
+        working-directory: crates/jstream-ui
+        run: trunk build --locked --offline
+      - name: Open the window on Xvfb
+        env:
+          JSTREAM_UI_DIR: ${{ github.workspace }}/crates/jstream-ui/dist
+          JSTREAM_SCREENSHOT: ${{ github.workspace }}/target/desktop-linux.png
+        run: |
+          xvfb-run -a -s "-screen 0 1400x900x24" \
+            cargo test -p jstream-desktop --features webkitgtk --locked --test webkitgtk -- --ignored --nocapture
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: desktop-linux
+          path: target/desktop-linux.png
+          if-no-files-found: warn
+          retention-days: 14
+
   doc:
     if: github.event_name != 'pull_request' || (!github.event.pull_request.draft && !startsWith(github.base_ref, 'wave/'))
     runs-on: ubuntu-latest

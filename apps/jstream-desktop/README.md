@@ -25,11 +25,12 @@ portable folder ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2
 Layer 6, an app that links core and server
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
-Contents (a first cut; Windows first, because the window needs WebView2):
+Contents (the window runs on Windows, on WebView2, and on Linux with the `webkitgtk`
+feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
-- **Engine host** (`host.rs`): the engine (on Windows a live one, wired as the daemon's
-  is, plus the virtual camera) and its server on a free port, with a token made fresh
+- **Engine host** (`host.rs`): the engine (on Windows and 64-bit Linux a live one,
+  wired as the daemon's is, plus the virtual camera on Windows) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on, and with `Network` the TLS network listener and pairing); `vcam_status`, whether
   the camera is registered and current.
@@ -51,11 +52,12 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
-- **Window** (`shell.rs`, Windows only): the Tauri window, its navigation guard, the
+- **Window** (`shell.rs`, Windows, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
   tested everywhere), shutdown, and the two commands the page may call: a native file,
-  save or folder dialog (`pick.rs`), and saving the network setting (`network.rs`).
+  save or folder dialog (`pick.rs`; on Linux the FileChooser portal's), and saving the
+  network setting (`network.rs`).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -72,9 +74,14 @@ Contents (a first cut; Windows first, because the window needs WebView2):
   pairing it turns on, and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
-  Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import.
+  Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import,
+  and `tests/webkitgtk.rs` (Linux with `webkitgtk`, ignored without a display and the
+  UI bundle; CI's `desktop-linux` job runs it on Xvfb), which opens the window and reads
+  the log file to check that WebKitGTK loaded the UI, the UI connected to the engine with
+  its token and the X11 global hotkeys started. The Browse portal's request and answer
+  are tested in `jstream-platform-linux`.
 
-Not here yet: a window on Linux and macOS (the binary says to use the daemon), the
+Not here yet: a window on macOS (the binary says to use the daemon), Linux packages, the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
 dumps (only a panic writes a report, as in the daemon), renewing the network
@@ -93,6 +100,14 @@ On Windows, with the UI built first:
 ```sh
 cd crates/jstream-ui && trunk build --release && cd ../..
 cargo run -p jstream-desktop -- --ui-dir crates/jstream-ui/dist
+```
+
+On Linux the window needs WebKitGTK 4.1's development package
+(`libwebkit2gtk-4.1-dev` on Debian and Ubuntu, `webkit2gtk4.1-devel` on Fedora) and the
+`webkitgtk` feature:
+
+```sh
+cargo run -p jstream-desktop --features webkitgtk -- --ui-dir crates/jstream-ui/dist
 ```
 
 The binary is `jstream` (`jstream.exe`). It opens a window on the UI and connects it to
@@ -182,13 +197,20 @@ folder, and its log `logs\cef.log`.
   applies at the next start and keeps the paired devices, which work again if it is
   turned back on: revoke them on the same page to end their access for good.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
-  (kept in Windows Credential Manager) and start it.
+  (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
+  file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)) and start it.
 - **The virtual camera.** Add a "Virtual camera" output in the outputs panel and start
   it: other apps then see the program as the webcam *JStream Virtual Camera*. The
   camera must be registered once, with `jstream-daemon --register-vcam` from the same
   folder (one administrator prompt); the panel says whether it is, as the app read it
   at start, so restart the app after registering. `--no-vcam` turns the camera off.
-- **Elsewhere** the binary prints that the app runs on Windows only for now and exits 1.
+- **On Linux** the data folder is `$XDG_DATA_HOME/jstream` (else
+  `~/.local/share/jstream`), the daemon's too. There is no virtual camera (the panel
+  says it is unavailable) and no browser sources yet. Browse opens the desktop's own
+  dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
+  desktop must run, as screen capture needs anyway.
+- **Elsewhere**, and on Linux without `webkitgtk`, the binary prints that it has no
+  window there, how to build one on Linux, and to use the daemon, and exits 1.
 
 <a id="design"></a>
 ## Design
@@ -214,7 +236,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   server still answers `ui_settings.get` and `ui_settings.set`, keeping them in the data
   folder's `ui-settings.json` (`Host::start`'s `ui_settings`,
   [ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). On Windows the engine is live with the same wiring as the daemon (OS backends,
-  keys in Credential Manager, an RTMP(S) publish opener); elsewhere it has no backends.
+  keys in Credential Manager, an RTMP(S) publish opener), and on 64-bit Linux too
+  (`LinuxBackends`, keys in the Secret Service or its `0600` file, the ScreenCast
+  portal's restore tokens in the data folder's `capture-tokens`, and
+  `LinuxProcessCpu` and `LinuxThreadCpu` for the readouts below); elsewhere it has no
+  backends.
   Everywhere it watches the data folder's `effects` for effect packs
   (`Engine::watch_effect_packs`) and starts the engine's stats heartbeat, so the header's readout shows the
   engine's load while nothing is live, and on Windows it hands the engine
@@ -270,9 +296,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   per notch of 120 (`WHEEL_DELTA`), adding up a high-resolution wheel's parts; any other
   turn passes on. On
   a Wayland session the Linux listener doesn't start (Wayland has no grab; its
-  GlobalShortcuts portal isn't wired yet), and the app has no Linux window yet
-  ([Purpose](#purpose)), so the X11 listener runs once one lands. The Wayland portal and the macOS listener
-  aren't built yet.
+  GlobalShortcuts portal isn't wired yet). The X11 listener runs in the Linux window
+  (`webkitgtk`), and the log says when a listener started. The Wayland portal and the
+  macOS listener aren't built yet.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin
@@ -325,10 +351,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu, Check for updates
   and About dialog link to), or to Cisco's OpenH264 licence at exactly
   `https://www.openh264.org/BINARY_LICENSE.txt` (the link in About and in Outputs ›
-  Encoders, #1165), opens in the system browser, through Explorer with the URL as one
-  argument, and never in the window. So a page can make the app start one OS process,
-  Explorer, for those URLs only; the Cisco URL is that one string, and no comma,
-  backslash, quote, space or percent escape can reach Explorer's command line. Every
+  Encoders, #1165), opens in the system browser, through Explorer (on Linux `xdg-open`,
+  found on `PATH`) with the URL as one argument, and never in the window. So a page can
+  make the app start one OS process, Explorer or `xdg-open`, for those URLs only; the Cisco URL is that one string, and no comma,
+  backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
   projector can open none. The page gets two Tauri commands, `pick_path` (`pick.rs`)
   and `set_network` (`network.rs`), and no other. `build.rs` declares them to
@@ -336,9 +362,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `permissions/autogenerated/` (gitignored, as `gen/` is). The capabilities `browse`
   and `network` grant those permissions to the main window only, and do not grant
   `core:default`. A projector has no path fields or settings, so it is granted neither.
-  The command opens a
+  On Windows the command opens a
   common-item dialog owned by the calling window and returns the path the person
-  picked. It does not read the file. The UI calls it only through `browse` on the
+  picked. On Linux it asks the FileChooser portal (`jstream_platform_linux::portal_pick_path`)
+  for the desktop's own dialog, unowned for now, on a thread of Tauri's pool so the window
+  keeps painting; only the portal's own bus connection may answer, and only a local
+  `file://` path that is UTF-8 comes back. It does not read the file. The UI calls it only through `browse` on the
   global. A browser of the daemon has no global, so it has no button and no command.
   The engine is still reached only over the WebSocket API. The one other request the
   scheme answers is the update check, which ignores whatever the page sends and always
@@ -356,11 +385,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   test job fails when `/DELAYLOAD` stops applying, or when a listed DLL is no longer
   imported (the linker only warns, LNK4199, which doesn't fail CI). A new Media
   Foundation import listed nowhere still gets past it.
-- **Windows only, for now.** Tauri is a Windows-only dependency, so Linux CI builds
-  and tests everything but the window (`shell.rs`, `pick.rs`) and `tests/delay_load.rs` without
-  GTK or WebKitGTK. Tauri's other platforms still appear in `cargo metadata`, so
-  `deny.toml` and the lint-deps allowlist list their duplicates and native crates,
-  each marked as never built for Windows where that holds. `tauri.conf.json` names the
+- **Linux behind a feature.** Tauri is a Windows dependency, and on Linux an optional
+  one that the `webkitgtk` feature turns on with `tauri-build`
+  ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)). `build.rs` sets the
+  `webview` cfg where there is a window, and the window's code (`shell.rs`, `pick.rs`,
+  `set_network`, the windowed `main`) is gated on it. So the Linux CI jobs build and
+  test everything but the window without GTK or WebKitGTK, and the `desktop-linux` job
+  installs them, lints and tests the app with the feature, and opens the window on
+  Xvfb. Tauri's other platforms still appear in `cargo metadata`, so `deny.toml` and
+  the lint-deps allowlist list their duplicates and native crates, each marked as never
+  built for Windows, or built only with `webkitgtk`, where that holds. `tauri.conf.json` names the
   app and its icon; the bundler is off (the portable folder is ADR-0066's), and so are
   Tauri's CSP injection and global API. `tauri-build` writes ACL schemas to `gen/`,
   which is not committed.
