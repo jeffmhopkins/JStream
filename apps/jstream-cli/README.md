@@ -87,7 +87,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
-| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |

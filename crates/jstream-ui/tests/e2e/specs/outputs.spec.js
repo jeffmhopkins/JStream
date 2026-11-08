@@ -1,10 +1,13 @@
 // The Outputs panel and the header: adding outputs through the settings dialog, the
-// write-only stream key, start and stop on each row, Go Live and Record in the header,
-// the encoder profile, the audio bus and the video mix applied on OK, editing encoder
-// profiles and video mixes in their dialog, and deleting after a confirmation, through a
+// write-only stream key, start and stop on each row, Start all and a running row's stats
+// line, Go Live and Record in the header, the encoder profile, the audio bus and the
+// video mix applied on OK, editing encoder profiles and video mixes in their
+// list-and-editor dialog and from an output's Edit encoder… and Edit mix…, Duplicate, an
+// open dialog following another client, and deleting after a confirmation, through a
 // real browser and the WebSocket API.
 import {
   test, expect, connect, showPanel, outputRow, addOutput, openOutputSettings, openEncoders,
+  statsTicks,
 } from '../fixtures.js';
 
 /** Connects and opens the inspector's Outputs page. */
@@ -200,10 +203,14 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await openOutputs(page, daemon);
   await addOutput(page, 'record', '/tmp/a.mkv');
 
+  // A list on the left, the editor of the one picked on the right.
   let library = await openEncoders(page);
-  const encoders = library.getByRole('region', { name: 'Encoders' });
-  await encoders.getByRole('button', { name: 'New encoder…' }).click();
-  const form = encoders.getByRole('form', { name: 'New encoder' });
+  const editor = () => library.locator('.library-editor');
+  const encoders = () => library.getByRole('region', { name: 'Encoders' });
+  const mixes = () => library.getByRole('region', { name: 'Video mixes' });
+  await expect(editor()).toContainText('Pick an encoder or a video mix');
+  await encoders().getByRole('button', { name: '+ New encoder' }).click();
+  const form = library.getByRole('form', { name: 'New encoder' });
   // A new profile is named for what it encodes, so a select reads it as a choice.
   await expect(form.getByLabel('Encoder name')).toHaveValue('Default H.264');
   await form.getByLabel('Encoder name').fill('AV1 archive');
@@ -216,17 +223,25 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(form.getByRole('alert')).toContainText('Peak bit rate');
   await form.getByLabel('Peak bit rate').fill('9000');
   await form.getByRole('button', { name: 'Save' }).click();
+  // Saved, the editor moves to the new profile, which the list shows in a few words and
+  // the editor in full.
   await expect(form).toHaveCount(0);
-  const row = encoders.locator('li.profile').filter({ hasText: 'AV1 archive' });
-  await expect(row).toContainText('AV1 · VBR 6000 kbps, peak 9000');
+  const encoderForm = library.getByRole('form', { name: 'Edit encoder' });
+  await expect(encoderForm.getByLabel('Encoder name')).toHaveValue('AV1 archive');
+  await expect(encoderForm.locator('.profile-summary')).toHaveText(
+    'AV1 · VBR 6000 kbps, peak 9000 · keyframe every 2 s · hardware first · AAC 160 kbps',
+  );
+  const archive = encoders().getByRole('button', { name: /AV1 archive/ });
+  await expect(archive).toContainText('AV1 · 6000 kbps VBR · HW');
+  await expect(archive).toHaveAttribute('aria-pressed', 'true');
 
-  const mixes = library.getByRole('region', { name: 'Video mixes' });
-  await mixes.getByRole('button', { name: 'New video mix…' }).click();
-  const mixForm = mixes.getByRole('form', { name: 'New video mix' });
+  await mixes().getByRole('button', { name: '+ New video mix' }).click();
+  const mixForm = library.getByRole('form', { name: 'New video mix' });
   await expect(mixForm.getByLabel('Size')).toHaveValue('3');
   await mixForm.getByRole('button', { name: 'Save' }).click();
-  const vertical = mixes.locator('li.profile').filter({ hasText: 'Vertical' });
-  await expect(vertical).toContainText('Program · 1080 × 1920 · every frame');
+  const vertical = mixes().getByRole('button', { name: /Vertical/ });
+  await expect(vertical).toContainText('1080 × 1920 · Program');
+  await expect(library.getByRole('form', { name: 'Edit video mix' })).toBeVisible();
   await library.getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(library).toHaveCount(0);
 
@@ -238,32 +253,140 @@ test('an encoder profile and a vertical video mix are made, used and kept', asyn
   await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('a.mkv · AV1 archive');
   // In use, neither can be deleted.
   library = await openEncoders(page);
-  await expect(row.getByRole('button', { name: 'Delete AV1 archive' })).toBeDisabled();
-  await expect(vertical.getByRole('button', { name: 'Delete Vertical' })).toBeDisabled();
+  await archive.click();
+  await expect(library.getByRole('button', { name: 'Delete AV1 archive' })).toBeDisabled();
+  await expect(library.getByRole('button', { name: 'Delete AV1 archive' })).toHaveAttribute('title', /Used by output-1/);
+  await vertical.click();
+  await expect(library.getByRole('button', { name: 'Delete Vertical' })).toBeDisabled();
 
   // A fresh page reads it all back from the engine, and an edit keeps the mix's ID.
   await openOutputs(page, daemon);
   dialog = await openOutputSettings(page, 'output-1');
   await expect(dialog.getByLabel('Encoder').locator('option:checked')).toHaveText('AV1 archive');
   await expect(dialog.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
-  // The encoder's "Encoders & mixes…" opens the library over the settings.
-  await dialog.getByRole('button', { name: 'Encoders & mixes…' }).click();
+  // Edit mix… opens the library over the settings, on that mix.
+  await dialog.getByRole('button', { name: 'Edit mix…' }).click();
   library = page.getByRole('dialog', { name: 'Encoders & mixes' });
-  await vertical.getByRole('button', { name: 'Edit Vertical' }).click();
-  const edit = mixes.getByRole('form', { name: 'Edit video mix' });
+  const edit = library.getByRole('form', { name: 'Edit video mix' });
+  await expect(edit.getByLabel('Video mix name')).toHaveValue('Vertical');
   await edit.getByLabel('Size').selectOption({ label: '720 × 1280 (vertical)' });
   await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(vertical).toContainText('Program · 720 × 1280');
+  await expect(edit.getByRole('status')).toHaveText('Saved.');
+  await expect(vertical).toContainText('720 × 1280 · Program');
   await library.getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(dialog.getByLabel('Video').locator('option:checked')).toHaveText('Vertical');
+  // Edit encoder… opens it on the output's encoder; the engine's default has none.
+  await dialog.getByRole('button', { name: 'Edit encoder…' }).click();
+  await expect(library.getByRole('form', { name: 'Edit encoder' }).getByLabel('Encoder name')).toHaveValue('AV1 archive');
+  await library.getByRole('button', { name: 'Close', exact: true }).last().click();
+  await dialog.getByLabel('Encoder').selectOption({ label: 'Engine default' });
+  await expect(dialog.getByRole('button', { name: 'Edit encoder…' })).toBeDisabled();
+  await dialog.getByRole('button', { name: 'New…', exact: true }).click();
+  await expect(library.getByRole('form', { name: 'New encoder' })).toBeVisible();
+  await library.getByRole('button', { name: 'Close', exact: true }).last().click();
 
   // Back on the program, the mix can go.
   await dialog.getByLabel('Video').selectOption({ label: 'Program (canvas size)' });
+  await expect(dialog.getByRole('button', { name: 'Edit mix…' })).toBeDisabled();
   await dialog.getByRole('button', { name: 'OK' }).click();
   await expect(dialog).toHaveCount(0);
   library = await openEncoders(page);
-  await vertical.getByRole('button', { name: 'Delete Vertical' }).click();
+  await vertical.click();
+  await library.getByRole('button', { name: 'Delete Vertical' }).click();
   await expect(vertical).toHaveCount(0);
+  await expect(editor()).toContainText('Pick an encoder or a video mix');
+});
+
+test('Start all starts every output that can start, Stop all stops what runs, and a running row shows its stats', async ({ page, daemon }) => {
+  const send = await statsTicks(page);
+  await openOutputs(page, daemon);
+  const head = page.locator('.outputs-head');
+  const all = head.getByRole('button', { name: '▶ Start all' });
+  const stopAll = head.getByRole('button', { name: '■ Stop all' });
+  await expect(all).toBeDisabled();
+  await expect(stopAll).toHaveCount(0);
+  await addOutput(page, 'record', '/tmp/a.mp4');
+  await addOutput(page, 'record', '/tmp/b.mp4');
+  // A stream without its key can't start, so Start all leaves it.
+  await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
+  await expect(all).toBeEnabled();
+  await all.click();
+  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Live');
+  await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Live');
+  await expect(outputRow(page, 'output-3').locator('.badge')).toHaveText('Stopped');
+  // Nothing left that can start; Stop all sits beside it while anything runs.
+  await expect(all).toBeDisabled();
+  await expect(stopAll).toBeVisible();
+
+  send({
+    seq: 1,
+    drops: {},
+    outputs: [{ output_id: 'output-1', uptime_ms: 754_000, kbps: 2_450, dropped_frames: 2, dropped_packets: 1 }],
+  });
+  await expect(outputRow(page, 'output-1').locator('.output-row-stats')).toHaveText('2.45 Mbps · 3 dropped · 00:12:34');
+  await expect(outputRow(page, 'output-2').locator('.output-row-stats')).toHaveCount(0);
+
+  await stopAll.click();
+  await expect(outputRow(page, 'output-1').locator('.badge')).toHaveText('Stopped');
+  await expect(outputRow(page, 'output-2').locator('.badge')).toHaveText('Stopped');
+  // A stopped row has no stats line, even before the next tick.
+  await expect(outputRow(page, 'output-1').locator('.output-row-stats')).toHaveCount(0);
+  await expect(stopAll).toHaveCount(0);
+  await expect(all).toBeEnabled();
+});
+
+test('Duplicate adds a copy without the stream key, a recording\'s under a free path, and opens its settings', async ({ page, daemon }) => {
+  await openOutputs(page, daemon);
+  await addOutput(page, 'rtmp', 'rtmps://live.example.com/app');
+  let dialog = await openOutputSettings(page, 'output-1');
+  await dialog.getByRole('textbox', { name: 'Stream key' }).fill('abcd-1234');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(outputRow(page, 'output-1').locator('.output-row-note')).toHaveCount(0);
+
+  await outputRow(page, 'output-1').getByRole('button', { name: 'More for output-1' }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  dialog = page.getByRole('dialog', { name: 'Output settings' });
+  await expect(dialog.locator('.modal-title')).toHaveText('output-2 settings');
+  await expect(dialog.getByLabel('Server URL')).toHaveValue('rtmps://live.example.com/app');
+  // The key never reaches the page, so the copy has none.
+  await expect(dialog.getByRole('textbox', { name: 'Stream key' })).toHaveAttribute('placeholder', 'Paste the stream key');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(outputRow(page, 'output-2').locator('.output-row-note')).toHaveText('Set a stream key first.');
+
+  // A recording's copy writes beside it under a free name, so both can run.
+  await addOutput(page, 'record', '/tmp/a.mp4');
+  await outputRow(page, 'output-3').getByRole('button', { name: 'More for output-3' }).click();
+  await page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  await expect(dialog.locator('.modal-title')).toHaveText('output-4 settings');
+  await expect(dialog.getByLabel('File path')).toHaveValue('/tmp/a (2).mp4');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+});
+
+test('an open dialog follows another client\'s change to a field it left alone', async ({ page, context, daemon }) => {
+  const other = await context.newPage();
+  await openOutputs(page, daemon);
+  await openOutputs(other, daemon);
+  await addOutput(page, 'record', '/tmp/a.mp4');
+
+  const dialog = await openOutputSettings(page, 'output-1');
+  const path = dialog.getByLabel('File path');
+  await expect(path).toHaveValue('/tmp/a.mp4');
+  const change = async (to) => {
+    const theirs = await openOutputSettings(other, 'output-1');
+    await theirs.getByLabel('File path').fill(to);
+    await theirs.getByRole('button', { name: 'OK' }).click();
+    await expect(theirs).toHaveCount(0);
+  };
+  await change('/tmp/b.mp4');
+  await expect(path).toHaveValue('/tmp/b.mp4');
+  // A field the person changed keeps what they typed.
+  await path.fill('/tmp/mine.mp4');
+  await change('/tmp/c.mp4');
+  await expect(outputRow(page, 'output-1').locator('.output-row-target')).toContainText('c.mp4');
+  await expect(path).toHaveValue('/tmp/mine.mp4');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(outputRow(other, 'output-1').locator('.output-row-target')).toContainText('mine.mp4');
 });
 
 test('another client sees outputs come and go', async ({ page, context, daemon }) => {

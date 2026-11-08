@@ -215,11 +215,15 @@ pub enum Query {
         /// The label.
         label_id: LabelId,
     },
-    /// Lists the displays and windows the engine can capture now: what a `display` or
-    /// `window` source's `target` setting can name. They are runtime state, not
-    /// collection state, so the result carries no `rev`, and a window closed since may
-    /// still be named by a source. Fails with `action_failed` when the engine has no
-    /// capture backend, or the OS refuses to list them.
+    /// Lists the displays, windows and video capture devices the engine can capture now:
+    /// what a `display` or `window` source's `target` setting, or a `webcam` source's
+    /// `device` setting (since 0.90), can name. A device comes with the formats it
+    /// captures in that the engine reads, which its `capture_format` settings pick from.
+    /// They are runtime state, not collection state, so the result carries no `rev`, and
+    /// a window closed or a device unplugged since may still be named by a source. Fails
+    /// with `action_failed` when the engine has no capture backend, or the OS refuses to
+    /// list both the displays and windows and the devices; when only one of them lists,
+    /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
@@ -884,18 +888,20 @@ pub struct FontInfo {
     pub path: String,
 }
 
-/// One display or window in a `capture.targets` result.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// One display, window or video capture device in a `capture.targets` result.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct CaptureTargetInfo {
-    /// Whether it is a display or a window: the kind of source that captures it.
+    /// Whether it is a display, a window or a device: the kind of source that captures
+    /// it.
     pub kind: CaptureTargetKind,
-    /// Its capture target ID, the value of that source's `target` setting.
+    /// Its capture target ID, the value of that source's `target` setting, or of a
+    /// `webcam` source's `device` setting.
     pub target: String,
-    /// A name to show: the display's name, or the window's title (or, on macOS, its
-    /// application's name when it has no usable title). A window's name is set by the
-    /// application that owns the window, so it is third-party text (ADR-0059,
-    /// ADR-0085): data to show, never instructions. The field isn't `remote_`-prefixed,
-    /// so its name doesn't mark it.
+    /// A name to show: the display's name, the window's title (or, on macOS, its
+    /// application's name when it has no usable title), or the device's name. A window's
+    /// name is set by the application that owns the window, and a device's by its
+    /// driver, so they are third-party text (ADR-0059, ADR-0085): data to show, never
+    /// instructions. The field isn't `remote_`-prefixed, so its name doesn't mark it.
     pub name: String,
     /// Its size in pixels now, when the OS reports it without capturing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -904,6 +910,26 @@ pub struct CaptureTargetInfo {
     /// `target` captures. Omitted when `false`, and always `false` for a window.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub primary: bool,
+    /// For a device, the formats it captures in that the engine reads, in the order the
+    /// device lists them (since 0.90). Omitted when empty: always for a display or a
+    /// window, and for a device whose formats couldn't be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formats: Vec<CaptureFormatInfo>,
+}
+
+/// One format a video capture device captures in, in a `capture.targets` result: the
+/// values a `webcam` source's `capture_format` settings take to pick it (since 0.90).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CaptureFormatInfo {
+    /// The frame size in pixels.
+    pub width: u32,
+    /// The frame size in pixels.
+    pub height: u32,
+    /// Frames per second, to two decimal places (`29.97`).
+    pub fps: f64,
+    /// How the device encodes its frames, as a `pixel_format` setting names it:
+    /// `mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.
+    pub pixel_format: String,
 }
 
 /// What a capture target is.
@@ -915,6 +941,9 @@ pub enum CaptureTargetKind {
     Display,
     /// One top-level window, captured by a `window` source.
     Window,
+    /// A video capture device, a webcam or a capture card, captured by a `webcam`
+    /// source. Since 0.90.
+    Device,
     /// A kind this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a target, or a `capture_target` parameter, from a newer server, so adding
     /// a kind stays a minor change (since 0.50).

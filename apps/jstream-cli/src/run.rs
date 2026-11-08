@@ -592,6 +592,13 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                     write!(out, ", primary")?;
                 }
                 writeln!(out)?;
+                for format in &target.formats {
+                    writeln!(
+                        out,
+                        "  {}x{} {} fps {}",
+                        format.width, format.height, format.fps, format.pixel_format
+                    )?;
+                }
             }
         }
         QueryResult::CollectionInfo { path, recent } => {

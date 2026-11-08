@@ -2987,6 +2987,28 @@ mod tests {
         assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
     }
 
+    /// A border with no outer stroke draws nothing past the box, so it doesn't grow the
+    /// layer; with one, the layer grows by the stroke after its gap (#1376).
+    #[test]
+    fn a_border_pads_only_for_its_outer_stroke() {
+        let pad = |settings: serde_json::Value| {
+            let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+            apply(
+                &mut graph,
+                vec![hide("logo"), effect("cam", "border", settings)],
+            );
+            let shot = shot(&graph);
+            let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+            chain.and_then(|c| c.pad)
+        };
+        assert_eq!(pad(serde_json::json!({"width": 4.0})), None);
+        // 20 + 10 + 1 px, rounded up to the 16 px step.
+        assert_eq!(
+            pad(serde_json::json!({"outer_width": 10.0, "outer_gap": 20.0})),
+            Some((0, 32))
+        );
+    }
+
     /// A `border` with rounded corners and an outer stroke on an opaque item (#1227): the
     /// stroke rings the box past its edge, in the room the border's own outset gives it,
     /// and the corners of the picture are cut round. The `?` samples fall on the

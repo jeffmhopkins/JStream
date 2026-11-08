@@ -153,77 +153,17 @@ covers = ["crates/jstream-core/src/activity_log.rs", "crates/jstream-core/src/au
 covers = ["crates/jstream-core/src/filters.rs", "crates/jstream-core/src/plugins/**"]
 -->
 
-- **Audio filters** (`filters.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
-  the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
-  one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
-  `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
-  master's or an output tap's filters in line with its owner's audio chain. A
-  `compressor`'s `key` ("Duck under", a `source` reference to an audio source, not
-  live) is ADR-0028's sidechain key: the program stage's audio sources thread resolves
-  it to the key source's mixer input once every input is open (`resolve_keys`), and
-  builds the filter as a `FilterSpec::KeyedCompressor` on it, so the source ducks
-  while the key plays. A key that names no playing input reads as silence. Setting,
-  clearing or re-resolving it rebuilds the filter. A master or output filter holds no
-  reference yet, so only a source's compressor has a key; the graph refuses a key on
-  its own source and a cycle of keys as it refuses any reference cycle, and a key blocks
-  deleting the source it names. A CLAP
-  filter's plugin host (`ClapHosts`) runs on the program stage's
-  `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
-  and the master's and the output taps' chains, which the routing keeps under the
-  collection lock, take each ready host's block from that thread, so starting or
-  stopping a host process never holds the lock.
-- **CLAP plugins** (`plugins/`, [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)):
-  - `Engine::scan_clap_plugins(Arc<dyn PluginHosts>)` scans the CLAP search directories
-    (recursively, for `.clap` entries, each scanned in its own host process) and adds
-    every audio effect found to the graph's kinds as an audio-filter kind,
-    `clap/<plugin id>` (`CLAP_KIND_PREFIX`), so `kind.list` and `kind.describe` report
-    it. Its settings are the plugin's parameters, by CLAP id in decimal, all live: a
-    stepped one is an `int`, any other a `float`, both with the plugin's range; hidden,
-    read-only and bypass parameters and ones without a finite range are left out. When
-    two files offer one plugin id, the first found wins. A plugin's names reach clients
-    through `plugin_text` (#351, #977): control and bidirectional formatting characters
-    become spaces, trimmed, at most 128 characters. The scan returns a `ClapScan`
-    with each kind's file and plugin id, and the files that failed. Kinds stay until
-    the engine ends. It is slow, so a host calls it on a worker thread; the engine's
-    lock is held only to add the kinds and hand the audio thread a `ClapCatalog` (the
-    hosts, and each kind's file and plugin id, added to earlier scans').
-  - `HostSupervisor` keeps one CLAP filter instance's host process running, on a
-    control thread, driven by `tick(now)`, which returns `HostEvent`s. A host is
-    `Ready` (with its block and latency) once its block says so. One that exits, isn't
-    ready within `start_timeout` (it may load the plugin without beating until then),
-    or, once ready, stops its heartbeat for `LIVENESS_MS` has `Crashed`: it is killed and restarted after a wait that doubles from `first_retry`
-    up to `max_retry`. After `max_crashes` crashes with no stable run (`stable_after`)
-    between them, or at once when the host marks a failure a restart can't fix (load,
-    not an effect, activate, configuration), it is `Disabled` until `enable`. The
-    supervisor asks for the plugin's state whenever the plugin marks it changed, keeps
-    the latest (`saved_state`, `StateSaved`) and restarts with it. A run of
-    `degraded_after` consecutive late blocks in the mixer is `Degraded`, and its end
-    `Recovered`; the mixer counts them in the engine's memory (`EngineBlock`), where
-    the host can't reset them. What the host sends back is checked first (#351):
-    parameter descriptions with a non-finite or inverted range, a default outside it,
-    or a repeated id are dropped from `Params`; a parameter change, from a control
-    message or the block's `params_out` ring (read only once the run's first `Params`
-    has arrived), must name a parameter of the last `Params` and be finite and within its range to become `ParamChanged`; and a saved
-    state over `MAX_STATE` (2 MiB) is ignored. Each dropped reply counts in `rejected`,
-    and the first of each host run is an `Error`. `stop` asks the host to stop and
-    kills it after `STOP_GRACE`.
-  - A CLAP filter runs as `plugins::filter::ClapFilter`, one host per filter. In a
-    source's audio chain the input's `filters::Chain` owns it (see *Audio sources*). On
-    the master stage's audio chain or an output's (ADR-0080), the program stage's
-    `jstream-audio-sources` thread owns it (`filters::ClapHosts`), and the routing puts
-    the filter on its host's block once that is ready (see *Audio routing*): on the
-    master bus's copy of the mixer's master chain, and on each other bus that feeds an
-    output (an output tap reads it) its copy on a host of that bus's own (ADR-0086).
-    A bus's copy delays its dry signal by the filter's latency while its host starts
-    and once the bus feeds no output. A collection holding one
-    loads before the scan describes its kind (the graph keeps such a filter verbatim),
-    and the filter is bypassed until then.
-  - **Not yet:** writing the plugin's own parameter changes and saved state back to the
-    filter's settings (the supervisor keeps the state for its restarts only, so a new
-    host after an engine restart starts from the plugin's defaults and the filter's
-    settings); a new mixer filter when a restarted plugin reports a new latency; the
-    plugin's editor; rescanning; and stopping a removed filter's host off the
-    `jstream-audio-sources` thread (now each stop waits up to `STOP_GRACE` there).
+Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
+--document-private-items --open`).
+
+- **Audio filters** (`filters.rs`,
+  [ADR-0026](../../docs/adr/0026-source-filter-chains.md)): the `audio_filter` kinds,
+  their mapping onto `jstream-audio`'s kernels, and `Chain`, which keeps a chain's
+  filters in line with its owner's, sidechain keys included.
+- **CLAP plugins** (`plugins/`,
+  [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the scan that adds
+  `clap/<plugin id>` filter kinds (`Engine::scan_clap_plugins`), `HostSupervisor`, which
+  keeps each filter's host process running, and `ClapFilter`, the filter on its host.
 - **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
   by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
@@ -317,80 +257,18 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
+Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
+--document-private-items --open`).
+
 - **Motion** (`motion.rs`,
   [ADR-0099](../../docs/adr/0099-native-motion-modifiers-and-timelines.md)): an item's
-  motion modifiers, turned into `jstream-anim`'s once when the shot is planned, are
-  evaluated each time a pass draws the item, at the frame's animation time, and added
-  to its placement, crop and opacity after any live value (`apply`: position, size,
-  rotation, tilt, turn and depth of a geometry, position, scale and rotation of a legacy
-  placement, crop rounded and never below 0, opacity kept within 0 and `MAX_OPACITY`, so a gain above 1 (#1101) stays one; a 3D model's drawn layer,
-  already placed in its pixels, stays put). An item whose effects run over the canvas
-  (ADR-0106) moves inside its canvas-sized layer, which stays over the canvas, also in
-  a transition, where that layer takes only the motion's opacity. The item's
-  stored values never change. A shot with motion anywhere (`Shot::moves`) changes with
-  time (`Shot::changes_with_time`), as a running transition does, so a preview stream
-  sends it each frame too. During a transition each track
-  carries both sides' motion (`TrackMotion`): a matched pair blends their offsets by
-  the eased progress, an appearing item moves by its new side's and a disappearing one
-  by its old side's. The `shown` clock starts when an item starts being drawn in any
-  pass of the program shot, a video mix's included: the engine keeps when each drawn
-  item appeared (`ShownSince`) and stamps it on each program shot it publishes
-  (`Shot::set_shown`). Scene and source preview shots aren't stamped, so a `shown`
-  modifier stays at its start there. The `triggered` clock (#1107) starts when
-  `item.trigger_motion` fires a modifier: the engine keeps when each item's modifiers
-  were last fired (`Fired`: all of them together, or one by ID, a modifier counting from
-  the later), forgets a fire after an hour (the longest an impulse runs), stamps the
-  fires on each program shot (`Shot::set_fired`) and plans the shot again, so the render
-  thread draws the fire from its next frame. A fire changes no `rev` and emits nothing;
-  a preview shot isn't stamped, so a `triggered` modifier adds nothing there. An item
-  with only `triggered` modifiers still counts as moving, so its shot draws each frame
-  while it waits to be fired.
-  A legacy placement's signed scale keeps its flip,
-  and a moved box past what `item.set_geometry` takes (`MAX_DRAWN_PX`), or a moved
-  legacy transform past `ItemTransform::check_drawable`'s bounds, stays unmoved (#1130).
-  `item.set_transform` stores a transform past those bounds (ADR-0022), and motion
-  moves one only where every moved value is back within them (a shrinking modifier).
+  motion modifiers, turned into `jstream-anim`'s when the shot is planned.
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
-  modifier hears the program mix, a bus or a source (`Hearing`), as a `spectrum` source
-  with the same settings would. The live sources find what items' and keyframe
-  overrides' motion hears on each sync (`audio::heard_by_motion`, so those buses and
-  sources are fed as a scope source's are) and keep its scopes in `FilterAssets`
-  (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
-  (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
-  loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
-  scope is first heard, never while it is steady), running the FFT only for a scope a
-  `band` binding hears (`measure_levels` otherwise), and advances each modifier's
-  envelope by the tick's media time, per item and modifier ID, so every pass and mix of
-  the tick reads the same level. The follower names a meter by its scope's address and
-  measures through the shot's binding, never holding a scope itself, so no scope's last
-  reference drops on the render thread (R-RT-003). An item drawn through two lists that
-  share a modifier ID (a keyframe and its parent) shares one envelope, and the first
-  list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
-  draw paths read by item and ID without allocating. A modifier with nothing heard, a
-  preview shot (no follower) and the program mix while no output runs read silence,
-  the modifier's `from`. A scene frame sheet follows those scopes itself, across its
-  pictures, so an audio modifier there hears the mix (#1189).
+  modifier hearing the program mix, a bus or a source.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
-  camera motion and follow camera, planned with the shot as its pass camera's
-  `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
-  box at its committed geometry, its crop, fit and flips, and the capture it shows). The
-  follow camera is the family's first enabled `follow_pointer` effect
-  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), which the chains skip,
-  since it draws nothing; a scene with one and no camera draws through the framing
-  camera (`PassCamera`'s `supplied`), so a 2D scene follows too. As a
-  pass draws, the follow camera glides after the pointer the capture reports
-  (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
-  springs of the follow-cursor mock, keeping the box filling the frame, then slides its
-  look point just far enough to keep the pointer inside its safe margin (#1216), and
-  focuses where it looks when the camera has a blur; camera motion is then added,
-  clamped to the camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
-  family), step once per frame time, and are dropped after 10 s undrawn. A transition
-  moves each end's camera the same way, so a Move into or out of a follow scene follows
-  it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
-  live-value channel carries (`LiveParams::with_zooms`); a follow camera takes the steps
-  asked for since it started. A shot whose camera moves changes with time.
+  camera motion and follow camera, planned with the shot.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -566,9 +444,14 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   with its last reader, a reader that joins counting frames from then on, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
   to the CPU path in place when a CPU reader joins, its counters carried on, and
-  `DeviceLost` for every reader when it doesn't open again there, and one open on the
-  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  `DeviceLost` for every reader when it doesn't open again there, one open on the
+  CPU path refused by the GPU view, a device switched in place to the format a later
+  open asks for every reader, on the CPU path when it is there even when the GPU view
+  asks, and kept in its format when it doesn't list the new one, MJPEG included
+  (#1265) (`runtime/devices.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, and with the resolution, frame rate and pixel format its
+  settings ask for, falling back to the engine's choice when the device offers none
+  that matches, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
@@ -946,8 +829,12 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `source.size_changed` for each one that changed, under the collection lock (see
   *Source sizes* in *Snapshots*).
 - **`capture.targets`** lists the platform capture backend's displays, then its
-  windows, with no engine lock held, since listing windows calls the OS. With no
-  backends it answers `action_failed`, and so it does when the OS refuses the list.
+  windows, then the video-device backend's devices, each with the formats the engine
+  reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
+  held, since listing windows and devices calls the OS. A device whose formats can't be
+  read is listed without them. With no backends it answers `action_failed`, and so it
+  does when the OS refuses both lists; when one fails, it answers with the other and
+  logs a warning.
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
@@ -1648,9 +1535,9 @@ overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
 outset is the sum of what each draws past its input at its settings
 (`jstream_render::video_filter_outset`: a drop shadow its offset plus its blur, a glow
-or a bloom its radius, an outline outside its width), each rounded up to 16 px
-(`OUTSET_STEP`) and at most its kind's `max_outset_px`; a kind it doesn't measure (a
-`border`, for now) and a pack effect that declares one take it whole (render › Filters). The chain grows the layer by it where the first
+or a bloom its radius, an outline outside its width, a border its outer stroke after
+its gap, #1376), each rounded up to 16 px (`OUTSET_STEP`) and at most its kind's
+`max_outset_px`; a pack effect that declares one takes it whole (render › Filters). The chain grows the layer by it where the first
 effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
@@ -1754,13 +1641,14 @@ lists the master's and outputs' video filters with the rest, and `plan_stages` h
 each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
-`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+`image_mask`'s `image`, whose first frame is the mask, and `border`'s `frame`, the
+image of its 9-slice frame, #1294) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
 name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
-layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+layout (`jstream_render::lut_image`) or the mask or frame uploaded as straight sRGB. A reference
 kind keeps no state between frames, so a new load makes the filter again with the new
 image, and the old filter, which holds the old image, is retired through the cache. A
 file that can't be read or decoded is logged and its filter passes its input through
@@ -1854,7 +1742,9 @@ anywhere else, `video.snapshot` included, it draws nothing. A page repaints on i
 own, so while a context is set a source that opens through the browser engine asks for a re-plan at
 the next program frame, painted yet or not, as an animation asks at its next frame: every frame of the frame grid, at 30 or at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
-context the page shows its stand-in, transparent. `LiveSources::audio` lists every
+context the page shows its stand-in, transparent. A page that paints on the CPU (CEF
+on Linux, ADR-0095) is a painter instead (*Live sources*): its paints reach the
+picture through its frame slot, with or without a context, and it asks for no re-plan. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
 *Audio sources*.
 
@@ -2059,8 +1949,8 @@ zero its build kept (*Live sources*). A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
-thread re-plans then, so an animated image or a video advances on the clock and a
-still one is never re-planned. That time is rounded to the frame grid at the
+thread re-plans then, so a source that changes with time and has no painter advances on
+the clock and a still one is never re-planned. That time is rounded to the frame grid at the
 collection's base rate (`LiveSources::wake_at`): the thread re-plans a quarter period
 before the first program tick at least that long after the change, so every change due
 before a tick shares one plan, finished by the tick, and animations out of phase with
@@ -2068,7 +1958,9 @@ each other plan once a frame at most, not once each (#1138). A change due in tha
 quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
-`timer`, which redraws when the value it shows changes)
+`timer`, which redraws when the value it shows changes, and, drawing nothing, an
+animated `image`, a `media` file with video and a `browser` page that paints on the
+CPU, which hand out the frame due or painted last)
 is painted by that thread, holding no engine lock, so under the collection lock the
 plan only takes the frame painted last; `install`, `sync` and a clock swap hand the
 thread the running painters and their time zeros. A painter's frames go through a
@@ -2328,7 +2220,13 @@ captures the same display again. The sizes these captures see go nowhere; `sourc
 reports the program stage's. A webcam or capture card opens once, so the two share it:
 the engine wraps the backends' `VideoDevices` in `SharedVideoDevices`
 (`runtime/devices.rs`), whose open of a device already open returns another reader of
-the same stream, in the format it was opened in. Each reader takes every frame that
+the same stream. An open asking another format the device lists switches it in place,
+for every reader (#1265): the stream closes and opens again in the new format, on the
+CPU path when the device is there (even when the GPU view asks), its counters carried
+on; when the new format doesn't open, it opens again in the old one on the CPU path
+(not for MJPEG, which needs a decoder that open lacks), and when that fails too every
+reader reports it lost. A format the device doesn't list never closes it; the open
+shares it in the format it has. Each reader takes every frame that
 arrives after it joined, once; the newest frame waits in the device's slot until every
 reader has taken it or a newer one replaces it, and the last reader moves it out while
 the others copy it, outside the lock. A read takes the device's lock with `try_lock`
@@ -3670,7 +3568,9 @@ capture starts. A webcam or capture card is opened on the backends' `VideoDevice
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
 in Design), in the format `device_format` picks from those it lists: on the backend's
 GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
-format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). A
+capture asking a format other than the one its device is open in switches the shared
+device to it for every reader (#1265; see *Preview streams*). The
 candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device

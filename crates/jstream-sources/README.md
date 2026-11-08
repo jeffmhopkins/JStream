@@ -85,6 +85,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
+  An animated `image`, a `media` file with video and a `browser` page that paints on
+  the CPU have a painter too, which draws nothing: the image's picks the frame due
+  (its frames are decoded when it is built), the media file's takes the decoded frames
+  due from its player's queue, and the page's hands out its latest paint. So their new
+  frames also reach the picture without a plan. A still image, a file with no video and
+  a page on the GPU have none.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -561,10 +567,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
 - `webcam`: a webcam or capture card, by the `device` setting, the ID the
-  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
-  `device` captures the first device listed. Like `display` and `window`, it only says
-  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
-  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  platform's video-device backend lists it by (`VideoDevices::devices`), which
+  `capture.targets` lists (a `capture_target` of kind `device`, protocol 0.90). An empty
+  `device` captures the first device listed. `resolution` (`<width>x<height>`), `fps`
+  and `pixel_format` (`capture_format` parameters, in the Format group) ask for a format
+  the device lists; empty or 0 leaves that part to the engine, and a device that offers
+  no format matching them opens in the engine's choice. Like `display` and `window`, it
+  only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
+  engine opens the device. A new device or format needs a new source. The kind keeps version 1:
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's
