@@ -284,6 +284,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
   *Audio sources*). Both settings are free text rather than a list of what is present,
   so a collection naming an unplugged device still loads.
+- `network_audio` ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
+  §6) is audio-only too: a network sender's audio, recorded by `jstream-core`'s JTunnel
+  receiver rather than the platform's audio I/O. `transport` is `jtunnel` (the only one
+  so far), `sender` the tunnel name (at most `MAX_SENDER_NAME`, 31 bytes, trimmed; free
+  text like a device ID, and recorded only once this machine accepts it), and
+  `latency_ms` how long frames wait before they play (`LATENCY_MS`: 5 to 500, 40 by
+  default; out of range reads as the default). Its target is
+  `AudioTarget::Network { transport: Transport::Jtunnel, sender, latency_ms }`.
 - `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
   first font of a collection), or with the bundled face `face` names when it is `null`
   (`regular`, `bold` or `condensed_bold`; see *Bundled fonts*). Fonts are

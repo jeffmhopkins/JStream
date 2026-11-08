@@ -48,6 +48,8 @@ jstream-plugin-proto.workspace = true
 # The wasmtime host the engine runs automation plugins on (ADR-0069), behind
 # `wasm-plugins`.
 jstream-plugin-wasm = { workspace = true, optional = true }
+# The JTunnel wire format and playout the receiver drives (ADR-0122, ADR-0123).
+jstream-jtunnel.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
 # The built-in source kinds and their descriptors (ADR-0140, ADR-0025).
