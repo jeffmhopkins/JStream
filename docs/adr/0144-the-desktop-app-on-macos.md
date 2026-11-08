@@ -2,14 +2,14 @@
 id = "ADR-0144"
 title = "The desktop app on macOS, as an unsigned app bundle"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0144: The desktop app on macOS, as an unsigned app bundle
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
