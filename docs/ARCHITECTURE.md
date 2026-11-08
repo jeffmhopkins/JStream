@@ -186,7 +186,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
-├── hotkeys        [{ chord, action }]   chord → protocol action request
+├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
 ├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
@@ -284,8 +284,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
     graph ([ADR-0116](adr/0116-keyframe-tracks.md),
     [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
     collection: see Keyframe tracks under [Protocol](#protocol).
-- **Folders and organisation are collection state:** folders, labels (which sources and
-  scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
+- **Folders and organisation are collection state:** folders, labels (which sources,
+  scenes, hotkey bindings and timelines carry, [ADR-0078](adr/0078-scenes-carry-labels.md),
+  [ADR-0133](adr/0133-labels-on-hotkeys-and-timelines.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
@@ -293,8 +294,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   display order, and a variant sits under its parent, never in a folder. A folder sits in
   at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
-  label a source or scene carries, can't be deleted; `delete.plan` moves what the folder
-  holds up to its parent, or takes the label off its sources and scenes. Labels and
+  label anything carries, can't be deleted; `delete.plan` moves what the folder
+  holds up to its parent, or takes the label off everything carrying it, and
+  `label.members` lists everything carrying it in one read. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. `item.show`, `item.hide` and `item.toggle` are the actions that show and hide
@@ -731,6 +733,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
+  `hotkey.set_labels` sets a binding's labels (protocol 0.100,
+  [ADR-0133](adr/0133-labels-on-hotkeys-and-timelines.md)), which go and come back with it.
   `binding.set` and `binding.clear` (protocol 0.96,
   [ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)) do the same
   for a controller `Trigger` (a MIDI note, controller or program change), with the
@@ -934,7 +938,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
   label) with everything
-  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25) and the controller bindings (protocol 0.96); `bus.list` (protocol 0.19) → the buses and sends;
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25) and the controller bindings (protocol 0.96); `label.members`
+  (protocol 0.100, ADR-0133) → the scenes, keyframe scenes among them, sources, hotkey
+  bindings and timelines that carry one label; `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
@@ -993,8 +999,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
   `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
-  `label.delete` refused because a scene or folder is in the folder or a source carries
-  the label.
+  `label.delete` refused because a scene or folder is in the folder or a source, scene,
+  hotkey binding or timeline carries the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
   `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
@@ -1477,7 +1483,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   settings already grant names or a bus, since loading rebuilds sources with their
   kind's defaults. Version 10 (ADR-0129)
   adds a keyframe override's `timing`, with a migration that refuses it in an older
-  file. `jstream-core`
+  file. Version 11 (ADR-0133) adds a hotkey binding's and a timeline's `labels`; its
+  migration refuses a binding's in an older file and drops a timeline's, as that version
+  ignored them. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

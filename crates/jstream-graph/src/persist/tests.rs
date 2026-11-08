@@ -51,10 +51,15 @@ const V8: &str = include_str!("fixtures/v8.json");
 /// (ADR-0122). It must keep loading as version 1 must.
 const V9: &str = include_str!("fixtures/v9.json");
 
-/// A collection file at schema version 10, the current one: version 9 with keyframe scene
-/// `k`'s timing for item `i3` in transitions into it (ADR-0129). The same rule applies
-/// once version 11 exists.
+/// A collection file at schema version 10: version 9 with keyframe scene
+/// `k`'s timing for item `i3` in transitions into it (ADR-0129). It must keep loading as
+/// version 1 must.
 const V10: &str = include_str!("fixtures/v10.json");
+
+/// A collection file at schema version 11, the current one: version 10 with a label on
+/// its hotkey `F6` and its timeline `t_intro` (ADR-0133). The same rule applies once
+/// version 12 exists.
+const V11: &str = include_str!("fixtures/v11.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -348,6 +353,7 @@ fn v6_graph() -> Graph {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t_intro"),
                     name: "Intro".into(),
                     duration_ms: 3000,
@@ -449,6 +455,40 @@ fn v10_graph() -> Graph {
     graph
 }
 
+/// The v10 collection, plus label `l_show` on hotkey `F6` and timeline `t_intro`
+/// (ADR-0133), in one more batch: what version 11 saves.
+fn v11_graph() -> Graph {
+    use jstream_protocol::{Chord, LabelId, TimelineId};
+    let mut graph = v10_graph();
+    let mut timeline = graph
+        .state()
+        .timeline(&TimelineId::new("t_intro"))
+        .map(|(_, t)| t.clone())
+        .expect("v6 has t_intro");
+    timeline.labels = vec![LabelId::new("l_show")];
+    let applied = graph.apply(
+        &[
+            Edit::LabelCreate {
+                label_id: LabelId::new("l_show"),
+                name: "Show".into(),
+                color: "#3366ff".into(),
+                icon: None,
+            },
+            Edit::HotkeySetLabels {
+                chord: Chord::new("F6"),
+                labels: vec![LabelId::new("l_show")],
+            },
+            Edit::TimelineSet {
+                scene_id: SceneId::new("a"),
+                timeline,
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -520,7 +560,7 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v10_graph().to_collection_json(), V10);
+    assert_eq!(v11_graph().to_collection_json(), V11);
 }
 
 #[test]
@@ -529,6 +569,31 @@ fn the_v9_fixture_loads_exactly() {
     let loaded = load(V9);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+#[test]
+fn the_v11_fixture_loads_exactly() {
+    let expected = v11_graph();
+    let loaded = load(V11);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(10)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 11 adds hotkey and timeline labels (ADR-0133). A version 10 hotkey's labels
+/// are refused, as version 10 refused them; a version 10 timeline's are dropped, as
+/// version 10 ignored them.
+#[test]
+fn a_version_10_hotkey_label_is_refused_and_a_timeline_label_dropped() {
+    let mut value: Value = serde_json::from_str(V10).unwrap_or_default();
+    value["hotkeys"][0]["labels"] = json!(["l_show"]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 10, .. })
+    ));
+    let mut value: Value = serde_json::from_str(V10).unwrap_or_default();
+    value["scenes"][1]["timelines"][0]["labels"] = json!(["l_missing"]);
+    let loaded = load(&value.to_string());
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(v10_graph().state()));
 }
 
 #[test]

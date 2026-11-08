@@ -108,7 +108,8 @@ pub use motion::{
     MotionModifier, MotionProblem, MotionProperty, MotionShape, check_motion, check_motion_id,
 };
 pub use organise::{
-    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon, parse_rgba,
+    FolderInfo, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, MAX_ICON_LEN, SceneMeta,
+    SourceMeta, check_color, check_icon, parse_rgba,
 };
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,

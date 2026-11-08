@@ -206,6 +206,9 @@ pub struct State {
     /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries (ADR-0133), ordered by ID. A chord with none has
+    /// no entry, and a cleared binding takes its entry with it.
+    pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
     /// The controller bindings (ADR-0122), ordered by trigger.
     pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// In folder order.
@@ -237,6 +240,7 @@ impl Default for State {
             sends: BTreeMap::new(),
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
@@ -393,6 +397,29 @@ impl State {
     /// The action bound to this chord.
     pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
         self.hotkeys.get(chord)
+    }
+
+    /// The labels the binding of this chord carries, ordered by ID: none for a chord
+    /// with no binding (ADR-0133).
+    pub fn hotkey_labels(&self, chord: &Chord) -> Vec<LabelId> {
+        self.hotkey_labels
+            .get(chord)
+            .map(|labels| labels.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The binding of `chord` to `action` as the wire reports it, with its labels.
+    pub fn binding(&self, chord: &Chord, action: &Action) -> jstream_protocol::HotkeyBinding {
+        jstream_protocol::HotkeyBinding::new(chord.clone(), action)
+            .with_labels(self.hotkey_labels(chord))
+    }
+
+    /// Every binding as the wire reports it, ordered by chord, with its labels.
+    pub fn hotkey_bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
+        self.hotkeys
+            .iter()
+            .map(|(chord, action)| self.binding(chord, action))
+            .collect()
     }
 
     /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the

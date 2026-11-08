@@ -536,6 +536,13 @@ impl Touched {
             Edit::HotkeyClear { chord } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
             }
+            // A binding's labels are its metadata (ADR-0133), and use each label.
+            Edit::HotkeySetLabels { chord, labels } => {
+                self.prop(Object::Hotkey(chord.clone()), Prop::Meta);
+                for label in labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
+            }
             Edit::BindingSet { trigger, action } => {
                 self.exists.insert(Object::Binding(trigger.clone()));
                 self.uses_named(action);
@@ -549,6 +556,9 @@ impl Touched {
                 self.exists
                     .insert(Object::Timeline(timeline.timeline_id.clone()));
                 self.uses.insert(Object::Scene(scene_id.clone()));
+                for label in &timeline.labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
             }
             Edit::TimelineDelete { timeline_id } => {
                 self.exists.insert(Object::Timeline(timeline_id.clone()));

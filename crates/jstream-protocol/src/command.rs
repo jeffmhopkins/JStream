@@ -963,6 +963,20 @@ pub enum Edit {
         /// The chord to unbind.
         chord: Chord,
     },
+    /// Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,
+    /// so it shows in each label's action group beside the keyframes and timelines that
+    /// carry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't
+    /// bound, `not_found` for a label that doesn't exist, and `invalid_argument` on
+    /// `labels` for one listed twice. `hotkey.clear` drops the labels with the binding,
+    /// and its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)
+    /// starts with none. Inverse: `hotkey.set_labels` with the old set.
+    #[serde(rename = "hotkey.set_labels")]
+    HotkeySetLabels {
+        /// The bound chord.
+        chord: Chord,
+        /// Its labels; empty for none.
+        labels: Vec<LabelId>,
+    },
     /// Binds a controller trigger, such as a MIDI note, to an action (since 0.96,
     /// ADR-0122 decision 1). The engine runs the action itself when an input it reads
     /// sends the trigger, on the first frame at or after the message's time; running it
@@ -1316,6 +1330,7 @@ impl Edit {
             Edit::LabelDelete { .. } => "label.delete",
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
+            Edit::HotkeySetLabels { .. } => "hotkey.set_labels",
             Edit::HotkeyClear { .. } => "hotkey.clear",
             Edit::BindingSet { .. } => "binding.set",
             Edit::BindingClear { .. } => "binding.clear",

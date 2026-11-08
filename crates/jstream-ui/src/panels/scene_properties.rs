@@ -210,24 +210,28 @@ pub fn scene_edits(
                 hotkeys::label(chord)
             ));
         }
-        // A rebind keeps the preset the old binding switched with.
-        let preset_id = collection
-            .scene_hotkey(scene_id)
-            .and_then(|b| match b.action() {
-                Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
-                _ => None,
-            });
+        // A rebind keeps the preset the old binding switched with, and its labels
+        // (ADR-0133).
+        let old = collection.scene_hotkey(scene_id);
+        let preset_id = old.and_then(|b| match b.action() {
+            Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
+            _ => None,
+        });
+        let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
-                chord,
+                chord: chord.clone(),
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
                 },
             });
+            if !labels.is_empty() {
+                edits.push(Edit::HotkeySetLabels { chord, labels });
+            }
         }
     }
     Ok(edits)
@@ -902,7 +906,7 @@ fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{HotkeyBinding, SceneInfo, SceneOptions};
+    use jstream_control::protocol::{HotkeyBinding, LabelId, SceneInfo, SceneOptions};
 
     fn switch(id: &str) -> Action {
         Action::SceneSwitch {
@@ -950,13 +954,15 @@ mod tests {
     fn a_new_hotkey_replaces_the_old_and_a_taken_one_is_refused() {
         let c = Collection {
             hotkeys: vec![
-                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F1"), &switch("a"))
+                    .with_labels(vec![LabelId::new("live")]),
                 HotkeyBinding::new(Chord::new("F2"), &switch("b")),
             ],
             ..Collection::default()
         };
         let a = SceneId::new("a");
         let before = draft("A", Some("F1"));
+        // A rebind keeps the old binding's labels (ADR-0133).
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
@@ -966,6 +972,10 @@ mod tests {
                 Edit::HotkeySet {
                     chord: Chord::new("F3"),
                     action: switch("a"),
+                },
+                Edit::HotkeySetLabels {
+                    chord: Chord::new("F3"),
+                    labels: vec![LabelId::new("live")],
                 },
             ])
         );

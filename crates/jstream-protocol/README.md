@@ -60,7 +60,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
-  `send.remove`, `hotkey.set`,
+  `send.remove`, `hotkey.set`, `hotkey.set_labels`,
   `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
@@ -110,7 +110,8 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   mock compare to remove a key that would otherwise follow its output elsewhere (#343).
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
-  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
+  every implementation), and `HotkeyBinding`, a chord, its action and its labels
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) as reads report it.
 - **Controller bindings** (`binding.rs`, since 0.96,
   [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
   `Trigger`, a MIDI note, control change or program change, on one channel or any, from
@@ -137,7 +138,10 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 - **Organisation** (`organise.rs`,
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
   `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
-  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
+  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`); and
+  `LabelMembers`, with `LabelledScene` and `LabelledTimeline`, what `label.members`
+  lists for a label
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)).
 
 <a id="contents-calls"></a>
 ## Contents: queries, kinds and events
@@ -152,7 +156,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
-  `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  `pack.read`, `values.list`, `label.members` (since 0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
@@ -312,7 +317,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.99 because a keyframe scene can time an item in switches into it
+`PROTOCOL_VERSION` is 0.100 because hotkey bindings and timelines carry labels
+(`hotkey.set_labels`, `HotkeyBinding.labels`, `TimelineInfo.labels`) and `label.members`
+lists everything that carries a label
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md), a number the
+release queue set); 0.99 because a keyframe scene can time an item in switches into it
 (`item.set_timing`, `ItemOverride.timing`, `KeyframeTiming`, `OverrideField::Timing`) and
 the easings gain `ease_in`, `hold` and `cubic_bezier`
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md), a number the
@@ -524,7 +533,8 @@ covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/
   canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
   encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path, encoder profile, video mix, hotkey and binding checks, and `item.set_source` and
+  URL, recording path, encoder profile, video mix, hotkey and binding checks, a hotkey
+binding's labels, `label.members` of a missing label, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
   `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
@@ -1133,8 +1143,14 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   and hide one item: they change its placement's visibility as `item.set_visible` would,
   moving `rev` on with no undo step, and the engine plays the item's own `appear` or
   `disappear` effect on program over the default preset's duration.
+- **`hotkey.set_labels {chord, labels}`** (0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) sets the labels of
+  a binding, whole, from the collection's one set of labels: the binding must exist
+  (`not_found`, entity `hotkey`), then each label (`not_found`), each listed once
+  (`invalid_argument` on `labels`). They are kept ordered by ID, and an empty list
+  removes them; its inverse sets the old ones. `hotkey.set` binds with none.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
-  inverse is `hotkey.set` with the action.
+  inverse is `hotkey.set` with the action, then `hotkey.set_labels` when it carried any.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
@@ -1142,13 +1158,14 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
-  the item (ADR-0101). Their inverses restore the
-  bindings after the target. If another client has bound one of those chords since,
+  the item (ADR-0101). A binding goes with its labels. Their inverses restore the
+  bindings, with their labels, after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
   lists the ones its batch would (`hotkeys`), so a client can say "this also removes
   the hotkey Ctrl+Digit1".
-- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+- Reads report a binding as a `HotkeyBinding {chord, action, labels}` (`labels` omitted
+  for none) whose `action` is plain
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
@@ -1238,11 +1255,18 @@ none drops nothing), and its inverse restores them. `SceneInfo.camera` reports t
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
 is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
-bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
-be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
-for a label, its sources first, then its scenes), and `delete.plan` with a `folder` or
-`label` target returns the batch that moves what the folder holds up to its parent, or
-takes the label off its sources and scenes, then deletes it.
+bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
+([Timelines](#timelines)) carry labels from the same set, checked the same way
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and
+`label.members {label_id}` lists everything that carries one: its scenes in display
+order, each with its parent when it is a keyframe scene, its sources by ID, its bindings
+by chord with their actions, and its timelines by scene then ID, each with its scene;
+`not_found` for a label that doesn't exist. A folder that holds a scene or folder, and a
+label anything carries, can't be deleted: the `invalid_argument` lists the `blockers`
+(`folder`, `parent` or `labels`; for a label, its sources first, then its scenes, its
+bindings and its timelines), and `delete.plan` with a `folder` or `label` target returns
+the batch that moves what the folder holds up to its parent, or takes the label off
+each, in that order, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.
@@ -1391,6 +1415,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
+- `label.members {label_id}` (0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): everything that
+  carries one label, as `LabelMembers` at the `rev` it was read: the label, its `scenes`
+  in display order (`scene_id`, `name`, and `variant_of` for a keyframe scene), its
+  `sources` by ID, its `hotkeys` by chord with their actions, and its `timelines` by
+  scene then ID (`timeline_id`, `name`, `scene_id`), each list omitted when empty, so an
+  agent lists a label's action group in one call. `not_found` for a label that doesn't
+  exist.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind`, settings, filters and, for an audio source, its `audio`.
 - `bus.list`: the buses, ordered by ID (the master among them), and every send,
@@ -2009,7 +2041,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 - **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
   `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding and studio
-  edits, among them a scene's folder, metadata and transitions, a source's metadata, an
+  edits, among them a scene's folder, metadata and transitions, a source's metadata, a
+  hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
   a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
@@ -2390,7 +2423,11 @@ Since 0.87 a scene holds timelines
   action a later cue runs still reads `state.get`; `timeline.set` refuses an action
   it doesn't know at `cues.N.action`. A scene holds at most 32. A cue a loop would
   never reach (at or past where it jumps back, or past a `once` timeline's end) is
-  refused. `TimelineInfo::problem` is the check every implementation shares.
+  refused. `TimelineInfo::problem` is the check every implementation shares. Since 0.100
+  a timeline carries `labels` too, omitted for none
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): each must exist
+  (`not_found`) and be listed once (`invalid_argument` on `timeline.labels`), and they
+  are kept ordered by ID ([Folders, labels and scene options](#organisation)).
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
   `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an

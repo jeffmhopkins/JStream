@@ -40,6 +40,7 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
+use jstream_protocol::LabelId;
 use jstream_protocol::{
     Action, Batch, Binding, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
     CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
@@ -577,6 +578,8 @@ struct Collection {
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries, ordered by ID (ADR-0133); no entry for none.
+    hotkey_labels: BTreeMap<Chord, Vec<LabelId>>,
     /// The controller bindings (ADR-0122), ordered by trigger.
     bindings: BTreeMap<Trigger, Action>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
@@ -613,6 +616,7 @@ impl Default for Collection {
             output_filters: BTreeMap::new(),
             master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
@@ -1312,6 +1316,10 @@ impl State {
                     scene_id,
                 }
             }
+            Query::LabelMembers { label_id } => QueryResult::LabelMembers {
+                rev: self.collection.rev,
+                members: self.collection.label_members(&label_id)?,
+            },
             Query::StateGet => QueryResult::StateGet {
                 rev: self.collection.rev,
                 canvas: self.collection.canvas,
@@ -1348,12 +1356,7 @@ impl State {
                 master: Box::new(jstream_protocol::MasterInfo {
                     filters: self.collection.master.clone(),
                 }),
-                hotkeys: self
-                    .collection
-                    .hotkeys
-                    .iter()
-                    .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
-                    .collect(),
+                hotkeys: self.collection.hotkey_bindings(|_| true),
                 bindings: self
                     .collection
                     .bindings
@@ -2480,11 +2483,27 @@ impl Collection {
                 self.hotkeys.insert(chord.clone(), action);
                 vec![Edit::HotkeyClear { chord }]
             }
+            // The graph's checks: the binding, then the labels (ADR-0133).
+            Edit::HotkeySetLabels { chord, labels } => {
+                if !self.hotkeys.contains_key(&chord) {
+                    return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+                }
+                let labels = self.checked_labels(&labels, at)?;
+                let old = if labels.is_empty() {
+                    self.hotkey_labels.remove(&chord)
+                } else {
+                    self.hotkey_labels.insert(chord.clone(), labels)
+                };
+                vec![Edit::HotkeySetLabels {
+                    chord,
+                    labels: old.unwrap_or_default(),
+                }]
+            }
             Edit::HotkeyClear { chord } => {
-                let Some(action) = self.hotkeys.remove(&chord) else {
+                let Some(binding) = self.take_hotkey(&chord) else {
                     return Err(not_found(EntityKind::Hotkey, chord.as_str()));
                 };
-                vec![Edit::HotkeySet { chord, action }]
+                restore_hotkey(binding)
             }
             // The graph's checks, in its order, as for hotkeys.
             Edit::BindingSet { trigger, action } => {
@@ -2547,6 +2566,24 @@ impl Collection {
         Ok(())
     }
 
+    /// Every binding `keep` keeps, ordered by chord, with its labels.
+    fn hotkey_bindings(&self, keep: impl Fn(&[LabelId]) -> bool) -> Vec<HotkeyBinding> {
+        self.hotkeys
+            .iter()
+            .filter_map(|(chord, action)| {
+                let labels = self.hotkey_labels.get(chord).cloned().unwrap_or_default();
+                keep(&labels).then(|| HotkeyBinding::new(chord.clone(), action).with_labels(labels))
+            })
+            .collect()
+    }
+
+    /// Removes the binding of `chord` and its labels, and returns it.
+    fn take_hotkey(&mut self, chord: &Chord) -> Option<HotkeyBinding> {
+        let action = self.hotkeys.remove(chord)?;
+        let labels = self.hotkey_labels.remove(chord).unwrap_or_default();
+        Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
+    }
+
     /// Removes the hotkey and controller bindings whose action names an item the
     /// collection no longer has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a
     /// deleted object.
@@ -2607,11 +2644,9 @@ impl Collection {
     ) -> Vec<Edit> {
         let mut restore = Vec::new();
         for chord in chords {
-            if let Some(action) = self.hotkeys.remove(&chord) {
-                removed
-                    .hotkeys
-                    .push(HotkeyBinding::new(chord.clone(), &action));
-                restore.push(Edit::HotkeySet { chord, action });
+            if let Some(binding) = self.take_hotkey(&chord) {
+                removed.hotkeys.push(binding.clone());
+                restore.extend(restore_hotkey(binding));
             }
         }
         for trigger in triggers {
@@ -3356,6 +3391,25 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
         entity,
         id: id.to_owned(),
     }
+}
+
+/// The edits that put back a removed binding: its `hotkey.set`, then its
+/// `hotkey.set_labels` when it carried any (ADR-0133).
+fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
+    let Some(action) = binding.action() else {
+        return Vec::new();
+    };
+    let mut edits = vec![Edit::HotkeySet {
+        chord: binding.chord.clone(),
+        action,
+    }];
+    if !binding.labels.is_empty() {
+        edits.push(Edit::HotkeySetLabels {
+            chord: binding.chord,
+            labels: binding.labels,
+        });
+    }
+    edits
 }
 
 /// A protocol variant added after this mock was written.

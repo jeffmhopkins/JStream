@@ -22,7 +22,7 @@ use crate::live::GestureInfo;
 use crate::mix::DEFAULT_BASE_FPS;
 use crate::mix::VideoMixInfo;
 use crate::motion::MotionModifier;
-use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
+use crate::organise::{FolderInfo, LabelInfo, LabelMembers, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
 use crate::profile::ProfileInfo;
@@ -199,6 +199,15 @@ pub enum Query {
     DeletePlan {
         /// What to delete.
         target: DeleteTarget,
+    },
+    /// Lists everything that carries a label (ADR-0133, since 0.100): its scenes,
+    /// keyframe scenes among them, its sources, its hotkey bindings with their actions,
+    /// and its timelines, so a client or an agent sees a label's action group in one
+    /// call. `not_found` for a label that doesn't exist.
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The label.
+        label_id: LabelId,
     },
     /// Lists the displays and windows the engine can capture now: what a `display` or
     /// `window` source's `target` setting can name. They are runtime state, not
@@ -382,6 +391,7 @@ impl Query {
             Query::YoutubeStats => "youtube.stats",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
@@ -685,6 +695,14 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         bindings: Vec<Binding>,
     },
+    /// The result of `label.members` (since 0.100).
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The revision it was read at.
+        rev: Rev,
+        /// The label and what carries it.
+        members: LabelMembers,
+    },
     /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
     #[serde(rename = "source.sizes")]
     SourceSizes {
@@ -807,6 +825,7 @@ impl QueryResult {
             QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::LabelMembers { .. } => "label.members",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::FontList { .. } => "font.list",

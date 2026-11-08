@@ -52,7 +52,10 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
+use crate::{
+    FolderId, FolderInfo, LabelId, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline,
+    SceneMeta, SourceMeta,
+};
 use crate::{FrameSheet, FrameStrip, SheetFrame};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
@@ -570,6 +573,10 @@ pub(crate) fn edits() -> Vec<Edit> {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
             },
+        },
+        Edit::HotkeySetLabels {
+            chord: Chord::new("Ctrl+Digit1"),
+            labels: vec![LabelId::new("lbl_sponsor")],
         },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
@@ -1194,7 +1201,8 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
             },
-        ),
+        )
+        .with_labels(vec![LabelId::new("lbl_sponsor")]),
         HotkeyBinding::new(
             Chord::new("F9"),
             &Action::OutputStart {
@@ -1590,6 +1598,7 @@ fn volley() -> TimelineInfo {
         )
     };
     TimelineInfo {
+        labels: vec![LabelId::new("lbl_sponsor")],
         timeline_id: TimelineId::new("tl_volley"),
         name: "Volley".into(),
         duration_ms: 4000,
@@ -1639,6 +1648,7 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        labels: Vec::new(),
         timeline_id: TimelineId::new(match looping {
             TimelineLoop::Loop => "tl_pulse",
             _ => "tl_once",
@@ -1696,6 +1706,9 @@ pub(crate) fn queries() -> Vec<Query> {
             scene_id: SceneId::new("scn_1"),
         },
         Query::StateGet,
+        Query::LabelMembers {
+            label_id: LabelId::new("lbl_sponsor"),
+        },
         Query::VideoSnapshot,
         Query::KindList,
         Query::KindDescribe {
@@ -2746,6 +2759,36 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     preset_id: None,
                 },
             )],
+        },
+        QueryResult::LabelMembers {
+            rev: Rev(12),
+            members: LabelMembers {
+                label: LabelInfo {
+                    label_id: LabelId::new("lbl_sponsor"),
+                    name: "Sponsor".into(),
+                    color: "#ff8800".into(),
+                    icon: Some("megaphone".into()),
+                },
+                scenes: vec![
+                    LabelledScene {
+                        scene_id: SceneId::new("scn_1"),
+                        name: "Main".into(),
+                        variant_of: None,
+                    },
+                    LabelledScene {
+                        scene_id: SceneId::new("scn_wide"),
+                        name: "Wide".into(),
+                        variant_of: Some(SceneId::new("scn_1")),
+                    },
+                ],
+                sources: vec![SourceId::new("src_cam")],
+                hotkeys: hotkey_bindings().into_iter().take(1).collect(),
+                timelines: vec![LabelledTimeline {
+                    timeline_id: TimelineId::new("tl_volley"),
+                    name: "Volley".into(),
+                    scene_id: SceneId::new("scn_1"),
+                }],
+            },
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {

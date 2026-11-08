@@ -1245,7 +1245,11 @@ The engine plays timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire
 as studio state beside the program scene (`timelines.rs`): `Timelines` keeps, for each
 one playing, when its pass 0 started on the animation clock (the media clock the sources
 and the render thread draw on, in nanoseconds), how far its cues have fired, its pass,
-and the client and request that started it. Nothing of it is saved or undone.
+and the client and request that started it. Nothing of it is saved or undone. A timeline's labels
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) are collection
+state the graph checks and saves; playing ignores them. The tests show a label gathering
+two keyframe scenes, their hotkeys and a timeline in one `label.members`, and their
+preset changed in one batch that one undo takes back.
 - **Schedule:** a stored `TimelineInfo` becomes `jstream-anim`'s `Timeline` (`schedule`),
   whose `due` gives each cue's exact fire time in a window, `seek` the state cues a seek
   runs, and `position` where it is. `Timelines::advance` takes the cues due up to now,
