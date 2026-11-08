@@ -271,8 +271,10 @@ Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). T
 Inspector shows only the selected item's placement and behaviour, in tabs (IN-11). The
 source's settings form is in the Properties dialog (DL-02), which the header's
 Properties & filters… button opens (IN-01), on a draft (#1219). In that form, a display or window
-capture's target is picked from a list of the displays or open windows the engine
-reports (`capture.targets`), not typed as an ID. Beyond the prototype, as in OBS, a
+capture's target, and a webcam's device, is picked from a list of the displays, open
+windows or video devices the engine reports (`capture.targets`), not typed as an ID;
+a webcam's resolution, frame rate and video format are picked from what that device
+lists, each with "Auto" for the engine's choice. Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
 first and "Other file…" for any other file. In the desktop app, an asset path whose
@@ -370,9 +372,9 @@ panel manages outputs (create, keys, start and stop, encoders and video mixes), 
 prototype doesn't show; that stays ([Beyond](#beyond)). Since #1206 the dock holds a
 compact, live-first list, OBS-style: the header's "Outputs" carries the pipeline's health
 as a dot and a word ("Healthy", "Dropping (N)", "No stats yet", with the detail on hover)
-and "▶ Start all", which starts every output that can start, of any kind (a stream
-without its key is left), and once none can becomes a red "■ Stop all", which stops every
-running one; then one row per output with its kind icon, ID, a one-line summary (the server's host, the
+and "▶ Start all", which starts every stopped output that can start, of any kind (a
+stream without its key is left; off when none can), with a red "■ Stop all" beside it
+while any output runs, which stops every running one; then one row per output with its kind icon, ID, a one-line summary (the server's host, the
 recording's file name or "Webcam", then the encoder profile's name), a ⚠ when the engine
 says the key would cross the network unencrypted (the full warning on hover), a state
 badge (grey stopped, amber starting or stopping, red live, red outline failed), Start
@@ -382,7 +384,9 @@ right-click). A live row gets a red edge, and a running one a second line from
 `stats.tick`'s `outputs`: its bitrate, what it dropped this run (frames and packets) and
 its uptime ("2.45 Mbps · 0 dropped · 00:12:34"). Duplicate adds a copy under the first free
 ID in one batch (the kind, target, encoder, mix, bus and filters, but not the stream key,
-which the page never has) and opens the copy's settings. Under the rows, "+ Add output"
+which the page never has; a recording's copy writes beside it under a free name, such as
+"show (2).mp4") and opens the copy's settings. A stream to a target this page doesn't
+know can't be copied: "This page can't copy this output yet." Under the rows, "+ Add output"
 and "Encoders & mixes…" open dialogs.
 
 An output's settings dialog (Settings…, or a double-click on its row) has General (the
@@ -403,7 +407,8 @@ dialog lists the encoder profiles and video mixes on the left, each with its nam
 short summary ("H.264 · 8000 kbps · HW", "1080 × 1920 · Program"), and edits the one
 picked on the right, with the whole of what it encodes or shows, Save, Cancel and Delete
 (off, naming the outputs, while one uses it); "+ New encoder" and "+ New video mix" start
-one, and a saved one stays picked. A new profile is named "Default H.264".
+one. Save and Delete wait for the engine: "Saving…" until it answers, then "Saved." (a
+new one is picked), or its refusal under the form with the draft kept. A new profile is named "Default H.264".
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|

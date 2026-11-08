@@ -51,7 +51,7 @@ mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
-pub use capture::{CaptureSpec, webcam_device};
+pub use capture::{CaptureSpec, DeviceFormatWant, fps_centi, webcam_device};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
 pub use fonts::{InstalledFont, installed_fonts, system_font_dirs};

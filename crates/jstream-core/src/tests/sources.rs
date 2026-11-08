@@ -12,7 +12,7 @@ use jstream_protocol::{
     Action, AssetRoot, Batch, Call, Edit, Event, ItemId, PixelSize, Reference, SceneId, Settings,
     SourceId, SourceKind, TimelineCue, TimelineId, TimelineInfo, TimelineLoop,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, DeviceFormatWant};
 use serde_json::{Value, json};
 use std::collections::BTreeSet;
 use std::fs;
@@ -538,8 +538,11 @@ fn capture_sources_capture_their_targets() {
             CaptureSpec::Display(None),
             CaptureSpec::Display(Some("monitor:2".into())),
             CaptureSpec::Window(Some("hwnd:0x2a".into())),
-            CaptureSpec::Device(None),
-            CaptureSpec::Device(Some("fake-capture-card-0".into())),
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Device(
+                Some("fake-capture-card-0".into()),
+                DeviceFormatWant::default()
+            ),
         ])
     );
     // Each source has a capture of its own, so a backend that keeps a grant per source

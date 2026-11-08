@@ -447,7 +447,7 @@ pub(crate) fn Profiles(
     mixes: RwSignal<Vec<VideoMixInfo>>,
     outputs: Signal<Vec<OutputInfo>>,
     scenes: Signal<Vec<(SceneId, String)>>,
-    send: Callback<Edit>,
+    send: SendEdit,
     pick: RwSignal<Option<LibraryPick>>,
 ) -> impl IntoView {
     let codecs = CodecDownloads::load();
@@ -592,20 +592,81 @@ pub(crate) fn Profiles(
     }
 }
 
-/// Sends a profile's or mix's save: an update keeps the editor on it, and a create
-/// moves the editor to the new one, which says "Saving…" until the engine lists it.
+/// Sends one edit, then calls its callback with the engine's answer.
+pub(crate) type SendEdit = Callback<(Edit, Callback<Result<(), String>>)>;
+
+/// Where an editor's last Save is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Saving {
+    /// Nothing sent since the last change.
+    Idle,
+    /// Sent, and the engine hasn't answered.
+    Sent,
+    /// The engine took it.
+    Saved,
+}
+
+/// The status line beside an editor's buttons: "Saving…" until the engine answers, then
+/// "Saved." until the next change.
+fn saving_note(saving: Saving) -> Option<&'static str> {
+    match saving {
+        Saving::Idle => None,
+        Saving::Sent => Some("Saving…"),
+        Saving::Saved => Some("Saved."),
+    }
+}
+
+/// Sends a profile's or mix's save and waits for the engine (#1373 r1 N4). Taken, an
+/// update says "Saved." and a create moves the editor to the new one, which says
+/// "Saving…" until the engine lists it. Refused, the editor keeps the draft and names
+/// the reason.
 fn save_edit(
     edit: Edit,
-    send: Callback<Edit>,
+    send: SendEdit,
     pick: RwSignal<Option<LibraryPick>>,
     pending: RwSignal<Option<LibraryPick>>,
+    saving: RwSignal<Saving>,
+    problem: RwSignal<Option<String>>,
 ) {
     let created = created_pick(&edit);
-    send.run(edit);
-    if let Some(created) = created {
-        pending.set(Some(created.clone()));
-        pick.set(Some(created));
-    }
+    saving.set(Saving::Sent);
+    problem.set(None);
+    let answered = Callback::new(move |answer: Result<(), String>| match answer {
+        Ok(()) => {
+            if saving.try_get_untracked() == Some(Saving::Sent) {
+                saving.try_set(Saving::Saved);
+            }
+            if let Some(created) = created.clone() {
+                pending.try_set(Some(created.clone()));
+                pick.try_set(Some(created));
+            }
+        }
+        Err(why) => {
+            saving.try_set(Saving::Idle);
+            problem.try_set(Some(why));
+        }
+    });
+    send.run((edit, answered));
+}
+
+/// Sends a delete and closes the editor once the engine takes it; refused, the editor
+/// stays and names the reason.
+fn delete_edit(
+    edit: Edit,
+    send: SendEdit,
+    pick: RwSignal<Option<LibraryPick>>,
+    problem: RwSignal<Option<String>>,
+) {
+    problem.set(None);
+    let answered = Callback::new(move |answer: Result<(), String>| match answer {
+        Ok(()) => {
+            pick.try_set(None);
+        }
+        Err(why) => {
+            problem.try_set(Some(why));
+        }
+    });
+    send.run((edit, answered));
 }
 
 /// The editor of a profile, or of a new one (`editing` `None`): its whole encoding in a
@@ -616,7 +677,7 @@ fn EncoderForm(
     editing: Option<EncoderProfileId>,
     encoders: RwSignal<Vec<EncoderProfileInfo>>,
     outputs: Signal<Vec<OutputInfo>>,
-    send: Callback<Edit>,
+    send: SendEdit,
     pick: RwSignal<Option<LibraryPick>>,
     pending: RwSignal<Option<LibraryPick>>,
     codecs: CodecDownloads,
@@ -630,12 +691,12 @@ fn EncoderForm(
         .unwrap_or_default();
     let draft = RwSignal::new(start);
     let problem = RwSignal::new(None::<String>);
-    let saved = RwSignal::new(false);
+    let saving = RwSignal::new(Saving::Idle);
     // Any change after a save takes its "Saved." away.
     Effect::new(move |first: Option<()>| {
         draft.track();
         if first.is_some() {
-            saved.set(false);
+            saving.set(Saving::Idle);
         }
     });
     let editing = StoredValue::new(editing);
@@ -644,11 +705,7 @@ fn EncoderForm(
         let built = encoders
             .with_untracked(|e| draft.with_untracked(|d| d.edit(editing.get_value().as_ref(), e)));
         match built {
-            Ok(edit) => {
-                problem.set(None);
-                saved.set(true);
-                save_edit(edit, send, pick, pending);
-            }
+            Ok(edit) => save_edit(edit, send, pick, pending, saving, problem),
             Err(why) => problem.set(Some(why)),
         }
     };
@@ -835,19 +892,21 @@ fn EncoderForm(
                         title=move || blocked.get().unwrap_or_default()
                         on:click=move |_| {
                             if let Some(profile_id) = editing.get_value() {
-                                send.run(Edit::EncoderDelete { profile_id });
-                                pick.set(None);
+                                delete_edit(Edit::EncoderDelete { profile_id }, send, pick, problem);
                             }
                         }
                     >
                         "Delete"
                     </button>
                 </Show>
-                <Show when=move || saved.get()>
-                    <span class="hint saved" role="status">"Saved."</span>
-                </Show>
+                {move || {
+                    saving_note(saving.get())
+                        .map(|note| view! { <span class="hint saved" role="status">{note}</span> })
+                }}
                 <button type="button" class="secondary" on:click=move |_| pick.set(None)>"Cancel"</button>
-                <button type="submit" class="primary">"Save"</button>
+                <button type="submit" class="primary" disabled=move || saving.get() == Saving::Sent>
+                    "Save"
+                </button>
             </div>
         </form>
     }
@@ -861,7 +920,7 @@ fn MixForm(
     mixes: RwSignal<Vec<VideoMixInfo>>,
     outputs: Signal<Vec<OutputInfo>>,
     scenes: Signal<Vec<(SceneId, String)>>,
-    send: Callback<Edit>,
+    send: SendEdit,
     pick: RwSignal<Option<LibraryPick>>,
     pending: RwSignal<Option<LibraryPick>>,
 ) -> impl IntoView {
@@ -873,11 +932,11 @@ fn MixForm(
         .unwrap_or_default();
     let draft = RwSignal::new(start);
     let problem = RwSignal::new(None::<String>);
-    let saved = RwSignal::new(false);
+    let saving = RwSignal::new(Saving::Idle);
     Effect::new(move |first: Option<()>| {
         draft.track();
         if first.is_some() {
-            saved.set(false);
+            saving.set(Saving::Idle);
         }
     });
     let editing = StoredValue::new(editing);
@@ -886,11 +945,7 @@ fn MixForm(
         let built = mixes
             .with_untracked(|m| draft.with_untracked(|d| d.edit(editing.get_value().as_ref(), m)));
         match built {
-            Ok(edit) => {
-                problem.set(None);
-                saved.set(true);
-                save_edit(edit, send, pick, pending);
-            }
+            Ok(edit) => save_edit(edit, send, pick, pending, saving, problem),
             Err(why) => problem.set(Some(why)),
         }
     };
@@ -1061,19 +1116,21 @@ fn MixForm(
                         title=move || blocked.get().unwrap_or_default()
                         on:click=move |_| {
                             if let Some(mix_id) = editing.get_value() {
-                                send.run(Edit::VideoMixDelete { mix_id });
-                                pick.set(None);
+                                delete_edit(Edit::VideoMixDelete { mix_id }, send, pick, problem);
                             }
                         }
                     >
                         "Delete"
                     </button>
                 </Show>
-                <Show when=move || saved.get()>
-                    <span class="hint saved" role="status">"Saved."</span>
-                </Show>
+                {move || {
+                    saving_note(saving.get())
+                        .map(|note| view! { <span class="hint saved" role="status">{note}</span> })
+                }}
                 <button type="button" class="secondary" on:click=move |_| pick.set(None)>"Cancel"</button>
-                <button type="submit" class="primary">"Save"</button>
+                <button type="submit" class="primary" disabled=move || saving.get() == Saving::Sent>
+                    "Save"
+                </button>
             </div>
         </form>
     }

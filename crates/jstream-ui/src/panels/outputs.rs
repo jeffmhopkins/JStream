@@ -431,39 +431,45 @@ pub fn live_outputs<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<Ou
         .collect()
 }
 
-/// What the panel's Start all button does now.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AllOutputs {
-    /// Starts these: every output that is stopped or failed and can start.
-    Start(Vec<OutputId>),
-    /// Stops these: every output that runs, when none is left to start.
-    Stop(Vec<OutputId>),
-    /// Nothing runs, and nothing can start.
-    Nothing,
+/// What the panel header's Start all and Stop all buttons act on.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AllOutputs {
+    /// What Start all starts: every output that is stopped or failed and can start.
+    pub start: Vec<OutputId>,
+    /// What Stop all stops: every output that runs.
+    pub stop: Vec<OutputId>,
 }
 
-/// What Start all does over `rows`: start each output that can start (any kind, unlike
-/// the header's Go Live, which starts streams), or, once none can, stop each that runs.
+/// What Start all and Stop all act on over `rows`: Start all starts each output that
+/// can start (any kind, unlike the header's Go Live, which starts streams), and Stop all,
+/// shown while any output runs, stops each that runs. They are separate buttons, so an
+/// output whose start keeps failing never hides Stop all.
 pub fn all_outputs<'a>(rows: impl IntoIterator<Item = &'a OutputRow>, vcam: Vcam) -> AllOutputs {
-    let rows: Vec<&OutputRow> = rows.into_iter().collect();
-    let startable: Vec<OutputId> = rows
-        .iter()
-        .filter(|row| start_blocker(row, vcam).is_none())
-        .map(|row| row.info.output_id.clone())
-        .collect();
-    if !startable.is_empty() {
-        return AllOutputs::Start(startable);
+    let mut all = AllOutputs::default();
+    for row in rows {
+        if is_running(row.state) {
+            all.stop.push(row.info.output_id.clone());
+        } else if start_blocker(row, vcam).is_none() {
+            all.start.push(row.info.output_id.clone());
+        }
     }
-    let running: Vec<OutputId> = rows
-        .iter()
-        .filter(|row| is_running(row.state))
-        .map(|row| row.info.output_id.clone())
-        .collect();
-    if running.is_empty() {
-        AllOutputs::Nothing
-    } else {
-        AllOutputs::Stop(running)
-    }
+    all
+}
+
+/// The path a copy of a recording at `path` writes to: the first of "show (2).mp4",
+/// "show (3).mp4" and so on that no output in `taken` records to, so the copy and the
+/// original can run together.
+pub fn copy_path<'a>(path: &str, taken: impl IntoIterator<Item = &'a str> + Clone) -> String {
+    let cut = path.rfind(['/', '\\']).map_or(0, |at| at + 1);
+    let (folder, name) = path.split_at(cut);
+    let (stem, extension) = match name.rfind('.') {
+        Some(dot) if dot > 0 => name.split_at(dot),
+        _ => (name, ""),
+    };
+    (2_u32..)
+        .map(|n| format!("{folder}{stem} ({n}){extension}"))
+        .find(|candidate| !taken.clone().into_iter().any(|t| t == candidate))
+        .unwrap_or_else(|| path.to_owned())
 }
 
 /// A running output's second line: its bitrate, what it lost this run (frames and
@@ -478,11 +484,23 @@ pub fn live_line(stats: &OutputStatsInfo) -> String {
 }
 
 /// The batch that makes `output_id` a copy of `info`: the same kind and target, encoder,
-/// mix and bus, then each of its filters with its settings, in order. The stream key
-/// isn't copied, as the page never has it (R-SEC-001). `None` for a kind this page
-/// doesn't edit.
-pub fn duplicate_edits(output_id: &OutputId, info: &OutputInfo) -> Option<Vec<Edit>> {
-    let draft = OutputDraft::of(info)?;
+/// mix and bus, then each of its filters with its settings, in order. A recording's copy
+/// writes to a free path ([`copy_path`]) beside the original's, none of `outputs` uses.
+/// The stream key isn't copied, as the page never has it (R-SEC-001). `None` for an
+/// output this page can't edit, such as a stream to a target it doesn't know.
+pub fn duplicate_edits(
+    output_id: &OutputId,
+    info: &OutputInfo,
+    outputs: &[OutputInfo],
+) -> Option<Vec<Edit>> {
+    let mut draft = OutputDraft::of(info)?;
+    if draft.kind == NewKind::Record {
+        let taken = outputs.iter().filter_map(|o| match &o.kind {
+            OutputKind::Record { path, .. } => Some(path.as_str()),
+            _ => None,
+        });
+        draft.target = copy_path(&draft.target, taken);
+    }
     let mut edits = draft_edits(output_id, None, &draft);
     let owner = FilterOwner::Output {
         output_id: output_id.clone(),
@@ -1012,6 +1030,10 @@ struct Panel {
     stats: RwSignal<BTreeMap<OutputId, OutputStatsInfo>>,
 }
 
+/// How many reads [`Panel::refresh`] makes while state changes keep arriving, before it
+/// applies the last one anyway.
+const REREADS: u32 = 4;
+
 impl Panel {
     /// Shows `owner`'s chains in the Filters panel, from an FX button.
     fn show_chains(self, owner: FilterOwner) {
@@ -1056,35 +1078,44 @@ impl Panel {
         }) else {
             return;
         };
-        {
+        // A state change heard while a read was out may be newer than what it read (an
+        // output started just after its status was read), so that read is dropped and
+        // another one, sent after the change, is made in its place. Applying the older
+        // read first would flicker the row back to its old state. After a few tries the
+        // last read is applied anyway and a fresh reload settles it, so a steady stream
+        // of changes can't stall the panel.
+        let mut tries = 0;
+        let loaded = loop {
+            tries += 1;
             let heard = self.state_events.try_get_value();
             let loaded = load(&*session.control).await;
             if self.loads.try_get_value() != Some(mine) {
                 return;
             }
-            // A state change heard while this read was out may be newer than what it
-            // read (an output started just after its status was read): the rows take
-            // what was read, and a fresh read, sent after the change, settles them.
-            if self.state_events.try_get_value() != heard {
-                self.reload();
+            if self.state_events.try_get_value() == heard {
+                break loaded;
             }
-            match loaded {
-                Ok(snapshot) => {
-                    self.rows.try_set(
-                        snapshot
-                            .outputs
-                            .into_iter()
-                            .map(|row| (row.info.output_id.clone(), row))
-                            .collect(),
-                    );
-                    self.encoders.try_set(snapshot.encoders);
-                    self.buses.try_set(snapshot.buses);
-                    self.mixes.try_set(snapshot.mixes);
-                    self.scenes.try_set(snapshot.scenes);
-                }
-                Err(problem) => {
-                    self.problem.try_set(Some(problem));
-                }
+            if tries >= REREADS {
+                self.reload();
+                break loaded;
+            }
+        };
+        match loaded {
+            Ok(snapshot) => {
+                self.rows.try_set(
+                    snapshot
+                        .outputs
+                        .into_iter()
+                        .map(|row| (row.info.output_id.clone(), row))
+                        .collect(),
+                );
+                self.encoders.try_set(snapshot.encoders);
+                self.buses.try_set(snapshot.buses);
+                self.mixes.try_set(snapshot.mixes);
+                self.scenes.try_set(snapshot.scenes);
+            }
+            Err(problem) => {
+                self.problem.try_set(Some(problem));
             }
         }
     }
@@ -1111,8 +1142,9 @@ impl Panel {
                     .map(|row| row.info.clone())
                     .ok_or_else(|| format!("{output_id} isn't there any more."))?;
                 let copy = next_output_id(taken.iter().map(|row| &row.info.output_id));
-                let edits = duplicate_edits(&copy, &info)
-                    .ok_or("This output's kind is newer than this page, so it can't be copied.")?;
+                let infos: Vec<OutputInfo> = taken.iter().map(|row| row.info.clone()).collect();
+                let edits = duplicate_edits(&copy, &info, &infos)
+                    .ok_or("This page can't copy this output yet.")?;
                 send_edits(&*session.control, edits).await?;
                 Ok::<_, String>(copy)
             }
@@ -1295,21 +1327,37 @@ pub fn Outputs() -> impl IntoView {
                 .collect::<Vec<_>>()
         })
     });
-    let send = Callback::new(move |change: Edit| {
-        panel.run(move |session| async move { edit(&*session.control, change).await });
-    });
+    // The Encoders & mixes editors send through this and show the engine's answer
+    // themselves (#1373 r1 N4).
+    let send = Callback::new(
+        move |(change, answered): (Edit, Callback<Result<(), String>>)| {
+            let Some(session) = panel.session.get() else {
+                answered.run(Err("Not connected.".into()));
+                return;
+            };
+            spawn_local(async move {
+                let answer = edit(&*session.control, change).await;
+                answered.try_run(answer);
+            });
+        },
+    );
     let close_libraries = move || panel.libraries.set(false);
     let all = Memo::new(move |_| {
         panel
             .rows
             .with(|rows| all_outputs(rows.values(), panel.vcam))
     });
-    let start_or_stop_all_now = move || {
-        let (outputs, start) = match all.get_untracked() {
-            AllOutputs::Start(outputs) => (outputs, true),
-            AllOutputs::Stop(outputs) => (outputs, false),
-            AllOutputs::Nothing => return,
-        };
+    let start_or_stop_all_now = move |start: bool| {
+        let outputs = all.with_untracked(|all| {
+            if start {
+                all.start.clone()
+            } else {
+                all.stop.clone()
+            }
+        });
+        if outputs.is_empty() {
+            return;
+        }
         panel.run(move |session| async move {
             start_or_stop_all(&*session.control, outputs, start).await
         });
@@ -1332,17 +1380,28 @@ pub fn Outputs() -> impl IntoView {
                 <button
                     type="button"
                     class="all-outputs"
-                    class:stop=move || matches!(all.get(), AllOutputs::Stop(_))
-                    disabled=move || all.get() == AllOutputs::Nothing
-                    title=move || match all.get() {
-                        AllOutputs::Start(_) => "Start every output that can start",
-                        AllOutputs::Stop(_) => "Stop every running output",
-                        AllOutputs::Nothing => "No output can start yet",
+                    disabled=move || all.with(|all| all.start.is_empty())
+                    title=move || {
+                        if all.with(|all| all.start.is_empty()) {
+                            "No stopped output can start now"
+                        } else {
+                            "Start every stopped output that can start"
+                        }
                     }
-                    on:click=move |_| start_or_stop_all_now()
+                    on:click=move |_| start_or_stop_all_now(true)
                 >
-                    {move || if matches!(all.get(), AllOutputs::Stop(_)) { "■ Stop all" } else { "▶ Start all" }}
+                    "▶ Start all"
                 </button>
+                <Show when=move || all.with(|all| !all.stop.is_empty())>
+                    <button
+                        type="button"
+                        class="all-outputs stop"
+                        title="Stop every running output"
+                        on:click=move |_| start_or_stop_all_now(false)
+                    >
+                        "■ Stop all"
+                    </button>
+                </Show>
             </div>
             {move || {
                 panel
@@ -2972,7 +3031,8 @@ mod tests {
         let info = now(load(&control)).expect("load").outputs[0].info.clone();
 
         let copy = OutputId::new("output-2");
-        let edits = duplicate_edits(&copy, &info).expect("a kind this page edits");
+        let edits = duplicate_edits(&copy, &info, std::slice::from_ref(&info))
+            .expect("a kind this page edits");
         assert_eq!(
             edits.first(),
             Some(&create_edit(
@@ -3007,7 +3067,7 @@ mod tests {
     /// Start all starts what can start, of any kind; once nothing can, it stops what
     /// runs.
     #[test]
-    fn start_all_starts_what_can_start_then_stops_what_runs() {
+    fn start_all_starts_what_can_start_and_stop_all_what_runs() {
         use super::{AllOutputs, all_outputs};
         let mut record = rtmp("output-3", OutputState::Stopped, false);
         record.info.kind = OutputKind::Record {
@@ -3015,27 +3075,45 @@ mod tests {
             container: jstream_control::protocol::RecordContainer::Mp4,
         };
         let rows = [
-            rtmp("output-1", OutputState::Stopped, true),
+            rtmp("output-1", OutputState::Failed, true),
             rtmp("output-2", OutputState::Stopped, false),
             record,
             rtmp("output-4", OutputState::Active, true),
         ];
+        // A failed stream that can start again doesn't hide Stop all (#1373 r1 N1).
         assert_eq!(
             all_outputs(&rows, Vcam::Unknown),
-            AllOutputs::Start(vec![OutputId::new("output-1"), OutputId::new("output-3")])
-        );
-        let running = [
-            rtmp("output-1", OutputState::Active, true),
-            rtmp("output-2", OutputState::Stopped, false),
-            rtmp("output-4", OutputState::Reconnecting, true),
-        ];
-        assert_eq!(
-            all_outputs(&running, Vcam::Unknown),
-            AllOutputs::Stop(vec![OutputId::new("output-1"), OutputId::new("output-4")])
+            AllOutputs {
+                start: vec![OutputId::new("output-1"), OutputId::new("output-3")],
+                stop: vec![OutputId::new("output-4")],
+            }
         );
         let idle = [rtmp("output-2", OutputState::Stopped, false)];
-        assert_eq!(all_outputs(&idle, Vcam::Unknown), AllOutputs::Nothing);
-        assert_eq!(all_outputs(&[], Vcam::Unknown), AllOutputs::Nothing);
+        assert_eq!(all_outputs(&idle, Vcam::Unknown), AllOutputs::default());
+        assert_eq!(all_outputs(&[], Vcam::Unknown), AllOutputs::default());
+    }
+
+    /// A recording's copy writes beside it, under a name no recording uses.
+    #[test]
+    fn a_copy_records_to_a_free_path() {
+        use super::copy_path;
+        assert_eq!(
+            copy_path("/tmp/show.mp4", ["/tmp/show.mp4"]),
+            "/tmp/show (2).mp4"
+        );
+        assert_eq!(
+            copy_path("/tmp/show.mp4", ["/tmp/show.mp4", "/tmp/show (2).mp4"]),
+            "/tmp/show (3).mp4"
+        );
+        assert_eq!(
+            copy_path(r"C:\v\take.mp4", [r"C:\v\take.mp4"]),
+            r"C:\v\take (2).mp4"
+        );
+        assert_eq!(
+            copy_path("/tmp/.hidden", ["/tmp/.hidden"]),
+            "/tmp/.hidden (2)"
+        );
+        assert_eq!(copy_path("show", ["show"]), "show (2)");
     }
 
     #[test]
