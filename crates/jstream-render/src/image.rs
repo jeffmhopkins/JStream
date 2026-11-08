@@ -8,7 +8,7 @@
 //! straight sRGB (a captured frame), or premultiplied sRGB code values (a browser page),
 //! which the shader converts to premultiplied linear after the filter.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
 
 use jstream_media::{FrameSize, VideoFrame, VideoFrameInfo};
@@ -123,6 +123,18 @@ pub struct Image {
     /// An upload's bind group for the conversion that writes it ([`crate::ingest`]);
     /// `None` for every other image.
     ingest: Option<wgpu::BindGroup>,
+    /// The size of the frame an upload holds, which its texture can be smaller than
+    /// (#1139); the texture's own size for every other image.
+    full: (u32, u32),
+    /// The most of the frame's resolution a draw needed since [`Self::take_need`] last
+    /// read it, as `f32` bits: 1 is every texel of [`Self::full`], 0.25 a quarter each
+    /// way, infinity a 3D placement. 0 when nothing drew it.
+    need: Arc<AtomicU32>,
+    /// The texels a layer's last [`crate::Compositor::render_into`] can have drawn
+    /// anything into, everything else transparent, with the [`Self::generation`] it was
+    /// drawn at (#1070). Only that generation's: any other write moves the generation on
+    /// ([`Self::mark_changed`]), and the bounds go with it. `None` when unknown.
+    content: Arc<Mutex<Option<(u64, Region)>>>,
 }
 
 impl Image {
@@ -170,6 +182,25 @@ impl Image {
     /// image never placed in 3D ignores it.
     pub fn mark_changed(&self) {
         self.generation.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records the texels the write that just marked a change ([`Self::mark_changed`])
+    /// drew into, all others transparent: `None` when they may be anywhere.
+    pub(crate) fn set_content(&self, content: Option<Region>) {
+        let generation = self.generation();
+        *self.content.lock().unwrap_or_else(PoisonError::into_inner) =
+            content.map(|region| (generation, region));
+    }
+
+    /// The texels outside of which the image is transparent, when its last write said
+    /// so ([`Self::set_content`]) and nothing has changed it since.
+    pub(crate) fn content(&self) -> Option<Region> {
+        let generation = self.generation();
+        self.content
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .filter(|(drawn_at, _)| *drawn_at == generation)
+            .map(|(_, region)| region)
     }
 
     /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
@@ -225,6 +256,34 @@ impl Image {
 
     pub(crate) fn alpha(&self) -> Alpha {
         self.alpha
+    }
+
+    /// The size of the frame an upload holds: its texture's, or larger when it was
+    /// uploaded smaller than its frame ([`crate::ResourceCache::upload_drawn`]).
+    pub(crate) fn full(&self) -> (u32, u32) {
+        self.full
+    }
+
+    /// Notes that a draw sampled `texels_per_pixel` of the texture's texels per canvas
+    /// pixel along its less minified axis (infinity for a 3D placement, which needs them
+    /// all): it needed that much of [`Self::full`]'s resolution.
+    pub(crate) fn record_draw(&self, texels_per_pixel: f32) {
+        let held = self.width as f32 / self.full.0.max(1) as f32;
+        let need = if texels_per_pixel > 0.0 {
+            held / texels_per_pixel
+        } else {
+            f32::INFINITY
+        };
+        // A non-negative float's bits order as it does, so the largest need wins.
+        if need >= 0.0 {
+            self.need.fetch_max(need.to_bits(), Ordering::Relaxed);
+        }
+    }
+
+    /// The most resolution a draw needed since the last call ([`Self::record_draw`]),
+    /// and starts counting again: 0 when nothing drew the image.
+    pub(crate) fn take_need(&self) -> f32 {
+        f32::from_bits(self.need.swap(0, Ordering::Relaxed))
     }
 
     pub(crate) fn owner(&self) -> &Owner {
@@ -295,17 +354,36 @@ pub(crate) fn upload(
     height: u32,
     rgba: &[u8],
 ) -> Result<Image, RenderError> {
+    upload_into(maker, width, height, rgba, (width, height))
+}
+
+/// [`upload`] into a texture of `to` texels, the frame's size or smaller each way: each
+/// texel averages the frame's under it (#1139). The image is placed at the frame's size.
+pub(crate) fn upload_into(
+    maker: &Maker<'_>,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+    to: (u32, u32),
+) -> Result<Image, RenderError> {
     check_bytes(width, height, rgba)?;
-    upload_planes(maker, &Planes::straight(width, height, rgba))
+    upload_planes(maker, &Planes::straight(width, height, rgba), to)
 }
 
 /// [`upload`] of a CPU video frame read as opaque ([`Planes::opaque`]).
 pub(crate) fn upload_frame(maker: &Maker<'_>, frame: &VideoFrame) -> Result<Image, RenderError> {
-    upload_planes(maker, &Planes::opaque(frame)?)
+    let planes = Planes::opaque(frame)?;
+    let to = (planes.width(), planes.height());
+    upload_planes(maker, &planes, to)
 }
 
-fn upload_planes(maker: &Maker<'_>, planes: &Planes<'_>) -> Result<Image, RenderError> {
-    let (width, height) = (planes.width(), planes.height());
+fn upload_planes(
+    maker: &Maker<'_>,
+    planes: &Planes<'_>,
+    to: (u32, u32),
+) -> Result<Image, RenderError> {
+    let full = (planes.width(), planes.height());
+    let (width, height) = to;
     if width == 0 || height == 0 {
         return Err(RenderError::Invalid {
             what: "image",
@@ -332,9 +410,11 @@ fn upload_planes(maker: &Maker<'_>, planes: &Planes<'_>) -> Result<Image, Render
         empty => empty.insert(Ingest::new(maker.gpu)?),
     };
     let bind = ingest.image_bind_group(maker.gpu, &texture);
-    ingest.convert(maker.gpu, &bind, planes)?;
+    ingest.convert(maker.gpu, &bind, planes, to)?;
     let mut image = finish(maker, texture, width, height, Alpha::Premultiplied, None);
     image.ingest = Some(bind);
+    image.full = full;
+    image.extent = full;
     Ok(image)
 }
 
@@ -394,16 +474,13 @@ pub(crate) fn upload_unit_f16(
     ))
 }
 
-/// Refills an uploaded `image` with new bytes of the same size, in place. The write is
-/// ordered after every submit already on the queue, so frames that sampled the old
-/// contents still see them.
+/// Refills an uploaded `image` with new bytes of the frame size it holds
+/// ([`Image::full`]), in place, at its texture's size. The write is ordered after every
+/// submit already on the queue, so frames that sampled the old contents still see them.
 pub(crate) fn rewrite(maker: &Maker<'_>, image: &Image, rgba: &[u8]) -> Result<(), RenderError> {
-    check_bytes(image.width, image.height, rgba)?;
-    rewrite_planes(
-        maker,
-        image,
-        &Planes::straight(image.width, image.height, rgba),
-    )
+    let (width, height) = image.full;
+    check_bytes(width, height, rgba)?;
+    rewrite_planes(maker, image, &Planes::straight(width, height, rgba))
 }
 
 /// [`rewrite`] with a CPU video frame read as opaque ([`Planes::opaque`]).
@@ -429,15 +506,15 @@ fn rewrite_planes(
             });
         }
     };
-    if (planes.width(), planes.height()) != (image.width, image.height) {
+    if (planes.width(), planes.height()) != image.full {
         return Err(RenderError::Invalid {
             what: "image",
             detail: format!(
                 "a {}x{} frame can't refill a {}x{} upload",
                 planes.width(),
                 planes.height(),
-                image.width,
-                image.height
+                image.full.0,
+                image.full.1
             ),
         });
     }
@@ -446,7 +523,7 @@ fn rewrite_planes(
         Some(ingest) => ingest,
         empty => empty.insert(Ingest::new(maker.gpu)?),
     };
-    ingest.convert(maker.gpu, bind, planes)?;
+    ingest.convert(maker.gpu, bind, planes, (image.width, image.height))?;
     image.mark_changed();
     Ok(())
 }
@@ -600,6 +677,9 @@ fn finish(
         generation: Arc::new(AtomicU64::new(0)),
         mips: Arc::new(Mutex::new(Vec::new())),
         ingest: None,
+        full: (width, height),
+        need: Arc::new(AtomicU32::new(0)),
+        content: Arc::new(Mutex::new(None)),
     }
 }
 
@@ -727,7 +807,7 @@ pub(crate) fn unit_f16_bytes(value: f32, out: &mut [u8]) {
 ///
 /// Only for finite values in `0..=1` ([`premultiply_to_f16`]'s and [`unit_f16_bytes`]'s),
 /// so there is no sign, overflow, infinity or NaN to handle.
-fn f16_bits(value: f32) -> u16 {
+pub(crate) fn f16_bits(value: f32) -> u16 {
     debug_assert!((0.0..=1.0).contains(&value), "{value} is outside 0..=1");
     let bits = value.to_bits();
     let exponent = ((bits >> 23) & 0xff) as i32 - 127 + 15;

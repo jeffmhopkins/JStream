@@ -547,6 +547,310 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "border",
+    "category": "video_filter",
+    "name": "Border",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 4.0,
+        "label": "Width",
+        "description": "Inside the edge, over the picture. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "style",
+        "type": "enum",
+        "options": [
+          {
+            "value": "solid",
+            "label": "Solid"
+          },
+          {
+            "value": "double",
+            "label": "Double"
+          },
+          {
+            "value": "dashed",
+            "label": "Dashed"
+          },
+          {
+            "value": "dotted",
+            "label": "Dotted"
+          }
+        ],
+        "default": "solid",
+        "label": "Style",
+        "live": true
+      },
+      {
+        "id": "dash",
+        "type": "float",
+        "min": 1.0,
+        "max": 400.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Dash length",
+        "visible_if": {
+          "param": "style",
+          "equals": "dashed"
+        },
+        "live": true
+      },
+      {
+        "id": "gap",
+        "type": "float",
+        "min": 0.0,
+        "max": 400.0,
+        "unit": "px",
+        "default": 8.0,
+        "label": "Gap",
+        "description": "Between dashes or dots.",
+        "live": true
+      },
+      {
+        "id": "corners",
+        "type": "enum",
+        "options": [
+          {
+            "value": "same",
+            "label": "All the same"
+          },
+          {
+            "value": "each",
+            "label": "Each its own"
+          }
+        ],
+        "default": "same",
+        "label": "Corners",
+        "description": "Round all four corners alike, or each its own.",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Corner radius",
+        "description": "Past half the shorter side it stays at half (a pill).",
+        "visible_if": {
+          "param": "corners",
+          "equals": "same"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_top_left",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Top left",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_top_right",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Top right",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_bottom_right",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Bottom right",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "radius_bottom_left",
+        "type": "float",
+        "min": 0.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Bottom left",
+        "visible_if": {
+          "param": "corners",
+          "equals": "each"
+        },
+        "live": true
+      },
+      {
+        "id": "clip",
+        "type": "bool",
+        "default": true,
+        "label": "Clip to the shape",
+        "description": "Cut the picture to the rounded shape, so it and the border round together, and a shadow or glow after it follows the shape.",
+        "live": true
+      },
+      {
+        "id": "fill",
+        "type": "enum",
+        "options": [
+          {
+            "value": "color",
+            "label": "Color"
+          },
+          {
+            "value": "linear",
+            "label": "Linear gradient"
+          },
+          {
+            "value": "conic",
+            "label": "Conic gradient"
+          }
+        ],
+        "default": "color",
+        "label": "Fill",
+        "description": "The stroke's color, or a gradient from Color to Color 2.",
+        "live": true
+      },
+      {
+        "id": "color2",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Color 2",
+        "live": true
+      },
+      {
+        "id": "angle",
+        "type": "float",
+        "min": 0.0,
+        "max": 360.0,
+        "unit": "°",
+        "default": 90.0,
+        "label": "Gradient angle",
+        "visible_if": {
+          "param": "fill",
+          "equals": "linear"
+        },
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Speed",
+        "description": "Moves the dashes and the gradient around the edge. Positive is clockwise. 0 holds still.",
+        "live": true
+      },
+      {
+        "id": "outer_width",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Outer width",
+        "description": "A second stroke past the edge, after the outer gap. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "outer_color",
+        "type": "color",
+        "alpha": true,
+        "default": "#000000ff",
+        "label": "Outer color",
+        "live": true
+      },
+      {
+        "id": "outer_gap",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Outer gap",
+        "live": true
+      },
+      {
+        "id": "frame",
+        "type": "asset",
+        "accept": [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif"
+        ],
+        "default": null,
+        "label": "Frame image",
+        "description": "Draw the inner stroke from an image as a 9-slice frame: its corners stay as they are and its edges run along the sides. Width sets how wide it draws.",
+        "live": true
+      },
+      {
+        "id": "frame_slice",
+        "type": "float",
+        "min": 1.0,
+        "max": 1024.0,
+        "unit": "px",
+        "default": 16.0,
+        "label": "Frame corner",
+        "description": "How far in from the image's edge its corners reach, in the image's own pixels.",
+        "live": true
+      },
+      {
+        "id": "frame_edges",
+        "type": "enum",
+        "options": [
+          {
+            "value": "stretch",
+            "label": "Stretch"
+          },
+          {
+            "value": "tile",
+            "label": "Tile"
+          }
+        ],
+        "default": "stretch",
+        "label": "Frame edges",
+        "live": true
+      }
+    ],
+    "max_outset_px": 129
+  },
+  {
     "kind_id": "browser",
     "category": "source",
     "name": "Browser",
@@ -611,13 +915,13 @@ source: crates/jstream-core/src/kinds.rs
       {
         "id": "fps",
         "type": "int",
-        "min": 1,
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "fps",
-        "default": 30,
+        "default": 0,
         "label": "Frame rate",
-        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "description": "The most frames a second the page paints. It paints less when nothing changes. 0 follows the program's frame rate, so a page's animation is as smooth as the program.",
         "live": false
       },
       {
@@ -2968,12 +3272,45 @@ source: crates/jstream-core/src/kinds.rs
     "params": [
       {
         "id": "device",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "device",
         "max_len": 1024,
         "default": "",
         "label": "Device",
-        "description": "The ID of the webcam or capture card, as the platform lists it. Empty captures the first device listed.",
+        "description": "The ID of the webcam or capture card, as `capture.targets` lists it. Empty captures the first device listed.",
+        "live": false
+      },
+      {
+        "id": "resolution",
+        "type": "capture_format",
+        "part": "resolution",
+        "target": "device",
+        "default": "",
+        "label": "Resolution",
+        "description": "The frame size to capture, as `<width>x<height>` (`1920x1080`), one the device lists in `capture.targets`. Empty lets the engine choose: the largest up to 1920x1080.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "capture_format",
+        "part": "fps",
+        "target": "device",
+        "default": 0,
+        "label": "Frame rate",
+        "description": "The frames per second to capture, one the device lists for the resolution. 0 lets the engine choose: the fastest.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "pixel_format",
+        "type": "capture_format",
+        "part": "pixel_format",
+        "target": "device",
+        "default": "",
+        "label": "Video format",
+        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
+        "group": "Format",
         "live": false
       }
     ]

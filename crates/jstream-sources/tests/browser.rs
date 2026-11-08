@@ -166,9 +166,14 @@ fn a_page_that_paints_on_the_cpu_shows_its_paint_each_frame() {
         vec![Plane::new(vec![255, 0, 0, 255, 0, 0, 255, 128], 8)],
     )
     .expect("a frame");
+    let painter = source.painter().expect("a page on the CPU has a painter");
     browser.pages()[0].paint(Arc::new(painted));
     let after = source.frame(at).expect("a frame");
     assert_eq!(after.planes()[0].data(), &[255, 0, 0, 255, 0, 0, 255, 128]);
+    assert!(
+        Arc::ptr_eq(&painter.frame(), &after),
+        "the painter hands it out too"
+    );
     assert!(source.gpu_frame().is_none());
 }
 
@@ -425,8 +430,9 @@ fn bad_settings_and_a_missing_backend_are_errors() {
         )),
         "url"
     );
+    // 0 is the program's rate (#1405), not an error; a fraction is.
     assert_eq!(
-        param_of(create(&ctx, &settings(&[("fps", json!(0))]))),
+        param_of(create(&ctx, &settings(&[("fps", json!(29.97))]))),
         "fps"
     );
     assert_eq!(

@@ -135,6 +135,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-midi` | MIDI 1.0 model for controller input ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): messages parsed from bytes, and the tempo, beat and bar a MIDI clock gives on the media clock; no I/O, no allocation, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
+| 0 | `jstream-visca` | VISCA format for PTZ control in both directions ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): commands, inquiries and replies encoded and parsed, and Sony-style VISCA-over-IP framing; no sockets, no allocation, no dependencies | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
 | 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
@@ -484,8 +485,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
-  Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), the `YouTube` kind, a virtual
+  Not yet: settings migrations between kind versions for built-in kinds (a source or
+  preset saved at another version is refused on load; a source or filter of an effect
+  pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
+  `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -909,7 +912,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; `font.list` (protocol 0.68,
+  source's `target` can name, and (0.90) the video devices a `webcam`'s `device` can
+  name, with their formats; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
@@ -1088,7 +1092,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), or in a window's `name` in
   `capture.targets` (its title or, on macOS, its application's name, set by the
-  window's application), and the tool descriptions and server instructions say it is
+  window's application) or a device's (set by its driver), and the tool descriptions and server instructions say it is
   data, never instructions ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md),
   amended by [ADR-0085](adr/0085-capture-target-names-marked-as-remote-text.md)). The instructions also say
   that names and other state text can be set by any client or plugin, and are data too
@@ -1121,12 +1125,12 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
-  countdown and grouping recipes, fitting boxes to text, a custom shader the UI's
-  shader editor opens, animating with keyframe
+  countdown and grouping recipes, fitting boxes to text, a custom shader or shader
+  source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette),
-  layering light, masks and reflections, 3D sets through a scene camera, a camera
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1212,14 +1216,25 @@ first (D3D12 first on Windows); the software adapter is the fallback, so a machi
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
 on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
-a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
+a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
+transparent background remembers the box its items could reach, and its parent draws
+only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
+group of a few small items doesn't shade the whole canvas twice. A blur or a mask over
+such a layer, as an item's effects, shades only that box grown by how far it reaches, and
+keeps the box for what reads it next. The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,
 `Color::mix`; [ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4). `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see
-[Threads › State to RT threads](#threading)). On the GPU path the engine's render
+[Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
+a source's frame that only items draw at the size those items draw it, not the frame's
+(#1139), so a 1080p still in a small box keeps a small texture, and a still image keeps
+no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
+go of it then and decodes the file again when a draw needs it, so a render tick never
+decodes, and the program stage's cache keeps the still's texture while no mix draws it,
+so a cut back to it is drawn at once (`jstream-core`'s `still`). On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
@@ -1451,12 +1466,17 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor
   version, migrated on load like the collection
-  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
-  migrations, a source, filter or preset saved at another version is refused on load.
-  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
-  CLAP plugin before the scan that runs after the load) loads with its settings and
-  version verbatim and is saved back as it was; the engine bypasses it until its kind
-  appears.
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). A source, filter or preset
+  saved at another version of a kind the engine describes at load is refused.
+  A source or filter whose kind the engine doesn't describe (a pack that isn't
+  installed or not loaded yet, since the packs load after the collection, or a CLAP
+  plugin before the scan that runs after the load) loads with its settings and version
+  verbatim and is saved back as it was; the engine bypasses it until its kind appears.
+  When an effect pack's kind appears or changes, its sources' and filters' settings
+  move through the pack's renames from the version they were saved by (#1353, #1412).
+  A source or filter keeps the version its settings were stored by, and that is what a
+  save writes: one of a removed kind, or one a downgraded pack can't read, keeps the
+  older or newer version until a pack of that version moves it.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1

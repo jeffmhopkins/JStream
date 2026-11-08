@@ -23,7 +23,7 @@ pub(crate) mod testing;
 pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
+pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 pub use program::{
     AUDIO_BANDS as PROGRAM_AUDIO_BANDS, ExternalProgram, FIRST_INPUT_BINDING,
     MAX_INPUTS as PROGRAM_MAX_INPUTS, MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES,
@@ -48,6 +48,17 @@ pub fn descriptors() -> Vec<KindDescriptor> {
     kinds.extend(assets::descriptors());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds
+}
+
+/// How far a built-in filter of `kind_id` draws past each edge of its input at
+/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
+/// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
+/// outside its width, a border its outer stroke after its gap. `None` for a kind that declares no outset, or one this crate
+/// doesn't draw; a caller then takes the declared `max_outset_px`.
+///
+/// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
+pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    multipass::outset(kind_id, settings).or_else(|| pack::outset(kind_id, settings))
 }
 
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.
@@ -152,6 +163,7 @@ impl VideoFilter {
     /// ones before it frame the item's box itself (ADR-0065 §5).
     pub fn set_pad(&mut self, pad: u32) {
         self.pad = pad;
+        self.pass.set_pad(pad);
     }
 
     /// The padding [`Self::set_pad`] set.

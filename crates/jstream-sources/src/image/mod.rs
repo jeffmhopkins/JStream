@@ -5,11 +5,12 @@ pub(crate) mod decode;
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
 use crate::source::{self, at_millis, changed_non_live, millis};
-use crate::{Context, Source, SourceError, SourceKind};
+use crate::{Context, Painter, Source, SourceError, SourceKind, Still};
 use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_protocol::{KindDescriptor, Settings};
 use serde_json::Value;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The `image` kind.
 pub(crate) struct ImageKind(KindDescriptor);
@@ -34,19 +35,39 @@ impl SourceKind for ImageKind {
     }
 
     /// Reads and decodes the whole file, every animation frame included, so this
-    /// blocks on I/O and decoding.
+    /// blocks on I/O and decoding. A still image keeps the file to decode again once
+    /// its pixels are let go of ([`Still`]).
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
-        let animation = match source::asset(settings, "file")? {
-            Some((root, path)) => {
-                let bytes = ctx.assets.read(root, &path, ctx.limits.max_file_bytes)?;
-                Animation::new(decode::decode(&bytes, &path, &ctx.limits)?)?
+        let file = source::asset(settings, "file")?;
+        let load = {
+            let (assets, limits) = (ctx.assets.clone(), ctx.limits);
+            let file = file.clone();
+            move || match &file {
+                Some((root, path)) => {
+                    let bytes = assets.read(*root, path, limits.max_file_bytes)?;
+                    Animation::new(decode::decode(&bytes, path, &limits)?)
+                }
+                None => Animation::empty(),
             }
-            None => Animation::empty()?,
+        };
+        let animation = load()?;
+        let shows = if animation.animated() {
+            Shows::Animated(Arc::new(Shown {
+                animation,
+                index: AtomicUsize::new(0),
+            }))
+        } else {
+            let path = file.map(|(_, path)| path).unwrap_or_default();
+            Shows::Still(Arc::new(Still::new(
+                Arc::new(animation.into_last()),
+                path,
+                move || load().map(Animation::into_last),
+            )))
         };
         Ok(Box::new(ImageSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
-            animation,
+            shows,
         }))
     }
 }
@@ -55,16 +76,80 @@ impl SourceKind for ImageKind {
 struct ImageSource {
     descriptor: KindDescriptor,
     settings: Settings,
-    animation: Animation,
+    shows: Shows,
 }
 
-impl Source for ImageSource {
-    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(self.animation.frame_at(millis(at)))
+/// What an image source shows: its frames, stepped on, or one still frame, which it
+/// holds only while the host does.
+enum Shows {
+    Animated(Arc<Shown>),
+    Still(Arc<Still>),
+}
+
+/// An image's frames and the one shown, which an animated image's [`Painter`] moves
+/// on, so the host's own thread can step it without the source (ADR-0117 §3).
+#[derive(Debug)]
+struct Shown {
+    animation: Animation,
+    /// The frame shown last: the one [`Painter::paint`] or [`Source::frame`] picked.
+    index: AtomicUsize,
+}
+
+impl Painter for Shown {
+    /// Picks the frame to show at `at`: no drawing, the frames are decoded already.
+    fn paint(&self, at: MediaTime) {
+        let index = self.animation.index(millis(at));
+        self.index.store(index, Ordering::Relaxed);
+    }
+
+    fn frame(&self) -> Arc<VideoFrame> {
+        let index = self.index.load(Ordering::Relaxed);
+        self.animation.frame(index)
     }
 
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
         self.animation.next_change(millis(at)).map(at_millis)
+    }
+}
+
+impl Source for ImageSource {
+    /// A still image's frame is decoded from the file again when no frame it handed
+    /// out is held any more ([`Still::frame`]): a host that doesn't hold one asks
+    /// [`still`](Source::still) instead.
+    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+        match &self.shows {
+            Shows::Animated(shown) => {
+                shown.paint(at);
+                Ok(shown.frame())
+            }
+            Shows::Still(still) => still.frame(),
+        }
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        match &self.shows {
+            Shows::Animated(shown) => shown.next_change(at),
+            Shows::Still(_) => None,
+        }
+    }
+
+    /// An animated image's: the host steps it on its own thread and takes each new
+    /// frame without a plan. A still image has none.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        match &self.shows {
+            Shows::Animated(shown) => {
+                let painter: Arc<dyn Painter> = shown.clone();
+                Some(painter)
+            }
+            Shows::Still(_) => None,
+        }
+    }
+
+    fn still(&self) -> Option<Arc<Still>> {
+        match &self.shows {
+            Shows::Still(still) => Some(Arc::clone(still)),
+            Shows::Animated(_) => None,
+        }
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -136,8 +221,24 @@ impl Animation {
             .is_some_and(|plays| t >= self.play_ms.saturating_mul(u64::from(plays)))
     }
 
-    fn frame_at(&self, t: u64) -> Arc<VideoFrame> {
-        Arc::clone(&self.frames[self.index(t)])
+    /// Frame `index`, or the last one past the end.
+    fn frame(&self, index: usize) -> Arc<VideoFrame> {
+        let last = self.frames.len() - 1;
+        Arc::clone(&self.frames[index.min(last)])
+    }
+
+    /// The frame a still shows, its last as [`Self::index`] picks, without the rest.
+    fn into_last(mut self) -> VideoFrame {
+        let last = self
+            .frames
+            .pop()
+            .expect("invariant: an animation has a frame");
+        Arc::try_unwrap(last).unwrap_or_else(|shared| (*shared).clone())
+    }
+
+    /// Whether it has more than one frame to show.
+    fn animated(&self) -> bool {
+        self.frames.len() > 1 && self.play_ms > 0
     }
 
     /// When, in ms after the start, the frame shown at `t` is next replaced.

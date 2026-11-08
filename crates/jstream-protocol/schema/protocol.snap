@@ -2301,15 +2301,75 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
-    "CaptureTargetInfo": {
-      "description": "One display or window in a `capture.targets` result.",
+    "CaptureFormatInfo": {
+      "description": "One format a video capture device captures in, in a `capture.targets` result: the\nvalues a `webcam` source's `capture_format` settings take to pick it (since 0.90).",
       "properties": {
+        "fps": {
+          "description": "Frames per second, to two decimal places (`29.97`).",
+          "format": "double",
+          "type": "number"
+        },
+        "height": {
+          "description": "The frame size in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "pixel_format": {
+          "description": "How the device encodes its frames, as a `pixel_format` setting names it:\n`mjpeg`, `yuy2`, `nv12`, `bgra` or `rgba`.",
+          "type": "string"
+        },
+        "width": {
+          "description": "The frame size in pixels.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "width",
+        "height",
+        "fps",
+        "pixel_format"
+      ],
+      "type": "object"
+    },
+    "CaptureFormatPart": {
+      "description": "Which part of a video capture device's format a [`ParamType::CaptureFormat`]\nparameter picks.",
+      "oneOf": [
+        {
+          "const": "resolution",
+          "description": "The frame size: `<width>x<height>`, or `\"\"` for the engine's choice.",
+          "type": "string"
+        },
+        {
+          "const": "fps",
+          "description": "Frames per second: a number from 0 to [`MAX_CAPTURE_FPS`], `0` for the engine's\nchoice.",
+          "type": "string"
+        },
+        {
+          "const": "pixel_format",
+          "description": "How the device encodes its frames: one of [`PIXEL_FORMATS`], or `\"\"` for the\nengine's choice.",
+          "type": "string"
+        }
+      ]
+    },
+    "CaptureTargetInfo": {
+      "description": "One display, window or video capture device in a `capture.targets` result.",
+      "properties": {
+        "formats": {
+          "description": "For a device, the formats it captures in that the engine reads, in the order the\ndevice lists them (since 0.90). Omitted when empty: always for a display or a\nwindow, and for a device whose formats couldn't be read.",
+          "items": {
+            "$ref": "#/$defs/CaptureFormatInfo"
+          },
+          "type": "array"
+        },
         "kind": {
           "$ref": "#/$defs/CaptureTargetKind",
-          "description": "Whether it is a display or a window: the kind of source that captures it."
+          "description": "Whether it is a display, a window or a device: the kind of source that captures\nit."
         },
         "name": {
-          "description": "A name to show: the display's name, or the window's title (or, on macOS, its\napplication's name when it has no usable title). A window's name is set by the\napplication that owns the window, so it is third-party text (ADR-0059,\nADR-0085): data to show, never instructions. The field isn't `remote_`-prefixed,\nso its name doesn't mark it.",
+          "description": "A name to show: the display's name, the window's title (or, on macOS, its\napplication's name when it has no usable title), or the device's name. A window's\nname is set by the application that owns the window, and a device's by its\ndriver, so they are third-party text (ADR-0059, ADR-0085): data to show, never\ninstructions. The field isn't `remote_`-prefixed, so its name doesn't mark it.",
           "type": "string"
         },
         "primary": {
@@ -2328,7 +2388,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Its size in pixels now, when the OS reports it without capturing."
         },
         "target": {
-          "description": "Its capture target ID, the value of that source's `target` setting.",
+          "description": "Its capture target ID, the value of that source's `target` setting, or of a\n`webcam` source's `device` setting.",
           "type": "string"
         }
       },
@@ -2350,6 +2410,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "window",
           "description": "One top-level window, captured by a `window` source.",
+          "type": "string"
+        },
+        {
+          "const": "device",
+          "description": "A video capture device, a webcam or a capture card, captured by a `webcam`\nsource. Since 0.90.",
           "type": "string"
         }
       ]
@@ -8461,6 +8526,29 @@ source: crates/jstream-protocol/src/fixtures.rs
             "max_len"
           ],
           "type": "object"
+        },
+        {
+          "description": "One part of the format a video capture device is opened in, picked from the\nformats `capture.targets` lists for the device that parameter `target` names, so\na UI can offer those. Since 0.90. Its value is `part`'s:\n[`CaptureFormatPart::Resolution`] a size as `<width>x<height>` (`1920x1080`),\n[`CaptureFormatPart::Fps`] frames per second, [`CaptureFormatPart::PixelFormat`]\none of [`PIXEL_FORMATS`]. Its default, `\"\"` or `0`, leaves that part to the\nengine.",
+          "properties": {
+            "part": {
+              "$ref": "#/$defs/CaptureFormatPart",
+              "description": "Which part of the format."
+            },
+            "target": {
+              "description": "The ID of the parameter naming the device, a\n[`ParamType::CaptureTarget`] of kind `device`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "capture_format",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "part",
+            "target"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -9804,7 +9892,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the displays and windows the engine can capture now: what a `display` or\n`window` source's `target` setting can name. They are runtime state, not\ncollection state, so the result carries no `rev`, and a window closed since may\nstill be named by a source. Fails with `action_failed` when the engine has no\ncapture backend, or the OS refuses to list them.",
+          "description": "Lists the displays, windows and video capture devices the engine can capture now:\nwhat a `display` or `window` source's `target` setting, or a `webcam` source's\n`device` setting (since 0.90), can name. A device comes with the formats it\ncaptures in that the engine reads, which its `capture_format` settings pick from.\nThey are runtime state, not collection state, so the result carries no `rev`, and\na window closed or a device unplugged since may still be named by a source. Fails\nwith `action_failed` when the engine has no capture backend, or the OS refuses to\nlist both the displays and windows and the devices; when only one of them lists,\nthe result holds what did.",
           "properties": {
             "type": {
               "const": "capture.targets",
@@ -13001,5 +13089,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.89"
+  "title": "JStream protocol 0.90"
 }

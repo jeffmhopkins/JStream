@@ -48,16 +48,16 @@ use jstream_graph::Graph;
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, DropCounts, Edit,
-    EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event, FilterChain, FontInfo,
-    FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection, IdempotencyKey, LiveOutcome,
-    OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings,
-    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
-    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
-    YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
+    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
+    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
+    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
+    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
+    VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -616,25 +616,7 @@ impl Engine {
     /// collection lock only to serialize, and writes with only the file's lock held, so
     /// saves happen one at a time and a late one never overwrites a newer collection.
     fn save_collection(&self) {
-        let mut file = lock(&self.shared.collection_file);
-        let Some(file) = file.as_mut() else {
-            return;
-        };
-        let (rev, json) = {
-            let state = lock(&self.shared.state);
-            if state.graph.rev() <= file.saved() {
-                return;
-            }
-            (state.graph.rev(), state.graph.to_collection_json())
-        };
-        if let Err(err) = file.save(rev, &json) {
-            tracing::error!(
-                path = %file.path().display(),
-                rev = %rev,
-                error = %err,
-                "collection not saved"
-            );
-        }
+        self.shared.save_collection();
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -1933,28 +1915,65 @@ impl Engine {
         self
     }
 
-    /// `capture.targets`: what the platform's capture backend can capture now, listed
-    /// with no engine lock held, since listing windows calls the OS.
+    /// `capture.targets`: what the platform's capture backend can capture now, then the
+    /// video devices with the formats the engine reads of each, listed with no engine
+    /// lock held, since listing windows and devices calls the OS. A list that fails is
+    /// left out, and logged; the query fails only when both do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
-        let capture = self.media.as_ref().and_then(|host| {
-            lock(&host.backends)
-                .as_ref()
-                .map(|backends| Arc::clone(&backends.capture))
+        let backends = self.media.as_ref().and_then(|host| {
+            lock(&host.backends).as_ref().map(|backends| {
+                (
+                    Arc::clone(&backends.capture),
+                    Arc::clone(&backends.video_devices),
+                )
+            })
         });
-        let Some(capture) = capture else {
+        let Some((capture, devices)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
         };
-        let mut targets: Vec<_> = capture
+        let captured = capture
             .targets()
-            .map_err(|err| ProtocolError::ActionFailed {
-                reason: format!("listing capture targets: {err}"),
-            })?
-            .into_iter()
-            .filter_map(capture_target_info)
-            .collect();
-        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+            .map_err(|err| format!("listing capture targets: {err}"));
+        let listed = devices
+            .devices()
+            .map_err(|err| format!("listing video devices: {err}"));
+        let (mut targets, devices_listed) = match (captured, listed) {
+            (Err(capture), Err(devices)) => {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!("{capture}; {devices}"),
+                });
+            }
+            (captured, listed) => {
+                let targets: Vec<_> = match captured {
+                    Ok(targets) => targets
+                        .into_iter()
+                        .filter_map(capture_target_info)
+                        .collect(),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
+                        Vec::new()
+                    }
+                };
+                let listed = listed.unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, "capture.targets lists no video devices");
+                    Vec::new()
+                });
+                (targets, listed)
+            }
+        };
+        let rank = |kind: CaptureTargetKind| match kind {
+            CaptureTargetKind::Display => 0,
+            CaptureTargetKind::Window => 1,
+            _ => 2,
+        };
+        targets.sort_by_key(|info| rank(info.kind));
+        targets.extend(
+            devices_listed
+                .into_iter()
+                .map(|device| device_target_info(devices.as_ref(), device)),
+        );
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -2676,6 +2695,12 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many plans of the program mix ran (ADR-0103's meters), for tests.
+    #[cfg(test)]
+    pub(crate) fn plans(&self) -> u64 {
+        lock(&self.shared.state).live.meters().plans()
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -2817,6 +2842,7 @@ impl Shared {
             }
         };
         Ok(frames::Sample {
+            pinned: snapshot.shot().pin(),
             snapshot,
             live: state.render.load_live(),
             rev: state.graph.rev(),
@@ -5364,10 +5390,34 @@ impl Shared {
         wake_all(wake);
     }
 
+    /// Saves the collection to its file: [`Engine::save_collection`].
+    fn save_collection(&self) {
+        let mut file = lock(&self.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        let (rev, json) = {
+            let state = lock(&self.state);
+            if state.graph.rev() <= file.saved() {
+                return;
+            }
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        if let Err(err) = file.save(rev, &json) {
+            tracing::error!(
+                path = %file.path().display(),
+                rev = %rev,
+                error = %err,
+                "collection not saved"
+            );
+        }
+    }
+
     /// Applies a change to the effect packs: their kinds to `kind.list`, their effects
     /// (the quarantined ones left out) to the chains, then re-plans.
     fn install_effects(&self, update: crate::effect_packs::Update) {
         let mut wake = Vec::new();
+        let mut save = false;
         {
             let mut state = lock(&self.state);
             // Every caller installs under the packs' lock, so updates come in order; one
@@ -5381,9 +5431,55 @@ impl Shared {
                 return;
             }
             state.effects_seq = update.seq;
+            // The version each changed kind had, for the filters stored by it.
+            let before: BTreeMap<String, Option<u32>> = update
+                .described
+                .iter()
+                .map(|kind| {
+                    let id = kind.kind_id.clone();
+                    let version = state.graph.kind(&id).map(|k| k.version);
+                    (id, version)
+                })
+                .collect();
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
+            // Sources and filters of a changed kind follow its renames (#1353, #1412,
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of.
+            let migrations = &update.migrations;
+            let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
+                migrations.get(kind)?.migrate(stored, from)
+            });
+            if let Some(upgraded) = upgraded {
+                tracing::info!(
+                    rev = %upgraded.rev,
+                    changed = upgraded.set.len(),
+                    "stored settings moved to their pack kind's current version"
+                );
+                // A shader source's new settings (its size among them) reach its live
+                // source as after any batch.
+                if upgraded
+                    .set
+                    .iter()
+                    .any(|edit| matches!(edit, Edit::SourceSetSettings { .. }))
+                {
+                    let state = &mut *state;
+                    state.refresh_shown();
+                    let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+                    state.live.sync(drawn.state());
+                }
+                state.history.record_engine(upgraded.rev, upgraded.touched);
+                state.subscribers.emit(
+                    &Event::StateChanged {
+                        rev: upgraded.rev,
+                        client_id: ClientId::new(crate::history::ENGINE_CLIENT),
+                        request_id: None,
+                        cause: None,
+                    },
+                    &mut wake,
+                );
+                save = true;
+            }
             state.quarantined = update.quarantined;
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
@@ -5391,6 +5487,9 @@ impl Shared {
             state.feed_pages();
         }
         wake_all(wake);
+        if save {
+            self.save_collection();
+        }
     }
 
     /// A GPU device loss on the program stage (#349): blames the pack kinds it drew,
@@ -5624,7 +5723,43 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
             height: size.height(),
         }),
         primary: info.primary,
+        formats: Vec::new(),
     })
+}
+
+/// A video device as `capture.targets` reports it, with the formats the engine reads
+/// of it: MJPEG among them, as every platform's codecs decode it. A device whose
+/// formats can't be read is listed without them.
+fn device_target_info(
+    devices: &dyn VideoDevices,
+    device: VideoDeviceInfo,
+) -> jstream_protocol::CaptureTargetInfo {
+    let formats = match devices.formats(&device.id) {
+        Ok(formats) => formats
+            .iter()
+            .filter(|format| crate::runtime::readable_format(format, true))
+            .filter_map(|format| {
+                Some(CaptureFormatInfo {
+                    width: format.size.width(),
+                    height: format.size.height(),
+                    fps: (crate::runtime::format_fps(format) * 100.0).round() / 100.0,
+                    pixel_format: crate::runtime::pixel_format_name(format.encoding)?.to_owned(),
+                })
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's formats");
+            Vec::new()
+        }
+    };
+    jstream_protocol::CaptureTargetInfo {
+        kind: CaptureTargetKind::Device,
+        target: device.id.as_str().to_owned(),
+        name: device.name,
+        size: None,
+        primary: false,
+        formats,
+    }
 }
 
 /// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves

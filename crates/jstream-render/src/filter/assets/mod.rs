@@ -13,6 +13,7 @@ pub use cube::{Lut, LutError};
 pub use lut::lut_image;
 mod lut;
 mod mask;
+pub(in crate::filter) use mask::IMAGE_TYPES;
 
 use std::sync::Arc;
 
@@ -58,7 +59,7 @@ fn reference_param(id: &str, label: &str, ty: ParamType) -> ParamDescriptor {
 }
 
 /// A live asset parameter accepting the file extensions `accept`.
-fn asset_param(id: &str, label: &str, accept: &[&str]) -> ParamDescriptor {
+pub(in crate::filter) fn asset_param(id: &str, label: &str, accept: &[&str]) -> ParamDescriptor {
     reference_param(
         id,
         label,
@@ -70,22 +71,22 @@ fn asset_param(id: &str, label: &str, accept: &[&str]) -> ParamDescriptor {
 
 /// The external image a pass reads, and whether its settings name one at all.
 #[derive(Default)]
-struct Reference {
+pub(in crate::filter) struct Reference {
     /// The setting is a reference, not `null`.
     named: bool,
-    image: Option<Arc<Image>>,
+    pub(in crate::filter) image: Option<Arc<Image>>,
 }
 
 impl Reference {
     /// Reads whether `settings` names a reference in `id`.
-    fn update(&mut self, settings: &Settings, id: &str) {
+    pub(in crate::filter) fn update(&mut self, settings: &Settings, id: &str) {
         self.named = settings.0.get(id).is_some_and(|v| !v.is_null());
     }
 
     /// The image to read this frame, checked against `ctx`'s compositor and held for its
     /// submit (a frame hold is staged with the input's); `None` when the setting is `null`
     /// or no image was set.
-    fn get(&self, ctx: &mut Ctx<'_>) -> Result<Option<&Image>, RenderError> {
+    pub(in crate::filter) fn get(&self, ctx: &mut Ctx<'_>) -> Result<Option<&Image>, RenderError> {
         let Some(image) = self.image.as_deref().filter(|_| self.named) else {
             return Ok(None);
         };

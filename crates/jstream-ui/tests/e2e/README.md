@@ -41,8 +41,11 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `openAddSource` opens the Add source dialog from the Sources panel's menu, by a
   right-click just under its last row (or under the empty scene's hint, since the tool
   bar at the panel's foot opens no menu), and
-  `nestScene` nests a scene through it; `rev` reads the revision the header last heard
-  of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
+  `nestScene` nests a scene through it; `outputRow` finds an output's row in the
+  Outputs panel, `addOutput` adds one through its "+ Add output" dialog,
+  `openOutputSettings` opens an output's settings dialog from its row's ⋯ menu, and
+  `openEncoders` opens the Encoders & mixes dialog; `rev` reads the revision the header last heard
+  of; `showPanel` makes sure a docked panel's tab (in the dock's strip, not the Inspector's own Transform tab) is the shown one; `describeKinds`
   routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
   descriptors a test gives, which the mock engine can't, and passes every other message
   on; given `refuse`, it also holds back the requests that function names and refuses
@@ -79,8 +82,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
   Browse… stores a path under the collection folder as a collection path and a path
   outside it as absolute, hides the button for app assets, and leaves the field when
-  the stub cancels; a recording's add form and Edit ask for a save dialog and a
-  stream has no button; Install plugin asks for a folder dialog and fills the path and
+  the stub cancels; a recording's add-output dialog and its settings dialog ask for a save dialog
+  and a stream has no button; Install plugin asks for a folder dialog and fills the path and
   the suggested id. A page with no desktop global has no Browse button. The native
   dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -118,26 +121,43 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   keeping the open, unfoldable folders of a match; a folder refusing to go inside its
   own child; F2 renaming a folder, and Del deleting an empty one without asking. Deleting
   a folder that holds anything needs `delete.plan`, so it is tested natively.
-- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
-  or go live until its key is set; the key field empties on save and the key never
-  appears in the page; go live and end stream; the header's Record starts and stops a
-  recording; clearing the key; deleting; editing the
-  server URL and choosing an encoder profile, both read back by a fresh page; a
-  recording's Audio select moving it to another bus, read back by a fresh page; making an
-  AV1 VBR encoder profile (a peak under the average is named in the form, which stays
-  open) and a vertical video mix, a recording using both (neither can then be deleted),
-  both read back by a fresh page, the mix resized from its Edit form and deleted once the
-  recording is back on the program; a second client sees outputs created, started and
-  deleted.
-- **Codec downloads** (`codec-downloads.spec.js`, on the Outputs panel): the mock
+- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): the panel is a
+  compact list (health in its header, no form or library under the rows; a stream's row
+  shows its host and encoder, the plain-rtmp ⚠ with the warning on hover, and why it
+  can't start; a double-click opens its settings); adding a stream and a recording
+  through the add-output dialog, a stream added with its key starting at once; a stream can't start or go live until its key is set
+  in its settings; the key never appears in the page, and a set key reads masked;
+  go live and end stream, with the target and Delete off while live; Remove taking the
+  key on OK; Delete asking first, and Cancel keeping it; the header's Record starts and
+  stops a recording; a settings edit dropped on Cancel; the server URL and an encoder
+  profile sent on Apply, both read back by a fresh page; a recording's Audio select
+  moving it to another bus on OK, read back by a fresh page; in the Encoders & mixes
+  dialog's list and editor, a new profile named "Default H.264", making an AV1 VBR
+  encoder profile (a peak under the average is named in the form, which stays open; once
+  saved the editor stays on it, with its short summary in the list and the whole in the
+  editor) and a vertical video mix, a recording using both (neither can then be
+  deleted, the title naming the recording), both read back by a fresh page, the mix
+  resized from Edit mix… over the settings dialog ("Saved."), Edit encoder… opening on
+  the recording's profile, off for the engine's default, and New… on a new one, and the
+  mix deleted once the recording is back on the program; Start all starting both
+  recordings but not a stream without its key (then off), Stop all beside it while they
+  run, with a running row's stats
+  line from a `stats.tick` (`statsTicks`) and none once stopped; Duplicate adding a copy
+  without the stream key and opening its settings, and a recording's copy writing to
+  "a (2).mp4"; an open dialog following another
+  client's path change until the person types their own; a second client sees outputs
+  created, started and deleted.
+- **Codec downloads** (`codec-downloads.spec.js`, in the Outputs panel's Encoders & mixes
+  dialog): the mock
   engine has no codec backend, so the spec routes the page's WebSocket and answers
   `codec.downloads`, `codec.download` and `codec.delete` for one OpenH264 download. With
-  no hardware H.264 encoder, Encoders offers it with Cisco's notice, the licence link and
+  no hardware H.264 encoder, the dialog offers it with Cisco's notice, the licence link and
   the licence's full text, sends nothing until Download is pressed, then shows it
   installed with the notice, link and Delete. The About dialog then lists it with the
   notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
   it out of About. With hardware, nothing is offered until the encoder form asks for software
-  H.264 (and not for HEVC), and a saved software profile brings the section's offer.
+  H.264 (and not for HEVC), and a saved software profile brings the dialog's offer, over
+  its editor.
 - **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
   Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
@@ -257,7 +277,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   Dragging the title moves the dialog, which stays inside the window and opens again
   where it was left; a double-click on the title centres it, and the header's × still
-  closes it.
+  closes it. With Sharpen described, a click on its row shows its settings on the
+  right, no Filters window opening, the name and the footer's Defaults hidden; a change
+  there is one edit at once, Enter on Blur's name picks Blur from the keyboard, and
+  Cancel puts the change back in one more.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively. A video capture device created through Add source, with its descriptor
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
@@ -284,8 +307,13 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   field is sent once on release, and text that isn't a number sends nothing while `−`
   and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
   the favourite star are sent; with no item selected the scene's object count, uses and Transition
-  in and out show, and a second selected item shows "+1". The mock engine doesn't
-  implement `scene.set_transitions`, so choosing one isn't run.
+  in and out show, and a second selected item shows "+1"; an item's sections are in
+  the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
+  section, the arrow keys moving along the strip with the focus, the tab kept across a
+  reload, and the header's Properties & filters… opening the Properties dialog; X and
+  Y, W and H, and W % and H % each on one row of its group, the crop's four sides on
+  one row, and no sideways scroll in the Transform tab. The mock
+  engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
   (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
@@ -318,7 +346,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row's Edit filters… showing that scene's chain from behind the Transform tab while
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
-  dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+  dialog listing the scene's chain and adding to it at once, the new filter's settings
+  taking the right side (the footer's Defaults hidden) until the Properties entry brings
+  the scene's back; Cancel puts the add back, and OK keeps another.
 - **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
   `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
   the test writes (the mock engine loads no packs), Add filter › Custom shader writes
@@ -327,7 +357,23 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   under a transparent textarea in the same box; Tab indents at the caret and the change
   compiles ("Compiled."); a line the fake engine refuses is marked in the gutter and
   named under the text while the colours follow the new text; and scrolling the text
-  scrolls the copy.
+  scrolls the copy, to the very end both ways. Then, on a second shader whose `amount`
+  the Filters window set to 0.25, an `@renamed amount mix_amount` line sends a manifest
+  at version 2 with its `renames` and is coloured as an annotation; Save as pack…
+  refuses a taken ID and a bad one, then writes `warm-look` with the same shader, and
+  the filter moves to its kind in the old one's place (the chain reads Sharpen, Blur,
+  Warm look) with the editor open on `warm-look`, its add carrying exactly
+  `mix_amount: 0.25`. The fake kinds declare the shader's own `@param` lines, and a
+  `filter.add` of a written pack with a setting its kind doesn't declare is refused, as
+  the engine refuses it. Add source › Shader (ADR-0135) writes the source template as
+  `custom-1`, a `[[source]] shader` at 1920 × 1080 whose one pass, `previous`, has no
+  inputs, places the source in the scene and opens its Properties with the editor over
+  them, with no Save as pack…; `@name`, `@size 640x360` and `@feedback` reach the
+  manifest (its name, `width` and `height`, and `previous` as the pass's input); a
+  setting named `width` is refused under the text and nothing is sent; Done leaves the
+  Properties, whose Edit shader… opens the editor again on the same text; and Add source
+  then lists the written shader by its `@name` beside Shader. A fake kind is a source when
+  its manifest has a `[[source]]`.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
@@ -342,8 +388,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   this item of “Backdrop” in this keyframe", after which the keyframe has its own and
   Main's item still has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
-  output row ("master", "FX 0"), a recording's row under it with its state and FX
-  button, and the footnote; the program's FX showing the master chain in the Filters
+  output row ("master", "FX 0", the program filters' note as its tooltip), a recording's
+  row under it with its state and FX button, its ID listed only once; the program's FX showing the master chain in the Filters
   panel from behind the Transform tab, with its note and its video and audio chains,
   the output's FX its own chain, and selecting an item going back to its source's. With
   Gain and Sharpen described: Add filter on the master offering both, with its foot,
@@ -427,7 +473,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
   Backspace, and with a new name, a background colour with alpha, and Show in multiview and Include its audio when nested unchecked is saved by OK and read
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
-  Inspector's Scene switches send `item.set_transition` with the whole settings. The
+  Inspector's Scene switches, open in its Behaviour tab, send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
 - **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
