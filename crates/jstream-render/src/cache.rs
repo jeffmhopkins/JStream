@@ -153,6 +153,27 @@ impl<K: Ord + Clone> ResourceCache<K> {
         height: u32,
         rgba: &[u8],
     ) -> Result<&Image, RenderError> {
+        self.upload_if_needed(compositor, key, version, (width, height), || Some(rgba))?
+            .ok_or_else(|| missing("an upload"))
+    }
+
+    /// [`Self::upload`] of pixels read only if they are needed: `rgba` is called only
+    /// when the entry doesn't hold `version` at this size already, so a caller that
+    /// keeps its pixels elsewhere (a still whose copy was let go of, #1139) need not
+    /// have them at hand. `Ok(None)` when it was called and gave none: the entry is
+    /// left as it was, and marked used if there is one, so the image it held (if any)
+    /// is still drawn until the pixels are given.
+    ///
+    /// # Errors
+    /// As for [`Self::upload`].
+    pub fn upload_if_needed<B: AsRef<[u8]>>(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        (width, height): (u32, u32),
+        rgba: impl FnOnce() -> Option<B>,
+    ) -> Result<Option<&Image>, RenderError> {
         let frame = self.frame;
         // By the frame it holds and the texture's own size: one held small by
         // `upload_drawn` is made again whole.
@@ -163,15 +184,30 @@ impl<K: Ord + Clone> ResourceCache<K> {
         });
         if reuse {
             let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+            entry.used = frame;
             if entry.version != version {
-                compositor.rewrite_rgba8(&entry.image, rgba)?;
+                let Some(rgba) = rgba() else {
+                    return Ok(None);
+                };
+                compositor.rewrite_rgba8(&entry.image, rgba.as_ref())?;
                 entry.version = version;
             }
-            entry.used = frame;
-            return Ok(&entry.image);
+            return Ok(Some(&entry.image));
         }
-        let image = compositor.upload_rgba8(width, height, rgba)?;
-        Ok(self.replace(key, image, version))
+        let Some(rgba) = rgba() else {
+            self.keep(key);
+            return Ok(None);
+        };
+        let image = compositor.upload_rgba8(width, height, rgba.as_ref())?;
+        Ok(Some(self.replace(key, image, version)))
+    }
+
+    /// Marks the entry under `key`, if there is one, used this frame.
+    fn keep(&mut self, key: &K) {
+        let frame = self.frame;
+        if let Some(entry) = self.live.get_mut(key) {
+            entry.used = frame;
+        }
     }
 
     /// Lets [`Self::upload_drawn`] hold an upload at the size it is drawn (#1139). Off
@@ -208,13 +244,32 @@ impl<K: Ord + Clone> ResourceCache<K> {
         compositor: &Compositor,
         key: &K,
         version: u64,
-        (width, height): (u32, u32),
+        size: (u32, u32),
         rgba: &[u8],
         planned: f32,
     ) -> Result<&Image, RenderError> {
+        self.upload_drawn_if_needed(compositor, key, version, size, planned, || Some(rgba))?
+            .ok_or_else(|| missing("an upload"))
+    }
+
+    /// [`Self::upload_drawn`] of pixels read only if they are needed, as
+    /// [`Self::upload_if_needed`] reads them. When a larger upload was due and `rgba`
+    /// gave none, the entry keeps the texels it holds and is drawn from them.
+    ///
+    /// # Errors
+    /// As for [`Self::upload`].
+    pub fn upload_drawn_if_needed<B: AsRef<[u8]>>(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        (width, height): (u32, u32),
+        planned: f32,
+        rgba: impl FnOnce() -> Option<B>,
+    ) -> Result<Option<&Image>, RenderError> {
         let small = u64::from(width) * u64::from(height) < DRAWN_MIN_TEXELS;
         if !self.drawn_small || small {
-            return self.upload(compositor, key, version, width, height, rgba);
+            return self.upload_if_needed(compositor, key, version, (width, height), rgba);
         }
         let frame = self.frame;
         let held = self.live.get(key).and_then(|entry| {
@@ -244,19 +299,26 @@ impl<K: Ord + Clone> ResourceCache<K> {
         };
         if held == Some(scale) {
             let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+            entry.used = frame;
             if entry.version != version {
-                compositor.rewrite_rgba8(&entry.image, rgba)?;
+                let Some(rgba) = rgba() else {
+                    return Ok(None);
+                };
+                compositor.rewrite_rgba8(&entry.image, rgba.as_ref())?;
                 entry.version = version;
             }
-            entry.used = frame;
-            return Ok(&entry.image);
+            return Ok(Some(&entry.image));
         }
+        let Some(rgba) = rgba() else {
+            self.keep(key);
+            return Ok(None);
+        };
         let to = (scaled(width, scale), scaled(height, scale));
-        let image = compositor.upload_rgba8_into(width, height, rgba, to)?;
+        let image = compositor.upload_rgba8_into(width, height, rgba.as_ref(), to)?;
         self.replace(key, image, version);
         let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
         entry.scale = scale;
-        Ok(&entry.image)
+        Ok(Some(&entry.image))
     }
 
     /// [`Self::upload`] of a CPU video frame read as opaque, converted on the GPU as

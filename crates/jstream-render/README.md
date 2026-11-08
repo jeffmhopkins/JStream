@@ -465,6 +465,13 @@ several draws of one frame share (a source's video chain) can run once in it.
 keeps the extent it had, so a caller that sets one sets it on every frame, and a new
 texture starts at its own size (an upload held small, at its frame's).
 
+`upload_if_needed` and `upload_drawn_if_needed` are `upload` and `upload_drawn` of
+pixels the caller reads only if the cache must upload: the closure is called only when
+the entry doesn't hold that version at that size, and when it gives none the entry is
+left as it was (marked used, so what it held is still drawn) and the call returns
+`Ok(None)`. A caller that lets go of a still's pixels once uploaded (`jstream-core`'s
+`still`, #1139) uploads through them.
+
 `upload_drawn` (#1139, ADR-0117 §2) is `upload` for a frame only items draw, so its
 texels need be no finer than its draws sample them. Each `render` notes on the image how
 much of its frame's resolution each item needed (`Image::record_draw`: the texture's

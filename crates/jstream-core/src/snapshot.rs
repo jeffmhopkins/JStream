@@ -130,6 +130,9 @@ enum Pixels {
     /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
     /// by that frame's own version, so a new frame of the same size needs no plan.
     Slot(Arc<crate::slot::FrameSlot>),
+    /// A live source's still image (#1139): its pixels are held only while a draw
+    /// needs them ([`crate::still`]), and each compositor uploads them once.
+    Still(Arc<crate::still::ShownStill>),
 }
 
 impl PartialEq for Frame {
@@ -219,6 +222,19 @@ impl Frame {
         }
     }
 
+    /// A live source's still image, at its size ([`crate::still`]).
+    pub(crate) fn from_still(still: Arc<crate::still::ShownStill>, version: u64) -> Self {
+        let size = still.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Still(still),
+            version,
+            model: None,
+        }
+    }
+
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
@@ -268,8 +284,9 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            // Read through the slot at a draw ([`compose`]); none to borrow here.
-            Pixels::Gpu { .. } | Pixels::Slot(_) => &[],
+            // Read through the slot or the still at a draw ([`compose`]); none to
+            // borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) | Pixels::Still(_) => &[],
         }
     }
 
@@ -285,6 +302,10 @@ impl Frame {
         match &self.pixels {
             // What a draw would upload now.
             Pixels::Slot(slot) => slot.latest().rgba().to_vec(),
+            Pixels::Still(still) => still
+                .read()
+                .map(|frame| crate::slot::rgba(&frame).to_vec())
+                .unwrap_or_default(),
             _ => self.rgba().to_vec(),
         }
     }
@@ -2911,6 +2932,9 @@ pub(crate) struct View<'a> {
     /// What the shot's frame slots held when a frame sheet's picture was taken, drawn in
     /// place of what they hold now ([`Shot::pin`]). `None` draws what they hold now.
     pub(crate) pinned: Option<&'a Pinned>,
+    /// Whether the program stage's render thread draws it: a still image's pixels are
+    /// read only if they are held then, never decoded again there ([`crate::still`]).
+    pub(crate) program: bool,
 }
 
 impl<'a> View<'a> {
@@ -2921,6 +2945,7 @@ impl<'a> View<'a> {
             stage: true,
             owner,
             pinned: None,
+            program: true,
         }
     }
 
@@ -4497,6 +4522,53 @@ fn planned_need(
     })
 }
 
+/// Uploads a still image's frame for `key`, held at the size its items draw it when
+/// `drawn` gives their planned need (as [`ResourceCache::upload_drawn`] holds one).
+/// Its pixels are read only if the cache needs them: on the program stage's render
+/// thread (`program`) only if they are held, asking for them when they aren't (the
+/// texture held already is drawn meanwhile), and saying once the cache has what it
+/// needs so they can be let go of; elsewhere they are decoded again if need be
+/// ([`crate::still`]).
+fn upload_still(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    (key, frame, still): (&GpuKey, &Frame, &crate::still::ShownStill),
+    program: bool,
+    drawn: Option<f32>,
+) -> Result<(), RenderError> {
+    let mut asked = false;
+    let rgba = || {
+        asked = true;
+        if program { still.held() } else { still.read() }.map(Packed)
+    };
+    let size = (frame.width, frame.height);
+    let uploaded = match drawn {
+        Some(planned) => cache
+            .upload_drawn_if_needed(compositor, key, frame.version, size, planned, rgba)?
+            .is_some(),
+        None => cache
+            .upload_if_needed(compositor, key, frame.version, size, rgba)?
+            .is_some(),
+    };
+    if program {
+        if uploaded {
+            still.uploaded();
+        } else if asked {
+            still.want();
+        }
+    }
+    Ok(())
+}
+
+/// A still's packed pixels, as an upload reads them.
+struct Packed(Arc<VideoFrame>);
+
+impl AsRef<[u8]> for Packed {
+    fn as_ref(&self) -> &[u8] {
+        crate::slot::rgba(&self.0)
+    }
+}
+
 /// [`compose`], timing each unit of the work into `meter` (ADR-0103): each source's
 /// upload, each capture, each video chain (an item's with its box), each nested pass and
 /// the composite, and the phases they make up. The readback's wait counts toward the
@@ -4585,6 +4657,19 @@ pub(crate) fn compose_metered(
                     if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
                         cache.set_extent(key, extent);
                     }
+                }
+            }
+            Pixels::Still(still) => {
+                upload_still(
+                    compositor,
+                    cache,
+                    (key, frame, still),
+                    view.program,
+                    shot.drawn_only(key, frame)
+                        .then(|| planned_need(&mut planned, shot, source, frame)),
+                )?;
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
@@ -7220,6 +7305,107 @@ pub(crate) mod tests {
             },
         );
         assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
+    }
+
+    /// A still image's pixels are let go of once the program stage has uploaded them,
+    /// and a later upload there waits for the stills thread to decode them again, drawing
+    /// what it has meanwhile; any other compositor decodes them itself (#1139).
+    #[test]
+    fn a_still_is_drawn_from_its_upload_after_its_pixels_go() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = |value: [u8; 4]| {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(value, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let loads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&loads);
+        let still = Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels(GREEN)),
+            "still.png".into(),
+            move || {
+                counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(pixels(GREEN))
+            },
+        ));
+        let stills = crate::still::Stills::default();
+        let drawn = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let shown = stills.show(still, drawn);
+        let mut planned = shot(vec![(
+            "program",
+            vec![
+                fill("red"),
+                placed(SourceRef::Frame(SourceId::new("still")), FULL),
+            ],
+        )]);
+        planned.frames.insert(
+            SourceId::new("still"),
+            Frame::from_still(Arc::clone(&shown), 3),
+        );
+        let key = GpuKey::Frame(SourceId::new("still"));
+        planned.uploads.push((key.clone(), SourceId::new("still")));
+        let draw = |compositor: &mut Compositor, cache: &mut ResourceCache<GpuKey>, program| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (&planned, zero()),
+                View {
+                    program,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(draw(&mut compositor, &mut program, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()), "let go of once uploaded");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "from its upload"
+        );
+
+        // A cache with no upload of it (as after nothing drew it): nothing to draw yet.
+        let mut fresh = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(RED));
+        assert!(fresh.get(&key).is_none(), "nothing uploaded");
+        assert!(
+            wait(&|| shown.held().is_some()),
+            "decoded again for the draw"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()));
+
+        // `video.snapshot`'s compositor reads it itself.
+        let mut snapshot = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's

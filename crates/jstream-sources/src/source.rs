@@ -15,12 +15,13 @@ use std::sync::Arc;
 /// Sources are created by their [`SourceKind`] from a complete, already validated
 /// settings map. Creating one may block (an image is read and decoded then), so it never
 /// happens on a real-time thread. Asking for a frame doesn't block on I/O or allocate
-/// for the built-in kinds, and frames are handed out as shared [`Arc`]s, so the render
-/// thread can hold one past the next update. Most make their frames when created or
-/// updated; a `media` file decodes them ahead on a thread of its own and hands each
-/// over under a short lock; a source whose frames follow something live (the
-/// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
-/// instead, and `frame` hands out the one painted last. An animated image, a media file
+/// for the built-in kinds (apart from a still image whose frame no one holds any more,
+/// which reads its file again: [`Source::still`]), and frames are handed out as shared
+/// [`Arc`]s, so the render thread can hold one past the next update. Most make their
+/// frames when created or updated; a `media` file decodes them ahead on a thread of its
+/// own and hands each over under a short lock; a source whose frames follow something
+/// live (the `waveform`, `spectrum` and `chat_message` kinds) draws them in its
+/// [`Painter`] instead, and `frame` hands out the one painted last. An animated image, a media file
 /// and a page that paints on the CPU have a painter that draws nothing, so a host can
 /// take their new frames from it without the source.
 pub trait Source: Send {
@@ -112,6 +113,14 @@ pub trait Source: Send {
     /// whose frames follow something live; `None` (the default) for one whose frames are
     /// made on create and update.
     fn painter(&self) -> Option<Arc<dyn Painter>> {
+        None
+    }
+
+    /// The source's one frame as a [`Still`], for a source that shows a single frame
+    /// it can make again (a still image, #1139): a host that holds the still's frame
+    /// only while it needs the pixels lets them be freed, and [`frame`](Self::frame)
+    /// then reads the file again. `None` (the default) for every other source.
+    fn still(&self) -> Option<Arc<crate::Still>> {
         None
     }
 

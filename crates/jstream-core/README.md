@@ -1390,7 +1390,22 @@ allocates no texture. A source's frame that no video chain reads and no model st
 the preview's caches (`draw_uploads_small`) hold it at the size its items draw it, never
 under what `Shot::scales` plans for it over every mix (so a mix that isn't due on a
 tick, and only claims its layers, doesn't let it shrink), and its first upload at that
-plan, so a 1080p still in a small box keeps a small texture (#1139). The snapshot thread's cache draws every upload whole. On a render tick, a mix that isn't due claims its layers without
+plan, so a 1080p still in a small box keeps a small texture (#1139). The snapshot thread's cache draws every upload whole. A still image's frame (`Pixels::Still`, from a source whose
+`Source::still` is `Some`) is uploaded through `upload_if_needed` and
+`upload_drawn_if_needed`, which read its pixels only when the cache has to upload:
+`still::ShownStill` holds them while a draw may need them, and the `jstream-stills`
+thread lets go of them once the program stage's cache says it has what it needs, so a
+shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). A program-stage
+draw that needs them again (a larger placement, an upload retired while nothing drew
+it) finds none, asks for them, and draws the texture it has (or nothing, with none)
+until the thread has decoded the file again (`jstream_sources::Still::frame`); the
+render thread only reads atomics and unparks the thread, never decodes, and never frees
+the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). A still
+that no mix of the program stage draws holds its pixels, so showing it again draws it
+at once. The snapshot thread's and the preview streams' compositors read the pixels
+themselves, decoding the file again when no one holds them (`ShownStill::read`). A file
+that fails to decode again (or now has another size) is logged once and tried again
+every 5 s; the still keeps drawing what its cache holds. On a render tick, a mix that isn't due claims its layers without
 drawing (`snapshot::claim_layers`), so mixes at different rates keep theirs between
 the ticks they draw on. Images no frame references are retired and freed after the GPU
 has finished with them. The mix's scene is drawn at the canvas: straight to the output
@@ -2051,7 +2066,10 @@ while something else re-plans every frame; a plan that reaches one again paints 
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
 them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
-calls under the lock never draw or decode. Each plan is numbered (`begin_plan`), and each source remembers the
+calls under the lock never draw or decode. A still `image` is planned by its `jstream_sources::Still`
+(`Source::still`), whose pixels the plan never asks for: it shows a `still::ShownStill`
+(`Frame::from_still`), whose pixels the `jstream-stills` thread holds and lets go of
+(see *Snapshots*), and `source.sizes` takes its size from the still. Each plan is numbered (`begin_plan`), and each source remembers the
 last plan that reached it, starting from the plan current when it was built: one that
 a plan reaches after plans that didn't (its item was hidden, or its scene wasn't the
 program) is told so first (`Source::show`), so a media file can restart, including

@@ -64,6 +64,7 @@ use crate::profile::SourceMeters;
 use crate::runtime::{frame_period, on_frame_grid};
 use crate::slot::{FrameSlot, Stored};
 use crate::snapshot::{CaptureKey, Frame, Look};
+use crate::still::Stills;
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -112,6 +113,8 @@ pub(crate) struct LiveSources {
     /// What each source's paints, builds and plans' looks cost, and the plans, for
     /// `profile.get` (ADR-0103). The thread holds it too.
     meters: Arc<SourceMeters>,
+    /// The thread that holds and lets go of shown stills' pixels (#1139).
+    stills: Stills,
 }
 
 /// One asset a video filter reads.
@@ -178,6 +181,10 @@ struct Running {
     /// instance before it that its build kept ([`Entry::anchor`]).
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The still image it shows and the frame plans show it by, for a source whose one
+    /// frame is a [`jstream_sources::Still`]: its pixels are held only while a draw
+    /// needs them ([`crate::still`]).
+    shown_still: Option<(Arc<jstream_sources::Still>, Frame)>,
     /// The last plan that reached it, or the plan current when it was built, so the
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
@@ -284,6 +291,7 @@ impl LiveSources {
             assets: HashMap::new(),
             loaded: Arc::new(FilterAssets::new()),
             meters,
+            stills: Stills::default(),
         }
     }
 
@@ -662,6 +670,7 @@ impl LiveSources {
                 ticket: built.ticket,
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
+                shown_still: None,
                 planned: plan,
                 looked: plan,
                 resting: false,
@@ -980,12 +989,13 @@ impl LiveSources {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
                 // A page that paints on the CPU hands its paints over through its frame
                 // slot instead, with no re-plan (ADR-0117 §3).
-                let (frame, own) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                let (frame, own) =
+                    Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
                 let next = if running.slot.is_some() { own } else { next };
                 return Some(Look::Frame(frame, next));
             }
         }
-        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        let (frame, next) = Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
         Some(Look::Frame(frame, next))
     }
 
@@ -1038,10 +1048,30 @@ impl LiveSources {
     fn cpu_frame(
         source_id: &SourceId,
         running: &mut Running,
-        at: MediaTime,
-        now: MediaTime,
+        (at, now): (MediaTime, MediaTime),
         versions: &mut u64,
+        stills: &Stills,
     ) -> Option<(Frame, Option<MediaTime>)> {
+        if let Some(still) = running.source.still() {
+            // Never decoded here: the stills thread holds its pixels for the draws.
+            let frame = match &running.shown_still {
+                Some((shown, frame)) if Arc::ptr_eq(shown, &still) => frame.clone(),
+                _ => {
+                    *versions = versions.saturating_add(1);
+                    let size = still.size();
+                    let shown = stills.show(Arc::clone(&still), Arc::clone(&running.drawn));
+                    let frame = Frame::from_still(shown, *versions);
+                    let frame = match running.extent {
+                        Some(extent) => frame.placed_at(extent),
+                        None => frame,
+                    };
+                    running.size = Some(running.extent.unwrap_or(size));
+                    running.shown_still = Some((still, frame.clone()));
+                    frame
+                }
+            };
+            return Some((frame.with_model(running.source.model()), None));
+        }
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {
@@ -1085,12 +1115,18 @@ impl LiveSources {
     /// ([`Self::look`]).
     pub(crate) fn rest_undrawn(&mut self) {
         let plan = self.plan;
+        let mut rested = false;
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             if running.looked != plan && !running.resting {
                 running.resting = true;
                 running.drawn.store(false, Ordering::Relaxed);
                 running.source.set_drawn(false);
+                rested = true;
             }
+        }
+        if rested {
+            // A still no mix draws gets its pixels back, so it is drawn at once again.
+            self.stills.drawn_changed();
         }
     }
 
@@ -1505,6 +1541,10 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
 fn first_size(source: &mut dyn Source) -> Option<FrameSize> {
     if source.capture().is_some() {
         return None;
+    }
+    if let Some(still) = source.still() {
+        // Its size, without taking the pixels it holds for the first plan.
+        return Some(still.size());
     }
     let frame = source.frame(MediaTime::zero(Timebase::MILLIS)).ok()?;
     Some(frame.info().size)
