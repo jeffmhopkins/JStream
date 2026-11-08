@@ -8,27 +8,39 @@
 // them, not what a real wheel reports: that was measured with real X input (#1346). The
 // devicePixelRatio is the browser's own (`--force-device-scale-factor`), not emulated:
 // emulating one scales the deltas the page sees, which no real display does.
-import { test, expect, connect } from '../fixtures.js';
+import { test, expect, connect, showPanel } from '../fixtures.js';
 
 /** Routes the page's WebSocket, passing everything on, and returns `zooms()`, the
- * `scene.zoom_camera` actions the page sent, and `bind(chord, steps)`, which binds a
- * chord to zoom Main from outside the page, as another client would. */
-async function route(page) {
+ * `scene.zoom_camera` actions the page sent; `send(edits)`, which applies edits from
+ * outside the page, as another client would; and `bind(chord, steps)`, which binds a
+ * chord to zoom Main that way. It answers `kind.list` and `kind.describe` for `kinds`,
+ * which the mock engine can't, as `describeKinds` does. */
+async function route(page, kinds = []) {
   const zooms = [];
   let server = null;
   let next = 0;
+  const answer = (id, result) => JSON.stringify({ type: 'response', id, result: { kind: 'query', result } });
   await page.routeWebSocket(/.*/, (ws) => {
     server = ws.connectToServer();
     ws.onMessage((message) => {
+      let parsed = null;
       try {
-        const parsed = JSON.parse(message);
-        if (parsed.call?.kind === 'action' && parsed.call.action?.type === 'scene.zoom_camera') {
-          zooms.push(parsed.call.action.steps);
-        }
+        parsed = JSON.parse(message);
       } catch {
         // Not JSON: pass it on.
       }
-      server.send(message);
+      const call = parsed?.call;
+      const query = call?.kind === 'query' ? call.query : null;
+      const described = kinds.find((k) => k.kind_id === query?.kind_id);
+      if (call?.kind === 'action' && call.action?.type === 'scene.zoom_camera') zooms.push(call.action.steps);
+      if (query?.type === 'kind.list' && kinds.length) {
+        const list = kinds.map(({ kind_id, category, name, version }) => ({ kind_id, category, name, version }));
+        ws.send(answer(parsed.id, { type: 'kind.list', kinds: list }));
+      } else if (query?.type === 'kind.describe' && described) {
+        ws.send(answer(parsed.id, { type: 'kind.describe', kind: described, settings_schema: {} }));
+      } else {
+        server.send(message);
+      }
     });
     server.onMessage((message) => {
       // The answers to this route's own requests aren't the page's.
@@ -36,18 +48,13 @@ async function route(page) {
       ws.send(message);
     });
   });
-  const bind = (chord, steps) => {
+  const send = (edits) => {
     next += 1;
-    server.send(JSON.stringify({
-      type: 'request',
-      id: `e2e-wheel-${next}`,
-      call: {
-        kind: 'batch',
-        edits: [{ type: 'hotkey.set', chord, action: { type: 'scene.zoom_camera', scene_id: 'main', steps } }],
-      },
-    }));
+    server.send(JSON.stringify({ type: 'request', id: `e2e-wheel-${next}`, call: { kind: 'batch', edits } }));
   };
-  return { zooms: () => zooms.slice(), bind };
+  const bind = (chord, steps) =>
+    send([{ type: 'hotkey.set', chord, action: { type: 'scene.zoom_camera', scene_id: 'main', steps } }]);
+  return { zooms: () => zooms.slice(), send, bind };
 }
 
 /** Counts, from here on, the wheel events that reached the window with the browser's
@@ -174,4 +181,65 @@ test('a Shift wheel chord counts the turn browsers report sideways', async ({ pa
   await expect.poll(async () => (await defaults()).kept).toBe(kept + 1);
   await page.keyboard.up('Shift');
   expect(calls.zooms().slice(start)).toEqual([-1]);
+});
+
+const FOLLOW = [{
+  kind_id: 'follow_pointer', category: 'video_filter', name: 'Follow pointer', version: 1, video: true, audio: false,
+  params: [
+    { id: 'zoom', type: 'float', min: 1, max: 4, step: 0.1, default: 1, label: 'Zoom', live: true },
+    { id: 'yaw_deg', type: 'float', min: -60, max: 60, default: 20, label: 'From the right', live: true },
+    { id: 'pitch_deg', type: 'float', min: -60, max: 60, default: -10, label: 'From below', live: true },
+    { id: 'lean_deg', type: 'float', min: 0, max: 30, default: 9, label: 'Lean', live: true },
+  ],
+}];
+
+test('a Follow pointer pane offers the default wheel zoom, and its Set key takes a Ctrl+wheel turn', async ({ page, daemon }) => {
+  // The mock lists and describes no kinds: the page's socket answers for Follow pointer,
+  // with four of its settings, so it opens in the Filters window, where its keys are. Add filter offers it
+  // only on a display or window capture, so another client places one in Main.
+  const calls = await route(page, FOLLOW);
+  await connect(page, daemon);
+  calls.send([
+    { type: 'source.create', source_id: 'screen', name: 'Screen', kind: { type: 'builtin', kind: 'display' } },
+    { type: 'item.add', scene_id: 'main', item_id: 'screen-item', source_id: 'screen' },
+  ]);
+  await showPanel(page, 'Filters');
+  await page.locator('.sources-panel li.row').filter({ hasText: 'Screen' }).locator('.row-main').click();
+  const effects = page.locator('.filters-panel .filters-effects');
+  await effects.getByRole('button', { name: '+ Add effect…' }).click();
+  const add = page.getByRole('dialog', { name: 'Add filter' });
+  await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option').filter({ hasText: 'Follow pointer' }).click();
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(add).toBeHidden();
+
+  // Neither default chord is bound: the pane offers both, and one click binds them.
+  const window = page.getByRole('dialog', { name: 'Filters', exact: true });
+  const keys = window.locator('.filter-keys');
+  const zoomIn = keys.locator('.hotkey-row').filter({ hasText: 'Zoom in' });
+  const zoomOut = keys.locator('.hotkey-row').filter({ hasText: 'Zoom out' });
+  const offer = keys.getByRole('button', { name: 'Bind Ctrl+WheelUp and Ctrl+WheelDown' });
+  await expect(offer).toBeVisible();
+  await offer.click();
+  await expect(zoomIn.locator('kbd')).toHaveText(['Ctrl+WheelUp']);
+  await expect(zoomOut.locator('kbd')).toHaveText(['Ctrl+WheelDown']);
+  // Once either is bound, the offer goes.
+  await expect(offer).toHaveCount(0);
+
+  // Unbound, Zoom out's Set key takes the next turn: a bare one scrolls and binds
+  // nothing; one with Alt held binds Alt+WheelDown.
+  await zoomOut.getByRole('button', { name: 'Unbind Ctrl+WheelDown' }).click();
+  await expect(zoomOut.locator('kbd')).toHaveCount(0);
+  const set = zoomOut.locator('.set-key');
+  await set.click();
+  await expect(set).toHaveText('Press a key or Ctrl+wheel…');
+  await set.hover();
+  await page.mouse.wheel(0, 120);
+  await expect(set).toHaveText('Press a key or Ctrl+wheel…');
+  await page.keyboard.down('Alt');
+  await page.mouse.wheel(0, 120);
+  await page.keyboard.up('Alt');
+  await expect(zoomOut.locator('kbd')).toHaveText(['Alt+WheelDown']);
+  await expect(set).toHaveText('Set key');
+  // Ctrl+WheelUp is still bound, so the offer stays gone.
+  await expect(offer).toHaveCount(0);
 });
