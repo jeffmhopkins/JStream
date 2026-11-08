@@ -12,7 +12,7 @@ use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
-use crate::mips::{MipPipelines, Mips, Region};
+use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
@@ -1035,8 +1035,14 @@ impl Compositor {
                     continue;
                 }
             }
-            // A 2D item minified at least twice along both axes never samples level 0.
-            let skip = u32::from(least >= 2.0);
+            // A 2D item minified `2^k` times or more along both axes never samples
+            // the levels finer than `k`.
+            let skip = if least >= 2.0 {
+                // `as` saturates, so even an infinite ratio (a degenerate quad) is in range.
+                (least.log2().floor() as u32).min(MAX_SKIP)
+            } else {
+                0
+            };
             let mips = (most > MINIFIED).then(|| {
                 let image = item.image;
                 // The crop counts in the extent; the chain is built from texels.
@@ -1233,7 +1239,6 @@ impl Compositor {
                 &self.gpu.queue,
                 &self.image_layout,
                 &self.mip_pipelines,
-                image,
                 region,
                 skip,
             )
