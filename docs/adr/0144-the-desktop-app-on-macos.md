@@ -2,14 +2,14 @@
 id = "ADR-0144"
 title = "The desktop app on macOS, as an unsigned app bundle"
 kind = "adr"
-status = "accepted"
-tier = "agent"
+status = "proposed"
+tier = "maintainer"
 -->
 
 # ADR-0144: The desktop app on macOS, as an unsigned app bundle
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Status:** proposed
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -33,8 +33,9 @@ Browse dialogs, the live engine's backends and key store, and the global hotkeys
    in-process and live on the backends the daemon uses there (ADR-0063), stream keys in
    the Keychain, AppKit's open and save panels for Browse, and no virtual camera
    (ADR-0063 §13 keeps it out). The app is windowed where `tauri` is a dependency, and its
-   build script says so to the code (`cfg(desktop_window)`), so another platform joins by
-   adding itself in one place.
+   build script says so to the code (`cfg(webview)`), so another platform joins by
+   adding itself in one place. Linux joins the same way behind its `webkitgtk` feature
+   ([ADR-0141](0141-desktop-app-on-linux.md)).
 2. **Global hotkeys on macOS** follow ADR-0112 §5: keys through Carbon's
    `RegisterEventHotKey`, which needs no permission, and wheel chords through a Quartz
    event tap installed only while a wheel chord is set. The tap needs the Accessibility

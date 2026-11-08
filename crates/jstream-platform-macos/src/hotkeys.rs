@@ -334,7 +334,9 @@ mod listener {
     use super::{Held, NEEDS_ACCESSIBILITY, WheelChords, parse_chord, scroll_delta};
     use dispatch2::DispatchQueue;
     use jstream_platform::PlatformError;
-    use objc2_core_foundation::{CFMachPort, CFRetained, CFRunLoop, kCFRunLoopCommonModes};
+    use objc2_core_foundation::{
+        CFMachPort, CFRetained, CFRunLoop, kCFRunLoopCommonModes, kCFRunLoopDefaultMode,
+    };
     use objc2_core_graphics::{
         CGEvent, CGEventField, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement,
         CGEventTapProxy, CGEventType, CGPreflightPostEventAccess, CGRequestPostEventAccess,
@@ -342,6 +344,7 @@ mod listener {
     use std::cell::RefCell;
     use std::ffi::c_void;
     use std::ptr::{self, NonNull};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex, PoisonError, mpsc};
     use std::thread::JoinHandle;
     use std::time::Duration;
@@ -461,6 +464,8 @@ mod listener {
     struct Shared {
         chords: Mutex<WheelChords>,
         on_press: Arc<OnPress>,
+        /// Set by [`Tap::remove`]; the tap's thread checks it between runs of its loop.
+        stopping: AtomicBool,
     }
 
     impl Shared {
@@ -468,6 +473,10 @@ mod listener {
             self.chords.lock().unwrap_or_else(PoisonError::into_inner)
         }
     }
+
+    /// The longest one run of the tap's loop lasts before it checks whether it should
+    /// stop (seconds): the bound on how long a lost `CFRunLoopStop` delays removing it.
+    const RUN_SLICE: f64 = 0.5;
 
     /// A run loop handle another thread may stop.
     struct RunLoopHandle(CFRetained<CFRunLoop>);
@@ -498,6 +507,7 @@ mod listener {
             let shared = Arc::new(Shared {
                 chords: Mutex::new(chords),
                 on_press,
+                stopping: AtomicBool::new(false),
             });
             let (ready, started) = mpsc::channel::<Result<RunLoopHandle, String>>();
             let theirs = Arc::clone(&shared);
@@ -523,8 +533,16 @@ mod listener {
         }
 
         /// Stops the tap's run loop and waits for its thread, which removes the tap.
+        ///
+        /// `CFRunLoopStop` does nothing to a loop that isn't running yet, so a stop sent
+        /// between the thread saying it is ready and entering its loop would be lost.
+        /// The flag closes that gap: the thread checks it before each run, and each run
+        /// is bounded by [`RUN_SLICE`], so the thread ends within one slice whatever the
+        /// order.
         fn remove(mut self) {
+            self.shared.stopping.store(true, Ordering::SeqCst);
             self.run_loop.0.stop();
+            self.run_loop.0.wake_up();
             if let Some(thread) = self.thread.take() {
                 let _ = thread.join();
             }
@@ -567,7 +585,11 @@ mod listener {
         CGEvent::tap_enable(&port, true);
         PORT.with(|cell| *cell.borrow_mut() = Some(port.clone()));
         if ready.send(Ok(RunLoopHandle(run_loop))).is_ok() {
-            CFRunLoop::run();
+            // SAFETY: a static the CoreFoundation framework defines, valid for the process.
+            let default = unsafe { kCFRunLoopDefaultMode };
+            while !shared.stopping.load(Ordering::SeqCst) {
+                CFRunLoop::run_in_mode(default, RUN_SLICE, false);
+            }
         }
         CGEvent::tap_enable(&port, false);
         port.invalidate();
