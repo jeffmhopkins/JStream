@@ -77,7 +77,9 @@ you type) and its frame rate, 30 or 60 fps. Each output scales from that picture
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device (and, for a webcam,
-   its resolution, frame rate and video format, or Auto) or the file. In the
+   its resolution, frame rate and video format, or Auto, and under **Camera** its
+   brightness, exposure, white balance and the other controls the camera offers, each
+   a slider with **Auto** where the camera can set it itself) or the file. In the
    desktop app a file field has a **Browse…** button; a browser page keeps the path as
    text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,

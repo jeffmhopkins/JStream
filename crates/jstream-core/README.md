@@ -292,7 +292,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -325,6 +325,15 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
   (`runtime/vcam.rs`).
+- **Camera controls** (`camera_controls.rs`, #1196): each `webcam` source's
+  `camera_controls` setting set on its device. After each change the control side
+  compares what the drawn collection asks, live values included, with what it last
+  sent, and hands the difference to the `jstream-camera-controls` thread, which calls
+  `VideoDevices::set_control` with the latest value of each control and drops the ones
+  a newer change replaced, so a slow set never runs under the engine lock. An empty
+  `device` is the first device listed; when two sources of one device set a control
+  differently, the one listed later wins. `capture.targets` lists each device's
+  `controls` from `VideoDevices::controls`.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -439,7 +448,11 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   and starting it again after a failed start or a lost target, and opening each webcam
   on program from the fake video devices, shared between sources, closed when it leaves
   or the output stops, closed when unplugged with the output staying up, and shared
-  with a preview stream that showed it first (`src/tests/cpu_pipeline/captures.rs`),
+  with a preview stream that showed it first, and a webcam's `camera_controls` set on
+  its device as they change, a number and `"auto"` alike (`src/tests/cpu_pipeline/captures.rs`;
+  `camera_controls.rs`'s own tests cover the diff, which sends only new or changed
+  controls the platform knows, and the thread setting each control's latest value, on
+  the first device listed for an empty `device`),
   one open of a device shared by two readers, each taking each frame once, closed
   with its last reader, a reader that joins counting frames from then on, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
@@ -831,8 +844,9 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
 - **`capture.targets`** lists the platform capture backend's displays, then its
   windows, then the video-device backend's devices, each with the formats the engine
   reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
-  held, since listing windows and devices calls the OS. A device whose formats can't be
-  read is listed without them. With no backends it answers `action_failed`, and so it
+  held, since listing windows and devices calls the OS, and the camera controls it can
+  set (`VideoDevices::controls`, since 0.107). A device whose formats or controls can't
+  be read is listed without them. With no backends it answers `action_failed`, and so it
   does when the OS refuses both lists; when one fails, it answers with the other and
   logs a warning.
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
@@ -3119,7 +3133,9 @@ drop ledger is its own mutex, and so is the audit sink's handle, which is only c
 under it (see *Audit log*). The audio sources' wanted set is a leaf mutex the control
 side takes under the collection lock; the program stage's `jstream-audio-sources`
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
-drop ledger's, never the collection lock (see *Audio sources*).
+drop ledger's, never the collection lock (see *Audio sources*). The camera controls'
+changes go to the `jstream-camera-controls` thread over a channel, sent under the
+collection lock; that thread takes no engine lock while it sets them on the device.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
@@ -3564,7 +3580,8 @@ capture where the pointer is (`Captures::pointer`, the stream's `CaptureStream::
 a few OS calls that return at once on Windows and macOS, `None` elsewhere) as it draws;
 nothing keeps or sends it. The primary display is looked up when its
 capture starts. A webcam or capture card is opened on the backends' `VideoDevices`
-(shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
+(shared with the preview thread's captures, `SharedVideoDevices`, which passes a
+camera control's read and set straight to the backend; see *Preview streams*
 in Design), in the format `device_format` picks from those it lists: on the backend's
 GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
 format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). A

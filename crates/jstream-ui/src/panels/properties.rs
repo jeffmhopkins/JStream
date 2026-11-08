@@ -8,7 +8,9 @@
 //! targets of its kind that `capture.targets` reports, read again each time the field
 //! gets focus, so a window opened since shows up. A `webcam`'s device is one too, and
 //! its format parameters (`capture_format`) are lists of what that device's listed
-//! formats offer. The fields of one form share one `capture.targets` answer.
+//! formats offer. Its `camera_controls` is a slider per control that device lists,
+//! with an Auto box where the device can set it itself. The fields of one form share
+//! one `capture.targets` answer.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 

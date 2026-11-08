@@ -59,27 +59,31 @@ impl CameraControls {
     /// Sends the controls `state`'s `webcam` sources ask that changed since the last
     /// call.
     pub(crate) fn sync(&mut self, state: &State) {
-        let wanted = wanted(state);
-        let changes = changes(&self.sent, &wanted);
-        if self.devices.is_none() {
-            return;
-        }
-        self.sent = wanted;
-        if changes.is_empty() {
-            return;
-        }
         let Some(devices) = &self.devices else {
             return;
         };
-        let worker = self
-            .worker
-            .get_or_insert_with(|| spawn(Arc::clone(devices)));
-        if worker.send(changes.clone()).is_err() {
-            // The thread is gone (it panicked); start another for these.
-            let fresh = spawn(Arc::clone(devices));
+        let wanted = wanted(state);
+        let changes = changes(&self.sent, &wanted);
+        if changes.is_empty() {
+            self.sent = wanted;
+            return;
+        }
+        // With no thread yet, or one that is gone (it panicked), start one for these.
+        let unsent = match &self.worker {
+            Some(worker) => worker.send(changes).err().map(|mpsc::SendError(back)| back),
+            None => Some(changes),
+        };
+        if let Some(changes) = unsent {
+            // This runs under the collection lock, where nothing is logged: a thread
+            // that can't start leaves `sent` as it was, so the next change tries again.
+            let Some(fresh) = spawn(Arc::clone(devices)) else {
+                self.worker = None;
+                return;
+            };
             let _ = fresh.send(changes);
             self.worker = Some(fresh);
         }
+        self.sent = wanted;
     }
 }
 
@@ -130,15 +134,14 @@ fn changes(
     out
 }
 
-fn spawn(devices: Arc<dyn VideoDevices>) -> Sender<Vec<Apply>> {
+/// Starts the thread, `None` when the OS refuses one.
+fn spawn(devices: Arc<dyn VideoDevices>) -> Option<Sender<Vec<Apply>>> {
     let (tx, rx) = mpsc::channel();
-    let spawned = thread::Builder::new()
+    thread::Builder::new()
         .name("jstream-camera-controls".into())
-        .spawn(move || run(&*devices, &rx));
-    if let Err(err) = spawned {
-        tracing::warn!(error = %err, "starting the camera controls thread");
-    }
-    tx
+        .spawn(move || run(&*devices, &rx))
+        .ok()?;
+    Some(tx)
 }
 
 /// Applies each batch, after taking every batch already queued, so a control dragged

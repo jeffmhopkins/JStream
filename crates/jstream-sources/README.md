@@ -574,7 +574,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the device lists; empty or 0 leaves that part to the engine, and a device that offers
   no format matching them opens in the engine's choice. Like `display` and `window`, it
   only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
-  engine opens the device. A new device or format needs a new source. The kind keeps version 1:
+  engine opens the device. A new device or format needs a new source. `camera_controls`
+  (the Camera group, live, protocol 0.107, #1196) sets the device's controls: an object
+  of control name to a number or `"auto"`, as `capture.targets` lists them for the
+  device; a control it leaves out keeps what the device has. `webcam_controls(kind,
+  settings)` reads it, with the device as `webcam_device` gives it, as
+  `CameraControlSetting`s, and the engine sets them on the device while it captures,
+  never restarting the capture. The kind keeps version 1:
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's

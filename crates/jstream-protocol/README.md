@@ -317,7 +317,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.100 because hotkey bindings and timelines carry labels
+`PROTOCOL_VERSION` is 0.107 because a webcam's camera controls are settable:
+`capture.targets` lists each device's `controls` (`CameraControlInfo`), and the
+`camera_controls` parameter type sets them on the device that its `target` parameter
+names (#1196, a number the release queue set); 0.100 because hotkey bindings and timelines carry labels
 (`hotkey.set_labels`, `HotkeyBinding.labels`, `TimelineInfo.labels`) and `label.members`
 lists everything that carries a label
 ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md), a number the
@@ -883,7 +886,13 @@ never a type per kind.
   0.90: one part of the format a device is opened in, a UI offering what
   `capture.targets` lists for that device. A `resolution` is `<width>x<height>`, each
   side 1 to `MAX_CAPTURE_SIDE`; an `fps` a number from 0 to `MAX_CAPTURE_FPS`; a
-  `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine), a
+  `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine);
+  `camera_controls` with the `target` parameter naming the device, since 0.107: an
+  object of at most `MAX_CAMERA_CONTROLS` entries, each a control name (lowercase
+  letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
+  integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
+  `capture.targets` lists for that device; a control the object doesn't name keeps what
+  the device has), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
@@ -1485,7 +1494,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. A device comes with `formats`
   (omitted when empty): each format it captures in that the engine reads, as
   `CaptureFormatInfo` (`width`, `height`, `fps` to two decimals, and `pixel_format`), in
-  the device's order. Runtime state, so no `rev`; a
+  the device's order, and `controls` (omitted when empty, since 0.107): each control
+  the engine can set on it, as `CameraControlInfo` (`name`, `min`, `max`, `step`,
+  `default`, the `value` now, and `auto`, omitted when the device can't set it itself,
+  else whether it does now). Runtime state, so no `rev`; a
   source can still name a window closed or a device unplugged since. `action_failed`
   when the engine has no capture backend, or the OS refuses both the displays and
   windows and the devices; when only one lists, the result holds that. Added in 0.27.
