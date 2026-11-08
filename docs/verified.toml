@@ -204,7 +204,7 @@ stamp = { hash = "b3:38e986c9266d0712", by = "agent:readme-scrub", note = "gpu/m
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:d431febae331fbac", by = "agent:claude", note = "Added one sentence on nested layers drawn only over their content box (#1070); the rest of the section re-read against the compositor, image and place changes." }
+stamp = { hash = "b3:bca5d0637ed5ccfa", by = "agent:claude", note = "A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged | merge: #1408 added a sentence on drawing a nested layer only over its content box; the filter pipeline sentence is untouched and still holds | kept from the merged side: Added one sentence on nested layers drawn only over their content box (#1070); the rest of the section re-read against the compositor, image and place changes." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:8a1a50c3e47dcdb8", by = "agent:claude", note = "Re-read against the GPU ingest compute pass and the ReadbackRing: CPU frames convert on the GPU, CPU-path sessions and cameras are read back through a ring collected without waiting." }
