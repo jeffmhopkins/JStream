@@ -12,6 +12,35 @@
 //! The target names and size checks are platform-independent and tested everywhere; the
 //! store exists only on Windows.
 //!
+//! # Behaviour
+//!
+//! **`WindowsCredentials`**, the OS credential store for stream keys and OAuth tokens
+//! (ARCH › Persistence,
+//! R-SEC-001): `set`, `get`, `exists` and `delete` on
+//! Windows Credential Manager (`CredWriteW`, `CredReadW`, `CredDeleteW`). It also
+//! implements `jstream-platform`'s `StreamKeyStore`, naming each output's credential
+//! with `CredentialTarget::stream_key`, so a host hands it to `Engine::with_key_store`,
+//! and `OAuthTokenStore`, naming each account's refresh token with
+//! `CredentialTarget::oauth_token`.
+//! - **Names:** a `CredentialTarget`, `JStream/stream-key/<output id>` or
+//!   `JStream/oauth-token/<account>`. Generic
+//!   credentials are one per-user namespace shared by every app, so the product prefix
+//!   keeps ours apart and groups them in Credential Manager, and the kind segment keeps an
+//!   OAuth token from sharing a name with a stream key. Output and account IDs
+//!   are opaque, so any ID is taken except an empty one, one with a control character (a
+//!   NUL would cut the name short, so two IDs could name one credential) or one that makes
+//!   the name longer than `CRED_MAX_GENERIC_TARGET_NAME_LENGTH` UTF-16 units.
+//! - **Storage:** `CRED_TYPE_GENERIC`, persisted `CRED_PERSIST_LOCAL_MACHINE`: it survives
+//!   logoff and reboot, for this user on this machine, and doesn't roam with a roaming
+//!   profile, so a key typed into a portable install stays on that machine. Windows
+//!   encrypts it for the user; any process running as the user can read it.
+//! - **Secrets:** a secret is 1 to `CRED_MAX_CREDENTIAL_BLOB_SIZE` bytes; anything else is
+//!   `Unsupported`. The limits are copied so the checks are tested on every platform, and
+//!   a Windows test compares them with the SDK's. `get` returns `jstream-platform`'s `Secret`, which zeroes its
+//!   bytes on drop, prints as `Secret("***")` and isn't `Clone`; a stored blob that
+//!   isn't UTF-8 is refused as `Unsupported`, without naming it. The copy Windows returns is zeroed before
+//!   `CredFree`. Nothing here logs, and errors carry no secret or its length.
+//!
 //! Docs: docs/ARCHITECTURE.md#persistence
 
 use std::fmt;

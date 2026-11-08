@@ -155,10 +155,12 @@ Contents ([Design](#design) explains the choices):
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the program output and each output with its FX button, creating, editing and
-  deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, whose drafts, edits and summaries are tested natively;
+  (the pipeline's health in its header, then a compact row for the program output and
+  for each output with its state, Start or Stop, FX button and ⋯ menu; each output's
+  settings dialog, which creates or edits a stream, recording or virtual camera and its
+  stream key and applies nothing until OK or Apply, whose drafts and edits are tested
+  natively; and the delete confirmation); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, in the panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
   form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
   About dialog's list of the installed ones; and the calls and

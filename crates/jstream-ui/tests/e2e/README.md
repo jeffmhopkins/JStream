@@ -41,7 +41,10 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   `openAddSource` opens the Add source dialog from the Sources panel's menu, by a
   right-click just under its last row (or under the empty scene's hint, since the tool
   bar at the panel's foot opens no menu), and
-  `nestScene` nests a scene through it; `rev` reads the revision the header last heard
+  `nestScene` nests a scene through it; `outputRow` finds an output's row in the
+  Outputs panel, `addOutput` adds one through its "+ Add output" dialog,
+  `openOutputSettings` opens an output's settings dialog from its row's ⋯ menu, and
+  `openEncoders` opens the Encoders & mixes dialog; `rev` reads the revision the header last heard
   of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
   routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
   descriptors a test gives, which the mock engine can't, and passes every other message
@@ -79,8 +82,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
   Browse… stores a path under the collection folder as a collection path and a path
   outside it as absolute, hides the button for app assets, and leaves the field when
-  the stub cancels; a recording's add form and Edit ask for a save dialog and a
-  stream has no button; Install plugin asks for a folder dialog and fills the path and
+  the stub cancels; a recording's add-output dialog and its settings dialog ask for a save dialog
+  and a stream has no button; Install plugin asks for a folder dialog and fills the path and
   the suggested id. A page with no desktop global has no Browse button. The native
   dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
@@ -118,18 +121,25 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   keeping the open, unfoldable folders of a match; a folder refusing to go inside its
   own child; F2 renaming a folder, and Del deleting an empty one without asking. Deleting
   a folder that holds anything needs `delete.plan`, so it is tested natively.
-- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): adding a stream and a recording; a stream can't start
-  or go live until its key is set; the key field empties on save and the key never
-  appears in the page; go live and end stream; the header's Record starts and stops a
-  recording; clearing the key; deleting; editing the
-  server URL and choosing an encoder profile, both read back by a fresh page; a
-  recording's Audio select moving it to another bus, read back by a fresh page; making an
-  AV1 VBR encoder profile (a peak under the average is named in the form, which stays
-  open) and a vertical video mix, a recording using both (neither can then be deleted),
-  both read back by a fresh page, the mix resized from its Edit form and deleted once the
-  recording is back on the program; a second client sees outputs created, started and
-  deleted.
-- **Codec downloads** (`codec-downloads.spec.js`, on the Outputs panel): the mock
+- **Outputs** (`outputs.spec.js`, on the Outputs panel and the header): the panel is a
+  compact list (health in its header, no form or library under the rows; a stream's row
+  shows its host and encoder, the plain-rtmp ⚠ with the warning on hover, and why it
+  can't start; a double-click opens its settings); adding a stream and a recording
+  through the add-output dialog, a stream added with its key starting at once; a stream can't start or go live until its key is set
+  in its settings; the key never appears in the page, and a set key reads masked;
+  go live and end stream, with the target and Delete off while live; Remove taking the
+  key on OK; Delete asking first, and Cancel keeping it; the header's Record starts and
+  stops a recording; a settings edit dropped on Cancel; the server URL and an encoder
+  profile sent on Apply, both read back by a fresh page; a recording's Audio select
+  moving it to another bus on OK, read back by a fresh page; in the Encoders & mixes
+  dialog, a new profile named "Default H.264", making an AV1 VBR encoder profile (a peak
+  under the average is named in the form, which stays open) and a vertical video mix, a
+  recording using both (neither can then be deleted), both read back by a fresh page,
+  the mix resized from its Edit form opened over the settings dialog and deleted once
+  the recording is back on the program; a second client sees outputs created, started
+  and deleted.
+- **Codec downloads** (`codec-downloads.spec.js`, in the Outputs panel's Encoders & mixes
+  dialog): the mock
   engine has no codec backend, so the spec routes the page's WebSocket and answers
   `codec.downloads`, `codec.download` and `codec.delete` for one OpenH264 download. With
   no hardware H.264 encoder, Encoders offers it with Cisco's notice, the licence link and
@@ -350,8 +360,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   this item of “Backdrop” in this keyframe", after which the keyframe has its own and
   Main's item still has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
-  output row ("master", "FX 0"), a recording's row under it with its state and FX
-  button, and the footnote; the program's FX showing the master chain in the Filters
+  output row ("master", "FX 0", the program filters' note as its tooltip), a recording's
+  row under it with its state and FX button, its ID listed only once; the program's FX showing the master chain in the Filters
   panel from behind the Transform tab, with its note and its video and audio chains,
   the output's FX its own chain, and selecting an item going back to its source's. With
   Gain and Sharpen described: Add filter on the master offering both, with its foot,
