@@ -87,6 +87,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("capture.targets", Class(R)),
     // LAN addresses of the machine's PTZ heads (ADR-0146) are the person's.
     ("ptz.list", N),
+    // LAN addresses of the senders on the person's network (ADR-0123).
+    ("jtunnel.senders", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),

@@ -1293,7 +1293,15 @@ impl Engine {
             let state = lock(&self.shared.state);
             (state.audio.wanted(), state.live.midi())
         };
-        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi.clone())?);
+        // One waiting message stands for any number of changes (`Receiver::start`).
+        let (changed, heard) = std::sync::mpsc::sync_channel(1);
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(
+            setup,
+            clock,
+            midi.clone(),
+            Some(changed),
+        )?);
+        spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
         if let Some(midi) = midi
@@ -1311,6 +1319,21 @@ impl Engine {
     pub fn jtunnel_stats(&self) -> Option<crate::jtunnel::JtunnelStats> {
         let wanted = lock(&self.shared.state).audio.wanted();
         wanted.jtunnel_receiver().map(|receiver| receiver.stats())
+    }
+
+    /// `jtunnel.senders`: the senders heard on the LAN, while the receiver is on.
+    fn jtunnel_senders(&self) -> QueryResult {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        match wanted.jtunnel_receiver() {
+            Some(receiver) => QueryResult::JtunnelSenders {
+                on: true,
+                senders: receiver.heard(),
+            },
+            None => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
+        }
     }
 
     /// `profile.get`'s `network`: the JTunnel receiver's senders, while it is on.
@@ -2014,6 +2037,13 @@ impl Engine {
             }
         ) {
             Ok(self.font_list())
+        } else if let Call::Query {
+            query: Query::JtunnelSenders,
+        } = &call
+        {
+            Ok(CallResult::Query {
+                result: self.jtunnel_senders(),
+            })
         } else if let Call::Query {
             query: Query::ProfileGet { seconds, top },
         } = &call
@@ -6439,6 +6469,30 @@ impl Drop for State {
 /// How often the live ticker checks whether the render thread has caught up with a
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Sends `jtunnel.senders_changed` for each change the JTunnel receiver reports on
+/// `heard`, until that receiver stops (its sender is dropped with it) or the engine goes.
+/// The receiver's thread never takes the engine's lock: this one does.
+fn spawn_jtunnel_events(shared: Weak<Shared>, heard: std::sync::mpsc::Receiver<()>) {
+    let started = thread::Builder::new()
+        .name("jstream-jtunnel-events".into())
+        .spawn(move || {
+            while heard.recv().is_ok() {
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let mut wake = Vec::new();
+                lock(&engine.state)
+                    .subscribers
+                    .emit(&Event::JtunnelSendersChanged {}, &mut wake);
+                drop(engine);
+                wake_all(wake);
+            }
+        });
+    if let Err(error) = started {
+        tracing::warn!(%error, "the JTunnel senders' events could not start; `jtunnel.senders` still answers");
+    }
+}
 
 /// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
 /// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it

@@ -976,6 +976,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the clients' views did with their preview pictures, as they report it with
   `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md)),
   and each JTunnel sender's latency, buffer, drift and drops (0.113, #1223);
+  `jtunnel.senders` (0.114, [ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md) §3) →
+  the JTunnel senders that answered the receiver's mDNS query, with whether each is
+  accepted, and `jtunnel.senders_changed` when that list changes;
   `quality.probe` (0.110, [ADR-0145](adr/0145-the-quality-probe-reads-back-the-compositor.md))
   → PSNR and SSIM of a running output's next few encoded frames, decoded by the
   platform, against the frames its encoder was given;

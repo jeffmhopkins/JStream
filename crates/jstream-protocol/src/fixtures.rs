@@ -1861,6 +1861,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::PtzList,
+        Query::JtunnelSenders,
         Query::FontList,
         Query::ValuesList { prefix: None },
         Query::ValuesList {
@@ -2844,6 +2845,25 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::JtunnelSenders {
+            on: true,
+            senders: vec![
+                crate::JtunnelSenderInfo {
+                    remote_name: "Bitwig".into(),
+                    address: "192.168.1.5:9000".into(),
+                    accepted: true,
+                },
+                crate::JtunnelSenderInfo {
+                    remote_name: "Laptop".into(),
+                    address: "192.168.1.9:9000".into(),
+                    accepted: false,
+                },
+            ],
+        },
+        QueryResult::JtunnelSenders {
+            on: false,
+            senders: Vec::new(),
+        },
         QueryResult::PtzList {
             cameras: vec![
                 crate::PtzCameraInfo {
@@ -3396,6 +3416,7 @@ pub(crate) fn events() -> Vec<Event> {
             outcome,
         });
     }
+    events.push(Event::JtunnelSendersChanged {});
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),

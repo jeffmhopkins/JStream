@@ -228,7 +228,18 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
   taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
-  says bye when it stops; it never announces itself or sends audio or MIDI. It drops and
+  says bye when it stops; it never announces itself or sends audio or MIDI. Every 10 s
+  it asks the LAN for senders from that socket (an mDNS PTR query for
+  `_jtunnel._udp.local` to 224.0.0.251:5353, so a legacy unicast query that senders
+  answer directly; `JtunnelSetup::discover` names where, `None` for nobody), lists those
+  that answer from a LAN address's port 5353 in `jstream-jtunnel`'s `Directory` (at most
+  `MAX_LISTED`, 64, and `MAX_LISTED_PER_HOST`, 8, from one IP address, each forgotten
+  35 s after it last answered or at its goodbye; an answer is read whole up to mDNS's
+  9000 bytes, while a JTunnel datagram over a packet's length is malformed), and
+  reports each change on the channel the host passes; the engine's
+  `jstream-jtunnel-events` thread turns that into `jtunnel.senders_changed`, so the
+  receiver's thread never takes the engine's lock. `jtunnel.senders` (protocol 0.114,
+  `Receiver::heard`) lists them with whether each is accepted. It drops and
   counts every datagram from outside loopback, 10/8, 172.16/12, 192.168/16 and
   169.254/16 (`is_lan`), from an address it didn't subscribe to (an IPv4 address mapped
   into IPv6 counts as itself), longer than a packet may be, or that isn't an audio
@@ -270,7 +281,12 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
   reaching its MIDI input with no source recording it, and its clock giving that input
-  a tempo and publishing the `tempo.*` values.
+  a tempo and publishing the `tempo.*` values. A fake mDNS responder on loopback tests
+  discovery: the query sent from the receive socket, the senders that answer listed
+  with whether they are accepted, a goodbye, an unreadable answer counted, a long
+  answer read whole, the per-host bound and (on Linux, from several loopback addresses)
+  the list's bound, and through the engine `jtunnel.senders` off by default, then the sender
+  listed and `jtunnel.senders_changed` sent.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
@@ -659,7 +675,9 @@ covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests
   last send is removed and opened again by a send, and closed when it is deleted
   (`a_webcam_records_its_paired_audio_input`), a `network_audio` source recording a
   loopback JTunnel sender once its first frame arrives, one naming a sender not accepted
-  and one with the receiver off unavailable with their reasons, a CLAP filter on the master chain run on its
+  and one with the receiver off unavailable with their reasons, `jtunnel.senders` off
+  by default and then listing a sender that answered a fake mDNS responder, with
+  `jtunnel.senders_changed`, a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
@@ -911,6 +929,8 @@ releasing it (see *Snapshots*). A frame sheet's thread reads the same once per p
 before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.106) run
 outside it: a rescan runs plugin host processes for seconds and takes the collection
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
+`jtunnel.senders` (0.114) and `profile.get`'s `network` read the JTunnel receiver
+outside it, taking only the audio sources' wanted-set mutex to clone the receiver.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
 own with neither held (see *Contents: media*).
@@ -3302,7 +3322,11 @@ side takes under the collection lock; the program stage's `jstream-audio-sources
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
 drop ledger's, never the collection lock (see *Audio sources*). The JTunnel receiver's
 slot in it is a leaf mutex of its own, held only to set or clone the receiver; the
-receiver's thread takes no lock, getting opens and closes over a channel; its senders'
+receiver's thread takes no engine lock, getting opens and closes over a channel (it
+takes only its own senders list's leaf mutex, which `jtunnel.senders` also takes alone,
+and reports a change to the list over a one-slot channel that it never waits on; the
+`jstream-jtunnel-events` thread takes the collection lock to emit
+`jtunnel.senders_changed`); its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
 lock held. The `jstream-tempo` thread reads the MIDI state without a lock and takes
 the collection lock only to publish a tempo value that changed. The camera controls'
@@ -3407,7 +3431,8 @@ log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at 
 or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
 the host's error) and an `info` with how many effects it found. A `tempo.*` value the
 shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
-`warn`.
+`warn`, as is a `jstream-jtunnel-events` thread that can't start (`jtunnel.senders` still
+answers; only its event is missing).
 
 <a id="audit-log"></a>
 ## Audit log
