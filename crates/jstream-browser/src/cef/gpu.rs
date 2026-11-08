@@ -4,7 +4,7 @@
 //!
 //! # Behaviour
 //!
-//! **Frames** (`cef/gpu.rs`): each shared texture the helper names is duplicated out of
+//! Each shared texture the helper names is duplicated out of
 //! the helper's process, opened once per slot on the engine's D3D12 device
 //! (`OpenSharedHandle`), checked to be a single-mip BGRA8 texture of the size the helper
 //! said, imported into wgpu, and each paint copied from it into the next of three

@@ -16,7 +16,7 @@
 //!
 //! # Behaviour
 //!
-//! **The page API** (`helper/page_api.rs`, ADR-0102). A granted page gets a request
+//! A granted page gets a request
 //! context of its own, so no other page's renderer process holds it, and its grant and
 //! `ApiHome` go to the renderer in the browser's `extra_info`. The browser process keeps
 //! each page's updates merged (`PageCache`); once the browser exists it sends the whole

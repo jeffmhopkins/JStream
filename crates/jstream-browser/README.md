@@ -26,7 +26,7 @@ part of a platform crate, so that only the helper's build downloads and builds C
 
 This README is the crate's map. How each part behaves (limits, timeouts, threads, the
 request and permission rules) is in its module's rustdoc, next to the code:
-`cargo doc -p jstream-browser --features fake --open`.
+`cargo doc -p jstream-browser --features fake --document-private-items --open`.
 
 **The seam.** `BrowserBackend` is what `jstream-sources` opens pages through, injected
 into its `Context` by the engine (`Engine::with_browser`). `open` takes a `PageSpec` and

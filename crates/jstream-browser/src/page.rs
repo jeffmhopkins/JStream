@@ -2,7 +2,7 @@
 //!
 //! # Behaviour
 //!
-//! `PageLocation` and `PageSpec` (`page.rs`). A web address must be `http://` or
+//! A web address must be `http://` or
 //! `https://` with a host, at most 8 KiB, without whitespace or control characters; an
 //! empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
 //! including UNC and `\\?\` paths. A page can also be given as its HTML

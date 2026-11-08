@@ -24,7 +24,7 @@ behind safe APIs, with RAII types for what the system hands back
 
 This README is the crate's map. How each backend behaves (formats, timing, permissions,
 error mapping, threads) is in its module's rustdoc, next to the code:
-`cargo doc -p jstream-platform-macos --target aarch64-apple-darwin --open`.
+`cargo doc -p jstream-platform-macos --target aarch64-apple-darwin --document-private-items --open`.
 
 **Bindings are maintained crates** (ADR-0063 §12, [R-UNSAFE-004](../../docs/RULES.md#R-UNSAFE-004)).
 Apple's frameworks are called through the objc2 framework crates, at the versions wgpu's
