@@ -187,3 +187,24 @@ test('an item\'s sections are in tabs, and its settings in the Properties dialog
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 });
+
+// Compact number rows (#1219): X and Y, W and H, and the scale's W and H each share a row
+// under its label, the crop's four sides share one, and nothing makes the Inspector
+// scroll sideways.
+test('the box and crop fields sit in rows, with no sideways scroll', async ({ page, daemon }) => {
+  await selectBackdrop(page, daemon);
+  const top = async (label) => (await field(page, label).boundingBox()).y;
+  for (const [row, a, b] of [['Position', 'X', 'Y'], ['Size', 'W', 'H'], ['Scale', 'W %', 'H %']]) {
+    await expect(inspector(page).getByRole('group', { name: row })).toBeVisible();
+    expect(Math.abs((await top(a)) - (await top(b)))).toBeLessThan(2);
+  }
+  expect(await top('Y')).toBeLessThan(await top('W'));
+  const left = await top('Left');
+  for (const side of ['Right', 'Top', 'Bottom']) {
+    expect(Math.abs((await top(side)) - left)).toBeLessThan(2);
+  }
+  // Each crop field still shows its value, its caption and its unit.
+  await expect(field(page, 'Left')).toHaveValue('0');
+  const body = inspector(page).locator('.tab-panel').first();
+  expect(await body.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+});
