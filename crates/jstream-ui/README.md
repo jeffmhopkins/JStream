@@ -155,10 +155,12 @@ Contents ([Design](#design) explains the choices):
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the program output and each output with its FX button, creating, editing and
-  deleting streams, recordings and the virtual camera, their stream keys, start and
-  stop, and the pipeline's health); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, whose drafts, edits and summaries are tested natively;
+  (the pipeline's health in its header, then a compact row for the program output and
+  for each output with its state, Start or Stop, FX button and ⋯ menu; each output's
+  settings dialog, which creates or edits a stream, recording or virtual camera and its
+  stream key and applies nothing until OK or Apply, whose drafts and edits are tested
+  natively; and the delete confirmation); `encoders.rs`: `Profiles`, its encoder profile and
+  video mix lists and forms, in the panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
   form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
   About dialog's list of the installed ones; and the calls and
@@ -677,8 +679,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The Filters window's Cancel fits each settings patch to the kind as described now
   (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
-  the disk: a written pack stays. The manifest is always `version = 1` with no
-  `renames`, so a renamed setting starts from its default.
+  the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
+  manifest's version by one and adds the pair to `renames` (`Declared::version`,
+  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
+  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
+  new one at its default; the template says so, and asks that no `@renamed` line be
+  deleted, since each is a version.
+  Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
+  checks it against `pack.list`) and moves only the filter being edited to the new
+  kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
+  carried through the renames and fitted to the new kind's descriptor, since the engine
+  refuses a key the kind doesn't declare); the old pack
+  stays for any other filter of it, and the window opens the editor on the new one.
+  The coloured copy is sized to the textarea's box inside its scrollbars, through
+  CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the

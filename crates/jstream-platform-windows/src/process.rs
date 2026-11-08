@@ -1,6 +1,16 @@
 //! The process's CPU time on Windows, for `stats.tick`'s load (protocol 0.48), each
 //! of its threads' CPU time, for `profile.get` (protocol 0.73, ADR-0103), and the
 //! Multimedia Class Scheduler Service tasks of its real-time threads (ADR-0117 §8).
+//!
+//! # Behaviour
+//!
+//! **`WindowsProcessCpu`** (`ProcessCpu`): the process's kernel and user time from
+//! `GetProcessTimes`, for `stats.tick`'s load. **`WindowsThreadCpu`** (`ThreadCpu`): the
+//! process's threads from a ToolHelp snapshot, each one's kernel and user time from
+//! `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`.
+//! **`WindowsThreadPriority`** (`ThreadPriority`): MMCSS through
+//! `AvSetMmThreadCharacteristicsW`, the `Playback` task for video and `Pro Audio` for
+//! audio, reverted when the guard drops.
 
 /// Adds a FILETIME's two halves into its 100 ns count, as `GetProcessTimes` reports
 /// kernel and user time.

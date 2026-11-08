@@ -352,3 +352,86 @@ fn a_scene_sheet_hears_audio_motion() {
         "the scene sheet should show the loud mix, not silence: {pixel:?}"
     );
 }
+
+/// Each tile shows a painted source as it was when the picture was taken, not as its
+/// frame slot holds it when the sheet is drawn (ADR-0117 §3): the waveform is silent in
+/// the first tile and at full scale in the second.
+#[test]
+fn a_sheet_shows_a_painted_source_as_each_picture_was_taken() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let settings = [
+        ("width", json!(1920)),
+        ("height", json!(1080)),
+        ("color", json!("#ff0000")),
+        ("background", json!("#0000ff")),
+    ];
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "waveform".into(),
+                },
+                settings: Settings(
+                    settings
+                        .iter()
+                        .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                        .collect(),
+                ),
+                duplicated_from: None,
+            },
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let scope = engine.audio_scope();
+    let feeding = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let feeder = {
+        let feeding = std::sync::Arc::clone(&feeding);
+        std::thread::spawn(move || {
+            // After the first picture, and on until the sheet is drawn.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            while feeding.load(std::sync::atomic::Ordering::Relaxed) {
+                scope.push(48_000, &[1.0; 960]);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        })
+    };
+    let sheet = sheet_or_skip(frames(&control, FrameStrip::new(2, 800), None));
+    feeding.store(false, std::sync::atomic::Ordering::Relaxed);
+    feeder.join().expect("fed");
+    let Some(sheet) = sheet else {
+        return;
+    };
+    // A silent waveform draws its line across the middle; one at full scale, at the top.
+    let (top, middle) = (at_height(&sheet, 0), centres(&sheet));
+    assert!(
+        top[0][0] == 0 && middle[0][0] > 0,
+        "silent when taken: {top:?} {middle:?}"
+    );
+    assert!(
+        top[1][0] > 0 && middle[1][0] == 0,
+        "full scale when taken: {top:?} {middle:?}"
+    );
+}
+
+/// The pixel `y` rows into each tile, half-way across, in order.
+fn at_height(sheet: &FrameSheet, y: u32) -> Vec<[u8; 4]> {
+    let bytes = decode_base64(&sheet.png).expect("png is base64");
+    let (width, _, rgba) = decode_png(&bytes).expect("png decodes");
+    (0..sheet.frames.len() as u32)
+        .map(|index| {
+            let (column, row) = (index % sheet.columns, index / sheet.columns);
+            let x = 4 + column * (sheet.tile_width + 4) + sheet.tile_width / 2;
+            let y = 4 + row * (sheet.tile_height + 4) + y;
+            let i = ((y * width + x) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        })
+        .collect()
+}

@@ -518,6 +518,8 @@ struct Work {
     /// The newest capture frame version the last picture drew
     /// ([`HubCaptures::frames`]).
     frames: u64,
+    /// What the frame slots the last picture drew held ([`Shot::slot_stamp`]).
+    slots: u64,
     /// The session the program stage feeds, while it draws this stream.
     staged: Option<Staged>,
 }
@@ -545,6 +547,7 @@ impl Work {
             shown: None,
             draw_errors: 0,
             frames: 0,
+            slots: 0,
             staged: None,
         }
     }
@@ -1297,9 +1300,12 @@ fn serve(
         return Some(work.next_at);
     }
     // A running transition changes the picture with time, not with the snapshot, and so
-    // can a video filter (a scroll, a video delay) and a capture.
+    // can a video filter (a scroll, a video delay) and a capture. The slots' stamp is
+    // read before the draw: a frame a slot takes during it is drawn again next time.
+    let slots = snapshot.shot().slot_stamp();
     let changed = snapshot.shot().changes_with_time()
         || frames.is_some_and(|frames| work.frames != frames)
+        || slots != work.slots
         || !work
             .shown
             .as_ref()
@@ -1349,6 +1355,7 @@ fn serve(
     work.draw_errors = 0;
     work.shown = Some((Arc::clone(snapshot), Arc::clone(live)));
     work.frames = frames.unwrap_or_default();
+    work.slots = slots;
     stream.keyframe.store(false, Ordering::Release);
     let pts_us =
         i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX);
