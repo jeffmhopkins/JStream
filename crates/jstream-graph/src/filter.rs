@@ -736,3 +736,254 @@ fn check_cycles(
     }
     Ok(())
 }
+
+/// What [`Graph::upgrade_filters`](crate::Graph::upgrade_filters) changed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Upgraded {
+    /// The revision the upgrade produced: the previous one plus one.
+    pub rev: jstream_protocol::Rev,
+    /// The filters whose settings changed, each as the `filter.set_settings` that sets
+    /// them to what they hold now: what clients re-read, and what [`touched`](Self::touched)
+    /// is made from.
+    pub set: Vec<Edit>,
+    /// What the upgrade touched, for the engine's undo history (ADR-0032): an earlier
+    /// step that set one of these filters' settings no longer undoes over it.
+    pub touched: crate::Touched,
+}
+
+/// Every filter on `state`'s chains, an item's keyframe overrides included, with its
+/// owner.
+fn every_filter(state: &State) -> Vec<(FilterOwner, &Filter)> {
+    fn push<'a>(out: &mut Vec<(FilterOwner, &'a Filter)>, owner: &FilterOwner, chains: &'a Chains) {
+        for filter in chains.video.iter().chain(&chains.audio) {
+            out.push((owner.clone(), filter));
+        }
+    }
+    let mut out = Vec::new();
+    for source in state.sources.values() {
+        let owner = FilterOwner::Source {
+            source_id: source.id.clone(),
+        };
+        push(&mut out, &owner, &source.filters);
+    }
+    for output in state.outputs.values() {
+        let owner = FilterOwner::Output {
+            output_id: output.id.clone(),
+        };
+        push(&mut out, &owner, &output.filters);
+    }
+    push(&mut out, &FilterOwner::Master, &state.master);
+    for scene in &state.scenes {
+        let owner = FilterOwner::Scene {
+            scene_id: scene.id.clone(),
+        };
+        push(&mut out, &owner, &scene.filters);
+        for item in &scene.items {
+            let owner = FilterOwner::Item {
+                item_id: item.id.clone(),
+            };
+            push(&mut out, &owner, &item.effects);
+        }
+        for (item_id, over) in scene.overrides.iter() {
+            if let Some(effects) = &over.effects {
+                let owner = FilterOwner::Keyframe {
+                    scene_id: scene.id.clone(),
+                    item_id: item_id.clone(),
+                };
+                push(&mut out, &owner, effects);
+            }
+        }
+    }
+    out
+}
+
+/// `migrated` with a default for each parameter of `descriptor` it lacks. Nothing else
+/// changes: a value under an ID the kind doesn't declare stays, as ADR-0025 › Versioning
+/// a kind keeps unknown data, and so does a value the kind would refuse.
+fn completed(descriptor: &KindDescriptor, mut migrated: Settings) -> Settings {
+    for p in &descriptor.params {
+        if migrated.get(&p.id).is_none() {
+            migrated.insert(p.id.clone(), p.default.clone());
+        }
+    }
+    migrated
+}
+
+/// The keys of `new` that differ from `old`'s, as a `*.set_settings` patch: a key `new`
+/// no longer has (an old ID a rename moved) as `null`.
+fn changed_keys(old: &Settings, new: &Settings) -> Settings {
+    let mut patch = Settings::new();
+    for (id, value) in new.iter() {
+        if old.get(id) != Some(value) {
+            patch.insert(id.to_owned(), value.clone());
+        }
+    }
+    for (id, _) in old.iter() {
+        if new.get(id).is_none() {
+            patch.insert(id.to_owned(), Value::Null);
+        }
+    }
+    patch
+}
+
+/// Records the version each filter of a kind being removed was stored by, so the kind
+/// coming back at a newer version moves them through its renames (ADR-0025): `kinds`
+/// maps each removed kind to the version it was described at. A filter that already
+/// holds a version keeps it.
+pub(crate) fn stamp_removed(state: &mut State, kinds: &std::collections::BTreeMap<&str, u32>) {
+    let stamp = |chains: &mut Chains| {
+        for filter in chains.video.iter_mut().chain(chains.audio.iter_mut()) {
+            if filter.unknown_kind_version.is_none()
+                && let Some(version) = kinds.get(filter.kind.as_str())
+            {
+                filter.unknown_kind_version = Some(*version);
+            }
+        }
+    };
+    for source in state.sources.values_mut() {
+        stamp(&mut source.filters);
+    }
+    for output in state.outputs.values_mut() {
+        stamp(&mut output.filters);
+    }
+    stamp(&mut state.master);
+    for scene in &mut state.scenes {
+        stamp(&mut scene.filters);
+        for item in &mut scene.items {
+            stamp(&mut item.effects);
+        }
+        let items: Vec<ItemId> = scene.overrides.iter().map(|(id, _)| id.clone()).collect();
+        for item_id in items {
+            if let Some(effects) = scene.overrides.effects_mut(&item_id) {
+                stamp(effects);
+            }
+        }
+    }
+}
+
+/// What [`Graph::upgrade_filters`](crate::Graph::upgrade_filters) does with one object's
+/// settings.
+enum Upgrade {
+    /// Nothing changes.
+    Keep,
+    /// Only the recorded version changes: not a revision, as no setting does.
+    Version(Option<u32>),
+    /// The settings change, and the recorded version with them.
+    Settings(Settings, Option<u32>),
+}
+
+/// What `stored`, recorded at version `unknown` (an object loaded while its kind was
+/// missing, or whose kind was removed since), else stored by `previous` (the version
+/// described before), needs under `descriptor` now.
+fn upgrade_of(
+    descriptor: &KindDescriptor,
+    stored: &Settings,
+    unknown: Option<u32>,
+    previous: Option<u32>,
+    migrate: &dyn Fn(&str, &Settings, u32) -> Option<Settings>,
+) -> Upgrade {
+    let from = unknown.or(previous).unwrap_or(descriptor.version);
+    if from == descriptor.version {
+        // The same version: its settings stay exactly as they are, unknown keys too.
+        return if unknown.is_some() {
+            Upgrade::Version(None)
+        } else {
+            Upgrade::Keep
+        };
+    }
+    match migrate(&descriptor.kind_id, stored, from) {
+        Some(migrated) => {
+            let settings = completed(descriptor, migrated);
+            if settings == *stored {
+                Upgrade::Version(None)
+            } else {
+                Upgrade::Settings(settings, None)
+            }
+        }
+        // A newer version's settings: kept, with the version they came from, which the
+        // next save records, for a pack that catches up.
+        None if unknown == Some(from) => Upgrade::Keep,
+        None => Upgrade::Version(Some(from)),
+    }
+}
+
+impl crate::Graph {
+    /// Upgrades the stored settings of every filter of the kinds in `kinds` to the
+    /// descriptor this graph holds for each now (ADR-0025 › Versioning a kind): what an
+    /// effect pack's reload or first load calls once [`with_kinds`](Self::with_kinds)
+    /// has the new descriptors. `kinds` maps each kind ID to the version this graph
+    /// described it at before, or `None` when it didn't.
+    ///
+    /// A filter's settings were stored by the version it records (one loaded while its
+    /// kind was missing, or whose kind was removed since), else by the version before.
+    /// Only when that differs from the kind's do they change: `migrate(kind, settings,
+    /// from)` moves them through the kind's renames, and a parameter they lack takes its
+    /// default. Every other value stays as it is, a key the kind doesn't declare
+    /// included (ADR-0025 keeps unknown data). `None` from `migrate` (a newer version's
+    /// settings than the pack's) keeps them, recording the version they came from for
+    /// the next save.
+    ///
+    /// Not an undo step: no client made it. When any settings change, the revision goes
+    /// up by one and the result says what changed; `None` when none did. A change to
+    /// only a recorded version is no revision.
+    pub fn upgrade_filters(
+        &mut self,
+        kinds: &std::collections::BTreeMap<String, Option<u32>>,
+        migrate: &dyn Fn(&str, &Settings, u32) -> Option<Settings>,
+    ) -> Option<Upgraded> {
+        let mut changes: Vec<(FilterOwner, FilterId, Option<Settings>, Option<u32>)> = Vec::new();
+        for (owner, filter) in every_filter(&self.state) {
+            let (Some(previous), Some(descriptor)) =
+                (kinds.get(&filter.kind), self.kinds.get(&filter.kind))
+            else {
+                continue;
+            };
+            match upgrade_of(
+                descriptor,
+                &filter.settings,
+                filter.unknown_kind_version,
+                *previous,
+                migrate,
+            ) {
+                Upgrade::Keep => {}
+                Upgrade::Version(version) => {
+                    changes.push((owner, filter.id.clone(), None, version));
+                }
+                Upgrade::Settings(settings, version) => {
+                    changes.push((owner, filter.id.clone(), Some(settings), version));
+                }
+            }
+        }
+        let mut set = Vec::new();
+        for (owner, filter_id, settings, version) in changes {
+            let Ok(chains) = chains_mut(&mut self.state, &owner) else {
+                continue;
+            };
+            let Some(filter) = chains
+                .video
+                .iter_mut()
+                .chain(chains.audio.iter_mut())
+                .find(|f| f.id == filter_id)
+            else {
+                continue;
+            };
+            filter.unknown_kind_version = version;
+            if let Some(settings) = settings {
+                let patch = changed_keys(&filter.settings, &settings);
+                filter.settings = settings;
+                set.push(Edit::FilterSetSettings {
+                    owner,
+                    filter_id,
+                    patch,
+                });
+            }
+        }
+        if set.is_empty() {
+            return None;
+        }
+        let rev = self.rev.next()?;
+        self.rev = rev;
+        let touched = crate::Touched::of(&set, &[]);
+        Some(Upgraded { rev, set, touched })
+    }
+}

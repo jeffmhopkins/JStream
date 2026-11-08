@@ -89,9 +89,9 @@ pub const TEMPLATE: &str = r#"// @name Custom shader
 //   // @param <id> bool = true "Label"            (a u32: 1 is on)
 //   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
 //   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
-// Give a setting a new ID with a `// @renamed <old> <new>` line: Save as pack… carries
-// the value over, and the pack records the rename (the engine doesn't move saved
-// values yet). Never delete the line: each one is a version.
+// Give a setting a new ID with a `// @renamed <old> <new>` line: the pack records the
+// rename, and every filter of it, and Save as pack…, carry the value over. Never delete
+// the line: each one is a version.
 //
 // Built in: src(uv) is the input at uv (premultiplied linear light), texel(px) one of
 // its pixels, frame.in_size and frame.out_size the sizes in pixels, frame.time the
