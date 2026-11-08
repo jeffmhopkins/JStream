@@ -47,7 +47,7 @@ platform-independent helpers, which are tested on every platform.
 | `LinuxSecrets` | `StreamKeyStore`, `OAuthTokenStore` | `secrets.rs` | the Secret Service, else a `0600` file ([ADR-0071](../../docs/adr/0071-linux-secret-store.md), [R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
 | `PipeWireAudio` | `AudioIo` | `pipewire/` | devices, input, output and loopback on PipeWire (ADR-0060 §4) |
 | `AlsaAudio` | `AudioIo` | `alsa.rs` | the fallback without a PipeWire daemon; no loopback |
-| `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path |
+| `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
 | `NoMediaDecoders` | `MediaDecoders` | `unbuilt.rs` | refuses every file, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) |
 | `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
