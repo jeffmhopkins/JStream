@@ -866,7 +866,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Answers a held client's request to connect (0.107, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
                 "properties": {
                   "approval_id": {
                     "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
@@ -889,7 +889,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes a row from the approved list (0.107, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
                 "properties": {
                   "client_name": {
                     "description": "The client name, as `agent.approved` lists it.",
@@ -7062,6 +7062,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -7354,6 +7400,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -14959,7 +15040,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Answers a held client's request to connect (0.107, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
                 "properties": {
                   "approval_id": {
                     "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
@@ -14982,7 +15063,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes a row from the approved list (0.107, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
                 "properties": {
                   "client_name": {
                     "description": "The client name, as `agent.approved` lists it.",
@@ -23156,7 +23237,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Answers a held client's request to connect (0.107, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
                 "properties": {
                   "approval_id": {
                     "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
@@ -23179,7 +23260,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes a row from the approved list (0.107, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
                 "properties": {
                   "client_name": {
                     "description": "The client name, as `agent.approved` lists it.",
@@ -32122,7 +32203,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Answers a held client's request to connect (0.107, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
                 "properties": {
                   "approval_id": {
                     "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
@@ -32145,7 +32226,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes a row from the approved list (0.107, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
                 "properties": {
                   "client_name": {
                     "description": "The client name, as `agent.approved` lists it.",

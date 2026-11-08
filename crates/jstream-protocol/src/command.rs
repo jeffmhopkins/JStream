@@ -1822,7 +1822,7 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
-    /// Answers a held client's request to connect (0.107, ADR-0131): `allow_once` lets it
+    /// Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it
     /// in, `always_allow` also adds it to the approved list, and `deny` turns it away
     /// with `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted
     /// client may answer. Fails with `not_found` for a request that isn't open (answered,
@@ -1834,7 +1834,7 @@ pub enum Action {
         /// The answer.
         decision: crate::ApprovalDecision,
     },
-    /// Removes a row from the approved list (0.107, ADR-0131): that client's next
+    /// Removes a row from the approved list (0.108, ADR-0131): that client's next
     /// connection asks again. An open connection stays open. Fails with `not_found` for
     /// a row the list doesn't hold. Answered by the server, like `device.revoke`.
     #[serde(rename = "agent.forget")]
@@ -2368,6 +2368,8 @@ impl Action {
             | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginClapRescan
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }

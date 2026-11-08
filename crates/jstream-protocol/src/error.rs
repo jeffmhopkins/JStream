@@ -156,7 +156,7 @@ pub enum ProtocolError {
         /// The server's request limit in bytes.
         limit_bytes: u64,
     },
-    /// The person declined this connection, or didn't answer in time (0.107,
+    /// The person declined this connection, or didn't answer in time (0.108,
     /// ADR-0131): only a `hello` fails with it, and the server then closes the
     /// connection. An agent reports it; connecting again asks again.
     #[error("not allowed: {reason}")]
@@ -275,7 +275,7 @@ pub enum EntityKind {
     /// error answering `collection.new` or `collection.save_as` names it, so a client
     /// that sends neither never reads it.
     File,
-    /// An agent's request to connect, or a row of the approved list (0.107, ADR-0131).
+    /// An agent's request to connect, or a row of the approved list (0.108, ADR-0131).
     /// Only an error answering `agent.approve` or `agent.forget` names it.
     Approval,
 }

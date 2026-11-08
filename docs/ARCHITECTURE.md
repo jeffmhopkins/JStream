@@ -818,7 +818,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
-- **Agent approval** (protocol 0.107, [ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)):
+- **Agent approval** (protocol 0.108, [ADR-0131](adr/0131-ask-before-a-new-agent-connects.md)):
   where the host asks (the desktop app with `--mcp`), `jstream-server` holds a control-
   token session at `hello` until the person approves its client, telling every client
   with `agent.approval_requested` and `agent.approval_resolved`; `agent.approve`,

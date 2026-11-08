@@ -272,7 +272,7 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
-    /// The approved list and the requests still open (0.107, ADR-0131). Runtime state,
+    /// The approved list and the requests still open (0.108, ADR-0131). Runtime state,
     /// so no `rev`. Answered by the server that admits clients, like `device.list`.
     #[serde(rename = "agent.approved")]
     AgentApproved,
@@ -776,7 +776,7 @@ pub enum QueryResult {
         /// The paired devices, ordered by ID.
         devices: Vec<DeviceInfo>,
     },
-    /// The result of `agent.approved` (0.107).
+    /// The result of `agent.approved` (0.108).
     #[serde(rename = "agent.approved")]
     AgentApproved {
         /// Whether this server asks before a new agent connects: the desktop app with
