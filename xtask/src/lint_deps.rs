@@ -86,7 +86,7 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          Only with jstream-browser's `helper` feature (ADR-0046, ADR-0048), so the default graph lacks it",
     ),
     // Tauri 2 (jstream-desktop, ADR-0045), a dependency on Windows, and on Linux with the
-    // `webkitgtk` feature (ADR-0140). `cargo metadata` lists every platform's packages, so
+    // `webkitgtk` feature (ADR-0141). `cargo metadata` lists every platform's packages, so
     // most of these are never built for Windows.
     (
         "tauri",

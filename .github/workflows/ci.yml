@@ -157,7 +157,7 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # The desktop app's window on Linux (ADR-0140): Tauri on WebKitGTK 4.1, behind
+  # The desktop app's window on Linux (ADR-0141): Tauri on WebKitGTK 4.1, behind
   # jstream-desktop's `webkitgtk` feature, so the other Linux jobs build without GTK. It
   # lints and tests the app with the feature, builds the UI, then opens the window on Xvfb
   # and checks that WebKitGTK loads the UI, connects it to the in-process engine and that
