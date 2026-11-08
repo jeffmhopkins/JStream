@@ -149,6 +149,7 @@ release = "alpha.5"
 title = "Snapshots and frame sheets draw browser pages and screen captures on Windows"
 status = "planned"
 issues = [1184, 1194, 1215]
+prs = [1264]
 
 [[target]]
 release = "alpha.5"
