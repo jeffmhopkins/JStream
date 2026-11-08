@@ -876,6 +876,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .outputs .health.idle .health-dot { background: var(--faint); }
 .outputs .health.dropping { color: var(--problem); }
 .outputs .health.dropping .health-dot { background: var(--problem); }
+.outputs-head .health { margin-left: auto; }
+.all-outputs { flex: 0 0 auto; padding: 2px 10px; border-color: var(--accent); background: var(--selected); font-size: 12px; }
+.all-outputs.stop { border-color: var(--danger); background: var(--danger); color: #fff; }
 /* The program's row and each output's (spec-panels.md U1, U2). */
 .output-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .output-row {
@@ -898,6 +901,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .output-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .output-row-target, .output-row-note { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .output-row-note { color: var(--dim); }
+.output-row-stats { color: var(--text-soft); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .output-row-warning { margin-left: 6px; color: var(--warn); cursor: help; }
 .output-row-status { color: var(--muted); font-size: 12px; }
 .row-action { flex: 0 0 auto; width: 28px; height: 26px; padding: 0; border-radius: 5px; font-size: 12px; line-height: 1; }
@@ -943,12 +947,29 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   color: var(--text);
 }
 /* The Encoders & mixes dialog, and the delete confirmation. */
-.modal.libraries-dialog { width: 560px; max-height: min(720px, 100%); }
-.libraries-body { display: grid; gap: 16px; padding: 16px; overflow: auto; }
-.libraries-body .profiles { display: grid; gap: 8px; }
-.libraries-body .profiles + .profiles { padding-top: 16px; border-top: 1px solid var(--line); }
-.libraries-body .profiles > .hint { margin: 0; color: var(--dim); font-size: 11px; }
-.libraries-body .profiles > button { justify-self: start; }
+.modal.libraries-dialog { width: 760px; max-height: min(720px, 100%); }
+.libraries-body { display: grid; gap: 12px; padding: 16px; overflow: auto; }
+.libraries-body > .problem { margin: 0; }
+/* A list on the left and the editor of the one picked on the right (#1206). */
+.library { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 16px; min-height: 320px; }
+.library-list { display: grid; align-content: start; gap: 16px; padding-right: 16px; border-right: 1px solid var(--line); }
+.library-group { display: grid; gap: 6px; }
+.library-group h3 { margin: 0; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.6px; }
+.library-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.library-item { display: grid; gap: 2px; width: 100%; padding: 6px 8px; border: 1px solid transparent; border-radius: 6px; background: none; text-align: left; }
+.library-item.chosen { border-color: var(--accent); background: var(--selected); }
+.library-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-summary { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-new { justify-self: start; background: none; font-size: 12px; }
+.library-editor { display: grid; align-content: start; gap: 12px; min-width: 0; }
+.library-editor > .hint { margin: 0; color: var(--dim); font-size: 11px; }
+.library-empty { color: var(--muted); }
+.profile-form .buttons .library-delete { margin-right: auto; background: none; border-color: var(--border); color: var(--problem); }
+.profile-form .buttons .saved { align-self: center; }
+@media (max-width: 640px) {
+  .library { grid-template-columns: minmax(0, 1fr); }
+  .library-list { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+}
 .modal.confirm-dialog { width: 360px; }
 .confirm-body { margin: 0; padding: 16px; color: var(--text-soft); }
 /* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0061). */
@@ -970,22 +991,11 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .codec-terms pre { max-height: 14rem; overflow: auto; margin: 0.3rem 0 0; padding: 0.4rem; white-space: pre-wrap; font-size: 0.75rem; color: var(--text-soft); background: var(--zone); border-radius: 4px; }
 .codec-installed .codec-terms { flex-basis: 100%; }
 .codec-installed { margin: 0; font-size: 0.85rem; display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; }
-.profile-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.profile {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.25rem 0.4rem;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.profile strong { flex: 1 1 auto; min-width: 0; }
-.profile-summary { flex: 1 0 100%; order: 1; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
-.profile-form { display: grid; gap: 0.5rem; padding: 0.6rem; border: 1px solid var(--accent); border-radius: 8px; }
+.profile-summary { margin: 0; color: var(--muted); font-size: 0.8rem; overflow-wrap: anywhere; }
+.profile-form { display: grid; gap: 0.5rem; }
 .profile-form .hint { margin: 0; color: var(--muted); font-size: 0.8rem; }
 .profile-form .problem { margin: 0; }
-.profile-form .buttons { display: flex; gap: 0.4rem; }
+.profile-form .buttons { display: flex; justify-content: flex-end; gap: 0.4rem; }
 .profile-field, .profile-field.size-pair label { display: grid; gap: 0.25rem; }
 .profile-field .label { color: var(--muted); font-size: 0.85rem; }
 .profile-field input, .profile-field select { min-width: 0; }
