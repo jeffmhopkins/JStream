@@ -8560,6 +8560,24 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "MotionEffect": {
+      "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+      "properties": {
+        "filter_id": {
+          "$ref": "#/$defs/FilterId",
+          "description": "The effect, by its `filter_id` in the item's effects."
+        },
+        "param": {
+          "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter_id",
+        "param"
+      ],
+      "type": "object"
+    },
     "MotionMeasure": {
       "description": "What an `audio` modifier measures of what it hears (since 0.86).",
       "oneOf": [
@@ -8833,6 +8851,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": "engine",
           "description": "Where its time starts. Default `engine`."
         },
+        "effect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionEffect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+        },
         "enabled": {
           "description": "Whether it applies. Default `true`; omitted when `true`.",
           "type": "boolean"
@@ -8913,6 +8942,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "crop_bottom",
           "description": "Source pixels cut from the bottom edge: added, never below 0.",
+          "type": "string"
+        },
+        {
+          "const": "effect",
+          "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
           "type": "string"
         }
       ]

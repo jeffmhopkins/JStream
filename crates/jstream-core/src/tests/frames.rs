@@ -314,6 +314,7 @@ fn a_scene_sheet_hears_audio_motion() {
                 motion: vec![MotionModifier {
                     modifier_id: "pulse".into(),
                     property: MotionProperty::Opacity,
+                    effect: None,
                     kind: MotionKind::Audio {
                         audio: None,
                         audio_source: None,

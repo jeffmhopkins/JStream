@@ -295,7 +295,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -307,6 +307,11 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
+- **Driven effect settings** (`driven.rs`,
+  [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
+  modifier adding to a number or colour setting of one of its item's effects each
+  frame, within the setting's range, by the path a Move's blend uses, with the layer padded for the
+  most and the least it reaches.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot.
@@ -1643,7 +1648,10 @@ effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
 [ADR-0136](../../docs/adr/0136-an-effects-outset-follows-its-settings.md)). While a Move blends an item's effects (ADR-0127), each effect's outset is
-the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both. A box
+the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both,
+and an item whose motion drives its effects' settings (ADR-0138, `driven.rs`) is padded
+for the least and the most they reach (`Driven::extremes`), from its own settings and,
+during a Move, from the look it leaves. A box
 longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
@@ -1686,7 +1694,9 @@ keeps one `EffectBlend` per such chain, with the item's timing and each filter's
 parameters from its descriptor (`Chain::whole_params`), and the render thread
 hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
 numbers and colours linearly, every other value switching halfway, the eased progress
-clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`
+clamped to `[0, 1]`), which updates the running filters in place. Settings an item's
+motion drives (ADR-0138) are added on top of that blend, or of the plan's settings, in
+the same list (`Shot::drive`), and only on a frame where they add something. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an

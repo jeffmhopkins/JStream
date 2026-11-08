@@ -29,6 +29,7 @@ mod camera_controls;
 mod chain;
 mod codec_downloads;
 mod collection;
+mod driven;
 mod drops;
 mod effect_packs;
 mod engine;

@@ -696,7 +696,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
   the program scene.
   Since 0.86 a modifier can follow a bus or a source's audio
-  ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)).
+  ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
+  number or colour setting of one of its item's effects, `property` `effect`
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -1520,7 +1522,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   ignored them. Version 12's `blending` (ADR-0126) also migrates what an older
   file means: its `normal_srgb` and `additive_srgb` items become `normal` and
   `additive`, and it is `srgb` only when no item used another mode, else `linear`, so
-  its scenes keep their look. `jstream-core`
+  its scenes keep their look. Version 13 (ADR-0138) adds motion modifiers that drive an
+  effect's setting (`property` `effect` with its `effect` target), with a migration that
+  refuses one in an older file. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

@@ -148,7 +148,15 @@ impl Bindings {
             let Some(jstream_anim::Modifier {
                 kind: jstream_anim::Kind::Audio(audio),
                 ..
-            }) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier)).pop()
+            }) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
+                .pop()
+                // One that drives an effect setting (ADR-0138) hears as one that moves
+                // the box does.
+                .or_else(|| {
+                    jstream_graph::effect_anim_modifiers(std::slice::from_ref(modifier))
+                        .pop()
+                        .map(|(_, modifier)| modifier)
+                })
             else {
                 continue;
             };
@@ -364,6 +372,7 @@ mod tests {
         MotionModifier {
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
+            effect: None,
             kind: MotionKind::Audio {
                 audio: audio.map(BusId::new),
                 audio_source: None,
