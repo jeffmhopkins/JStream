@@ -295,7 +295,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -307,6 +307,11 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
+- **Driven effect settings** (`driven.rs`,
+  [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
+  modifier adding to a number or colour setting of one of its item's effects each
+  frame, within the setting's range, by the path a Move's blend uses, with the layer padded for the
+  most and the least it reaches.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot.
@@ -333,7 +338,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -483,6 +488,20 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   session's end marks its views ended, and they are forgotten once no window reaches
   their last report. Each sample copies them, and a window lists the views reported
   since its base, with their growth.
+  The quality probe (protocol 0.110, `quality.rs`,
+  [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)):
+  every output's `Encoders` holds a `ProbeTap`, which its render-thread tap shares.
+  `quality.probe` checks the call and finds the running output's session under the
+  locks, subscribes to the session's packets (from the keyframe the subscription asks
+  for, with no second request) and arms the tap, then answers `Pending`
+  from a `jstream-quality-probe` thread. While the tap is armed the render thread
+  copies each frame it pushes to that session, with its `pts`, against credit the
+  probe grants (four between two of its reads), under a lock it only tries, so it never
+  waits or frees a copy; a session on the GPU path is read back for it only then. The
+  probe thread decodes the packets with the platform's decoder (NV12, software
+  preferred), meets each picture with its reference by `pts` in microseconds, whichever
+  arrives first (16 of each wait at most), and measures PSNR and SSIM as NV12; it
+  disarms the tap before it drops the channel. It answers within ten seconds, or fails.
 
 <a id="contents-tests"></a>
 ## Contents: tests
@@ -585,6 +604,9 @@ covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
   profiles, and on a half-rate video mix held to its rate without being starved), a
+  quality probe's checks (an unknown output, too many frames, a stopped output) and,
+  on a running recording, its copied frames meeting the fake decoder's pictures by
+  `pts` (which then fail it for their 16 × 16 size), a
   second hardware session refused as `hardware_session_limit` naming the holder, under
   `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
   falling back when no hardware session is open, and an HEVC start the machine lists no
@@ -820,7 +842,7 @@ Live API client behind the YouTube commands and `youtube` outputs), `serde_json`
 values: the audio filter kinds' defaults, what the mixer kernels read from a filter's
 settings, and the CLAP kinds' parameter defaults), `png`
 (encodes the snapshot readback; default features off, deflate stays pure Rust, allowed by
-[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), `thiserror`
+[ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), `thiserror`
 (`SourceFrameError`), `futures-core` (the `Stream` trait of event streams),
 `arc-swap` (the published render snapshot and the mixer thread's list of bus and
 source scopes), `blake3` (the digests a quarantine keeps of each blamed
@@ -865,6 +887,9 @@ releasing it (see *Snapshots*). A frame sheet's thread reads the same once per p
 before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.106) run
 outside it: a rescan runs plugin host processes for seconds and takes the collection
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
+`quality.probe` (0.110) checks the output under the collection lock and finds its
+session under the pipeline gate, one after the other, then measures on a thread of its
+own with neither held (see *Contents: media*).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -1659,7 +1684,10 @@ effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
 [ADR-0136](../../docs/adr/0136-an-effects-outset-follows-its-settings.md)). While a Move blends an item's effects (ADR-0127), each effect's outset is
-the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both. A box
+the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both,
+and an item whose motion drives its effects' settings (ADR-0138, `driven.rs`) is padded
+for the least and the most they reach (`Driven::extremes`), from its own settings and,
+during a Move, from the look it leaves. A box
 longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into
@@ -1702,7 +1730,9 @@ keeps one `EffectBlend` per such chain, with the item's timing and each filter's
 parameters from its descriptor (`Chain::whole_params`), and the render thread
 hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_settings`:
 numbers and colours linearly, every other value switching halfway, the eased progress
-clamped to `[0, 1]`), which updates the running filters in place. Goldens in `chain.rs`
+clamped to `[0, 1]`), which updates the running filters in place. Settings an item's
+motion drives (ADR-0138) are added on top of that blend, or of the plan's settings, in
+the same list (`Shot::drive`), and only on a frame where they add something. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
@@ -3246,7 +3276,9 @@ changes go to the `jstream-camera-controls` thread over a channel, sent under th
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
 (`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
 its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
-collection lock under its scan lock only to add the kinds it found. The PTZ heads work
+collection lock under its scan lock only to add the kinds it found. A quality probe's
+tap lock (`ProbeTap`) is a leaf: the probe takes it with no engine lock held, and the
+render thread only tries it. The PTZ heads work
 the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
@@ -3560,6 +3592,10 @@ the tick's frame is dropped for that mix's GPU sessions and counted in
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
+mix with a session on the GPU path is read back too while a quality probe is armed on
+that session, whose reference frames are those readbacks (ADR-0145), and a
+readback made only for the probe that falls behind is no dropped frame, so it is never
+counted in the drops (`MixFrame::probe_only`); a
 mix none of them is fed is not read back, and each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw

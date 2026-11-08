@@ -10,7 +10,7 @@
 //! conversion. [`draw_cursor`] draws a pointer that a capture sent beside its
 //! frames into a CPU frame.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0066-portable-windows-distribution-v2.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-platform/README.md#purpose, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0014-media-clock.md, docs/adr/0066-portable-windows-distribution-v2.md
 
 #![forbid(unsafe_code)]
 

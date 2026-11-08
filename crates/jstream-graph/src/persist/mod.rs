@@ -351,9 +351,34 @@ fn v11_to_v12(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Version 13 is held for the pulse change (#1417), which lands in the wave queue before
-/// this one and brings its own migration; until then it changes nothing.
-fn v12_to_v13(_value: &mut Value) -> Result<(), String> {
+/// Version 13 adds motion modifiers that drive an effect's setting (ADR-0138): property
+/// `effect` with its `effect` target, on an item's motion or a keyframe override's. A
+/// version 12 file has none, so it upgrades unchanged; one there is refused, as version
+/// 12 refused it.
+fn v12_to_v13(value: &mut Value) -> Result<(), String> {
+    let drives = |motion: Option<&Value>| {
+        motion
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|m| {
+                m.get("effect").is_some()
+                    || m.get("property").and_then(Value::as_str) == Some("effect")
+            })
+    };
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let items = scene.get("items").and_then(Value::as_array);
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if items
+            .into_iter()
+            .flatten()
+            .chain(overrides.into_iter().flatten())
+            .any(|holder| drives(holder.get("motion")))
+        {
+            return Err("a version 12 motion modifier drives no effect setting".into());
+        }
+    }
     Ok(())
 }
 

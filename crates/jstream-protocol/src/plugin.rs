@@ -90,6 +90,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
+    // Only numbers about a stream's pictures, never the pictures (ADR-0145).
+    ("quality.probe", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
@@ -101,6 +103,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.list_streams", N),
     ("youtube.stats", N),
     ("device.list", N),
+    ("agent.approved", N),
     // What other clients did, by name, is the user's to read, not a plugin's (ADR-0083).
     ("activity.list", N),
     // The server answers it, and a UI's settings are the person's.
@@ -228,6 +231,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("youtube.transition_broadcast", N),
     ("pairing.start", N),
     ("device.revoke", N),
+    ("agent.approve", N),
+    ("agent.forget", N),
     ("ui_settings.set", N),
     // Needs a filesystem grant, like `video.snapshot`.
     ("preview.subscribe", N),

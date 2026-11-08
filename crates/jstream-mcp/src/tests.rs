@@ -246,6 +246,7 @@ fn handshake_list_and_call_round_trip() {
             "preview",
             "profile",
             "ptz",
+            "quality",
             "scene",
             "send",
             "source",
@@ -440,7 +441,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(39));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(40));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(

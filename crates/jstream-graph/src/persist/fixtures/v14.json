@@ -1,6 +1,6 @@
 {
   "schema_version": 14,
-  "rev": 11,
+  "rev": 12,
   "canvas": {
     "width": 1280,
     "height": 720
@@ -73,6 +73,20 @@
               "phase": 0.0,
               "clock": "shown",
               "enabled": false
+            },
+            {
+              "modifier_id": "pulse",
+              "property": "effect",
+              "effect": {
+                "filter_id": "edge",
+                "param": "width"
+              },
+              "kind": "oscillate",
+              "shape": "sine",
+              "amplitude": 2.0,
+              "period_ms": 500,
+              "phase": 0.0,
+              "clock": "engine"
             }
           ]
         }

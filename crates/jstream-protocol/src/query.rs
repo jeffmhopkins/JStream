@@ -278,6 +278,10 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
+    /// The approved list and the requests still open (0.108, ADR-0131). Runtime state,
+    /// so no `rev`. Answered by the server that admits clients, like `device.list`.
+    #[serde(rename = "agent.approved")]
+    AgentApproved,
     /// Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,
     /// undos, redos and actions did, newest first. The engine keeps the last 100
     /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted
@@ -354,6 +358,25 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top: Option<u32>,
     },
+    /// Measures how close a stream's decoded pictures are to the frames its encoder was
+    /// given (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames
+    /// the stream's encoder takes, from the next keyframe on, decodes the packets it
+    /// makes of them with the platform's decoder, and answers PSNR and SSIM for each.
+    /// Nothing is copied or decoded unless a probe is waiting. It waits for those frames
+    /// (a still stream still sends them, at its frame rate) and answers within about
+    /// ten seconds. Fails with `not_found` for an output that doesn't exist,
+    /// `invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the
+    /// output isn't running, the platform has no decoder for its codec, or the frames
+    /// didn't arrive in time. Runtime state: the result carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The stream.
+        stream: crate::quality::ProbeStream,
+        /// The frames to compare, from 1 to 10
+        /// ([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        frames: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -424,6 +447,7 @@ impl Query {
             Query::PackRead { .. } => "pack.read",
             Query::ValuesList { .. } => "values.list",
             Query::DeviceList => "device.list",
+            Query::AgentApproved => "agent.approved",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
@@ -431,6 +455,7 @@ impl Query {
             Query::CodecDownloads => "codec.downloads",
             Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
+            Query::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -784,6 +809,18 @@ pub enum QueryResult {
         /// The paired devices, ordered by ID.
         devices: Vec<DeviceInfo>,
     },
+    /// The result of `agent.approved` (0.108).
+    #[serde(rename = "agent.approved")]
+    AgentApproved {
+        /// Whether this server asks before a new agent connects: the desktop app with
+        /// MCP on and its setting on. Off, nothing is held, and the list is kept for when
+        /// it is on again.
+        asking: bool,
+        /// The approved list, ordered by client name, then transport.
+        approved: Vec<crate::ApprovedAgent>,
+        /// The requests still open, oldest first.
+        pending: Vec<crate::AgentApproval>,
+    },
     /// The result of `activity.list` (0.51).
     #[serde(rename = "activity.list")]
     ActivityList {
@@ -841,6 +878,13 @@ pub enum QueryResult {
         #[serde(flatten)]
         profile: ProfileInfo,
     },
+    /// The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The measurement.
+        #[serde(flatten)]
+        probe: crate::quality::QualityProbeInfo,
+    },
 }
 
 impl QueryResult {
@@ -877,6 +921,7 @@ impl QueryResult {
             QueryResult::PackRead { .. } => "pack.read",
             QueryResult::ValuesList { .. } => "values.list",
             QueryResult::DeviceList { .. } => "device.list",
+            QueryResult::AgentApproved { .. } => "agent.approved",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
@@ -884,6 +929,7 @@ impl QueryResult {
             QueryResult::CodecDownloads { .. } => "codec.downloads",
             QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
+            QueryResult::QualityProbe { .. } => "quality.probe",
         }
     }
 }

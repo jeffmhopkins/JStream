@@ -364,8 +364,9 @@ impl Server {
                 tracing::warn!("the engine didn't answer hello in time");
                 return Ok(disconnected(format!(
                     "the engine session could not be opened: the engine didn't answer \
-                     `hello` within {:?}; this call was not sent. The next call tries \
-                     again",
+                     `hello` within {:?}; this call was not sent. JStream may be asking \
+                     the person whether to let this agent connect: once they allow it, \
+                     the next call goes through. The next call tries again",
                     self.hello_timeout
                 )));
             }

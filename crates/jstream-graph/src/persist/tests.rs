@@ -65,7 +65,11 @@ const V11: &str = include_str!("fixtures/v11.json");
 /// loading as version 1 must.
 const V12: &str = include_str!("fixtures/v12.json");
 
-/// A collection file at schema version 14, the current one: version 12 with PTZ shots
+/// A collection file at schema version 13, version 12 with a motion
+/// modifier on `i4` that drives its `edge` effect's `width` (ADR-0138). It must keep loading as version 1 must.
+const V13: &str = include_str!("fixtures/v13.json");
+
+/// A collection file at schema version 14, the current one: version 13 with PTZ shots
 /// on scene `a` and its keyframe scene `k` (ADR-0146). The same rule applies once
 /// version 15 exists.
 const V14: &str = include_str!("fixtures/v14.json");
@@ -252,6 +256,7 @@ fn v4_graph() -> Graph {
                     MotionModifier {
                         modifier_id: "sway".into(),
                         property: MotionProperty::X,
+                        effect: None,
                         kind: MotionKind::Wiggle {
                             amplitude: f(3.0),
                             frequency_hz: f(0.5),
@@ -264,6 +269,7 @@ fn v4_graph() -> Graph {
                     MotionModifier {
                         modifier_id: "roll".into(),
                         property: MotionProperty::Rotation,
+                        effect: None,
                         kind: MotionKind::Oscillate {
                             shape: MotionShape::Sine,
                             amplitude: f(0.1),
@@ -281,6 +287,7 @@ fn v4_graph() -> Graph {
                 motion: vec![MotionModifier {
                     modifier_id: "scroll".into(),
                     property: MotionProperty::CropLeft,
+                    effect: None,
                     kind: MotionKind::Drift {
                         rate_per_s: f(-8.0),
                         wrap: Some(f(64.0)),
@@ -572,11 +579,55 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
     value.to_string()
 }
 
-/// [`v11_graph`] with PTZ shots on scene `a` (a preset and a pose) and on its keyframe
+/// Version 12, with a modifier on `i4` that pulses its `edge` effect's `width`
+/// (ADR-0138).
+fn v12_graph() -> Graph {
+    use jstream_protocol::{
+        FilterId, MotionClock, MotionEffect, MotionKind, MotionModifier, MotionProperty,
+        MotionShape,
+    };
+    let mut graph = v11_graph();
+    let mut motion = graph
+        .state()
+        .scenes()
+        .iter()
+        .flat_map(|s| s.items())
+        .find(|i| i.id().as_str() == "i4")
+        .map(|i| i.motion().to_vec())
+        .expect("i4 is in the fixture");
+    motion.push(MotionModifier {
+        modifier_id: "pulse".into(),
+        property: MotionProperty::Effect,
+        effect: Some(MotionEffect {
+            filter_id: FilterId::new("edge"),
+            param: "width".into(),
+        }),
+        kind: MotionKind::Oscillate {
+            shape: MotionShape::Sine,
+            amplitude: jstream_protocol::Finite32::new(2.0).expect("finite"),
+            period_ms: 500,
+            phase: jstream_protocol::Finite32::ZERO,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+    });
+    let applied = graph.apply(
+        &[Edit::ItemSetMotion {
+            item_id: ItemId::new("i4"),
+            scene_id: None,
+            motion,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// [`v12_graph`] (the version 13 collection) with PTZ shots on scene `a` (a preset and a pose) and on its keyframe
 /// scene `k`, which replaces `a`'s shot of `close` (ADR-0146 §6).
 fn v14_graph() -> Graph {
     use jstream_protocol::{PtzPose, PtzShot};
-    let mut graph = v11_graph();
+    let mut graph = v12_graph();
     let applied = graph.apply(
         &[
             Edit::SceneSetPtzShots {
@@ -623,8 +674,29 @@ fn the_fixture_is_what_the_collection_saves() {
 fn the_v14_fixture_loads_exactly() {
     let expected = v14_graph();
     let loaded = load(V14);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(12)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+#[test]
+fn the_v13_fixture_loads_exactly() {
+    let expected = v12_graph();
+    let loaded = load(V13);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(11)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 13 adds motion that drives an effect setting (ADR-0138): such a modifier in
+/// a version 12 file is refused, as version 12 refused it.
+#[test]
+fn a_version_12_effect_modifier_is_refused() {
+    let v13: Value = serde_json::from_str(V13).expect("the v13 fixture");
+    let mut value = v13.clone();
+    value["schema_version"] = json!(12);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 12, .. })
+    ));
 }
 
 #[test]

@@ -11,7 +11,14 @@
 //! reply arrives on.
 
 #[cfg(any(target_os = "linux", test))]
+mod file_chooser;
+#[cfg(any(target_os = "linux", test))]
 mod handshake;
+
+#[cfg(target_os = "linux")]
+pub use file_chooser::pick_path;
+#[cfg(any(target_os = "linux", test))]
+pub use file_chooser::{FileChoice, FileChoiceKind, filter_extensions};
 
 /// The `types` option of `SelectSources`: which kinds of source the picker offers. A
 /// bit set, as the portal defines it.

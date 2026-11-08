@@ -150,7 +150,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 <a id="contents-calls"></a>
 ## Contents: queries, kinds and events
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -158,11 +158,14 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `video.snapshot`, `video.frames`, `kind.list`,
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
-  `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
+  `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
   `ptz.list`, `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them),
+  `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
+  `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
+  `MAX_PSNR_DB`), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -198,7 +201,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
   ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
   and `MotionCurve`, follows a bus or a source
-  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
+  `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -243,8 +248,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
-  `collection.file_changed` (with `CollectionCause`, 0.94), and `kinds.changed` (with
-  `KindsCause`, 0.107).
+  `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
+  `KindsCause`, 0.107), and `agent.approval_requested` and `agent.approval_resolved`
+  (0.108).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -329,7 +335,18 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.111 (a number the release queue set)
 because the engine drives PTZ cameras: the actions `ptz.drive`, `ptz.aim`,
 `ptz.home`, `ptz.recall`, `ptz.store` and `ptz.focus`, the query `ptz.list`, and a
-scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.107 because the event `kinds.changed` (`KindsCause`) tells
+scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.110 because the query `quality.probe` (`ProbeStream`,
+`QualityProbeInfo`) measures a running output's encoded picture
+([Queries](#queries), [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+a number the release queue set); 0.109 because a motion modifier can drive a number or colour
+setting of one of its item's effects (#1404): `MotionProperty::Effect` and `MotionModifier.effect`
+(`MotionEffect`, [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md),
+#1294, a number the release queue set); 0.108 because the person is asked before a new agent connects:
+the events `agent.approval_requested` and `agent.approval_resolved`, the actions
+`agent.approve` and `agent.forget`, the query `agent.approved`, the error `not_allowed`
+and the entity kind `approval`
+([Agent approval](#agent-approval), [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md),
+a number the release queue set); 0.107 because the event `kinds.changed` (`KindsCause`) tells
 every client when a CLAP scan or the effect packs change the kinds
 ([Events](#events), #1328, a number the release queue set); 0.106 because a person can see and redo the CLAP plugin scan: the
 query `plugin.clap_scan` (`ClapScanInfo`) and the action `plugin.clap_rescan`
@@ -432,7 +449,7 @@ codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.7
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.69 because of the
 `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
 download Cisco's OpenH264 on a person's request ([Codec downloads](#codec-downloads),
-[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
+[ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)); 0.68 because of the
 `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
 takes a source's settings whose kind marks them `live` (`source.set_settings`,
 [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -1486,7 +1503,7 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
 <a id="queries"></a>
 ## Queries
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 Queries read and never change `rev`. Those that read the collection state carry the
@@ -1624,6 +1641,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
   view whose session has ended stays while a window reaches back to its last report.
   Runtime state, so no `rev`. Added in 0.73.
+- `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
+  frames its encoder was given
+  ([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+  refining [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md) §3).
+  `stream` is a `ProbeStream`, so far only `{"type": "output", "output_id"}`, a running
+  output's encoder session. The engine copies the next `frames` (1 to 10, default 3)
+  frames the render thread pushes to the session, from the next keyframe on, decodes
+  the session's packets with the platform's decoder, and answers a `QualityProbeInfo`:
+  the `encoder` (and whether it is `hardware`), the `decoder`, the encoded `width` and
+  `height`, each frame's `FrameQuality` (`pts_us` on the engine's clock, `psnr_y` and
+  `psnr` in dB up to `MAX_PSNR_DB`, 100, for identical pictures, and `ssim_y` from 0 to
+  1), and their means. Both pictures are compared as NV12 in BT.709 limited range.
+  Nothing is copied or decoded unless a probe waits, and one probe of a session runs at
+  a time. Fails with `not_found` for an unknown output, `invalid_argument` on `frames`,
+  and `action_failed` when the output isn't running, the platform has no decoder for
+  its codec, another probe of the stream runs, or the frames don't come back within ten
+  seconds. A plugin with the `read` class may call it. Runtime state, so no `rev`.
+  Added in 0.110.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1654,6 +1689,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `device.list`: the devices paired with the listener this client reached, each with
   its `device_id`, `name`, and when it was paired and last used (Unix seconds). Not
   collection state, so no `rev`. Added in 0.21 (see *Pairing* below).
+- `agent.approved`: whether the server asks before a new agent connects (`asking`), the
+  approved list (`approved`, each `{client_name, transport}`) and the requests still
+  open (`pending`, each `{approval_id, client_name, transport}`). Runtime state, so no
+  `rev`. Added in 0.108 (see [Agent approval](#agent-approval)).
 - `ui_settings.get {key}`: the UI setting kept under `key`, or no `value` when there is
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
@@ -2263,6 +2302,40 @@ not WASM plugins: the engine scans for `.clap` files and offers each effect as a
 - Both are a person's: no MCP tool carries them, no plugin is granted them (they name
   files on the machine) and no hotkey binds the rescan.
 
+<a id="agent-approval"></a>
+## Agent approval
+<!-- @section
+covers = ["crates/jstream-protocol/src/agent.rs"]
+-->
+
+Since 0.108 the desktop app with MCP on asks the person before a new agent's first
+connection ([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). The
+server, not the engine, answers all of this; a `Control` with no server in front
+answers `unsupported`.
+- A connection that presents the control token from the token file, and whose `hello`
+  names a client the person hasn't approved over that `AgentTransport` (`websocket`,
+  which `jstream-cli mcp` uses too, or `mcp_http`), is held: no `welcome` yet. Every
+  admitted client gets **`agent.approval_requested {approval}`**, an `AgentApproval`
+  `{approval_id, client_name, transport}`. `client_name` is the client's own text.
+- **`agent.approve {approval_id, decision}`** answers it: `allow_once`, `always_allow`
+  (which adds `{client_name, transport}` to the approved list) or `deny`. Any admitted
+  client may answer; MCP agents get no tool for it. A request that isn't open is
+  `not_found` (entity `approval`).
+- With no answer in 2 minutes the `hello` fails as a denied one does: **`not_allowed`**,
+  with a `reason`, and the server closes the connection. A client that connects again
+  asks again. A `hello` sent again on a held connection waits on the same request.
+- **`agent.approval_resolved {approval_id, outcome}`** tells every client how it ended:
+  `allowed_once`, `always_allowed`, `denied`, `timed_out` or `closed` (the client went
+  away first).
+- **`agent.approved`** lists the approved list and the open requests, and
+  **`agent.forget {client_name, transport}`** removes a row (`not_found` when the list
+  doesn't hold it); the client's next connection asks again.
+- None of these can be bound to a hotkey or granted to a WASM plugin.
+
+It is a notice with a veto, not a control: a client can pass by naming itself after an
+approved one, and an approved client is trusted no differently from any other token
+holder.
+
 <a id="quarantine"></a>
 ## Effect quarantine
 <!-- @section
@@ -2326,7 +2399,7 @@ covers = ["crates/jstream-protocol/src/encoder.rs"]
 Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
 straight to the user's machine, so on Linux the engine downloads it from Cisco when a
 person asks, and never ships it
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.69:
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Since 0.69:
 - **`codec.downloads`** lists what the engine can download, ordered by ID, each a
   `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
   the pinned `version`, the `notice` and `license_url` a client shows wherever it offers
@@ -2396,6 +2469,7 @@ people and agents. Clients match on `code`, never on `message`.
 | `forbidden` | A plugin's call is outside its grant, or is never granted to a plugin; it never reaches the engine (0.35) | `call`, `reason` |
 | `hardware_session_limit` | `output.start` couldn't open a hardware video encoder while other outputs held hardware sessions, so the hardware session limit is taken to be reached; there is no fallback to software (0.44, [ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md) §3) | `outputs` (the holders, sorted), `reason` (the encoder's refusal) |
 | `too_large` | The message was over the server's request limit (`Welcome.max_request_bytes`, 4 MiB); only its `id` was read (echoed when it is at most 256 bytes), nothing was applied, and the connection stays open. Retrying won't help: split the work (0.62, [ADR-0074](../../docs/adr/0074-too-large-requests.md)) | `size_bytes`, `limit_bytes` |
+| `not_allowed` | Only for a `hello`: the person declined the connection, or didn't answer in time; the server then closes it (0.108, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). A client that doesn't know the code still gets its `message`, so it can report it | `reason` |
 | `internal` | An engine bug or unexpected condition; may be retried | `reason` |
 
 An error that isn't tied to a request (a failed handshake, or a message too broken to
@@ -2495,7 +2569,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
+`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`), its
+`kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
   `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`), `drift` (a steady
@@ -2524,6 +2599,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+- **Effect settings** (since 0.109,
+  [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
+  `effect` drives a number setting of one of the item's own effects instead, which
+  `effect: {filter_id, param}` (`MotionEffect`) names: the effect by its ID among the
+  effects the item draws (a keyframe's override in that keyframe) and a `float`, `int`
+  or colour parameter of its kind by its ID, `param` 1 to 64 bytes of ASCII letters,
+  digits and `_`. Only property `effect` takes an `effect`, and it needs one
+  (`motion.<n>.effect`). Its value is added to the setting (during a Move, to the
+  blended one): a number is kept within the parameter's range and rounded for an
+  `int`; a colour has it added to each of its red, green and blue as a fraction of
+  full, each kept within 0 and full, its alpha unchanged. One naming an effect or
+  parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
+  `effect` is omitted for every other property, and a client before 0.109 reads the
+  property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source

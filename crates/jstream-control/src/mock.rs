@@ -1193,6 +1193,8 @@ impl State {
             // plugins either, so it has nothing to rescan.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginClapRescan) => {
@@ -1530,7 +1532,10 @@ impl State {
                     call: query.name().into(),
                 });
             }
-            Query::DeviceList | Query::UiSettingsGet { .. } | Query::CollectionInfo => {
+            Query::DeviceList
+            | Query::AgentApproved
+            | Query::UiSettingsGet { .. }
+            | Query::CollectionInfo => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
                 });

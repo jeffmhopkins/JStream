@@ -245,6 +245,17 @@ Contents ([Design](#design) explains the choices):
   revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
   network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
+  `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
+  holds a new agent's hello (Deny, Allow once, Always allow), on
+  `agent.approval_requested` and gone on `agent.approval_resolved`. Closing it leaves
+  the agent waiting and shows the next request in the queue. It holds no session of its
+  own, so Disconnect still closes the socket;
+  `AskAgentsSetting`, the General page's "Ask before a new agent connects" (the UI
+  setting `agents.ask`); and `ApprovedAgents`, the Devices page's list of always-allowed
+  agents with Remove. Each shows only where the server asks (`agent.approved`'s
+  `asking`, answered `unsupported` elsewhere). The calls behind them and the texts are
+  tested natively; the flow end to end in `tests/e2e/specs/agents.spec.js`.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
   Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
   page's top level), the calls behind
@@ -555,7 +566,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099). A scene shows its object
+  in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
+  (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
+  picking a placement property for it drops its effect target; the section doesn't add
+  one yet). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -986,7 +1000,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   disabled, titled with the outputs that use it, while any does, as the engine refuses
   it then. The dialog also offers a codec the engine can download on a person's request
   (`codec.downloads`, `codec_downloads.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), over the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), over the
   encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
   installed and the machine has no hardware encoder for H.264 or a profile asks for
   software H.264, and the encoder form offers it under the hardware choice while the

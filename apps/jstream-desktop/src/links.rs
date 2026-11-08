@@ -10,7 +10,7 @@
 pub const REPOSITORY: &str = env!("CARGO_PKG_REPOSITORY");
 
 /// Cisco's licence for its OpenH264 binary. The UI links this exact URL beside the
-/// download offer and in About (ADR-0061). It is the one page outside the project the
+/// download offer and in About (ADR-0140). It is the one page outside the project the
 /// window opens, and only as this string: nothing else on that host, and no query or
 /// fragment.
 pub const OPENH264_LICENCE: &str = "https://www.openh264.org/BINARY_LICENSE.txt";

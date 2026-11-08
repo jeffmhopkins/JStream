@@ -754,6 +754,7 @@ fn keyframe_edits() -> Vec<Edit> {
                     .expect("a string")
             ),
             property,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape,
                 amplitude: Finite32::new(1.0).expect("finite"),
@@ -773,6 +774,27 @@ fn keyframe_edits() -> Vec<Edit> {
                 motion: motion.to_vec(),
             }),
     );
+    // A border's width pulsing on a sine (ADR-0138).
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: vec![MotionModifier {
+            modifier_id: "pulse-border".into(),
+            property: MotionProperty::Effect,
+            effect: Some(crate::MotionEffect {
+                filter_id: FilterId::new("border"),
+                param: "width".into(),
+            }),
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Sine,
+                amplitude: Finite32::new(2.0).expect("finite"),
+                period_ms: 500,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }],
+    });
     // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
     // source.
     edits.push(Edit::ItemSetMotion {
@@ -856,6 +878,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
+            effect: None,
             kind: MotionKind::Wiggle {
                 amplitude: f(3.0),
                 frequency_hz: f(0.4),
@@ -868,6 +891,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape: MotionShape::Triangle,
                 amplitude: f(0.1),
@@ -880,6 +904,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
+            effect: None,
             kind: MotionKind::Drift {
                 rate_per_s: f(12.0),
                 wrap: Some(f(480.0)),
@@ -890,6 +915,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
+            effect: None,
             kind: MotionKind::Impulse {
                 amplitude: f(18.0),
                 frequency_hz: f(1.5),
@@ -922,6 +948,7 @@ fn reactive() -> Vec<MotionModifier> {
     let modifier = |id: &str, property, kind| MotionModifier {
         modifier_id: id.into(),
         property,
+        effect: None,
         kind,
         clock: MotionClock::Engine,
         enabled: true,
@@ -967,6 +994,7 @@ fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
+        effect: None,
         kind: MotionKind::Oscillate {
             shape: MotionShape::Sine,
             amplitude: Finite32::new(0.2).expect("finite"),
@@ -1536,6 +1564,22 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::AgentApprove {
+            approval_id: "apr_1".into(),
+            decision: crate::ApprovalDecision::AllowOnce,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_2".into(),
+            decision: crate::ApprovalDecision::AlwaysAllow,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_3".into(),
+            decision: crate::ApprovalDecision::Deny,
+        },
+        Action::AgentForget {
+            client_name: "claude-code".into(),
+            transport: crate::AgentTransport::Websocket,
+        },
         Action::UiSettingsSet {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
@@ -1839,6 +1883,18 @@ pub(crate) fn queries() -> Vec<Query> {
             seconds: Some(10),
             top: Some(5),
         },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: None,
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: Some(5),
+        },
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1891,6 +1947,7 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::AgentApproved,
         Query::ActivityList {
             after_seq: None,
             limit: None,
@@ -1920,6 +1977,30 @@ pub(crate) fn queries() -> Vec<Query> {
 }
 
 /// A live broadcast's audience, every count reported.
+fn quality_probe() -> crate::QualityProbeInfo {
+    let db = |v: f32| Finite32::new(v).expect("finite");
+    let frame = |pts_us, psnr_y, psnr, ssim_y| crate::FrameQuality {
+        pts_us,
+        psnr_y: db(psnr_y),
+        psnr: db(psnr),
+        ssim_y: db(ssim_y),
+    };
+    crate::QualityProbeInfo {
+        encoder: "OpenH264 (Cisco Systems, software)".into(),
+        hardware: false,
+        decoder: "OpenH264 decoder (Cisco Systems, software)".into(),
+        width: 1280,
+        height: 720,
+        frames: vec![
+            frame(2_000_000, 42.5, 44.0, 0.985),
+            frame(2_033_333, 41.5, 43.0, 0.975),
+        ],
+        psnr_y: db(42.0),
+        psnr: db(43.5),
+        ssim_y: db(0.98),
+    }
+}
+
 fn profile_info() -> ProfileInfo {
     let ms = |value: f32| Finite32::new(value).expect("finite");
     ProfileInfo {
@@ -2871,6 +2952,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         QueryResult::ProfileGet {
             profile: profile_info(),
         },
+        QueryResult::QualityProbe {
+            probe: quality_probe(),
+        },
         QueryResult::FontList {
             fonts: vec![
                 FontInfo {
@@ -3024,6 +3108,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 paired_at: 1_790_000_000,
                 last_used_at: 1_790_003_600,
             }],
+        },
+        QueryResult::AgentApproved {
+            asking: true,
+            approved: vec![crate::ApprovedAgent::new(
+                "claude-code",
+                crate::AgentTransport::Websocket,
+            )],
+            pending: vec![crate::AgentApproval::new(
+                "apr_4",
+                "cursor",
+                crate::AgentTransport::McpHttp,
+            )],
         },
         QueryResult::ActivityList {
             now_ms: 1_790_000_120_000,
@@ -3264,6 +3360,21 @@ pub(crate) fn events() -> Vec<Event> {
     }
     for cause in [crate::KindsCause::ClapScan, crate::KindsCause::EffectPacks] {
         events.push(Event::KindsChanged { cause });
+    }
+    events.push(Event::AgentApprovalRequested {
+        approval: crate::AgentApproval::new("apr_4", "cursor", crate::AgentTransport::McpHttp),
+    });
+    for outcome in [
+        crate::ApprovalOutcome::AllowedOnce,
+        crate::ApprovalOutcome::AlwaysAllowed,
+        crate::ApprovalOutcome::Denied,
+        crate::ApprovalOutcome::TimedOut,
+        crate::ApprovalOutcome::Closed,
+    ] {
+        events.push(Event::AgentApprovalResolved {
+            approval_id: "apr_4".into(),
+            outcome,
+        });
     }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
@@ -3539,6 +3650,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             size_bytes: 5_767_168,
             limit_bytes: 4_194_304,
         },
+        ProtocolError::NotAllowed {
+            reason: "the person declined this connection".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -3558,6 +3672,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Plugin,
         EntityKind::Pack,
         EntityKind::File,
+        EntityKind::Approval,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

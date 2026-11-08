@@ -1,12 +1,13 @@
-//! Hand-written declarations for the OpenH264 encoder calls JStream makes (ADR-0061).
+//! Hand-written declarations for the OpenH264 encoder and decoder calls JStream makes
+//! (ADR-0140).
 //!
 //! They follow `codec_api.h`, `codec_app_def.h` and `codec_def.h` at the pinned release
-//! (v2.6.0) and cover only the encoder. Several structs gained fields in that release
+//! (v2.6.0) and cover only the calls the encoder and decoder make. Several structs gained fields in that release
 //! (`bPsnr*`, `rPsnr`), so the layouts belong to the pin: [`Api::load`] refuses a library
-//! that reports another version. `int` is `c_int`, C enums are `c_int`, `long long` is
-//! `i64` and `bool` is Rust's `bool` (both one byte, 0 or 1, on Linux).
+//! that reports another version. `int` is `c_int`, C enums are `c_int`, `long` is `c_long`,
+//! `long long` is `i64` and `bool` is Rust's `bool` (both one byte, 0 or 1, on Linux).
 
-use std::ffi::{c_int, c_uint, c_void};
+use std::ffi::{c_int, c_long, c_uchar, c_uint, c_void};
 
 use jstream_platform::PlatformError;
 
@@ -151,6 +152,112 @@ pub(super) struct EncoderVtbl {
     pub get_option: unsafe extern "C" fn(*mut Encoder, c_int, *mut c_void) -> c_int,
 }
 
+/// `DECODING_STATE::dsErrorFree`: the call decoded without error.
+pub(super) const DS_ERROR_FREE: c_int = 0;
+/// `ERROR_CON_IDC::ERROR_CON_DISABLE`: no concealment, so a broken packet is an error
+/// rather than a picture patched from the last one.
+pub(super) const ERROR_CON_DISABLE: c_int = 0;
+/// `VIDEO_BITSTREAM_TYPE::VIDEO_BITSTREAM_AVC`: plain H.264, not SVC.
+pub(super) const VIDEO_BITSTREAM_AVC: c_int = 0;
+/// `DECODER_OPTION_TRACE_LEVEL` (an `int`, a `WELS_LOG_*` level).
+pub(super) const DECODER_OPTION_TRACE_LEVEL: c_int = 9;
+/// `DECODER_OPTION_NUM_OF_FRAMES_REMAINING_IN_BUFFER` (an `int`, read with `GetOption`).
+pub(super) const DECODER_OPTION_FRAMES_REMAINING: c_int = 18;
+
+/// `SVideoProperty`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(super) struct VideoProperty {
+    /// The struct's own size, in bytes.
+    pub size: c_uint,
+    /// A `VIDEO_BITSTREAM_TYPE`, here [`VIDEO_BITSTREAM_AVC`].
+    pub bs_type: c_int,
+}
+
+/// `SDecodingParam`.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(super) struct DecodingParam {
+    /// A debug file the decoder writes its reconstruction to; always null.
+    pub file_name_restructed: *mut std::ffi::c_char,
+    pub cpu_load: c_uint,
+    /// `UCHAR_MAX` decodes every layer.
+    pub target_dq_layer: c_uchar,
+    /// An `ERROR_CON_IDC`, here [`ERROR_CON_DISABLE`].
+    pub ec_active_idc: c_int,
+    pub parse_only: bool,
+    pub video_property: VideoProperty,
+}
+
+/// `SSysMEMBuffer`: where a decoded picture is, once `iBufferStatus` is 1.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct SysMemBuffer {
+    pub width: c_int,
+    pub height: c_int,
+    /// An `EVideoFormatType`; [`VIDEO_FORMAT_I420`] for every decoded picture.
+    pub format: c_int,
+    /// The luma stride, then the stride of both chroma planes.
+    pub stride: [c_int; 2],
+}
+
+/// `SBufferInfo`. Its `UsrData` union has the one member, `sSystemBuffer`.
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct BufferInfo {
+    /// 1 when the call put out a picture.
+    pub buffer_status: c_int,
+    /// The input's time stamp, which the decoder carries to the picture it decodes.
+    pub in_bs_time_stamp: u64,
+    /// The picture's time stamp, once `buffer_status` is 1.
+    pub out_yuv_time_stamp: u64,
+    pub system_buffer: SysMemBuffer,
+    /// The picture's Y, U and V planes, owned by the decoder until its next call.
+    pub dst: [*mut u8; 3],
+}
+
+impl BufferInfo {
+    /// An empty one, for a call to fill, carrying `time_stamp` in.
+    pub(super) fn with_time_stamp(time_stamp: u64) -> Self {
+        Self {
+            buffer_status: 0,
+            in_bs_time_stamp: time_stamp,
+            out_yuv_time_stamp: 0,
+            system_buffer: SysMemBuffer::default(),
+            dst: [std::ptr::null_mut(); 3],
+        }
+    }
+}
+
+/// `ISVCDecoder`: a pointer to the vtable. The library's decoder object starts with it.
+pub(super) type Decoder = *const DecoderVtbl;
+
+/// `ISVCDecoderVtbl`, in declaration order. Only some entries are called; the rest are
+/// declared as untyped pointers so the offsets are right.
+#[repr(C)]
+pub(super) struct DecoderVtbl {
+    pub initialize: unsafe extern "C" fn(*mut Decoder, *const DecodingParam) -> c_long,
+    pub uninitialize: unsafe extern "C" fn(*mut Decoder) -> c_long,
+    /// `DecodeFrame`, not called.
+    pub decode_frame: *const c_void,
+    pub decode_frame_no_delay: unsafe extern "C" fn(
+        *mut Decoder,
+        *const u8,
+        c_int,
+        *mut *mut u8,
+        *mut BufferInfo,
+    ) -> c_int,
+    /// `DecodeFrame2`, not called.
+    pub decode_frame2: *const c_void,
+    pub flush_frame: unsafe extern "C" fn(*mut Decoder, *mut *mut u8, *mut BufferInfo) -> c_int,
+    /// `DecodeParser`, not called.
+    pub decode_parser: *const c_void,
+    /// `DecodeFrameEx`, not called.
+    pub decode_frame_ex: *const c_void,
+    pub set_option: unsafe extern "C" fn(*mut Decoder, c_int, *mut c_void) -> c_long,
+    pub get_option: unsafe extern "C" fn(*mut Decoder, c_int, *mut c_void) -> c_long,
+}
+
 /// `OpenH264Version`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -165,15 +272,21 @@ pub(super) struct Version {
 pub(super) type CreateFn = unsafe extern "C" fn(*mut *mut Encoder) -> c_int;
 /// `void WelsDestroySVCEncoder(ISVCEncoder* pEncoder)`.
 pub(super) type DestroyFn = unsafe extern "C" fn(*mut Encoder);
+/// `long WelsCreateDecoder(ISVCDecoder** ppDecoder)`.
+pub(super) type CreateDecoderFn = unsafe extern "C" fn(*mut *mut Decoder) -> c_long;
+/// `void WelsDestroyDecoder(ISVCDecoder* pDecoder)`.
+pub(super) type DestroyDecoderFn = unsafe extern "C" fn(*mut Decoder);
 /// `void WelsGetCodecVersionEx(OpenH264Version* pVersion)`.
 pub(super) type VersionFn = unsafe extern "C" fn(*mut Version);
 
 /// The library's entry points, and the library they came from, kept loaded while any
-/// encoder made from them lives.
+/// encoder or decoder made from them lives.
 #[derive(Debug)]
 pub(super) struct Api {
     pub create: CreateFn,
     pub destroy: DestroyFn,
+    /// The decoder's pair. `None` only for the tests' fake encoder library.
+    pub decoder: Option<(CreateDecoderFn, DestroyDecoderFn)>,
     /// `None` for the fake library in tests.
     _lib: Option<SystemLibrary>,
 }
@@ -188,13 +301,15 @@ impl Api {
         lib: SystemLibrary,
         expected: (u32, u32, u32),
     ) -> Result<Self, PlatformError> {
-        // SAFETY: the three types are the C declarations quoted on them, from
+        // SAFETY: the five types are the C declarations quoted on them, from
         // `codec_api.h` at the pinned release; `lib` is kept in the returned `Api`, so
         // the pointers are never called after it is unloaded.
-        let (create, destroy, version) = unsafe {
+        let (create, destroy, create_decoder, destroy_decoder, version) = unsafe {
             (
                 lib.function::<CreateFn>("WelsCreateSVCEncoder")?,
                 lib.function::<DestroyFn>("WelsDestroySVCEncoder")?,
+                lib.function::<CreateDecoderFn>("WelsCreateDecoder")?,
+                lib.function::<DestroyDecoderFn>("WelsDestroyDecoder")?,
                 lib.function::<VersionFn>("WelsGetCodecVersionEx")?,
             )
         };
@@ -215,6 +330,7 @@ impl Api {
         Ok(Self {
             create,
             destroy,
+            decoder: Some((create_decoder, destroy_decoder)),
             _lib: Some(lib),
         })
     }
@@ -225,6 +341,7 @@ impl Api {
         Self {
             create,
             destroy,
+            decoder: None,
             _lib: None,
         }
     }

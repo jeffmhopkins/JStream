@@ -1075,6 +1075,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -1367,6 +1413,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -5084,6 +5165,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -5357,6 +5456,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -5437,6 +5547,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
@@ -7519,6 +7634,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -7811,6 +7972,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -11528,6 +11724,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -11801,6 +12015,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -11881,6 +12106,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
@@ -15745,6 +15975,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -16037,6 +16313,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -19754,6 +20065,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -20027,6 +20356,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -20107,6 +20447,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
@@ -21733,6 +22078,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -22006,6 +22369,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -22086,6 +22460,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
@@ -24190,6 +24569,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -24482,6 +24907,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -28195,6 +28655,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -28468,6 +28946,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -28548,6 +29037,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
@@ -30913,6 +31407,84 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "ptz"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Runs one `quality` operation: set `op.type` to one of `quality.probe` (query). A query only reads. `quality.probe` measures a running output's encoded picture against the frames its encoder was given: PSNR in dB (above about 40 is hard to tell apart, below about 30 shows) and SSIM from 0 to 1, per frame and on average. It waits for the frames, so it takes up to a few seconds. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "OutputId": {
+            "description": "An output (RTMP(S), recording, virtual camera).",
+            "type": "string"
+          },
+          "ProbeStream": {
+            "description": "The encoded stream a `quality.probe` measures.",
+            "oneOf": [
+              {
+                "description": "A running output's video: the encoder session it sends from, which it may share\nwith other outputs of the same mix and profile.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `quality` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Measures how close a stream's decoded pictures are to the frames its encoder was\ngiven (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames\nthe stream's encoder takes, from the next keyframe on, decodes the packets it\nmakes of them with the platform's decoder, and answers PSNR and SSIM for each.\nNothing is copied or decoded unless a probe is waiting. It waits for those frames\n(a still stream still sends them, at its frame rate) and answers within about\nten seconds. Fails with `not_found` for an output that doesn't exist,\n`invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the\noutput isn't running, the platform has no decoder for its codec, or the frames\ndidn't arrive in time. Runtime state: the result carries no `rev`.",
+                "properties": {
+                  "frames": {
+                    "description": "The frames to compare, from 1 to 10\n([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "stream": {
+                    "$ref": "#/$defs/ProbeStream",
+                    "description": "The stream."
+                  },
+                  "type": {
+                    "const": "quality.probe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "stream"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "quality"
     },
     {
       "annotations": {
@@ -33772,6 +34344,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "approval_id": {
+                    "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "$ref": "#/$defs/ApprovalDecision",
+                    "description": "The answer."
+                  },
+                  "type": {
+                    "const": "agent.approve",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "approval_id",
+                  "decision"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+                "properties": {
+                  "client_name": {
+                    "description": "The client name, as `agent.approved` lists it.",
+                    "type": "string"
+                  },
+                  "transport": {
+                    "$ref": "#/$defs/AgentTransport",
+                    "description": "How it connects, as `agent.approved` lists it."
+                  },
+                  "type": {
+                    "const": "agent.forget",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "client_name",
+                  "transport"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
                 "properties": {
                   "key": {
@@ -34064,6 +34682,41 @@ source: crates/jstream-mcp/src/tests.rs
                   "on"
                 ],
                 "type": "object"
+              }
+            ]
+          },
+          "AgentTransport": {
+            "description": "How a held client reaches the server.",
+            "oneOf": [
+              {
+                "const": "websocket",
+                "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+                "type": "string"
+              },
+              {
+                "const": "mcp_http",
+                "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+                "type": "string"
+              }
+            ]
+          },
+          "ApprovalDecision": {
+            "description": "The person's answer to a held client (`agent.approve`).",
+            "oneOf": [
+              {
+                "const": "allow_once",
+                "description": "Let it in this time.",
+                "type": "string"
+              },
+              {
+                "const": "always_allow",
+                "description": "Let it in, and add it to the approved list.",
+                "type": "string"
+              },
+              {
+                "const": "deny",
+                "description": "Turn it away: its `hello` fails with `not_allowed`.",
+                "type": "string"
               }
             ]
           },
@@ -37781,6 +38434,24 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionEffect": {
+            "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+            "properties": {
+              "filter_id": {
+                "$ref": "#/$defs/FilterId",
+                "description": "The effect, by its `filter_id` in the item's effects."
+              },
+              "param": {
+                "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "filter_id",
+              "param"
+            ],
+            "type": "object"
+          },
           "MotionMeasure": {
             "description": "What an `audio` modifier measures of what it hears (since 0.86).",
             "oneOf": [
@@ -38054,6 +38725,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "default": "engine",
                 "description": "Where its time starts. Default `engine`."
               },
+              "effect": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MotionEffect"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+              },
               "enabled": {
                 "description": "Whether it applies. Default `true`; omitted when `true`.",
                 "type": "boolean"
@@ -38134,6 +38816,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "crop_bottom",
                 "description": "Source pixels cut from the bottom edge: added, never below 0.",
+                "type": "string"
+              },
+              {
+                "const": "effect",
+                "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
                 "type": "string"
               }
             ]
