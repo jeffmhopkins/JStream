@@ -7,8 +7,9 @@
 //! go of the pixels; the texture is drawn from then on. A draw that needs them again (a
 //! larger placement, an upload dropped while nothing drew it) finds none and asks for
 //! them, and the thread decodes the file again for a later draw ([`Still::frame`]),
-//! which keeps drawing the texture it has meanwhile. A still that no mix draws holds
-//! its pixels, so showing it again draws it at once.
+//! which keeps drawing the texture it has meanwhile. A still that no mix has drawn for
+//! 2 s gets its pixels back, so showing it again draws it at once; one deleted or left
+//! for good sooner than that costs no decode.
 //!
 //! The render thread only reads and sets atomics here, and wakes the thread with
 //! [`Thread::unpark`] (R-RT-002, R-RT-003): it never decodes, and never drops the last
@@ -27,6 +28,10 @@ use jstream_sources::Still;
 
 /// How long the thread waits before it decodes a still again whose file failed to.
 const RETRY: Duration = Duration::from_secs(5);
+
+/// How long a still no mix draws waits before its pixels are decoded again, so a
+/// source deleted, or a scene left for good, right after it was shown costs no decode.
+const UNDRAWN: Duration = Duration::from_secs(2);
 
 /// How often the thread looks again at pixels it let go of that a draw was still
 /// reading, to free them once it is done.
@@ -205,10 +210,24 @@ struct Kept {
     retry: Option<Instant>,
     /// Whether that failure was logged, so a file that stays gone warns once.
     warned: bool,
+    /// Since when no mix has drawn it, while its pixels are let go of.
+    undrawn: Option<Instant>,
+}
+
+impl Kept {
+    /// When the thread next has something to do for it unasked.
+    fn due(&self) -> Option<Instant> {
+        let undrawn = self.undrawn.map(|since| since + UNDRAWN);
+        match (self.retry, undrawn) {
+            (Some(a), Some(b)) => Some(a.max(b)),
+            (a, b) => a.or(b),
+        }
+    }
 }
 
 /// The `jstream-stills` thread: lets go of the pixels the program stage has uploaded,
-/// and decodes again those a draw wants or that no mix draws, until the engine goes.
+/// and decodes again those a draw wants or that no mix has drawn for a while, until
+/// the engine goes.
 fn run(shared: &Shared) {
     let mut kept: Vec<Kept> = Vec::new();
     // Pixels let go of that a draw may still read, freed here once only this holds them.
@@ -218,6 +237,7 @@ fn run(shared: &Shared) {
             still,
             retry: None,
             warned: false,
+            undrawn: None,
         }));
         kept.retain(|kept| kept.still.strong_count() > 0);
         let now = Instant::now();
@@ -229,8 +249,8 @@ fn run(shared: &Shared) {
             if let Some(frame) = keep(&still, kept, now) {
                 retired.push(frame);
             }
-            if let Some(retry) = kept.retry {
-                next = Some(next.map_or(retry, |next| next.min(retry)));
+            if let Some(due) = kept.due() {
+                next = Some(next.map_or(due, |next| next.min(due)));
             }
         }
         retired.retain(|frame| Arc::strong_count(frame) > 1);
@@ -261,9 +281,16 @@ fn keep(still: &ShownStill, kept: &mut Kept, now: Instant) -> Option<Arc<VideoFr
         return None;
     }
     let wanted = still.wanted.load(Ordering::Acquire);
-    if !(wanted || !drawn) || kept.retry.is_some_and(|retry| now < retry) {
+    kept.undrawn = if drawn {
+        None
+    } else {
+        Some(kept.undrawn.unwrap_or(now))
+    };
+    let rested = kept.undrawn.is_some_and(|since| now >= since + UNDRAWN);
+    if !(wanted || rested) || kept.retry.is_some_and(|retry| now < retry) {
         return None;
     }
+    kept.undrawn = None;
     still.wanted.store(false, Ordering::Release);
     still.uploaded.store(false, Ordering::Release);
     match still.still.frame() {

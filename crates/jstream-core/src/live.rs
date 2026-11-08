@@ -1125,7 +1125,7 @@ impl LiveSources {
             }
         }
         if rested {
-            // A still no mix draws gets its pixels back, so it is drawn at once again.
+            // A still no mix draws gets its pixels back, so it is drawn at once when shown again.
             self.stills.drawn_changed();
         }
     }
