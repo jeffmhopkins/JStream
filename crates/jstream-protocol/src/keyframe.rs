@@ -18,6 +18,7 @@ use crate::finite::Finite32;
 use crate::geometry::ItemGeometry;
 use crate::id::{ItemId, SceneId};
 use crate::motion::MotionModifier;
+use crate::transition::KeyframeTiming;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -41,6 +42,9 @@ pub enum OverrideField {
     Effects,
     /// Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).
     Motion,
+    /// Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,
+    /// ADR-0129).
+    Timing,
 }
 
 /// What a keyframe scene overrides for one item in its parent's tree, as `state.get`
@@ -76,6 +80,11 @@ pub struct ItemOverride {
     /// motion there. A Move between two members of a family blends both sides'.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub motion: Option<Vec<MotionModifier>>,
+    /// The item's timing in transitions into this keyframe: its delay, easing and
+    /// duration there (since 0.99, ADR-0129). Never an empty timing: clearing every
+    /// field removes the override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timing: Option<KeyframeTiming>,
 }
 
 /// Overrides a batch dropped because their item left the keyframe scene's tree

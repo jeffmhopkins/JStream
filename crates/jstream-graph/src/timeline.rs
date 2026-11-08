@@ -40,6 +40,14 @@ fn set(
     if let Some((field, reason)) = timeline.problem() {
         return Err(invalid(at, &format!("timeline.{field}"), reason));
     }
+    // Its labels exist and are each listed once, and it keeps them ordered by ID
+    // (ADR-0133).
+    let labels =
+        crate::organise::checked_labels_in(state, &timeline.labels, at, "timeline.labels")?;
+    let timeline = &TimelineInfo {
+        labels: labels.into_iter().collect(),
+        ..timeline.clone()
+    };
     let id = &timeline.timeline_id;
     if let Some((holder, _)) = state.timeline(id)
         && holder.id() != scene_id

@@ -111,7 +111,13 @@ Contents:
   whose streams deliver `Gpu` frames, or `None` (the default) when it has no GPU path.
   That backend opens only the formats it can deliver there and is `Unsupported` for the
   rest; the engine then opens the device on the backend itself, and never asks it for a
-  compressed format.
+  compressed format. Camera controls (#1196): `VideoDevices::controls` lists a device's
+  `CameraControlInfo`s (a `CameraControlId` such as `exposure`, `focus` or
+  `white_balance` by its stable `name`, its range, step, default, value now, and `auto`:
+  `None` without an automatic mode, else whether it is on), and `set_control` sets one
+  to a `CameraControlValue` (`Manual`, clamped and snapped to the step, or `Auto`), on
+  a running stream without reopening it. Both are default methods: no controls, and
+  `Unsupported`.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
   process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
@@ -191,7 +197,9 @@ Contents:
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **CLAP plugin hosts** (`plugin_host.rs`,
   [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): `PluginHosts`
-  (`Send + Sync`) lists the CLAP search directories that exist, `scan`s a plugin file
+  (`Send + Sync`) lists the CLAP search directories that exist, and with `folders`
+  (by default the same) every one it searches whether it exists or not, for telling a
+  person where to install a plugin; it `scan`s a plugin file
   in a short-lived host process (so a plugin that crashes while scanned costs only that
   process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
   `Config` and a saved state): it creates the block initialised with that
@@ -249,7 +257,8 @@ Contents:
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
-  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, which
+  MJPEG, and brightness, white balance and exposure controls, the last two automatic,
+  and a capture card with no controls; `unplug` loses a device) with `FakeCaptureDecoder`, which
   `FakeCodecs::capture_decoder` makes for MJPEG (all-zero NV12 frames), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA

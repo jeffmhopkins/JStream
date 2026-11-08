@@ -5,7 +5,9 @@
 //! memory, threads, handles and child processes. Then it removes the scene and goes on.
 //! It measures the plain base scene first and last, so a leak shows as growth between
 //! the two, prints a table, writes a JSON report and, with `--check`, judges the rows
-//! against `xtask/perf/thresholds.toml`.
+//! against `xtask/perf/thresholds.toml`. With `--bench <gates>`, it then runs
+//! `jstream-cli bench` on the same engine, judged by that gates file, and fails when the
+//! bench does.
 //!
 //! Docs: xtask/perf/README.md#runner
 
@@ -28,7 +30,7 @@ use scene::Scene;
 
 const USAGE: &str = "usage: cargo xtask perf [--scene <name>]... [--seconds <n>] [--settle <n>] \
 [--canvas <w>x<h>] [--openh264 <library>] [--out <report.json>] [--check [--thresholds <file>]] \
-[--browser] [--no-build] [--debug] [--list]";
+[--bench <gates.json>] [--browser] [--no-build] [--debug] [--list]";
 
 /// The canvas when `--canvas` names none: the size #1140's first results were taken at.
 const DEFAULT_CANVAS: (u32, u32) = (1280, 720);
@@ -47,6 +49,8 @@ struct Options {
     out: Option<PathBuf>,
     check: bool,
     thresholds: Option<PathBuf>,
+    /// A `jstream-cli bench` gates file: run the bench after the scenes.
+    bench: Option<PathBuf>,
     browser: bool,
     build: bool,
     release: bool,
@@ -63,6 +67,7 @@ fn parse(args: &[String]) -> Result<Options> {
         out: None,
         check: false,
         thresholds: None,
+        bench: None,
         browser: false,
         build: true,
         release: true,
@@ -97,6 +102,7 @@ fn parse(args: &[String]) -> Result<Options> {
             "--out" => o.out = Some(value()?.into()),
             "--check" => o.check = true,
             "--thresholds" => o.thresholds = Some(value()?.into()),
+            "--bench" => o.bench = Some(value()?.into()),
             "--browser" => o.browser = true,
             "--no-build" => o.build = false,
             "--debug" => o.release = false,
@@ -118,6 +124,9 @@ fn picked(name: &str, patterns: &[String]) -> bool {
             None => name == p,
         })
 }
+
+/// The base scene's rows, measured first and last; `[scene.<name>]` may name them too.
+const BASE_ROWS: [&str; 2] = ["baseline", "baseline_after"];
 
 /// Runs `cargo xtask perf`; `Ok(false)` when `--check` found a row over its limits.
 pub fn run(args: &[String], root: &Path) -> Result<bool> {
@@ -202,7 +211,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     };
     run.build_base(o.canvas)?;
     run.record(&run_dir.join("program.mp4"))?;
-    run.measure_base("baseline")?;
+    run.measure_base(BASE_ROWS[0])?;
     for s in scenes.iter().filter(|s| picked(&s.name, &o.scenes)) {
         if s.needs_browser && !o.browser {
             run.rows
@@ -221,7 +230,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             }
         }
     }
-    run.measure_base("baseline_after")?;
+    run.measure_base(BASE_ROWS[1])?;
     let _ = run
         .mcp
         .output(json!({"type": "output.stop", "output_id": RECORDING}));
@@ -246,18 +255,52 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     std::fs::write(&out, serde_json::to_string_pretty(&report)?)
         .with_context(|| format!("writing {}", out.display()))?;
     eprintln!("xtask perf: report in {}", out.display());
+    // After the report is written, so a bench that can't run doesn't lose the scenes'.
+    let mut pass = match &o.bench {
+        Some(gates) => bench(&cli_bin, &daemon, &run_dir, gates)?,
+        None => true,
+    };
+    if !pass {
+        eprintln!(
+            "xtask perf: FAIL jstream bench: a gate failed (see {})",
+            run_dir.join("bench").join("summary.md").display()
+        );
+    }
     match verdict {
-        None => Ok(true),
+        None => {}
         Some(failures) if failures.is_empty() => {
             eprintln!("xtask perf: every row within its thresholds");
-            Ok(true)
         }
         Some(failures) => {
             for f in &failures {
                 eprintln!("xtask perf: FAIL {f}");
             }
-            Ok(false)
+            pass = false;
         }
+    }
+    Ok(pass)
+}
+
+/// Runs `jstream-cli bench` on `daemon`, judged by `gates`, writing to `run_dir/bench`.
+/// `Ok(false)` when a gate failed (the CLI's exit code 4).
+///
+/// # Errors
+/// When the bench couldn't run at all.
+fn bench(cli: &Path, daemon: &Daemon, run_dir: &Path, gates: &Path) -> Result<bool> {
+    eprintln!("xtask perf: jstream bench, gates {}", gates.display());
+    let status = Command::new(cli)
+        .args(["--url", &daemon.url, "--token-file"])
+        .arg(run_dir.join("token"))
+        .args(["bench", "--scenario", "all", "--preset", "cut", "--out"])
+        .arg(run_dir.join("bench"))
+        .arg("--gates")
+        .arg(gates)
+        .status()
+        .context("running jstream-cli bench")?;
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(4) => Ok(false),
+        _ => bail!("jstream bench couldn't run ({status})"),
     }
 }
 
@@ -636,7 +679,7 @@ impl Thresholds {
                 (name, &r["process_after_first_cycle"], &r["process"], true)
             })
             .collect();
-        if let (Some(a), Some(b)) = (base("baseline"), base("baseline_after")) {
+        if let (Some(a), Some(b)) = (base(BASE_ROWS[0]), base(BASE_ROWS[1])) {
             pairs.push(("the run".to_owned(), &a["process"], &b["process"], false));
         }
         for (what, before, after, rss) in pairs {
@@ -726,7 +769,7 @@ mod tests {
         let scenes = scene::load_dir(&dir, (1920.0, 1080.0)).expect("loads");
         for (name, _) in &t.scenes {
             assert!(
-                scenes.iter().any(|s| &s.name == name),
+                BASE_ROWS.contains(&name.as_str()) || scenes.iter().any(|s| &s.name == name),
                 "[scene.{name}] names no scene"
             );
         }

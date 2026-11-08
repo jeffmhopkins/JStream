@@ -1,4 +1,20 @@
 //! What a page is: where it loads from, its size and frame rate, and its custom CSS.
+//!
+//! # Behaviour
+//!
+//! A web address must be `http://` or
+//! `https://` with a host, at most 8 KiB, without whitespace or control characters; an
+//! empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
+//! including UNC and `\\?\` paths. A page can also be given as its HTML
+//! (`PageLocation::html`, at most 128 KiB, `MAX_HTML_BYTES`; blank text is a blank
+//! page), which loads from a host of its own under the reserved `HTML_PAGE_DOMAIN`
+//! (`https://p<n>.html.jstream.invalid/`, `RequestPolicy::html_url`) that the helper
+//! answers itself with the HTML. So the page has an origin of its own, and shares neither
+//! storage nor its opt-in with another source (#1035). Being `https`, it is a secure context, and Chromium refuses its plain `http`
+//! scripts and frames as mixed content. The custom CSS (at most 64 KiB) goes into the page as
+//! one `<style id="jstream-custom-css">` that every change replaces, through a script
+//! that quotes it as a JavaScript string (`css_script`). The default CSS makes the page's
+//! background transparent, as OBS does.
 
 use std::path::{Path, PathBuf};
 

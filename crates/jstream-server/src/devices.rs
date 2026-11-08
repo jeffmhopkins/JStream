@@ -5,6 +5,10 @@
 //!   and a new one replaces it. It is open for [`CODE_LIFETIME`], is used once, and is
 //!   void after [`MAX_WRONG_ATTEMPTS`] wrong attempts. Only its BLAKE3 digest is kept, and
 //!   a presented code is compared digest to digest, as the control token is.
+//! - **Attempts from the network** (ADR-0104) count toward the same five: a code
+//!   is void after [`MAX_WRONG_ATTEMPTS`] wrong attempts from either listener together,
+//!   as ADR-0044 sets. So a peer on the network can void the host's open code, and the
+//!   host starts pairing again; it can't get more guesses at a code than ADR-0044 allows.
 //! - **Device tokens.** A right code gets a new 256-bit token, written as 64 hex digits
 //!   like the control token. The server keeps only its BLAKE3 digest, with the device's
 //!   ID, its name, when it paired and when its token was last presented. A token unused
@@ -117,6 +121,7 @@ struct Pairing {
     /// The digest of the code, normalized (8 symbols, no dash).
     digest: blake3::Hash,
     expires: Instant,
+    /// Wrong attempts, from either listener.
     wrong: u32,
 }
 
@@ -424,8 +429,7 @@ pub(crate) fn check_name(name: &str) -> Result<&str, &'static str> {
 }
 
 /// Reads the device file: a missing one holds no devices. A file other users may access
-/// is refused, as the token file is: on Unix one group or others have any permission on,
-/// on Windows one `jstream_platform_windows::check_private_file` refuses.
+/// is refused, as the token file is ([`read_private`]).
 fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
     match read_private(path)? {
         Some(text) => parse_file(&text),
@@ -433,8 +437,9 @@ fn read_file(path: &Path) -> Result<BTreeMap<DeviceId, Device>, String> {
     }
 }
 
-/// Reads a user-only file whole: `None` when it is missing. A file other users may
-/// access is refused, as the token file is.
+/// Reads a user-only file whole, `None` when there is none. A file other users may
+/// access is refused, as the token file is: on Unix one group or others have any
+/// permission on, on Windows one `jstream_platform_windows::check_private_file` refuses.
 pub(crate) fn read_private(path: &Path) -> Result<Option<String>, String> {
     let metadata = match fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -513,8 +518,7 @@ fn render_file(devices: &BTreeMap<DeviceId, Device>) -> String {
     text
 }
 
-/// Writes the device file whole: to `<path>.tmp`, created user-only, synced, then
-/// renamed over `path`, so a crash leaves the old file or the new one.
+/// Writes the device file whole ([`write_private`]).
 fn write_file(path: &Path, devices: &BTreeMap<DeviceId, Device>) -> io::Result<()> {
     write_private(path, &render_file(devices))
 }

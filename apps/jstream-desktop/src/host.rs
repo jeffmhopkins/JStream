@@ -8,7 +8,9 @@
 //! it lets agents in as the daemon does: it listens on a fixed port, takes its token from
 //! a user-only token file that MCP clients read, and serves MCP at `/mcp`. The webview
 //! then gets a second token, made at each start and kept only in memory, and the server
-//! asks the person before a new agent with the file's token connects (ADR-0131).
+//! asks the person before a new agent with the file's token connects (ADR-0131). With
+//! [`Network`] ("Allow devices on my network", `network.rs`) it also opens the TLS
+//! network listener and pairs devices (ADR-0104, ADR-0044).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -54,6 +56,17 @@ pub struct Agents {
     pub token_file: PathBuf,
 }
 
+/// "Allow devices on my network" (ADR-0104): the network listener, and the file that
+/// keeps the devices paired through it.
+#[derive(Clone)]
+pub struct Network {
+    /// Where the network listener binds and its certificate (`network::config`).
+    pub config: jstream_server::NetworkConfig,
+    /// The paired devices' file (`jstream_server::token_file::device_file`), beside the
+    /// token file as the daemon keeps it.
+    pub device_file: PathBuf,
+}
+
 /// The running engine and its server.
 pub struct Host {
     runtime: Runtime,
@@ -62,6 +75,8 @@ pub struct Host {
     ws_url: String,
     token: String,
     mcp_url: Option<String>,
+    /// The network listener's addresses and certificate fingerprint, with [`Network`].
+    network: Option<(Vec<String>, String)>,
     /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows and on X11.
     hotkeys: Option<JoinHandle<()>>,
 }
@@ -71,7 +86,8 @@ impl Host {
     /// settings in `ui_settings` (ADR-0084; in memory without one). Without `agents` it
     /// listens on a port the OS picks with a new token kept in memory, and serves no
     /// MCP. With them it listens on their port, takes the token from their token file
-    /// (`jstream_server::token_file`), and serves MCP.
+    /// (`jstream_server::token_file`), and serves MCP. With `network` it also opens the
+    /// network listener and pairs devices; without it, it pairs none.
     ///
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, the token
@@ -82,6 +98,7 @@ impl Host {
         secrets: &Secrets,
         ui_settings: Option<PathBuf>,
         agents: Option<&Agents>,
+        network: Option<&Network>,
     ) -> anyhow::Result<Host> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -120,9 +137,16 @@ impl Host {
             }
         };
         config.extra_origins = vec![origin.to_owned()];
-        // The window needs no pairing, and pairing remote browsers isn't offered yet, so it
-        // pairs no device (ADR-0047), with or without agents.
-        config.pairing = false;
+        // The window needs no pairing, so without network access the host pairs no device
+        // (ADR-0047), with or without agents. With it, devices on the network pair over
+        // the TLS listener, and the window's pairing panel opens their codes.
+        match network {
+            Some(network) => {
+                config.network = Some(network.config.clone());
+                config.device_file = Some(network.device_file.clone());
+            }
+            None => config.pairing = false,
+        }
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
         config.ui_settings_file = ui_settings;
@@ -142,6 +166,15 @@ impl Host {
             })?;
         let ws_url = server.ws_url();
         let mcp_url = server.mcp_url();
+        let network = server.network_fingerprint().map(|fingerprint| {
+            let urls = server.network_urls();
+            tracing::info!(
+                urls = %urls.join(", "),
+                %fingerprint,
+                "devices on the network may pair (Allow devices on my network)"
+            );
+            (urls, fingerprint.to_owned())
+        });
         #[cfg(any(windows, target_os = "linux"))]
         let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
         #[cfg(not(any(windows, target_os = "linux")))]
@@ -166,8 +199,17 @@ impl Host {
             ws_url,
             token,
             mcp_url,
+            network,
             hotkeys,
         })
+    }
+
+    /// The network listener's addresses and its certificate's SHA-256 fingerprint, with
+    /// [`Network`].
+    pub fn network(&self) -> Option<(&[String], &str)> {
+        self.network
+            .as_ref()
+            .map(|(urls, fingerprint)| (urls.as_slice(), fingerprint.as_str()))
     }
 
     /// The MCP endpoint, `http://127.0.0.1:<port>/mcp`, with `--mcp`.
@@ -261,7 +303,8 @@ fn global_hotkeys(
 #[cfg(any(windows, target_os = "linux"))]
 type OnPress = Box<dyn Fn(&str) + Send>;
 
-/// Windows' listener: `RegisterHotKey` on its own thread.
+/// Windows' listener: `RegisterHotKey` on its own thread, and a low-level mouse hook there
+/// while a wheel chord is set.
 #[cfg(windows)]
 fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
     use jstream_platform_windows::GlobalHotkeys;
@@ -271,6 +314,9 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
         fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
             self.0.set(chords)
         }
+        fn hears_wheel(&self) -> bool {
+            true
+        }
     }
 
     GlobalHotkeys::start(on_press)
@@ -278,7 +324,7 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
         .map_err(|error| error.to_string())
 }
 
-/// Linux's listener: X11 key grabs on their own connection, on an X11 session. Wayland
+/// Linux's listener: X11 key and wheel grabs on their own connection, on an X11 session. Wayland
 /// has no grab (its GlobalShortcuts portal isn't wired yet), so there it doesn't start.
 #[cfg(target_os = "linux")]
 fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
@@ -288,6 +334,9 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
     impl crate::hotkeys::Registrar for X11 {
         fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
             self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
         }
     }
 
@@ -566,7 +615,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Agents, Host, VcamStatus, engine, new_token, vcam_status};
+    use super::{Agents, Host, Network, VcamStatus, engine, new_token, vcam_status};
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
@@ -632,8 +681,15 @@ mod tests {
             &secrets,
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, "http://jstream.localhost", &secrets, None, None)
-            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let host = Host::start(
+            engine,
+            "http://jstream.localhost",
+            &secrets,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
             host.ws_url().starts_with("ws://127.0.0.1:"),
             "{}",
@@ -714,7 +770,7 @@ mod tests {
             &Secrets::new(),
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, ORIGIN, &Secrets::new(), None, None)
+        let host = Host::start(engine, ORIGIN, &Secrets::new(), None, None, None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");
@@ -751,7 +807,7 @@ mod tests {
             token_file: scratch.join("token"),
         };
         let secrets = Secrets::new();
-        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, Some(&agents))
+        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, Some(&agents), None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(host.ws_url(), format!("ws://127.0.0.1:{port}/api/v1/ws"));
         assert_eq!(
@@ -802,6 +858,7 @@ mod tests {
             &Secrets::new(),
             None,
             Some(&agents),
+            None,
         )
         .unwrap_or_else(|e| panic!("a host: {e:#}"));
         let reread = std::fs::read_to_string(&agents.token_file).unwrap_or_else(|e| panic!("{e}"));
@@ -817,13 +874,109 @@ mod tests {
         );
         again.stop();
 
-        let plain = Host::start(open(&Secrets::new()), ORIGIN, &Secrets::new(), None, None)
-            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let plain = Host::start(
+            open(&Secrets::new()),
+            ORIGIN,
+            &Secrets::new(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(plain.mcp_url(), None);
         assert_ne!(
             plain.token(),
             file_token,
             "without --mcp the token is fresh and in memory"
+        );
+        plain.stop();
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// "Allow devices on my network": the host opens the TLS network listener, pairs
+    /// devices, and `pairing.start` names the listener's addresses and fingerprint.
+    /// Without it, the host pairs none (`unsupported`).
+    #[test]
+    fn network_access_opens_the_listener_and_pairs_devices() {
+        use jstream_control::protocol::{Action, ActionResult, Call, CallResult};
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-network-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let token_file = scratch.join("token");
+        let mut config =
+            crate::network::config(&token_file).unwrap_or_else(|e| panic!("a config: {e:#}"));
+        assert_eq!(config.bind.port(), crate::network::NETWORK_PORT);
+        // A port the OS picks, so the test doesn't need 4456 free.
+        config.bind = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
+        let network = Network {
+            config,
+            device_file: jstream_server::token_file::device_file(&token_file),
+        };
+        let open = |secrets: &Secrets| {
+            engine(
+                &scratch.join("collection.json"),
+                &scratch,
+                Arc::new(AuditMemory::new()),
+                false,
+                secrets,
+            )
+            .unwrap_or_else(|e| panic!("an engine: {e:#}"))
+        };
+        let pairing_start = |host: &Host| {
+            let client = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap_or_else(|e| panic!("{e}"));
+            client.block_on(async {
+                let control = WsControl::connect(WsConfig::new(host.ws_url(), host.token()))
+                    .await
+                    .unwrap_or_else(|e| panic!("connect: {e}"));
+                control
+                    .hello(Hello {
+                        protocol: PROTOCOL_VERSION,
+                        client_name: "desktop-test".into(),
+                    })
+                    .await
+                    .unwrap_or_else(|e| panic!("hello: {e}"));
+                control
+                    .call(Call::Action {
+                        action: Action::PairingStart,
+                    })
+                    .await
+            })
+        };
+
+        let secrets = Secrets::new();
+        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, None, Some(&network))
+            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let (urls, fingerprint) = host.network().unwrap_or_else(|| panic!("listening"));
+        let (urls, fingerprint) = (urls.to_vec(), fingerprint.to_owned());
+        assert!(!urls.is_empty() && urls.iter().all(|url| url.starts_with("https://")));
+        let started = pairing_start(&host).unwrap_or_else(|e| panic!("pairing: {e}"));
+        let CallResult::Action {
+            result: Some(ActionResult::PairingStart { network, .. }),
+        } = started.result
+        else {
+            panic!("no code: {:?}", started.result);
+        };
+        let network = network.unwrap_or_else(|| panic!("no network in the answer"));
+        assert_eq!((network.urls, network.fingerprint), (urls, fingerprint));
+        host.stop();
+
+        let plain = Host::start(
+            open(&Secrets::new()),
+            ORIGIN,
+            &Secrets::new(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        assert!(plain.network().is_none());
+        assert!(
+            pairing_start(&plain).is_err(),
+            "pairs no device: unsupported"
         );
         plain.stop();
         let _ = std::fs::remove_dir_all(&scratch);

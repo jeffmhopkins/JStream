@@ -74,6 +74,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("source.sizes", Class(R)),
     ("item.list", Class(R)),
     ("state.get", Class(R)),
+    ("label.members", Class(R)),
     ("kind.list", Class(R)),
     ("kind.describe", Class(R)),
     ("output.list", Class(R)),
@@ -136,6 +137,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("item.set_motion", Class(E)),
+    ("item.set_timing", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),
@@ -157,8 +159,12 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("send.remove", Class(E)),
     ("canvas.set_size", Class(E)),
     ("canvas.set_frame_rate", Class(E)),
+    ("canvas.set_blending", Class(E)),
     ("hotkey.set", Class(E)),
     ("hotkey.clear", Class(E)),
+    ("hotkey.set_labels", Class(E)),
+    ("binding.set", Class(E)),
+    ("binding.clear", Class(E)),
     ("timeline.set", N),
     ("timeline.delete", N),
     ("output.create", N),
@@ -220,6 +226,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("preview.subscribe", N),
     // Not named in any class, so "never" until a PR places them.
     ("preview.unsubscribe", N),
+    // A session's own views (ADR-0132): a plugin shows no preview streams.
+    ("preview.report", N),
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),
@@ -243,6 +251,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.install", N),
     ("plugin.grant", N),
     ("plugin.enable", N),
+    // A person rescans the CLAP plugins and reads the scan, which names files on the
+    // machine (ADR-0035); a plugin never does.
+    ("plugin.clap_rescan", N),
+    ("plugin.clap_scan", N),
     // A person re-enables a quarantined effect (#349); a plugin never does.
     ("effect.enable", N),
     // A person downloads or deletes a codec after reading its licence (ADR-0061); a
@@ -291,17 +303,17 @@ pub enum PluginDenial {
 }
 
 /// The classes `call` needs: one per command it carries (each edit of a batch, or the
-/// one action, query or history op). A `hotkey.set` also needs the class of the action
-/// it binds, since that action runs when a person presses the chord: with `edit` alone a
-/// plugin can't bind `output.start`. Fails for a call no plugin may make.
+/// one action, query or history op). A `hotkey.set` or `binding.set` also needs the class
+/// of the action it binds, since that action runs when a person presses the chord or the
+/// pad: with `edit` alone a plugin can't bind `output.start`. Fails for a call no plugin may make.
 pub fn plugin_classes(call: &Call) -> Result<BTreeSet<PluginClass>, PluginDenial> {
     let mut names: Vec<(String, &'static str)> = Vec::new();
     match call {
         Call::Batch(batch) => {
             for edit in &batch.edits {
                 names.push((edit.name().to_owned(), edit.name()));
-                if let Edit::HotkeySet { action, .. } = edit {
-                    let bound = format!("hotkey.set binding {}", action.name());
+                if let Edit::HotkeySet { action, .. } | Edit::BindingSet { action, .. } = edit {
+                    let bound = format!("{} binding {}", edit.name(), action.name());
                     names.push((bound, action.name()));
                 }
             }
@@ -825,6 +837,25 @@ mod tests {
             })
         });
         assert_eq!(plugin_classes(&empty), Err(PluginDenial::NoCommand));
+    }
+
+    #[test]
+    fn a_controller_binding_needs_the_class_of_the_action_it_binds() {
+        let start = Call::Batch(Batch::single(Edit::BindingSet {
+            trigger: crate::Trigger::MidiNote {
+                note: 36,
+                channel: None,
+                input: None,
+            },
+            action: Action::OutputStart {
+                output_id: OutputId::new("main"),
+            },
+        }));
+        assert_eq!(
+            plugin_classes(&start),
+            Ok(BTreeSet::from([PluginClass::Edit, PluginClass::Outputs]))
+        );
+        assert!(grant(&[PluginClass::Edit]).check(&start).is_err());
     }
 
     #[test]

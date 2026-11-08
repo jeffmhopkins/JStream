@@ -6,7 +6,7 @@
 use jstream_protocol::{
     BusId, Chord, Edit, EncoderProfileId, EntityKind, FilterId, FilterOwner, FolderId, ItemId,
     LabelId, OutputId, OverrideField, SceneId, SourceId, SourceKind, TimelineId,
-    TransitionPresetId, VideoMixId,
+    TransitionPresetId, Trigger, VideoMixId,
 };
 use std::collections::BTreeSet;
 
@@ -29,6 +29,8 @@ enum Object {
     Send(SourceId, BusId),
     /// A hotkey binding, by its chord.
     Hotkey(Chord),
+    /// A controller binding, by its trigger (ADR-0122).
+    Binding(Trigger),
     Folder(FolderId),
     Label(LabelId),
     /// A timeline, whole: `timeline.set` writes all of it (ADR-0115).
@@ -53,6 +55,8 @@ enum Prop {
     /// An item's motion modifiers, the whole list, its own or a keyframe scene's
     /// override (ADR-0099).
     Motion,
+    /// A keyframe scene's timing for an item in transitions into it (ADR-0129).
+    Timing,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -121,6 +125,8 @@ pub struct Touched {
     canvas: bool,
     /// Whether the base frame rate was set (ADR-0119).
     frame_rate: bool,
+    /// Whether the blending space was set (ADR-0126).
+    blending: bool,
     /// Whether the default transition preset was set.
     default_preset: bool,
     /// Whether the folders' order was set.
@@ -171,6 +177,7 @@ impl Touched {
                     OverrideField::Opacity => Prop::Opacity,
                     OverrideField::Effects => Prop::Effects,
                     OverrideField::Motion => Prop::Motion,
+                    OverrideField::Timing => Prop::Timing,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
             }
@@ -187,6 +194,7 @@ impl Touched {
             Edit::SceneReorder { .. } => self.scene_order = true,
             Edit::CanvasSetSize { .. } => self.canvas = true,
             Edit::CanvasSetFrameRate { .. } => self.frame_rate = true,
+            Edit::CanvasSetBlending { .. } => self.blending = true,
             Edit::ItemAdd {
                 scene_id,
                 item_id,
@@ -211,6 +219,9 @@ impl Touched {
             }
             Edit::ItemSetMotion { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Motion);
+            }
+            Edit::ItemSetTiming { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Timing);
             }
             Edit::ItemSetOpacity { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Opacity);
@@ -520,27 +531,27 @@ impl Touched {
                 self.uses.insert(Object::Source(source_id.clone()));
                 self.uses.insert(Object::Bus(bus_id.clone()));
             }
-            // A binding uses what its action names, so deleting that object (which
-            // removes the binding) and binding to it conflict.
+            // A binding uses what its action names (see `uses_named`).
             Edit::HotkeySet { chord, action } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
-                for (entity, id) in action.named_objects() {
-                    let object = match entity {
-                        EntityKind::Scene => Object::Scene(SceneId::new(id)),
-                        EntityKind::Source => Object::Source(SourceId::new(id)),
-                        EntityKind::Output => Object::Output(OutputId::new(id)),
-                        EntityKind::Transition => Object::Transition(TransitionPresetId::new(id)),
-                        EntityKind::Timeline => Object::Timeline(TimelineId::new(id)),
-                        _ => {
-                            self.unknown = true;
-                            continue;
-                        }
-                    };
-                    self.uses.insert(object);
-                }
+                self.uses_named(action);
             }
             Edit::HotkeyClear { chord } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
+            }
+            // A binding's labels are its metadata (ADR-0133), and use each label.
+            Edit::HotkeySetLabels { chord, labels } => {
+                self.prop(Object::Hotkey(chord.clone()), Prop::Meta);
+                for label in labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
+            }
+            Edit::BindingSet { trigger, action } => {
+                self.exists.insert(Object::Binding(trigger.clone()));
+                self.uses_named(action);
+            }
+            Edit::BindingClear { trigger } => {
+                self.exists.insert(Object::Binding(trigger.clone()));
             }
             // A timeline is written whole, so any two writes of it conflict, and a write
             // conflicts with deleting its scene.
@@ -548,6 +559,9 @@ impl Touched {
                 self.exists
                     .insert(Object::Timeline(timeline.timeline_id.clone()));
                 self.uses.insert(Object::Scene(scene_id.clone()));
+                for label in &timeline.labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
             }
             Edit::TimelineDelete { timeline_id } => {
                 self.exists.insert(Object::Timeline(timeline_id.clone()));
@@ -564,10 +578,30 @@ impl Touched {
         self.scene_order |= other.scene_order;
         self.canvas |= other.canvas;
         self.frame_rate |= other.frame_rate;
+        self.blending |= other.blending;
         self.default_preset |= other.default_preset;
         self.folder_order |= other.folder_order;
         self.label_order |= other.label_order;
         self.unknown |= other.unknown;
+    }
+
+    /// A binding uses what its action names, so deleting that object (which removes the
+    /// binding) and binding to it conflict.
+    fn uses_named(&mut self, action: &jstream_protocol::Action) {
+        for (entity, id) in action.named_objects() {
+            let object = match entity {
+                EntityKind::Scene => Object::Scene(SceneId::new(id)),
+                EntityKind::Source => Object::Source(SourceId::new(id)),
+                EntityKind::Output => Object::Output(OutputId::new(id)),
+                EntityKind::Transition => Object::Transition(TransitionPresetId::new(id)),
+                EntityKind::Timeline => Object::Timeline(TimelineId::new(id)),
+                _ => {
+                    self.unknown = true;
+                    continue;
+                }
+            };
+            self.uses.insert(object);
+        }
     }
 
     fn prop(&mut self, object: Object, prop: Prop) {
@@ -592,6 +626,7 @@ impl Touched {
             || (self.scene_order && other.scene_order)
             || (self.canvas && other.canvas)
             || (self.frame_rate && other.frame_rate)
+            || (self.blending && other.blending)
             || (self.default_preset && other.default_preset)
             || (self.folder_order && other.folder_order)
             || (self.label_order && other.label_order)

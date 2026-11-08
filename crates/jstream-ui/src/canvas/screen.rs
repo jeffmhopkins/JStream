@@ -28,7 +28,11 @@ mod native {
         }
 
         /// Draws into `canvas`; natively there is nothing to draw on.
-        pub fn new<T>(_canvas: T, _on_first: impl Fn() + 'static) -> Option<Screen> {
+        pub fn new<T>(
+            _canvas: T,
+            _on_first: impl Fn() + 'static,
+            _tally: crate::views::ViewTally,
+        ) -> Option<Screen> {
             None
         }
 
@@ -50,6 +54,7 @@ mod native {
 #[cfg(target_arch = "wasm32")]
 mod web {
     use crate::canvas::preview::{H264Feed, JpegSlot, Step};
+    use crate::views::ViewTally;
     use jstream_control::protocol::{BinaryHeader, PreviewCodec};
     use leptos::web_sys::js_sys::{Array, Function, Object, Reflect, Uint8Array};
     use leptos::web_sys::wasm_bindgen::closure::Closure;
@@ -119,6 +124,8 @@ mod web {
         on_first: Box<dyn Fn()>,
         /// The screen is gone: pictures still arriving are closed, not drawn.
         closed: Cell<bool>,
+        /// The view's counts.
+        tally: ViewTally,
     }
 
     impl Painter {
@@ -132,9 +139,11 @@ mod web {
                     &[image.clone(), zero.clone(), zero],
                 )
                 .is_ok()
-                    && !self.drew.replace(true)
                 {
-                    (self.on_first)();
+                    self.tally.shown();
+                    if !self.drew.replace(true) {
+                        (self.on_first)();
+                    }
                 }
             }
             let _closed = call(&image, "close", &[]);
@@ -150,7 +159,14 @@ mod web {
 
     /// Decodes and draws one JPEG now, or keeps it as the newest waiting one.
     fn show_jpeg(jpegs: &Rc<Jpegs>, payload: &[u8]) -> Result<(), String> {
-        let now = jpegs.slot.borrow_mut().offer(payload.to_vec());
+        let (now, replaced) = {
+            let mut slot = jpegs.slot.borrow_mut();
+            let now = slot.offer(payload.to_vec());
+            (now, slot.take_replaced())
+        };
+        for _ in 0..replaced {
+            jpegs.painter.tally.skipped();
+        }
         match now {
             Some(picture) => decode_jpeg(jpegs, &picture),
             None => Ok(()),
@@ -181,11 +197,15 @@ mod web {
                 // A bitmap has `close`; a rejection's error doesn't.
                 if Reflect::has(&value, &JsValue::from_str("close")).unwrap_or(false) {
                     jpegs.painter.draw(value);
+                } else {
+                    jpegs.painter.tally.decode_error();
                 }
                 let next = jpegs.slot.borrow_mut().settled();
                 if let Some(picture) = next {
                     // A picture the browser refuses is skipped; the next one may decode.
-                    let _shown = decode_jpeg(&jpegs, &picture);
+                    if decode_jpeg(&jpegs, &picture).is_err() {
+                        jpegs.painter.tally.decode_error();
+                    }
                 }
             })
         };
@@ -216,10 +236,12 @@ mod web {
         }
 
         /// A screen on `canvas`, or `None` if it has no 2D context. `on_first` is
-        /// called when the first picture has been drawn.
+        /// called when the first picture has been drawn; `tally` counts what it does
+        /// with each frame.
         pub fn new(
             canvas: leptos::web_sys::HtmlCanvasElement,
             on_first: impl Fn() + 'static,
+            tally: ViewTally,
         ) -> Option<Screen> {
             let canvas = JsValue::from(canvas);
             let context = call(&canvas, "getContext", &[JsValue::from_str("2d")]).ok()?;
@@ -231,6 +253,7 @@ mod web {
                 drew: Cell::new(false),
                 on_first: Box::new(on_first),
                 closed: Cell::new(false),
+                tally: tally.clone(),
             });
             let failed = Rc::new(Cell::new(false));
             let on_frame = {
@@ -239,7 +262,10 @@ mod web {
             };
             let on_error = {
                 let failed = Rc::clone(&failed);
-                Closure::<dyn FnMut(JsValue)>::new(move |_| failed.set(true))
+                Closure::<dyn FnMut(JsValue)>::new(move |_| {
+                    tally.decode_error();
+                    failed.set(true);
+                })
             };
             let jpegs = Rc::new(Jpegs {
                 painter: Rc::clone(&painter),
@@ -267,6 +293,7 @@ mod web {
         /// # Errors
         /// What the browser refused, as text.
         pub fn show(&mut self, header: &BinaryHeader, payload: &[u8]) -> Result<(), String> {
+            self.painter.tally.received();
             let (width, height) = (u32::from(header.width), u32::from(header.height));
             if width == 0 || height == 0 {
                 return Ok(());
@@ -292,7 +319,10 @@ mod web {
                 None => 0,
             };
             let key = match self.feed.step(header.keyframe, payload, backlog) {
-                Step::Skip => return Ok(()),
+                Step::Skip => {
+                    self.painter.tally.skipped();
+                    return Ok(());
+                }
                 Step::Decode { key } => key,
                 Step::Configure(codec) => {
                     self.configure(&codec)?;
@@ -331,6 +361,7 @@ mod web {
                 ("optimizeForLatency", JsValue::TRUE),
             ])?;
             if let Err(error) = call(&decoder, "configure", &[config]) {
+                self.painter.tally.decode_error();
                 self.failed.set(true);
                 self.feed.reset();
                 return Err(error);

@@ -10,6 +10,7 @@ use jstream_protocol::{
 
 fn info(id: &str, duration_ms: u32) -> TimelineInfo {
     TimelineInfo {
+        labels: Vec::new(),
         timeline_id: TimelineId::new(id),
         name: String::new(),
         duration_ms,

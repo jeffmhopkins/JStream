@@ -208,6 +208,8 @@ impl GpuInterop for LinuxGpu {
         if render_node.is_some() {
             required_features |= wgpu::Features::TEXTURE_FORMAT_NV12;
         }
+        // So the compositor can time effect-pack passes on this device (#349).
+        required_features |= adapter.features() & wgpu::Features::TIMESTAMP_QUERY;
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream"),
             required_features,
