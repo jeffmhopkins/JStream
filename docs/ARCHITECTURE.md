@@ -1294,7 +1294,12 @@ treats a lost device as one event: it opens the compositor on a new device at on
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter
-first again. Encoders on the CPU path take the readback, so they don't reopen. A session
+first again. The platform's context is the engine's one context, lent to every
+compositor and to the browser engine
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
+opens a new one for the next holder that asks and hands it to the browser engine, while
+the stage that saw the loss stays on its own device until it stops. Encoders on the CPU
+path take the readback, so they don't reopen. A session
 that takes the context's encode targets (step 4) rules out leaving the context, so a lost
 context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass

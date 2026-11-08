@@ -37,7 +37,7 @@ pub use filter::{
     depth_descriptors as depth_filter_descriptors, descriptors as video_filter_descriptors,
     lut_image, outset as video_filter_outset, reads_depth as video_filter_reads_depth,
 };
-pub use gpu::{OpenOptions, adapter_available};
+pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
