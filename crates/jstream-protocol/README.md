@@ -312,10 +312,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.101 because `pairing.start`'s answer can carry `network`, the
+`PROTOCOL_VERSION` is 0.97 because `pairing.start`'s answer can carry `network`, the
 network listener's addresses and certificate fingerprint
-([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md), a placeholder
-number until the release queue sets it); 0.96 because of controller bindings: `binding.set`,
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md), a number the
+release queue set); 0.96 because of controller bindings: `binding.set`,
 `binding.clear`, `Trigger`, `Binding`, `state.get`'s `bindings`, `delete.plan`'s
 `bindings`, the batch result's `removed_bindings` and the `binding` entity kind
 ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md), a
@@ -1553,7 +1553,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
 
 **Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
-(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`). Since 0.101 a
+(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`). Since 0.97 a
 server that also listens on the local network adds `network`, `{"urls":[…],
 "fingerprint":"AB:CD:…"}`: the addresses a device opens and the SHA-256 fingerprint of
 the listener's certificate, which a client shows so the person continues past the

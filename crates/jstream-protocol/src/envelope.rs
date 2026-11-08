@@ -208,7 +208,7 @@ impl CallResult {
     }
 }
 
-/// How a device on the network reaches the host's network listener (ADR-0104, 0.101):
+/// How a device on the network reaches the host's network listener (ADR-0104, 0.97):
 /// what the host shows beside a pairing code.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct NetworkAccess {
@@ -246,7 +246,7 @@ pub enum ActionResult {
         expires_in_secs: u32,
         /// Where a device on the network reaches the host, while the host's network
         /// listener is on ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md),
-        /// 0.101). Absent otherwise: then only a device on this machine can pair.
+        /// 0.97). Absent otherwise: then only a device on this machine can pair.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         network: Option<NetworkAccess>,
     },

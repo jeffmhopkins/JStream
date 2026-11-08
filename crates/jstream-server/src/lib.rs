@@ -144,7 +144,7 @@ struct App {
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
     /// Where a device on the network reaches the network listener, while it is on:
-    /// `pairing.start` answers with it (0.101).
+    /// `pairing.start` answers with it (0.97).
     network_access: Option<jstream_protocol::NetworkAccess>,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
