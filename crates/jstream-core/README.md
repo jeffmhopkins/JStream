@@ -57,7 +57,9 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
-  and `start_stats_heartbeat` (`stats.tick`'s load, below); `set_thread_cpu`
+  and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
+  `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
+  live sources*); `set_thread_cpu`
   (`profile.get`'s threads, below); `set_thread_priority` (the OS scheduling class the
   program stage's render and mixer threads take as they start, on Windows their MMCSS
   tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
@@ -238,7 +240,7 @@ covers = ["crates/jstream-core/src/filters.rs", "crates/jstream-core/src/plugins
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -269,7 +271,34 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   audio filters and is listed for the audio routing, which sets its fader, mute and
   sends. While there is no audio-only source, the default microphone and desktop audio
   are recorded too, sent to master at unity (see *Audio sources* in
-  [Design](#design)).
+  [Design](#design)). A `network_audio` source records a JTunnel sender through the
+  JTunnel receiver, below, rather than the platform's audio I/O: its input opens once
+  the sender has been heard, at the stream's rate, and is unavailable while the
+  receiver is off, the sender isn't accepted or nothing has arrived from it.
+- **JTunnel receiver** (`jtunnel/`, [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md),
+  [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): off unless the host
+  calls `Engine::start_jtunnel` with a `JtunnelSetup`, the senders this machine accepts
+  (`AcceptedSender`: a tunnel name of at most 31 bytes and the LAN address and port it
+  sends from, at most `MAX_SENDERS`, 32). It binds one UDP socket and runs a
+  `jstream-jtunnel` thread that subscribes to each sender by name every half second and
+  says bye when it stops; it never announces itself or sends audio or MIDI. It drops and
+  counts every datagram from outside loopback, 10/8, 172.16/12, 192.168/16 and
+  169.254/16 (`is_lan`), from an address it didn't subscribe to (an IPv4 address mapped
+  into IPv6 counts as itself), or that isn't an audio packet `jstream-jtunnel` accepts.
+  Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
+  estimate) held for the source's `latency_ms`, and each one due is handed to the
+  source's mixer input as a device packet: the stream position as the device position,
+  the frame's media-clock time, a concealed frame flagged silent, a restart flagged as a
+  discontinuity. Opens and closes reach the thread over a bounded channel; a stream that
+  changes rate fails its input, which reopens at the new rate. 24-bit PCM and MIDI-only
+  streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
+  unsupported until a decoder is picked. `Engine::jtunnel_stats` reads its counters
+  (`JtunnelStats`). Tests run a fake sender on loopback: the subscribe and its
+  keepalive, the frames in order with their positions and times, the bye, an
+  unaccepted sender, a datagram that isn't JTunnel and a receiver's packet dropped and
+  counted, a rate change failing the input, Opus refused, and through the engine a
+  `network_audio` source recording once its sender is heard, unavailable for a sender
+  not accepted and with the receiver off.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
@@ -636,7 +665,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   with no paired input and one not connected unavailable with their reasons, the
   output staying active, and its input closed while its audio is off, closed when its
   last send is removed and opened again by a send, and closed when it is deleted
-  (`a_webcam_records_its_paired_audio_input`), a CLAP filter on the master chain run on its
+  (`a_webcam_records_its_paired_audio_input`), a `network_audio` source recording a
+  loopback JTunnel sender once its first frame arrives, one naming a sender not accepted
+  and one with the receiver off unavailable with their reasons, a CLAP filter on the master chain run on its
   own fake host by the program stage's thread, put on the host's block, and its host
   stopped when the filter is removed (`a_master_clap_filter_runs_on_a_host`), a media file's sound reaching
   its own input beside the defaults, silent while hidden, routed and metered, quieted
@@ -820,7 +851,8 @@ the capture counters a `stats.tick` reads), `jstream-audio` (the mixer and its d
 counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters),
 `jstream-mux` (FLV and fragmented MP4), `jstream-outputs` (the reconnecting RTMP
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
-descriptors and the sources that draw them), `jstream-plugin-proto` (the CLAP host
+descriptors and the sources that draw them), `jstream-jtunnel` (JTunnel's packets and
+the playout the JTunnel receiver drives, ADR-0122), `jstream-plugin-proto` (the CLAP host
 supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
 WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
 by default, ADR-0075), `serde` (the derives of the installed plugins' file,
@@ -3177,7 +3209,9 @@ drop ledger is its own mutex, and so is the audit sink's handle, which is only c
 under it (see *Audit log*). The audio sources' wanted set is a leaf mutex the control
 side takes under the collection lock; the program stage's `jstream-audio-sources`
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
-drop ledger's, never the collection lock (see *Audio sources*).
+drop ledger's, never the collection lock (see *Audio sources*). The JTunnel receiver's
+slot in it is a leaf mutex of its own, held only to set or clone the receiver; the
+receiver's thread takes no lock, getting opens and closes over a channel.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit

@@ -2877,6 +2877,7 @@ dependencies = [
  "jstream-effects",
  "jstream-encode",
  "jstream-graph",
+ "jstream-jtunnel",
  "jstream-mcp",
  "jstream-media",
  "jstream-mux",

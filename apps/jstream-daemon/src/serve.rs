@@ -123,6 +123,20 @@ pub fn engine(
         all(target_os = "linux", target_pointer_width = "64")
     )))]
     let engine = Arc::new(engine);
+    if !options.jtunnel.is_empty() {
+        // After the backends: arrivals are stamped on the media clock.
+        let setup =
+            jstream_core::JtunnelSetup::new(options.jtunnel.clone()).map_err(anyhow::Error::msg)?;
+        let local = engine
+            .start_jtunnel(&setup)
+            .context("could not start receiving from JTunnel senders")?;
+        let senders: Vec<String> = options
+            .jtunnel
+            .iter()
+            .map(|s| format!("{}@{}", s.name(), s.addr()))
+            .collect();
+        tracing::info!(%local, senders = ?senders, "receiving from JTunnel senders");
+    }
     if let Some(dir) = &options.plugin_dir {
         // Last, once the engine is built: a saved plugin keeps a handle to the engine as
         // it is now, so it sees the loaded collection and acts through the backends.

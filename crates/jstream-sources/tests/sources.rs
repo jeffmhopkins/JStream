@@ -95,6 +95,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "image",
             "media",
             "model",
+            "network_audio",
             "shape",
             "spectrum",
             "text",
