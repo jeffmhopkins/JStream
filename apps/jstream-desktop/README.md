@@ -39,6 +39,10 @@ feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
   the command that saves it.
+- **JTunnel** (`jtunnel.rs`): "Receive from JTunnel senders"
+  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
+  its accepted senders in the data folder's `jtunnel.json`, starting the engine's
+  JTunnel receiver from it, and `set_jtunnel`, the command that saves it.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows and on an X11 session): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -50,15 +54,16 @@ feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
   the virtual camera's status, the data folder (so a picked file under it can be
   stored relative to the collection), whether "Allow devices on my network" is on,
-  `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting.
+  `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
+  and the JTunnel setting as it was at start with `setJtunnel`, which saves it.
 - **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
   tested everywhere), shutdown, and the two commands the page may call: a native file,
-  save or folder dialog (`pick.rs`; on Linux the FileChooser portal's), and saving the
-  network setting (`network.rs`).
+  save or folder dialog (`pick.rs`; on Linux the FileChooser portal's), saving the
+  network setting (`network.rs`) and saving the JTunnel setting (`jtunnel.rs`).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -71,7 +76,8 @@ feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
   script's escaping, the command line, the virtual camera's status values, the
   capped log file (user-only, checked on Unix), the update check's request and the
   replies it gives a releases list, a rate limit and a malformed message, the network
-  setting (off until saved on, user-only, off when malformed), the network listener and
+  setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
+  until turned on, user-only, a refused sender never saved, off when malformed), the network listener and
   pairing it turns on, and the control token registered for redaction; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
@@ -197,6 +203,13 @@ folder, and its log `logs\cef.log`.
   time, and on a network marked Public it blocks other devices. Turning the setting off
   applies at the next start and keeps the paired devices, which work again if it is
   turned back on: revoke them on the same page to end their access for good.
+- **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
+  turned on) and its list of accepted senders, each a tunnel name and the address and
+  port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
+  in the data folder; they apply at the next start. On with at least one sender, the
+  app receives that sender's audio and MIDI as the daemon's `--jtunnel-accept` does
+  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)). The page shows
+  why a sender was refused, and the log names the senders at start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
   file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)) and start it.
@@ -278,6 +291,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   that isn't the listener's fails the retry too, with its own error. The page is told
   whether the listener opened (`networkOpen`), so Settings › Devices says when the
   setting is on but devices can't connect.
+- **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
+  "address": "192.168.1.5:9000"}]}` in the data folder's `jtunnel.json`, per machine
+  and never in the collection, so opening a collection never turns it on. It is written
+  user-only and replaced whole, and only once the engine would take it
+  (`AcceptedSender::new`, `JtunnelSetup::new`), so a refused sender is never saved; a
+  missing, unreadable or malformed file is off. As with network access, only the person
+  changes it: the page calls `setJtunnel`, which invokes the Tauri command
+  `set_jtunnel`, granted to the main window by the `jtunnel` capability and to nothing
+  else, never a protocol call an engine client could make. It is read once at start,
+  after the engine's backends, whose media clock stamps the arrivals: on with at least
+  one sender, the app calls `Engine::start_jtunnel`, and a refused setting or a socket
+  that can't be bound is logged and the app runs without the receiver. Off, or with no
+  sender, no JTunnel socket is open.
 - **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
@@ -337,7 +364,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `networkOpen`, whether its listener then opened, and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
-  saved, false when the command fails too (see *Network access*).
+  saved, false when the command fails too (see *Network access*). `jtunnel` is the
+  JTunnel setting as the app read it at start, and `setJtunnel(setting)` calls
+  `set_jtunnel` and resolves to null when it was saved, or why not (see *JTunnel*).
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no

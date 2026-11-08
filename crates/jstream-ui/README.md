@@ -91,7 +91,9 @@ Contents ([Design](#design) explains the choices):
   same-origin opener's for a projector window), if the page runs there,
   `desktop_vcam()`, what that global says about the virtual camera, `browse`,
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
-  and `allow_network`, which read and save the app's "Allow devices on my network". `same_engine` says
+  and `allow_network`, which read and save the app's "Allow devices on my network",
+  and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
+  JTunnel senders" as a `JtunnelSetting` (its JSON tested natively). `same_engine` says
   whether the open session is that app's own engine.
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
@@ -245,6 +247,9 @@ Contents ([Design](#design) explains the choices):
   revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
   network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
+  JTunnel senders" switch and accepted senders on the Devices page, and `with_sender`,
+  the add row's check, tested natively.
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on
@@ -1038,7 +1043,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   turn it on; a failed save puts the box back and says so, and while the box differs
   from the setting the app started with it says to restart JStream. When the setting
   was on but the listener didn't open (`networkOpen` false: its port taken), it says
-  devices can't connect. Its note says Windows may ask about its firewall. The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+  devices can't connect. Its note says Windows may ask about its firewall. Below it,
+  "Receive from JTunnel senders" ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  decisions 1 and 3), shown only when the global has `jtunnel` and `setJtunnel`: the
+  switch, the accepted senders (name and `address:port`, each with Remove) and an add
+  row. Each change saves the whole setting through `setJtunnel`, the app's own command,
+  never a protocol call; a refused change is undone and the app's reason shown (the
+  page itself only asks for a name, an address and a name no other sender has), and
+  while it differs from the setting the app started with it says to restart JStream.
+  The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
   no device can pair with this session. "Pair a device"

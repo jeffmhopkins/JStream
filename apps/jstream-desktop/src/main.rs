@@ -64,6 +64,7 @@ fn main() -> ExitCode {
         startup.script,
         startup.host,
         startup.network_file,
+        startup.jtunnel_file,
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
