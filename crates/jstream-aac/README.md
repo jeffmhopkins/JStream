@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-aac/src/**", "crates/jstream-aac/tests/**", "crates/jstream-aac/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-aac", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/RULES.md#R-RT-002", "docs/RULES.md#R-DEP-001"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-aac", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/RULES.md#R-RT-002", "docs/RULES.md#R-DEP-001"]
 -->
 
 JStream's own AAC-LC encoder, the one Linux streams with
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) › AAC on Linux).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md) › AAC on Linux).
 Windows and macOS keep their operating systems' encoders. Layer 0: safe Rust with no C,
 no `unsafe` and no I/O, and `thiserror` its only dependency. It encodes only: there is no
 decoder. `jstream-platform-linux` puts it behind the `AudioEncoder` trait.

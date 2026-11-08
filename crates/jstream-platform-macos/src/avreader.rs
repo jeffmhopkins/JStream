@@ -1,4 +1,4 @@
-//! Local media files through AVFoundation (ADR-0061, ADR-0063 §6): an `AVURLAsset` read by
+//! Local media files through AVFoundation (ADR-0140, ADR-0063 §6): an `AVURLAsset` read by
 //! an `AVAssetReader`, which demuxes and decodes with the OS decoders (VideoToolbox for
 //! video, Core Audio's converters for audio). This module asks it for the formats
 //! [`av_reader_settings`] and [`audio_layout`] choose and hands the samples on as CPU

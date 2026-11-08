@@ -52,9 +52,9 @@ jstream-plugin-wasm = { workspace = true, optional = true }
 jstream-jtunnel.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
-# The built-in source kinds and their descriptors (ADR-0061, ADR-0025).
+# The built-in source kinds and their descriptors (ADR-0140, ADR-0025).
 jstream-sources.workspace = true
-# PNG for `video.snapshot` (ADR-0061). Encoding only; deflate stays pure Rust.
+# PNG for `video.snapshot` (ADR-0140). Encoding only; deflate stays pure Rust.
 png.workspace = true
 # The installed WASM plugins' file (`plugins.json`, ADR-0076).
 serde.workspace = true

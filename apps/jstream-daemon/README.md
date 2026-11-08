@@ -127,7 +127,7 @@ reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV
 binary on its own Linux backends, with nothing faked, against the same receiver.
 
 The H.264 encoder is Cisco's OpenH264, Linux's software encoder
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), when
 `JSTREAM_E2E_OPENH264` asks for it. `cargo xtask e2e-stream --openh264-download`, which
 CI runs, sets it to `download`: the harness installs the pinned release from Cisco's
 server through `OpenH264Store::install`, as the app does, into one store the run's tests
@@ -348,7 +348,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
   both ways to get one, when the machine has no H.264 encoder: neither VA-API nor
   Cisco's OpenH264, which is downloaded on the user's request
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Elsewhere
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Elsewhere
   (32-bit Linux and other Unixes), `output.start` only steps the placeholder state
   machine and `output.set_key` fails: there is no key store.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
@@ -497,7 +497,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 
   H.264 comes from VA-API, else from Cisco's OpenH264 in the data directory's
   `codecs/openh264` once the user has downloaded it
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Until one of
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Until one of
   them is there, `output.start` fails with the platform's reason, which names both. AAC
   is JStream's own encoder. Creating the backends lists the audio devices and probes
   the VA-API render nodes, and opens nothing else: the portal is asked when a pipeline

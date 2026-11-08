@@ -18,7 +18,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
 features, which are for people, through the UI (ADR-0058 §3), installing and
-granting plugins (ADR-0069 G1), and downloading codecs (ADR-0061). It is written against
+granting plugins (ADR-0069 G1), and downloading codecs (ADR-0140). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -32,7 +32,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
   an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
+  less the people-only `youtube.*`, `plugin.*`, `effect.*`, `codec.*` and `agent.*` ops
   (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
   (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
@@ -78,7 +78,12 @@ pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
 `gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). So are the
+`agent.*` ops and events (`agent.approve`, `agent.forget`, `agent.approved`): the person,
+not another agent, lets a new agent in
+([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). While the person
+is being asked, a tool call's `hello` times out as any slow one does, and its error says
+the person may be being asked; the next call waits on the same request.
 The `pack` tool, by contrast, reaches agents (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
 [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
 WGSL of an effect pack, which loads at once, and `pack.list` names the client that

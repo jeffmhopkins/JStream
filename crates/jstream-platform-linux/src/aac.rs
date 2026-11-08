@@ -1,5 +1,5 @@
 //! AAC on Linux: JStream's own AAC-LC encoder (`jstream-aac`) behind the
-//! `AudioEncoder` trait (docs/adr/0061-source-types-and-decoding-scope-v2.md, within
+//! `AudioEncoder` trait (docs/adr/0140-source-types-and-decoding-scope-v3.md, within
 //! docs/adr/0062-aac-lc-encoder-patent-check.md's limits).
 //!
 //! It is built only with the `aac-encoder` feature, on by default. ADR-0062's re-check

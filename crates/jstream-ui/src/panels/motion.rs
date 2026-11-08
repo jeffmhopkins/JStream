@@ -34,6 +34,8 @@ pub fn property_name(property: MotionProperty) -> &'static str {
         MotionProperty::CropTop => "Crop top",
         MotionProperty::CropRight => "Crop right",
         MotionProperty::CropBottom => "Crop bottom",
+        // An effect's setting (ADR-0138): shown, but not offered here yet.
+        MotionProperty::Effect => "Effect setting",
         // One from a newer engine: shown, but not offered.
         _ => "Other",
     }
@@ -169,6 +171,7 @@ pub fn with_added(list: &[MotionModifier]) -> Option<Vec<MotionModifier>> {
     next.push(MotionModifier {
         modifier_id: id,
         property: MotionProperty::X,
+        effect: None,
         kind: default_kind("Wiggle", MotionProperty::X)?,
         clock: MotionClock::Engine,
         enabled: true,
@@ -583,6 +586,8 @@ pub fn MotionSection(
                                         return false;
                                     };
                                     m.property = p;
+                                    // A placement property names no effect setting.
+                                    m.effect = None;
                                     true
                                 });
                             }
@@ -591,6 +596,13 @@ pub fn MotionSection(
                                 .into_iter()
                                 .map(|p| view! { <option value=property_name(p)>{property_name(p)}</option> })
                                 .collect_view()}
+                            // An effect setting it drives (ADR-0138) shows as itself.
+                            {move || {
+                                at().filter(|m| m.property == MotionProperty::Effect).map(|_| {
+                                    let name = property_name(MotionProperty::Effect);
+                                    view! { <option value=name disabled=true>{name}</option> }
+                                })
+                            }}
                         </select>
                     </label>
                     <label class="select-field">

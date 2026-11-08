@@ -5156,6 +5156,8 @@ impl State {
             }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
@@ -5243,7 +5245,7 @@ impl State {
                         })
                         .collect(),
                 },
-                Query::DeviceList | Query::UiSettingsGet { .. } => {
+                Query::DeviceList | Query::AgentApproved | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
                 // Built without the `wasm-plugins` feature, no plugin is ever installed.

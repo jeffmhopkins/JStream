@@ -1,5 +1,5 @@
 // The offer to download Cisco's OpenH264 in the Outputs panel's Encoders & mixes dialog and in
-// the encoder form (LNX2, ADR-0061), and the installed codec in the About dialog (#1119):
+// the encoder form (LNX2, ADR-0140), and the installed codec in the About dialog (#1119):
 // it names Cisco, shows Cisco's notice with a link to its licence, and sends
 // `codec.download` only when the person presses Download. The mock engine has no codec
 // backend, so the page's WebSocket is routed: `codec.downloads`,

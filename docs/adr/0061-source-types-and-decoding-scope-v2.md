@@ -2,14 +2,15 @@
 id = "ADR-0061"
 title = "Source types and decoding scope v2: Linux's software H.264 and AAC"
 kind = "adr"
-status = "accepted"
+status = "superseded"
+superseded_by = "docs/adr/0140-source-types-and-decoding-scope-v3.md"
 tier = "maintainer"
 -->
 
 # ADR-0061: Source types and decoding scope v2: Linux's software H.264 and AAC
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0140: Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264](0140-source-types-and-decoding-scope-v3.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0031](0031-source-types-and-decoding-scope.md).
