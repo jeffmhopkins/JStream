@@ -285,7 +285,8 @@ fn global_hotkeys(
 #[cfg(any(windows, target_os = "linux"))]
 type OnPress = Box<dyn Fn(&str) + Send>;
 
-/// Windows' listener: `RegisterHotKey` on its own thread.
+/// Windows' listener: `RegisterHotKey` on its own thread, and a low-level mouse hook there
+/// while a wheel chord is set.
 #[cfg(windows)]
 fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
     use jstream_platform_windows::GlobalHotkeys;
@@ -294,6 +295,9 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
     impl crate::hotkeys::Registrar for Windows {
         fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
             self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
         }
     }
 

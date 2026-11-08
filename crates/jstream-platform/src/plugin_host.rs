@@ -36,6 +36,13 @@ pub trait PluginHosts: Send + Sync {
     /// The CLAP search directories on this platform that exist, in CLAP's order.
     fn search_paths(&self) -> Vec<PathBuf>;
 
+    /// Every CLAP search directory on this platform, in CLAP's order, whether it exists
+    /// or not, so a person can be told where to install a plugin. The ones that exist
+    /// are [`PluginHosts::search_paths`], which is what this returns by default.
+    fn folders(&self) -> Vec<PathBuf> {
+        self.search_paths()
+    }
+
     /// The hostable audio effects in `file`, found by a short-lived host process, so a
     /// plugin that crashes while being scanned costs only that process.
     ///

@@ -62,7 +62,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   program stage's render and mixer threads take as they start, on Windows their MMCSS
   tasks, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8); `open_plugin_dir`
   (where installed WASM plugins are saved, ADR-0076), called once the engine is built;
-  `scan_clap_plugins` adds the CLAP filter kinds; `watch_effect_packs` loads and
+  `scan_clap_plugins` adds the CLAP filter kinds, and `set_clap_unavailable` says why
+  there are none; `watch_effect_packs` loads and
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
@@ -164,6 +165,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): the scan that adds
   `clap/<plugin id>` filter kinds (`Engine::scan_clap_plugins`), `HostSupervisor`, which
   keeps each filter's host process running, and `ClapFilter`, the filter on its host.
+  The engine keeps the hosts and the last scan (`plugins/scan.rs`, `ClapScans`) for
+  `plugin.clap_scan` and `plugin.clap_rescan` (protocol 0.106), which scans again on a
+  `jstream-clap-scan` thread, one scan at a time. A scan that finds a new effect, or one
+  described differently, sends every client `kinds.changed` (`clap_scan`, 0.107).
 - **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
   by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
@@ -721,7 +726,8 @@ WebSocket API does, minus serialization:
   come back in the `Response` and in the `state.changed` event a batch causes.
 - Calls run to completion inside `call`, so their futures are already complete,
   except `video.snapshot`'s: it completes, and wakes its waker, when the snapshot
-  thread has drawn the frame (see *Snapshots*). Any executor drives the session, or
+  thread has drawn the frame (see *Snapshots*). Frame sheets and `plugin.clap_rescan`
+  complete the same way, from their own threads. Any executor drives the session, or
   a poll loop that parks until woken, and it needs no async runtime. It never fails
   with `Disconnected`. `output.start` and `output.stop` still block inside `call`
   while devices open and threads join.
@@ -808,7 +814,9 @@ happened. Placeholder output actions do too: they only step the state machine.
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
 (see *Frame sheets*), and a scene sheet follows its audio modifiers under that lock
-before the picture is handed off.
+before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.106) run
+outside it: a rescan runs plugin host processes for seconds and takes the collection
+lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -1442,7 +1450,9 @@ for the ones gone, `with_kinds` for the added and changed ones), hands the effec
 the live sources' `FilterAssets`, which every plan reads, and re-plans. Every pack
 update, a poll's, a blame's or an `effect.enable`'s, is installed with the packs' lock
 still held (then the collection's; nothing takes them the other way round), so an
-older update can't land after a newer one and undo it. A chain's filter
+older update can't land after a newer one and undo it. An update that adds, changes or
+removes a kind, or changes the quarantine, sends every client `kinds.changed`
+(`effect_packs`, 0.107). A chain's filter
 of a pack kind carries its `PackEffect`, so each compositor draws it through
 `Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
 running filter is made again with the new WGSL and uniform layout; an effect that didn't
@@ -3181,8 +3191,11 @@ side takes under the collection lock; the program stage's `jstream-audio-sources
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
 drop ledger's, never the collection lock (see *Audio sources*). The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
-collection lock; that thread takes no engine lock while it sets them on the device. The PTZ heads work
-the same way (ADR-0138): actions and shots go to each `jstream-ptz` thread over a channel,
+collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
+(`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
+its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
+collection lock under its scan lock only to add the kinds it found. The PTZ heads work
+the same way as the camera controls (ADR-0138): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply.
@@ -3272,7 +3285,9 @@ everything else (the new `rev`, or the error code). A refused `hello`, with the 
 name and protocol version, and a call before `hello` are `debug`. Only names, IDs,
 revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
-log nothing: `timeline.cue_fired` reports each, with its error.
+log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
+or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
+the host's error) and an `info` with how many effects it found.
 
 <a id="audit-log"></a>
 ## Audit log

@@ -258,6 +258,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("plugin.install", N),
     ("plugin.grant", N),
     ("plugin.enable", N),
+    // A person rescans the CLAP plugins and reads the scan, which names files on the
+    // machine (ADR-0035); a plugin never does.
+    ("plugin.clap_rescan", N),
+    ("plugin.clap_scan", N),
     // A person re-enables a quarantined effect (#349); a plugin never does.
     ("effect.enable", N),
     // A person downloads or deletes a codec after reading its licence (ADR-0061); a
