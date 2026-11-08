@@ -428,8 +428,11 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   with its last reader, a reader that joins counting frames from then on, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
   to the CPU path in place when a CPU reader joins, its counters carried on, and
-  `DeviceLost` for every reader when it doesn't open again there, and one open on the
-  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
+  `DeviceLost` for every reader when it doesn't open again there, one open on the
+  CPU path refused by the GPU view, a device switched in place to the format a later
+  open asks for every reader, on the CPU path when it is there even when the GPU view
+  asks, and kept in its format when it doesn't list the new one, MJPEG included
+  (#1265) (`runtime/devices.rs`), the format a webcam opens in, with and
   without an MJPEG decoder, and with the resolution, frame rate and pixel format its
   settings ask for, falling back to the engine's choice when the device offers none
   that matches, its frames, decoded or not, read as RGBA, a webcam
@@ -2176,7 +2179,13 @@ captures the same display again. The sizes these captures see go nowhere; `sourc
 reports the program stage's. A webcam or capture card opens once, so the two share it:
 the engine wraps the backends' `VideoDevices` in `SharedVideoDevices`
 (`runtime/devices.rs`), whose open of a device already open returns another reader of
-the same stream, in the format it was opened in. Each reader takes every frame that
+the same stream. An open asking another format the device lists switches it in place,
+for every reader (#1265): the stream closes and opens again in the new format, on the
+CPU path when the device is there (even when the GPU view asks), its counters carried
+on; when the new format doesn't open, it opens again in the old one on the CPU path
+(not for MJPEG, which needs a decoder that open lacks), and when that fails too every
+reader reports it lost. A format the device doesn't list never closes it; the open
+shares it in the format it has. Each reader takes every frame that
 arrives after it joined, once; the newest frame waits in the device's slot until every
 reader has taken it or a newer one replaces it, and the last reader moves it out while
 the others copy it, outside the lock. A read takes the device's lock with `try_lock`
@@ -3467,7 +3476,9 @@ capture starts. A webcam or capture card is opened on the backends' `VideoDevice
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
 in Design), in the format `device_format` picks from those it lists: on the backend's
 GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
-format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). A
+capture asking a format other than the one its device is open in switches the shared
+device to it for every reader (#1265; see *Preview streams*). The
 candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device
