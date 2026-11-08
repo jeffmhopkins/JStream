@@ -2596,7 +2596,7 @@ impl EffectsSpace {
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). The project's [`Blending`]
 /// picks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`
-/// (0.75 to 0.97, ADR-0105) still parse, as `normal` and `additive`; the engine never
+/// (0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never
 /// sends them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]

@@ -1460,7 +1460,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "BlendMode": {
-      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.97, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
       "oneOf": [
         {
           "const": "normal",

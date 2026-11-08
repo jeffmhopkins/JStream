@@ -962,7 +962,7 @@ mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compo
 draws all nine, in linear light except overlay, difference and exclusion, which blend
 sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). From 0.101
 the collection's blending space picks where every mode mixes: `srgb`, the default, as a
-browser composites, or `linear`, ADR-0082's ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). 0.75 to 0.97 had
+browser composites, or `linear`, ADR-0082's ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). 0.75 to 0.100 had
 `normal_srgb` and `additive_srgb` (ADR-0105);
 they still parse, as `normal` and `additive`, and are never sent.
 `ItemInfo` reports both.
