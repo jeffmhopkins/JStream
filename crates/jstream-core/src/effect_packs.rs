@@ -117,6 +117,9 @@ pub(crate) struct Update {
     pub(crate) removed: Vec<String>,
     /// Kinds added or changed, with their new descriptors.
     pub(crate) described: Vec<KindDescriptor>,
+    /// The effects of the `described` filter kinds, whose renames move a filter's
+    /// stored settings to the new version (#1353, ADR-0025 › Versioning a kind).
+    pub(crate) migrations: BTreeMap<String, Effect>,
     /// Every loaded effect that draws from now on: the quarantined ones left out.
     pub(crate) effects: PackEffects,
     /// Every loaded shader source that draws from now on, as `effects` holds effects.
@@ -345,7 +348,14 @@ impl Packs {
         for change in &changes.kinds {
             tracing::info!(?change, "effect pack kind");
         }
-        Some(self.update(removed, described))
+        let migrations = changed
+            .iter()
+            .filter_map(|id| self.watcher.effect(id))
+            .map(|effect| (effect.kind_id().to_owned(), effect.clone()))
+            .collect();
+        let mut update = self.update(removed, described);
+        update.migrations = migrations;
+        Some(update)
     }
 
     /// Blames a GPU device loss on the pack kinds in `drawn`, the ones drawn in the
@@ -580,6 +590,7 @@ impl Packs {
         Update {
             removed,
             described,
+            migrations: BTreeMap::new(),
             effects: Arc::new(effects),
             sources: Arc::new(sources),
             quarantined,
