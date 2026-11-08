@@ -5,8 +5,9 @@
 //! **Scenes.** A stream of a scene draws that scene's own render snapshot, which the
 //! engine plans beside the program mix's for every scene a live stream shows
 //! ([`PreviewHub::scenes`]), after the program's plan has ended so it never makes a
-//! source shown or heard. The program stage neither draws nor captures anything for
-//! it; the hub captures its displays, windows and webcams (**Captures**). Until the
+//! source shown or heard. Once the engine has backends the program stage draws it as a
+//! monitored scene (**The program stage**); otherwise the hub draws it and captures its
+//! displays, windows and webcams (**Captures**). Until the
 //! engine has planned it the stream waits; once the scene is deleted the engine ends it
 //! ([`PreviewHub::end_scene`]).
 //!
@@ -16,11 +17,15 @@
 //! request, picks the codec and registers the stream with the engine's [`PreviewHub`];
 //! `preview.unsubscribe` and the session's end drop it.
 //!
-//! **The program stage.** An H.264 stream of the program is drawn by the program stage
-//! (ADR-0117 §6): the hub holds the stage while such a stream is open, opening it when
-//! no output has, and hands the stream's encoder session to it ([`Staged`]); the
-//! stage's render thread draws the program at the stream's size and feeds the session,
-//! and a sender thread forwards its packets. Every other stream is the hub's own.
+//! **The program stage.** A stream of the program or of a scene is drawn by the program
+//! stage (ADR-0117 §6): the hub holds the stage while such a stream is open, opening it
+//! when no output has, and hands it the stream's H.264 encoder session, or for JPEG and
+//! PNG a picture queue ([`Staged`]); the stage's render thread draws the program, or the
+//! scene as a monitored scene, at the stream's size and feeds it, and a sender thread
+//! per stream forwards the packets, or encodes and sends the pictures that differ from
+//! the last one sent (or after [`KEYFRAME_EVERY`], or when a keyframe is asked for).
+//! Source and draft streams, and every stream of an engine without backends, are the
+//! hub's own.
 //!
 //! **The hub.** One `jstream-preview` thread per engine, started by the first
 //! subscription and ended when none is left, serves every stream. For the streams it
@@ -96,8 +101,8 @@ use crate::chain::Chains;
 use crate::lock;
 use crate::profile::DrawMeter;
 use crate::runtime::{
-    CaptureBackends, Program, RenderCaptures, RenderSnapshot, SharedGpu, output_size,
-    spawn_captures,
+    CaptureBackends, PictureOutput, Program, RenderCaptures, RenderSnapshot, SharedGpu,
+    output_size, picture_queue, spawn_captures,
 };
 use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
@@ -654,15 +659,17 @@ pub(crate) type StageOpener = Arc<dyn Fn() -> Result<Option<Arc<Program>>, Strin
 const STAGE_RETRY: Duration = Duration::from_millis(200);
 const STAGE_RETRY_FAILED: Duration = Duration::from_secs(5);
 
-/// A program stream fed by the program stage (ADR-0117 §6): the stage's render thread
-/// draws the program at the stream's size on the engine's one compositor and pushes it
-/// into this session; a `jstream-preview-send` thread sends its packets as they come.
-/// The hub only opens it, asks for keyframes and closes it.
+/// A program or scene stream fed by the program stage (ADR-0117 §6): the stage's render
+/// thread draws it at the stream's size on the engine's one compositor and pushes it
+/// into this H.264 session, or into a JPEG or PNG stream's picture queue; a
+/// `jstream-preview-send` thread sends its packets, or encodes and sends its pictures,
+/// as they come. The hub only opens it, asks for keyframes and closes it.
 struct Staged {
     session: Option<VideoSession>,
     sender: Option<JoinHandle<()>>,
     /// Set before the session is closed, so the sender knows its end was asked for.
     closing: Arc<AtomicBool>,
+    codec: PreviewCodec,
     size: FrameSize,
     stage: Weak<Program>,
 }
@@ -696,14 +703,48 @@ impl Staged {
             session: Some(session),
             sender: Some(sender),
             closing,
+            codec: PreviewCodec::H264,
             size,
             stage: Arc::downgrade(stage),
         })
     }
 
-    /// Whether it is open at `size` on `stage`.
-    fn is(&self, size: FrameSize, stage: &Arc<Program>) -> bool {
-        self.size == size
+    /// Hands `stage` a picture queue for `stream` at `size`, and starts the thread that
+    /// encodes each picture in `codec` (JPEG or PNG) and sends it.
+    fn open_pictures(
+        stream: &Arc<PreviewStream>,
+        codec: PreviewCodec,
+        size: FrameSize,
+        stage: &Arc<Program>,
+        rev: &Arc<AtomicU64>,
+    ) -> Result<Self, String> {
+        let (input, pictures) = picture_queue();
+        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
+        stage.attach_pictures(size, divisor, stream.scene.clone(), input);
+        let closing = Arc::new(AtomicBool::new(false));
+        let sender = {
+            let stream = Arc::clone(stream);
+            let closing = Arc::clone(&closing);
+            let rev = Arc::clone(rev);
+            thread::Builder::new()
+                .name("jstream-preview-send".into())
+                .spawn(move || send_pictures(&stream, codec, &pictures, &rev, &closing))
+                .map_err(|err| format!("starting the preview sender: {err}"))?
+        };
+        Ok(Self {
+            session: None,
+            sender: Some(sender),
+            closing,
+            codec,
+            size,
+            stage: Arc::downgrade(stage),
+        })
+    }
+
+    /// Whether it is open in `codec` at `size` on `stage`.
+    fn is(&self, codec: PreviewCodec, size: FrameSize, stage: &Arc<Program>) -> bool {
+        self.codec == codec
+            && self.size == size
             && self
                 .stage
                 .upgrade()
@@ -766,15 +807,82 @@ fn send_packets(
     }
 }
 
-/// Whether `stream` is one the program stage draws for, given its `work` so far: an
-/// H.264 stream of the program or of a scene (ADR-0117 §6).
+/// The thread of a [`Staged`] JPEG or PNG stream: encodes and sends each picture the
+/// stage pushes, its time counted from the first, as the hub would draw it: when it
+/// differs from the last one sent, a keyframe was asked for, or [`KEYFRAME_EVERY`]
+/// passed, and only while the stream's queue has room. Ends when the stream closes it
+/// or the stage lets go of the queue (the hub then opens it on the next stage).
+fn send_pictures(
+    stream: &PreviewStream,
+    codec: PreviewCodec,
+    pictures: &PictureOutput,
+    rev: &AtomicU64,
+    closing: &AtomicBool,
+) {
+    let mut base = None;
+    let mut last: Vec<u8> = Vec::new();
+    let mut sent: Option<Instant> = None;
+    let mut encoded = Vec::new();
+    while !closing.load(Ordering::Acquire) {
+        let shot = match pictures.recv(PACKET_WAIT * 5) {
+            Ok(shot) => shot,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
+        };
+        let stale = sent.is_none_or(|at| at.elapsed() >= KEYFRAME_EVERY);
+        let asked = stream.keyframe.load(Ordering::Acquire);
+        if (shot.rgba == last && !stale && !asked) || !lock(&stream.sink).has_room() {
+            continue;
+        }
+        let pts = shot
+            .pts
+            .rescale(Timebase::MICROS, Rounding::Nearest)
+            .map_or(0, MediaTime::ticks);
+        let base = *base.get_or_insert(pts);
+        let (width, height) = (shot.size.width(), shot.size.height());
+        let payload = match codec {
+            PreviewCodec::Png => snapshot::encode_png(width, height, &shot.rgba),
+            _ if jpeg::encode(width, height, &shot.rgba, JPEG_QUALITY, &mut encoded) => {
+                Ok(std::mem::take(&mut encoded))
+            }
+            _ => Err("encoding the JPEG failed".to_owned()),
+        };
+        let rev = Rev(rev.load(Ordering::Acquire));
+        match payload {
+            Ok(payload) => {
+                stream.keyframe.store(false, Ordering::Release);
+                stream.send(picture(
+                    stream,
+                    codec,
+                    true,
+                    shot.size,
+                    pts.saturating_sub(base),
+                    rev,
+                    &payload,
+                ));
+                encoded = payload;
+                sent = Some(Instant::now());
+                last = shot.rgba;
+            }
+            Err(reason) => {
+                stream.end(rev, &reason);
+                return;
+            }
+        }
+    }
+}
+
+/// Whether `stream` is one the program stage draws for, given its `work` so far: a
+/// stream of the program or of a scene, in H.264 when the engine has an encoder, or in
+/// JPEG or PNG (ADR-0117 §6).
 fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bool {
     can_stage
         && stream.source_id.is_none()
         && stream.draft.is_none()
-        && stream.codec == PreviewCodec::H264
-        && stream.codecs.is_some()
-        && work.is_none_or(|work| work.codec == PreviewCodec::H264)
+        && match work.map_or(stream.codec, |work| work.codec) {
+            PreviewCodec::H264 => stream.codecs.is_some(),
+            _ => true,
+        }
 }
 
 /// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas` (the
@@ -791,18 +899,23 @@ fn serve_staged(
     if !work
         .staged
         .as_ref()
-        .is_some_and(|staged| staged.is(size, stage))
+        .is_some_and(|staged| staged.is(work.codec, size, stage))
     {
         // The old session (or the hub's own) closes first.
         work.staged = None;
         work.h264 = None;
-        let codecs = stream
-            .codecs
-            .as_ref()
-            .ok_or("this engine has no H.264 encoder")?;
-        work.staged = Some(Staged::open(stream, codecs.as_ref(), size, stage, rev)?);
-        // A new session starts on a keyframe.
-        stream.keyframe.store(false, Ordering::Release);
+        work.staged = Some(if work.codec == PreviewCodec::H264 {
+            let codecs = stream
+                .codecs
+                .as_ref()
+                .ok_or("this engine has no H.264 encoder")?;
+            let staged = Staged::open(stream, codecs.as_ref(), size, stage, rev)?;
+            // A new session starts on a keyframe.
+            stream.keyframe.store(false, Ordering::Release);
+            staged
+        } else {
+            Staged::open_pictures(stream, work.codec, size, stage, rev)?
+        });
     }
     if stream.keyframe.swap(false, Ordering::AcqRel)
         && let Some(session) = work
@@ -1079,6 +1192,8 @@ fn run(
             {
                 let canvas = match &stream.scene {
                     None => Some(program_canvas),
+                    // A planned scene with no canvas (the collection has none) draws at
+                    // 16 × 16, as the hub's own drawing of it does (`serve`).
                     Some(scene_id) => scenes.get(scene_id).map(|scene| {
                         scene
                             .shot()

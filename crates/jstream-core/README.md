@@ -301,7 +301,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   encoder of its own), or in PNG for a client that asks for it to take a screenshot
   (`video.snapshot`'s encoder, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
   compositor and its own captures of what the mix shows (an H.264 stream of the program
-  or of a scene is drawn by the program stage instead), a webcam's one open shared
+  or of a scene, in any codec, is drawn by the program stage instead), a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
@@ -556,9 +556,10 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   from the preview's capture and closed with the stream, the collection untouched, a
   draft of the program's webcam sharing its one open beside a draft display, and a
   kind that captures nothing, an unknown kind, a refused setting and a scene with a
-  source refused; an H.264 stream of the program and one of a scene off program drawn
-  by the program stage, which opens for each with no output and stops once it closes,
-  with the preview thread's own drawing failing), the
+  source refused; an H.264 stream of the program and one of a scene off program, and a
+  JPEG scene stream beside a PNG program stream, drawn by the program stage, which
+  opens for them with no output and stops once they close, with the preview thread's
+  own drawing failing), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -2196,8 +2197,8 @@ frame finds the queue full, the stream's frames are dropped up to the next keyfr
 which the hub then forces (`KeyframeGate`).
 
 **Program and scene streams on the program stage**
-([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §6). An H.264 stream of
-the program or of a scene isn't drawn by the hub: once the engine has backends, the hub takes the
+([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §6). A stream of the
+program or of a scene, in H.264, JPEG or PNG, isn't drawn by the hub: once the engine has backends, the hub takes the
 program stage (`Engine::preview_stage`: the running one, or one it opens with no output,
 under the start lock but never waiting for a start, asking again 200 ms later while an
 output is starting and 5 s later after a stage that failed to open) and holds it while
@@ -2225,10 +2226,18 @@ that size, and with the scene's captures as well as the program's. Monitored sce
 draw after every mix, so the program never waits for one: one not begun within the
 tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
 counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
-deleted ends its stream as before. JPEG and PNG streams, source and draft streams, an
-engine without backends, and a stage that can't be had yet still draw on the hub's
-compositor as described above, and the hub captures a scene's displays only while it
-draws a stream of that scene itself.
+deleted ends its stream as before.
+
+A JPEG or PNG stream gets a picture queue instead of an encoder session
+(`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
+back into it, at most two waiting (one beyond is dropped without a copy), and its
+`jstream-preview-send` thread encodes and sends a picture when it differs from the last
+one sent, a keyframe was asked for, or 2 s passed, and only while the stream's queue
+has room, timed from the stream's first picture. Once that thread ends (the stream
+closed), the render thread lets go of the queue. Source and draft streams, an engine
+without backends, and a stage that can't be had yet still draw on the hub's compositor
+as described above, and the hub captures a scene's displays only while it draws a stream
+of that scene itself.
 
 The hub captures the displays, windows, webcams and capture cards the program mix and
 each streamed scene show itself, so they show with no output running: once the engine has backends, it
@@ -3399,7 +3408,8 @@ the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
 It pushes that target, stamped with the tick's time, to every such session. Sessions
-on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
+on the CPU path get the mix read back as RGBA8, as do JPEG and PNG preview streams'
+picture queues (*Preview streams*), and virtual cameras the program; a
 mix none of them is fed is not read back, and each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw

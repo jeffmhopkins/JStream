@@ -30,7 +30,7 @@ use jstream_render::Reclaimed;
 
 use crate::audio::{MonitorRoute, ScopeTap};
 use crate::profile::DrawerTotals;
-use crate::runtime::pipeline::VideoTap;
+use crate::runtime::pipeline::{PictureInput, VideoTap};
 use crate::runtime::vcam::VcamTap;
 use crate::snapshot::{CaptureKey, LiveParams, Shot};
 
@@ -327,6 +327,9 @@ pub(crate) enum Garbage {
     /// the session itself has dropped, it holds the last reference to the session's
     /// shared state and input channel.
     Video(VideoInput),
+    /// The same for a JPEG or PNG preview stream's picture queue, once its thread has
+    /// let go of the other end.
+    Pictures(PictureInput),
     /// The same for the audio input the mixer thread let go of.
     Audio(AudioInput),
     /// A frame buffer of a video mix the render thread stopped drawing.
@@ -396,6 +399,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Wanted(wanted, scenes) => drop((wanted, scenes)),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
+            Garbage::Pictures(pictures) => drop(pictures),
             Garbage::Audio(input) => drop(input),
             Garbage::Pixels(pixels) => drop(pixels),
             Garbage::Inputs(inputs) => drop(inputs),

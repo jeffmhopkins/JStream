@@ -944,7 +944,7 @@ impl Program {
         // The thread holds the receiver until the program stops; a send fails only
         // after that, when nothing is fed anyway.
         let tap = VideoTap {
-            input: encoders.video.input(),
+            input: encoders.video.input().into(),
             gpu: *encoders.video.path() == VideoPath::Gpu,
             claim: lock(&encoders.claim).take(),
         };
@@ -964,6 +964,11 @@ impl Program {
         scene: Option<SceneId>,
         input: VideoInput,
     ) {
+        self.attach_tap(size, divisor, scene, input.into());
+    }
+
+    /// Hands the render thread a preview stream's tap of the program or `scene`.
+    fn attach_tap(&self, size: FrameSize, divisor: u32, scene: Option<SceneId>, input: TapInput) {
         let feed = Feed {
             mix: None,
             size,
@@ -977,6 +982,20 @@ impl Program {
             claim: None,
         };
         let _ = self.video_taps.send((feed, tap));
+    }
+
+    /// Feeds the program mix, or the monitored `scene`, to a JPEG or PNG preview stream
+    /// as [`attach_preview`](Self::attach_preview) does for an encoder session: the
+    /// render thread pushes each frame read back into `pictures`, whose stream's thread
+    /// encodes it, until that thread lets go of them.
+    pub(crate) fn attach_pictures(
+        &self,
+        size: FrameSize,
+        divisor: u32,
+        scene: Option<SceneId>,
+        pictures: PictureInput,
+    ) {
+        self.attach_tap(size, divisor, scene, TapInput::Pictures(pictures));
     }
 
     /// The size the stage composites the program at: the canvas when it opened.
@@ -1776,6 +1795,8 @@ impl Watched {
     ) -> &'a BTreeSet<CaptureKey> {
         let drawn = || mixes.iter().filter_map(|frame| frame.scene.as_ref());
         if drawn().next().is_none() {
+            // Forgotten, so a later scenes' map at a reused address isn't taken for it.
+            self.of = None;
             return program.shot().captures();
         }
         let key = (program.generation(), std::ptr::from_ref(scenes) as usize);
@@ -2835,13 +2856,139 @@ fn stream_info(
 
 /// A video session the render thread pushes frames into, and which kind it takes.
 pub(crate) struct VideoTap {
-    pub(crate) input: VideoInput,
+    pub(crate) input: TapInput,
     /// GPU frames: NV12 encode targets on the render thread's context
     /// ([`VideoPath::Gpu`]). Otherwise CPU RGBA8.
     gpu: bool,
     /// A GPU session's claim on the context, released once the render thread has the
     /// tap ([`Frames::add`]), from when [`Frames::feeds_gpu`] keeps it there.
     claim: Option<GpuClaim>,
+}
+
+/// Where a [`VideoTap`]'s frames go.
+pub(crate) enum TapInput {
+    /// An encoder session's input.
+    Session(VideoInput),
+    /// A JPEG or PNG preview stream's pictures (ADR-0117 §6).
+    Pictures(PictureInput),
+}
+
+impl From<VideoInput> for TapInput {
+    fn from(input: VideoInput) -> Self {
+        Self::Session(input)
+    }
+}
+
+impl TapInput {
+    /// Pushes the RGBA8 frame `rgba` of `size`, stamped `pts`. `false` once its reader has
+    /// gone.
+    fn push_rgba(&self, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
+        match self {
+            Self::Session(input) => push_frame(input, size, pts, rgba),
+            Self::Pictures(pictures) => pictures.push(size, pts, rgba),
+        }
+    }
+
+    /// The collector's share of it, once its reader has gone (R-RT-003).
+    fn into_garbage(self) -> Garbage {
+        match self {
+            Self::Session(input) => Garbage::Video(input),
+            Self::Pictures(pictures) => Garbage::Pictures(pictures),
+        }
+    }
+}
+
+/// How many pictures a JPEG or PNG preview stream on the program stage may have waiting:
+/// one being encoded and the next. The render thread drops a frame beyond that.
+const PICTURE_DEPTH: usize = 2;
+
+/// One frame the program stage read back for a JPEG or PNG preview stream.
+pub(crate) struct Picture {
+    pub(crate) size: FrameSize,
+    /// The time it was drawn for.
+    pub(crate) pts: MediaTime,
+    /// Tightly packed RGBA8.
+    pub(crate) rgba: Vec<u8>,
+}
+
+/// The render thread's end of a JPEG or PNG preview stream's pictures: never blocks, and
+/// allocates a frame only when the stream has room for it.
+#[derive(Clone)]
+pub(crate) struct PictureInput {
+    pictures: mpsc::SyncSender<Picture>,
+    shared: Arc<PictureQueue>,
+}
+
+/// What both ends of a picture queue read.
+#[derive(Default)]
+struct PictureQueue {
+    /// Pictures sent and not yet received.
+    waiting: AtomicUsize,
+    /// The reader has gone.
+    closed: AtomicBool,
+}
+
+/// The stream's end of its pictures, read on its own thread.
+pub(crate) struct PictureOutput {
+    pictures: Receiver<Picture>,
+    shared: Arc<PictureQueue>,
+}
+
+/// A JPEG or PNG preview stream's picture queue, [`PICTURE_DEPTH`] deep.
+pub(crate) fn picture_queue() -> (PictureInput, PictureOutput) {
+    let (sender, pictures) = mpsc::sync_channel(PICTURE_DEPTH);
+    let shared = Arc::new(PictureQueue::default());
+    (
+        PictureInput {
+            pictures: sender,
+            shared: Arc::clone(&shared),
+        },
+        PictureOutput { pictures, shared },
+    )
+}
+
+impl PictureInput {
+    /// Copies `rgba` into a new picture unless the stream already has
+    /// [`PICTURE_DEPTH`] waiting, when this frame is dropped (R-RT-004). `false` once the
+    /// reader has gone.
+    fn push(&self, size: FrameSize, pts: MediaTime, rgba: &[u8]) -> bool {
+        if self.shared.closed.load(Ordering::Acquire) {
+            return false;
+        }
+        if self.shared.waiting.load(Ordering::Acquire) >= PICTURE_DEPTH {
+            return true;
+        }
+        self.shared.waiting.fetch_add(1, Ordering::AcqRel);
+        let picture = Picture {
+            size,
+            pts,
+            rgba: rgba.to_vec(),
+        };
+        match self.pictures.try_send(picture) {
+            Ok(()) => true,
+            Err(mpsc::TrySendError::Full(_)) => {
+                self.shared.waiting.fetch_sub(1, Ordering::AcqRel);
+                true
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => false,
+        }
+    }
+}
+
+impl PictureOutput {
+    /// The next picture, waiting at most `wait`; an error once the stage let go of its
+    /// end ([`RecvTimeoutError::Disconnected`]).
+    pub(crate) fn recv(&self, wait: Duration) -> Result<Picture, RecvTimeoutError> {
+        let picture = self.pictures.recv_timeout(wait)?;
+        self.shared.waiting.fetch_sub(1, Ordering::AcqRel);
+        Ok(picture)
+    }
+}
+
+impl Drop for PictureOutput {
+    fn drop(&mut self) {
+        self.shared.closed.store(true, Ordering::Release);
+    }
 }
 
 /// Whether video sessions may open on the platform's GPU context, shared by
@@ -3605,18 +3752,20 @@ fn render_loop(job: RenderJob) {
             if frame.due {
                 push_each(
                     targets,
-                    |tap| match (tap.gpu, &encode.shown) {
+                    |tap| match (&tap.input, tap.gpu, &encode.shown) {
                         // Every target was held, or a covered draw failed: the frame
                         // is dropped, not repeated.
-                        (true, _) if starved => true,
-                        (true, Some(target)) => push_gpu(&tap.input, target, due),
-                        (false, _) if !shown.is_empty() => match frame.push_at {
-                            Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
+                        (_, true, _) if starved => true,
+                        (TapInput::Session(input), true, Some(target)) => {
+                            push_gpu(input, target, due)
+                        }
+                        (input, false, _) if !shown.is_empty() => match frame.push_at {
+                            Some(pts) => input.push_rgba(frame.size, pts, shown),
                             None => true,
                         },
                         _ => true,
                     },
-                    |tap| collector.free(Garbage::Video(tap.input)),
+                    |tap| collector.free(tap.input.into_garbage()),
                 );
             }
         }
@@ -4994,7 +5143,7 @@ mod tests {
     /// A tap for a session on the CPU path.
     fn cpu_tap(input: jstream_encode::VideoInput) -> VideoTap {
         VideoTap {
-            input,
+            input: input.into(),
             gpu: false,
             claim: None,
         }
@@ -5147,7 +5296,7 @@ mod tests {
         frames.add(
             feed(),
             VideoTap {
-                input: session.input(),
+                input: session.input().into(),
                 gpu: true,
                 claim: None,
             },
@@ -5191,7 +5340,7 @@ mod tests {
         frames.add(
             feed(),
             VideoTap {
-                input: session.input(),
+                input: session.input().into(),
                 gpu: true,
                 claim: Some(claim),
             },
@@ -5547,5 +5696,29 @@ mod tests {
         assert!(frames[0].awaiting, "the late scene pushes nothing");
         assert!(frames[0].ready.is_none() && frames[0].out.is_empty());
         assert!(frames[2].ready.is_none() && frames[2].unread == 0);
+    }
+
+    /// A picture queue takes at most its depth of pictures, dropping the frame beyond
+    /// that without copying it, and refuses once its reader has gone.
+    #[test]
+    fn a_picture_queue_drops_beyond_its_depth_and_closes_with_its_reader() {
+        let (input, output) = super::picture_queue();
+        let size = FrameSize::new(2, 1).expect("size");
+        let at = |ms| MediaTime::new(ms, Timebase::MILLIS);
+        for ms in 0..4 {
+            assert!(input.push(size, at(ms), &[ms as u8; 8]));
+        }
+        let first = output.recv(Duration::ZERO).expect("first");
+        assert_eq!(first.pts, at(0));
+        assert_eq!(first.rgba, [0; 8]);
+        assert_eq!(output.recv(Duration::ZERO).expect("second").pts, at(1));
+        assert!(
+            output.recv(Duration::ZERO).is_err(),
+            "the rest were dropped"
+        );
+        assert!(input.push(size, at(9), &[9; 8]));
+        assert_eq!(output.recv(Duration::ZERO).expect("room again").pts, at(9));
+        drop(output);
+        assert!(!input.push(size, at(10), &[10; 8]), "the reader has gone");
     }
 }
